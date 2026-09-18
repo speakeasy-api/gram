@@ -207,6 +207,61 @@ func TestFindingCHWriter_ProcessBatch_MapsAllFields(t *testing.T) {
 	require.Equal(t, "call_abc123", row.ToolCallID)
 }
 
+func TestFindingCHWriter_ProcessBatch_CarriedAttributionNeedsNoAnchor(t *testing.T) {
+	t.Parallel()
+	w, ins := newCHWriter(t)
+	f := chFinding()
+	f.SetChatMessageId("")
+	f.SetAttribution(riskv1.Finding_Attribution_builder{
+		ChatId:           new(""),
+		UserId:           new("validated-user"),
+		ExternalUserId:   new("external-user"),
+		AssistantId:      new("assistant"),
+		MessageCreatedAt: new("2026-06-27T14:00:00+02:00"),
+		ChatSource:       new("carried-source"),
+		Team:             new("security"),
+		UserEmail:        new("user@example.com"),
+	}.Build())
+	f.SetExecution(riskv1.Finding_Execution_builder{
+		ExecutionId:      new("execution"),
+		McpServerId:      new("server"),
+		MetaMcpServerId:  new("meta-server"),
+		ToolsetId:        new("toolset"),
+		ToolName:         new("run"),
+		Phase:            new("request"),
+		MediationSurface: new("hosted_mcp"),
+		Method:           new("tools/call"),
+		PrincipalKind:    new("user_session"),
+		IdentityStamped:  new(true),
+	}.Build())
+	f.SetEnforcementOutcome(riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED)
+
+	requireNoRejects(t, processBatch(t, w, t.Context(), []*riskv1.Finding{f}))
+	rows := chRows(t, ins)
+	require.Len(t, rows, 1)
+	row := rows[0]
+	require.Empty(t, row.ChatMessageID)
+	require.Empty(t, row.ChatID)
+	require.Equal(t, "validated-user", row.UserID)
+	require.Equal(t, "external-user", row.ExternalUserID)
+	require.Equal(t, "assistant", row.AssistantID)
+	require.Equal(t, "carried-source", row.ChatSource)
+	require.Equal(t, "security", row.Team)
+	require.Equal(t, "user@example.com", row.UserEmail)
+	require.Equal(t, time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC), row.MessageCreatedAt)
+	require.Equal(t, "execution", row.ExecutionID)
+	require.Equal(t, "server", row.MCPServerID)
+	require.Equal(t, "meta-server", row.MetaMCPServerID)
+	require.Equal(t, "toolset", row.ToolsetID)
+	require.Equal(t, "run", row.ToolName)
+	require.Equal(t, "request", row.Phase)
+	require.Equal(t, "hosted_mcp", row.MediationSurface)
+	require.Equal(t, "tools/call", row.MCPMethod)
+	require.Equal(t, "user_session", row.PrincipalKind)
+	require.True(t, row.IdentityStamped)
+	require.Equal(t, "denied", row.EnforcementOutcome)
+}
+
 // match_redacted is the shared maskdisplay partial mask, per source: an
 // account_identity email keeps only the domain (the local part — the PII —
 // is never stored), a judge match displays as nothing, and shadow_mcp passes
@@ -1004,4 +1059,97 @@ func chMessagesInsertedPoint(t *testing.T, reader *sdkmetric.ManualReader) metri
 
 	require.Failf(t, "metric not found", "missing metric %q", metricName)
 	return metricdata.DataPoint[int64]{}
+}
+
+// Carried attribution is producer-asserted, so the writer applies the same
+// tenancy rule as the anchor lookups: a chat outside the finding's project
+// drops every chat-derived field while the finding and its execution metadata
+// still land.
+func TestFindingCHWriter_ProcessBatch_CarriedChatMustBelongToProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "carried-attr-" + uuid.New().String()[:8]
+	otherProject, err := projectsRepo.New(ti.conn).CreateProject(ctx, projectsRepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	queries := riskrepo.New(ti.conn)
+	ownChatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("own-user"),
+		ExternalUserID: conv.ToPGText("own-user@example.com"),
+	})
+	require.NoError(t, err)
+	foreignChatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      otherProject.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("foreign-user"),
+		ExternalUserID: conv.ToPGText("foreign-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	ins := &fakeCHInserter{}
+	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
+	require.NoError(t, err)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp)
+
+	carried := func(chatID string) *riskv1.Finding {
+		f := chFinding()
+		f.SetChatMessageId("")
+		f.SetProjectId(authCtx.ProjectID.String())
+		f.SetAttribution(riskv1.Finding_Attribution_builder{
+			ChatId:         new(chatID),
+			UserId:         new("carried-user"),
+			ExternalUserId: new("carried-user@example.com"),
+			AssistantId:    new(uuid.NewString()),
+			ChatSource:     new("claude-code"),
+			Team:           new("security"),
+			UserEmail:      new("carried-user@example.com"),
+		}.Build())
+		f.SetExecution(riskv1.Finding_Execution_builder{
+			ExecutionId: new("execution"),
+			McpServerId: new("server"),
+			ToolName:    new("run"),
+			Phase:       new("request"),
+		}.Build())
+		return f
+	}
+	own := carried(ownChatID.String())
+	foreign := carried(foreignChatID.String())
+	malformed := carried("not-a-chat-id")
+
+	requireNoRejects(t, processBatch(t, w, ctx, []*riskv1.Finding{own, foreign, malformed}))
+	rows := chRows(t, ins)
+	require.Len(t, rows, 3)
+	byID := make(map[string]chrepo.RiskFindingRow, len(rows))
+	for _, row := range rows {
+		byID[row.ID.String()] = row
+	}
+
+	ownRow := byID[own.GetId()]
+	require.Equal(t, ownChatID.String(), ownRow.ChatID)
+	require.Equal(t, "carried-user", ownRow.UserID)
+	require.Equal(t, "security", ownRow.Team)
+
+	for _, f := range []*riskv1.Finding{foreign, malformed} {
+		row := byID[f.GetId()]
+		require.Empty(t, row.ChatID)
+		require.Empty(t, row.UserID)
+		require.Empty(t, row.ExternalUserID)
+		require.Empty(t, row.AssistantID)
+		require.Empty(t, row.ChatSource)
+		require.Empty(t, row.Team)
+		require.Empty(t, row.UserEmail)
+		require.Equal(t, "server", row.MCPServerID, "execution metadata survives an unverifiable chat")
+		require.Equal(t, "run", row.ToolName)
+	}
 }

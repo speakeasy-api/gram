@@ -2058,6 +2058,16 @@ WHERE cm.id = ANY(@ids::uuid[])
       AND pc.project_id = cm.project_id
   );
 
+-- name: ListChatProjectsByIDs :many
+-- Verifies carried finding attribution: a producer-asserted chat id is only
+-- trusted when the chat belongs to the finding's own project, the same rule
+-- the anchor lookups above apply. Scoped to the batch's project ids; the
+-- caller re-checks each finding's project against the returned row.
+SELECT id, project_id
+FROM chats
+WHERE id = ANY(@ids::uuid[])
+  AND project_id = ANY(@project_ids::uuid[]);
+
 -- name: GetChatContentPartAttribution :many
 -- Resolves denormalized attribution for a content-part finding. The parent
 -- message's user ids win over chat-level ids; both empty and NULL collapse to

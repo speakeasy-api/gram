@@ -1281,7 +1281,9 @@ FROM numbers(64);
 -- Beyond mirroring, this insert stamps the attribution columns the ingest
 -- pipeline denormalizes and the Watchdog reads without touching Postgres:
 -- chat_source (its App grouping), team (its Team grouping) and user_email
--- (its top-user display). Leaving them empty renders those groupings blank.
+-- (its top-user display). Tool-output findings additionally model the mediated
+-- response that produced that content, so the Risk Events MCP-server filter
+-- has representative data without misattributing user-message findings.
 INSERT INTO risk_findings
   (id, created_at, organization_id, project_id, chat_message_id, chat_id,
    user_id, external_user_id, user_email, team, chat_source,
@@ -1289,7 +1291,9 @@ INSERT INTO risk_findings
    description, source, confidence, category, tags, start_pos, end_pos,
    match_len, match_redacted, surface, field, message_created_at,
    excluded_at, exclusion_id, false_positive_at, excluded_reason,
-   excluded_detail)
+   excluded_detail, execution_id, mcp_server_id, toolset_id, tool_name,
+   phase, mediation_surface, mcp_method, principal_kind, identity_stamped,
+   enforcement_outcome)
 SELECT
   toUUID(concat(substring(hm, 1, 8), '-', substring(hm, 9, 4), '-5', substring(hm, 14, 3), '-8',
                 substring(hm, 18, 3), '-', substring(hm, 21, 12))),
@@ -1385,7 +1389,26 @@ SELECT
   if(supp IN (2, 3), chat_dt + toIntervalHour(3), NULL),
   arrayElement(['', 'rule', 'manual', 'automated'], 1 + supp),
   arrayElement(['', '', 'Known internal test fixture, not customer data',
-                'placeholder_value'], 1 + supp)
+                'placeholder_value'], 1 + supp),
+  if(k IN (2, 4, 5, 11), '',
+     concat(substring(hexec, 1, 8), '-', substring(hexec, 9, 4), '-5',
+            substring(hexec, 14, 3), '-8', substring(hexec, 18, 3), '-',
+            substring(hexec, 21, 12))),
+  if(k IN (2, 4, 5, 11), '',
+     concat(substring(hmcp, 1, 8), '-', substring(hmcp, 9, 4), '-5',
+            substring(hmcp, 14, 3), '-8', substring(hmcp, 18, 3), '-',
+            substring(hmcp, 21, 12))),
+  if(k IN (2, 4, 5, 11), '',
+     if(i % 5 = 0, 'dec0de00-0000-4000-a000-000000005e02',
+                     'dec0de00-0000-4000-a000-000000005e01')),
+  if(k IN (2, 4, 5, 11), '',
+     if(i % 5 = 0, 'check_health', 'get_customer')),
+  if(k IN (2, 4, 5, 11), '', 'response'),
+  if(k IN (2, 4, 5, 11), '', 'hosted_mcp'),
+  if(k IN (2, 4, 5, 11), '', 'tools/call'),
+  if(k IN (2, 4, 5, 11), '', 'user_session'),
+  k NOT IN (2, 4, 5, 11),
+  if(k IN (2, 4, 5, 11), '', 'logged')
 FROM (
   SELECT
     number + 1 AS i,
@@ -1416,6 +1439,11 @@ FROM (
     lower(hex(MD5(concat('gram-demo-risk-', toString(number + 1))))) AS hm,
     lower(hex(MD5(concat('gram-demo-msg-', toString(number + 1), '-',
                          if(k IN (2, 4, 5, 11), '1', '3'))))) AS hmsg,
+    lower(hex(MD5(concat('gram-demo-mcp-execution-', toString(number + 1))))) AS hexec,
+    -- Same chat-to-server rule as telemetry_logs (i % 5 = 0 is Acme Ops),
+    -- so the Risk Events MCP filter agrees with the call details.
+    lower(hex(MD5(if(i % 5 = 0, 'gram-demo-mcpserver-ops',
+                                   'gram-demo-mcpserver-support')))) AS hmcp,
     -- demo.chat_surface(i).
     if(i % 2 = 1, 'claude-code', if(i % 6 = 2, 'codex', 'cursor')) AS surface_slug,
     -- Byte offset of the match inside the message content: the length of the
@@ -2082,6 +2110,20 @@ SELECT throwIf(
    WHERE organization_id = 'org_gram_demo_workspace'
      AND (chat_source = '' OR team = '' OR user_email = '')) > 0,
   'demo seed postflight: risk_findings missing chat_source/team/user_email attribution');
+
+SELECT throwIf(
+  (SELECT count() FROM risk_findings
+   WHERE organization_id = 'org_gram_demo_workspace'
+     AND mcp_server_id != ''
+     AND (execution_id = '' OR toolset_id = '' OR tool_name = ''
+          OR phase != 'response' OR mediation_surface != 'hosted_mcp'
+          OR mcp_method != 'tools/call' OR principal_kind != 'user_session'
+          OR identity_stamped = false OR enforcement_outcome != 'logged')) > 0
+  OR
+  (SELECT count() FROM risk_findings
+   WHERE organization_id = 'org_gram_demo_workspace'
+     AND mcp_server_id != '') = 0,
+  'demo seed postflight: mediated risk findings missing complete MCP attribution');
 
 -- Fewer than four distinct rule clusters means the weighted type draw
 -- collapsed and the Watchdog list is a flat rotation again.

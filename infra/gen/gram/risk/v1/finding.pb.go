@@ -21,43 +21,109 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Finding is a single secret or sensitive-data match detected in a message.
-// dead_letter_reason is populated only on synthetic "could not analyze" markers
-// emitted when a scanner exhausts its retry budget for a message; it is empty
-// on every real finding.
+// EnforcementOutcome records the action taken, independently of detection.
+// The lifecycle values preserve warning acknowledgement/abandonment and
+// quarantine without overloading a boolean blocked flag.
+type Finding_EnforcementOutcome int32
+
+const (
+	Finding_ENFORCEMENT_OUTCOME_UNSPECIFIED         Finding_EnforcementOutcome = 0
+	Finding_ENFORCEMENT_OUTCOME_LOGGED              Finding_EnforcementOutcome = 1
+	Finding_ENFORCEMENT_OUTCOME_DENIED              Finding_EnforcementOutcome = 2
+	Finding_ENFORCEMENT_OUTCOME_WITHHELD            Finding_EnforcementOutcome = 3
+	Finding_ENFORCEMENT_OUTCOME_WARNED_PENDING      Finding_EnforcementOutcome = 4
+	Finding_ENFORCEMENT_OUTCOME_WARNED_ACKNOWLEDGED Finding_EnforcementOutcome = 5
+	Finding_ENFORCEMENT_OUTCOME_WARNED_ABANDONED    Finding_EnforcementOutcome = 6
+	Finding_ENFORCEMENT_OUTCOME_QUARANTINED         Finding_EnforcementOutcome = 7
+)
+
+// Enum value maps for Finding_EnforcementOutcome.
+var (
+	Finding_EnforcementOutcome_name = map[int32]string{
+		0: "ENFORCEMENT_OUTCOME_UNSPECIFIED",
+		1: "ENFORCEMENT_OUTCOME_LOGGED",
+		2: "ENFORCEMENT_OUTCOME_DENIED",
+		3: "ENFORCEMENT_OUTCOME_WITHHELD",
+		4: "ENFORCEMENT_OUTCOME_WARNED_PENDING",
+		5: "ENFORCEMENT_OUTCOME_WARNED_ACKNOWLEDGED",
+		6: "ENFORCEMENT_OUTCOME_WARNED_ABANDONED",
+		7: "ENFORCEMENT_OUTCOME_QUARANTINED",
+	}
+	Finding_EnforcementOutcome_value = map[string]int32{
+		"ENFORCEMENT_OUTCOME_UNSPECIFIED":         0,
+		"ENFORCEMENT_OUTCOME_LOGGED":              1,
+		"ENFORCEMENT_OUTCOME_DENIED":              2,
+		"ENFORCEMENT_OUTCOME_WITHHELD":            3,
+		"ENFORCEMENT_OUTCOME_WARNED_PENDING":      4,
+		"ENFORCEMENT_OUTCOME_WARNED_ACKNOWLEDGED": 5,
+		"ENFORCEMENT_OUTCOME_WARNED_ABANDONED":    6,
+		"ENFORCEMENT_OUTCOME_QUARANTINED":         7,
+	}
+)
+
+func (x Finding_EnforcementOutcome) Enum() *Finding_EnforcementOutcome {
+	p := new(Finding_EnforcementOutcome)
+	*p = x
+	return p
+}
+
+func (x Finding_EnforcementOutcome) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Finding_EnforcementOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_gram_risk_v1_finding_proto_enumTypes[0].Descriptor()
+}
+
+func (Finding_EnforcementOutcome) Type() protoreflect.EnumType {
+	return &file_gram_risk_v1_finding_proto_enumTypes[0]
+}
+
+func (x Finding_EnforcementOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Finding is one risk match detected in a chat message or mediated MCP
+// execution. A durable chat anchor is optional when attribution and execution
+// metadata travel with the finding. dead_letter_reason is populated only on
+// synthetic "could not analyze" markers emitted when a scanner exhausts its
+// retry budget; it is empty on every real finding.
 type Finding struct {
-	state                        protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_Id                *string                `protobuf:"bytes,1,opt,name=id"`
-	xxx_hidden_RequestId         *string                `protobuf:"bytes,2,opt,name=request_id,json=requestId"`
-	xxx_hidden_ChatMessageId     *string                `protobuf:"bytes,3,opt,name=chat_message_id,json=chatMessageId"`
-	xxx_hidden_ProjectId         *string                `protobuf:"bytes,4,opt,name=project_id,json=projectId"`
-	xxx_hidden_OrganizationId    *string                `protobuf:"bytes,5,opt,name=organization_id,json=organizationId"`
-	xxx_hidden_RiskPolicyId      *string                `protobuf:"bytes,6,opt,name=risk_policy_id,json=riskPolicyId"`
-	xxx_hidden_RiskPolicyVersion int64                  `protobuf:"varint,7,opt,name=risk_policy_version,json=riskPolicyVersion"`
-	xxx_hidden_CreatedAt         *string                `protobuf:"bytes,8,opt,name=created_at,json=createdAt"`
-	xxx_hidden_RuleId            *string                `protobuf:"bytes,9,opt,name=rule_id,json=ruleId"`
-	xxx_hidden_Description       *string                `protobuf:"bytes,10,opt,name=description"`
-	xxx_hidden_Match             *string                `protobuf:"bytes,11,opt,name=match"`
-	xxx_hidden_StartPos          int32                  `protobuf:"varint,12,opt,name=start_pos,json=startPos"`
-	xxx_hidden_EndPos            int32                  `protobuf:"varint,13,opt,name=end_pos,json=endPos"`
-	xxx_hidden_Tags              []string               `protobuf:"bytes,14,rep,name=tags"`
-	xxx_hidden_Source            *string                `protobuf:"bytes,15,opt,name=source"`
-	xxx_hidden_Confidence        float64                `protobuf:"fixed64,16,opt,name=confidence"`
-	xxx_hidden_DeadLetterReason  *string                `protobuf:"bytes,17,opt,name=dead_letter_reason,json=deadLetterReason"`
-	xxx_hidden_ContentPartId     *string                `protobuf:"bytes,18,opt,name=content_part_id,json=contentPartId"`
-	xxx_hidden_FalsePositiveAt   *string                `protobuf:"bytes,19,opt,name=false_positive_at,json=falsePositiveAt"`
-	xxx_hidden_Surface           *string                `protobuf:"bytes,20,opt,name=surface"`
-	xxx_hidden_Field             *string                `protobuf:"bytes,21,opt,name=field"`
-	xxx_hidden_Path              *string                `protobuf:"bytes,22,opt,name=path"`
-	xxx_hidden_ToolCallId        *string                `protobuf:"bytes,23,opt,name=tool_call_id,json=toolCallId"`
-	xxx_hidden_ExcludedAt        *string                `protobuf:"bytes,24,opt,name=excluded_at,json=excludedAt"`
-	xxx_hidden_ExcludedReason    *string                `protobuf:"bytes,25,opt,name=excluded_reason,json=excludedReason"`
-	xxx_hidden_ExcludedDetail    *string                `protobuf:"bytes,26,opt,name=excluded_detail,json=excludedDetail"`
-	xxx_hidden_EventKind         *string                `protobuf:"bytes,27,opt,name=event_kind,json=eventKind"`
-	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
-	XXX_presence                 [1]uint32
-	unknownFields                protoimpl.UnknownFields
-	sizeCache                    protoimpl.SizeCache
+	state                         protoimpl.MessageState     `protogen:"opaque.v1"`
+	xxx_hidden_Id                 *string                    `protobuf:"bytes,1,opt,name=id"`
+	xxx_hidden_RequestId          *string                    `protobuf:"bytes,2,opt,name=request_id,json=requestId"`
+	xxx_hidden_ChatMessageId      *string                    `protobuf:"bytes,3,opt,name=chat_message_id,json=chatMessageId"`
+	xxx_hidden_ProjectId          *string                    `protobuf:"bytes,4,opt,name=project_id,json=projectId"`
+	xxx_hidden_OrganizationId     *string                    `protobuf:"bytes,5,opt,name=organization_id,json=organizationId"`
+	xxx_hidden_RiskPolicyId       *string                    `protobuf:"bytes,6,opt,name=risk_policy_id,json=riskPolicyId"`
+	xxx_hidden_RiskPolicyVersion  int64                      `protobuf:"varint,7,opt,name=risk_policy_version,json=riskPolicyVersion"`
+	xxx_hidden_CreatedAt          *string                    `protobuf:"bytes,8,opt,name=created_at,json=createdAt"`
+	xxx_hidden_RuleId             *string                    `protobuf:"bytes,9,opt,name=rule_id,json=ruleId"`
+	xxx_hidden_Description        *string                    `protobuf:"bytes,10,opt,name=description"`
+	xxx_hidden_Match              *string                    `protobuf:"bytes,11,opt,name=match"`
+	xxx_hidden_StartPos           int32                      `protobuf:"varint,12,opt,name=start_pos,json=startPos"`
+	xxx_hidden_EndPos             int32                      `protobuf:"varint,13,opt,name=end_pos,json=endPos"`
+	xxx_hidden_Tags               []string                   `protobuf:"bytes,14,rep,name=tags"`
+	xxx_hidden_Source             *string                    `protobuf:"bytes,15,opt,name=source"`
+	xxx_hidden_Confidence         float64                    `protobuf:"fixed64,16,opt,name=confidence"`
+	xxx_hidden_DeadLetterReason   *string                    `protobuf:"bytes,17,opt,name=dead_letter_reason,json=deadLetterReason"`
+	xxx_hidden_ContentPartId      *string                    `protobuf:"bytes,18,opt,name=content_part_id,json=contentPartId"`
+	xxx_hidden_FalsePositiveAt    *string                    `protobuf:"bytes,19,opt,name=false_positive_at,json=falsePositiveAt"`
+	xxx_hidden_Surface            *string                    `protobuf:"bytes,20,opt,name=surface"`
+	xxx_hidden_Field              *string                    `protobuf:"bytes,21,opt,name=field"`
+	xxx_hidden_Path               *string                    `protobuf:"bytes,22,opt,name=path"`
+	xxx_hidden_ToolCallId         *string                    `protobuf:"bytes,23,opt,name=tool_call_id,json=toolCallId"`
+	xxx_hidden_ExcludedAt         *string                    `protobuf:"bytes,24,opt,name=excluded_at,json=excludedAt"`
+	xxx_hidden_ExcludedReason     *string                    `protobuf:"bytes,25,opt,name=excluded_reason,json=excludedReason"`
+	xxx_hidden_ExcludedDetail     *string                    `protobuf:"bytes,26,opt,name=excluded_detail,json=excludedDetail"`
+	xxx_hidden_EventKind          *string                    `protobuf:"bytes,27,opt,name=event_kind,json=eventKind"`
+	xxx_hidden_Attribution        *Finding_Attribution       `protobuf:"bytes,28,opt,name=attribution"`
+	xxx_hidden_Execution          *Finding_Execution         `protobuf:"bytes,29,opt,name=execution"`
+	xxx_hidden_EnforcementOutcome Finding_EnforcementOutcome `protobuf:"varint,30,opt,name=enforcement_outcome,json=enforcementOutcome,enum=gram.risk.v1.Finding_EnforcementOutcome"`
+	XXX_raceDetectHookData        protoimpl.RaceDetectHookData
+	XXX_presence                  [1]uint32
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *Finding) Reset() {
@@ -340,69 +406,92 @@ func (x *Finding) GetEventKind() string {
 	return ""
 }
 
+func (x *Finding) GetAttribution() *Finding_Attribution {
+	if x != nil {
+		return x.xxx_hidden_Attribution
+	}
+	return nil
+}
+
+func (x *Finding) GetExecution() *Finding_Execution {
+	if x != nil {
+		return x.xxx_hidden_Execution
+	}
+	return nil
+}
+
+func (x *Finding) GetEnforcementOutcome() Finding_EnforcementOutcome {
+	if x != nil {
+		if protoimpl.X.Present(&(x.XXX_presence[0]), 29) {
+			return x.xxx_hidden_EnforcementOutcome
+		}
+	}
+	return Finding_ENFORCEMENT_OUTCOME_UNSPECIFIED
+}
+
 func (x *Finding) SetId(v string) {
 	x.xxx_hidden_Id = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 30)
 }
 
 func (x *Finding) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 30)
 }
 
 func (x *Finding) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 30)
 }
 
 func (x *Finding) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 30)
 }
 
 func (x *Finding) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 30)
 }
 
 func (x *Finding) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 30)
 }
 
 func (x *Finding) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 30)
 }
 
 func (x *Finding) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 30)
 }
 
 func (x *Finding) SetRuleId(v string) {
 	x.xxx_hidden_RuleId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 30)
 }
 
 func (x *Finding) SetDescription(v string) {
 	x.xxx_hidden_Description = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 30)
 }
 
 func (x *Finding) SetMatch(v string) {
 	x.xxx_hidden_Match = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 30)
 }
 
 func (x *Finding) SetStartPos(v int32) {
 	x.xxx_hidden_StartPos = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 30)
 }
 
 func (x *Finding) SetEndPos(v int32) {
 	x.xxx_hidden_EndPos = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 30)
 }
 
 func (x *Finding) SetTags(v []string) {
@@ -411,67 +500,80 @@ func (x *Finding) SetTags(v []string) {
 
 func (x *Finding) SetSource(v string) {
 	x.xxx_hidden_Source = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 30)
 }
 
 func (x *Finding) SetConfidence(v float64) {
 	x.xxx_hidden_Confidence = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 30)
 }
 
 func (x *Finding) SetDeadLetterReason(v string) {
 	x.xxx_hidden_DeadLetterReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 30)
 }
 
 func (x *Finding) SetContentPartId(v string) {
 	x.xxx_hidden_ContentPartId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 30)
 }
 
 func (x *Finding) SetFalsePositiveAt(v string) {
 	x.xxx_hidden_FalsePositiveAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 30)
 }
 
 func (x *Finding) SetSurface(v string) {
 	x.xxx_hidden_Surface = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 30)
 }
 
 func (x *Finding) SetField(v string) {
 	x.xxx_hidden_Field = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 30)
 }
 
 func (x *Finding) SetPath(v string) {
 	x.xxx_hidden_Path = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 30)
 }
 
 func (x *Finding) SetToolCallId(v string) {
 	x.xxx_hidden_ToolCallId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 30)
 }
 
 func (x *Finding) SetExcludedAt(v string) {
 	x.xxx_hidden_ExcludedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 30)
 }
 
 func (x *Finding) SetExcludedReason(v string) {
 	x.xxx_hidden_ExcludedReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 30)
 }
 
 func (x *Finding) SetExcludedDetail(v string) {
 	x.xxx_hidden_ExcludedDetail = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 25, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 25, 30)
 }
 
 func (x *Finding) SetEventKind(v string) {
 	x.xxx_hidden_EventKind = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 26, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 26, 30)
+}
+
+func (x *Finding) SetAttribution(v *Finding_Attribution) {
+	x.xxx_hidden_Attribution = v
+}
+
+func (x *Finding) SetExecution(v *Finding_Execution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *Finding) SetEnforcementOutcome(v Finding_EnforcementOutcome) {
+	x.xxx_hidden_EnforcementOutcome = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 29, 30)
 }
 
 func (x *Finding) HasId() bool {
@@ -656,6 +758,27 @@ func (x *Finding) HasEventKind() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 26)
 }
 
+func (x *Finding) HasAttribution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Attribution != nil
+}
+
+func (x *Finding) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *Finding) HasEnforcementOutcome() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 29)
+}
+
 func (x *Finding) ClearId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Id = nil
@@ -786,6 +909,19 @@ func (x *Finding) ClearEventKind() {
 	x.xxx_hidden_EventKind = nil
 }
 
+func (x *Finding) ClearAttribution() {
+	x.xxx_hidden_Attribution = nil
+}
+
+func (x *Finding) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+func (x *Finding) ClearEnforcementOutcome() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 29)
+	x.xxx_hidden_EnforcementOutcome = Finding_ENFORCEMENT_OUTCOME_UNSPECIFIED
+}
+
 type Finding_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -848,7 +984,10 @@ type Finding_builder struct {
 	// must never clobber a later dismissal. Empty on messages from producers
 	// that predate the field: the writer derives "suppression" when
 	// excluded_at/false_positive_at is carried and "finding" otherwise.
-	EventKind *string
+	EventKind          *string
+	Attribution        *Finding_Attribution
+	Execution          *Finding_Execution
+	EnforcementOutcome *Finding_EnforcementOutcome
 }
 
 func (b0 Finding_builder) Build() *Finding {
@@ -856,109 +995,799 @@ func (b0 Finding_builder) Build() *Finding {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Id != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 30)
 		x.xxx_hidden_Id = b.Id
 	}
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 30)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 30)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 30)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 30)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 30)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 30)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 30)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.RuleId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 30)
 		x.xxx_hidden_RuleId = b.RuleId
 	}
 	if b.Description != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 30)
 		x.xxx_hidden_Description = b.Description
 	}
 	if b.Match != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 30)
 		x.xxx_hidden_Match = b.Match
 	}
 	if b.StartPos != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 30)
 		x.xxx_hidden_StartPos = *b.StartPos
 	}
 	if b.EndPos != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 30)
 		x.xxx_hidden_EndPos = *b.EndPos
 	}
 	x.xxx_hidden_Tags = b.Tags
 	if b.Source != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 30)
 		x.xxx_hidden_Source = b.Source
 	}
 	if b.Confidence != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 30)
 		x.xxx_hidden_Confidence = *b.Confidence
 	}
 	if b.DeadLetterReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 30)
 		x.xxx_hidden_DeadLetterReason = b.DeadLetterReason
 	}
 	if b.ContentPartId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 30)
 		x.xxx_hidden_ContentPartId = b.ContentPartId
 	}
 	if b.FalsePositiveAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 30)
 		x.xxx_hidden_FalsePositiveAt = b.FalsePositiveAt
 	}
 	if b.Surface != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 30)
 		x.xxx_hidden_Surface = b.Surface
 	}
 	if b.Field != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 30)
 		x.xxx_hidden_Field = b.Field
 	}
 	if b.Path != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 30)
 		x.xxx_hidden_Path = b.Path
 	}
 	if b.ToolCallId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 30)
 		x.xxx_hidden_ToolCallId = b.ToolCallId
 	}
 	if b.ExcludedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 30)
 		x.xxx_hidden_ExcludedAt = b.ExcludedAt
 	}
 	if b.ExcludedReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 30)
 		x.xxx_hidden_ExcludedReason = b.ExcludedReason
 	}
 	if b.ExcludedDetail != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 25, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 25, 30)
 		x.xxx_hidden_ExcludedDetail = b.ExcludedDetail
 	}
 	if b.EventKind != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 26, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 26, 30)
 		x.xxx_hidden_EventKind = b.EventKind
+	}
+	x.xxx_hidden_Attribution = b.Attribution
+	x.xxx_hidden_Execution = b.Execution
+	if b.EnforcementOutcome != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 29, 30)
+		x.xxx_hidden_EnforcementOutcome = *b.EnforcementOutcome
+	}
+	return m0
+}
+
+// Presence is authoritative, including intentionally empty values. Absent
+// attribution retains project-bounded chat-anchor enrichment at ingest.
+type Finding_Attribution struct {
+	state                       protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ChatId           *string                `protobuf:"bytes,1,opt,name=chat_id,json=chatId"`
+	xxx_hidden_UserId           *string                `protobuf:"bytes,2,opt,name=user_id,json=userId"`
+	xxx_hidden_ExternalUserId   *string                `protobuf:"bytes,3,opt,name=external_user_id,json=externalUserId"`
+	xxx_hidden_AssistantId      *string                `protobuf:"bytes,4,opt,name=assistant_id,json=assistantId"`
+	xxx_hidden_MessageCreatedAt *string                `protobuf:"bytes,5,opt,name=message_created_at,json=messageCreatedAt"`
+	xxx_hidden_ChatSource       *string                `protobuf:"bytes,6,opt,name=chat_source,json=chatSource"`
+	xxx_hidden_Team             *string                `protobuf:"bytes,7,opt,name=team"`
+	xxx_hidden_UserEmail        *string                `protobuf:"bytes,8,opt,name=user_email,json=userEmail"`
+	XXX_raceDetectHookData      protoimpl.RaceDetectHookData
+	XXX_presence                [1]uint32
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
+}
+
+func (x *Finding_Attribution) Reset() {
+	*x = Finding_Attribution{}
+	mi := &file_gram_risk_v1_finding_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Finding_Attribution) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Finding_Attribution) ProtoMessage() {}
+
+func (x *Finding_Attribution) ProtoReflect() protoreflect.Message {
+	mi := &file_gram_risk_v1_finding_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *Finding_Attribution) GetChatId() string {
+	if x != nil {
+		if x.xxx_hidden_ChatId != nil {
+			return *x.xxx_hidden_ChatId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Attribution) GetUserId() string {
+	if x != nil {
+		if x.xxx_hidden_UserId != nil {
+			return *x.xxx_hidden_UserId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Attribution) GetExternalUserId() string {
+	if x != nil {
+		if x.xxx_hidden_ExternalUserId != nil {
+			return *x.xxx_hidden_ExternalUserId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Attribution) GetAssistantId() string {
+	if x != nil {
+		if x.xxx_hidden_AssistantId != nil {
+			return *x.xxx_hidden_AssistantId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Attribution) GetMessageCreatedAt() string {
+	if x != nil {
+		if x.xxx_hidden_MessageCreatedAt != nil {
+			return *x.xxx_hidden_MessageCreatedAt
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Attribution) GetChatSource() string {
+	if x != nil {
+		if x.xxx_hidden_ChatSource != nil {
+			return *x.xxx_hidden_ChatSource
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Attribution) GetTeam() string {
+	if x != nil {
+		if x.xxx_hidden_Team != nil {
+			return *x.xxx_hidden_Team
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Attribution) GetUserEmail() string {
+	if x != nil {
+		if x.xxx_hidden_UserEmail != nil {
+			return *x.xxx_hidden_UserEmail
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Attribution) SetChatId(v string) {
+	x.xxx_hidden_ChatId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 8)
+}
+
+func (x *Finding_Attribution) SetUserId(v string) {
+	x.xxx_hidden_UserId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 8)
+}
+
+func (x *Finding_Attribution) SetExternalUserId(v string) {
+	x.xxx_hidden_ExternalUserId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 8)
+}
+
+func (x *Finding_Attribution) SetAssistantId(v string) {
+	x.xxx_hidden_AssistantId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 8)
+}
+
+func (x *Finding_Attribution) SetMessageCreatedAt(v string) {
+	x.xxx_hidden_MessageCreatedAt = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 8)
+}
+
+func (x *Finding_Attribution) SetChatSource(v string) {
+	x.xxx_hidden_ChatSource = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 8)
+}
+
+func (x *Finding_Attribution) SetTeam(v string) {
+	x.xxx_hidden_Team = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 8)
+}
+
+func (x *Finding_Attribution) SetUserEmail(v string) {
+	x.xxx_hidden_UserEmail = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 8)
+}
+
+func (x *Finding_Attribution) HasChatId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
+}
+
+func (x *Finding_Attribution) HasUserId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
+}
+
+func (x *Finding_Attribution) HasExternalUserId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
+func (x *Finding_Attribution) HasAssistantId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
+}
+
+func (x *Finding_Attribution) HasMessageCreatedAt() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
+}
+
+func (x *Finding_Attribution) HasChatSource() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
+}
+
+func (x *Finding_Attribution) HasTeam() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 6)
+}
+
+func (x *Finding_Attribution) HasUserEmail() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 7)
+}
+
+func (x *Finding_Attribution) ClearChatId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
+	x.xxx_hidden_ChatId = nil
+}
+
+func (x *Finding_Attribution) ClearUserId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
+	x.xxx_hidden_UserId = nil
+}
+
+func (x *Finding_Attribution) ClearExternalUserId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_ExternalUserId = nil
+}
+
+func (x *Finding_Attribution) ClearAssistantId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 3)
+	x.xxx_hidden_AssistantId = nil
+}
+
+func (x *Finding_Attribution) ClearMessageCreatedAt() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
+	x.xxx_hidden_MessageCreatedAt = nil
+}
+
+func (x *Finding_Attribution) ClearChatSource() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 5)
+	x.xxx_hidden_ChatSource = nil
+}
+
+func (x *Finding_Attribution) ClearTeam() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 6)
+	x.xxx_hidden_Team = nil
+}
+
+func (x *Finding_Attribution) ClearUserEmail() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 7)
+	x.xxx_hidden_UserEmail = nil
+}
+
+type Finding_Attribution_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ChatId           *string
+	UserId           *string
+	ExternalUserId   *string
+	AssistantId      *string
+	MessageCreatedAt *string
+	ChatSource       *string
+	Team             *string
+	UserEmail        *string
+}
+
+func (b0 Finding_Attribution_builder) Build() *Finding_Attribution {
+	m0 := &Finding_Attribution{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.ChatId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 8)
+		x.xxx_hidden_ChatId = b.ChatId
+	}
+	if b.UserId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 8)
+		x.xxx_hidden_UserId = b.UserId
+	}
+	if b.ExternalUserId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 8)
+		x.xxx_hidden_ExternalUserId = b.ExternalUserId
+	}
+	if b.AssistantId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 8)
+		x.xxx_hidden_AssistantId = b.AssistantId
+	}
+	if b.MessageCreatedAt != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 8)
+		x.xxx_hidden_MessageCreatedAt = b.MessageCreatedAt
+	}
+	if b.ChatSource != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 8)
+		x.xxx_hidden_ChatSource = b.ChatSource
+	}
+	if b.Team != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 8)
+		x.xxx_hidden_Team = b.Team
+	}
+	if b.UserEmail != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 8)
+		x.xxx_hidden_UserEmail = b.UserEmail
+	}
+	return m0
+}
+
+// Metadata only: never arguments, results, credentials, or stream contents.
+type Finding_Execution struct {
+	state                       protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ExecutionId      *string                `protobuf:"bytes,1,opt,name=execution_id,json=executionId"`
+	xxx_hidden_McpServerId      *string                `protobuf:"bytes,2,opt,name=mcp_server_id,json=mcpServerId"`
+	xxx_hidden_MetaMcpServerId  *string                `protobuf:"bytes,3,opt,name=meta_mcp_server_id,json=metaMcpServerId"`
+	xxx_hidden_ToolsetId        *string                `protobuf:"bytes,4,opt,name=toolset_id,json=toolsetId"`
+	xxx_hidden_ToolName         *string                `protobuf:"bytes,5,opt,name=tool_name,json=toolName"`
+	xxx_hidden_Phase            *string                `protobuf:"bytes,6,opt,name=phase"`
+	xxx_hidden_MediationSurface *string                `protobuf:"bytes,7,opt,name=mediation_surface,json=mediationSurface"`
+	xxx_hidden_Method           *string                `protobuf:"bytes,8,opt,name=method"`
+	xxx_hidden_PrincipalKind    *string                `protobuf:"bytes,9,opt,name=principal_kind,json=principalKind"`
+	xxx_hidden_IdentityStamped  bool                   `protobuf:"varint,10,opt,name=identity_stamped,json=identityStamped"`
+	XXX_raceDetectHookData      protoimpl.RaceDetectHookData
+	XXX_presence                [1]uint32
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
+}
+
+func (x *Finding_Execution) Reset() {
+	*x = Finding_Execution{}
+	mi := &file_gram_risk_v1_finding_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Finding_Execution) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Finding_Execution) ProtoMessage() {}
+
+func (x *Finding_Execution) ProtoReflect() protoreflect.Message {
+	mi := &file_gram_risk_v1_finding_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *Finding_Execution) GetExecutionId() string {
+	if x != nil {
+		if x.xxx_hidden_ExecutionId != nil {
+			return *x.xxx_hidden_ExecutionId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Execution) GetMcpServerId() string {
+	if x != nil {
+		if x.xxx_hidden_McpServerId != nil {
+			return *x.xxx_hidden_McpServerId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Execution) GetMetaMcpServerId() string {
+	if x != nil {
+		if x.xxx_hidden_MetaMcpServerId != nil {
+			return *x.xxx_hidden_MetaMcpServerId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Execution) GetToolsetId() string {
+	if x != nil {
+		if x.xxx_hidden_ToolsetId != nil {
+			return *x.xxx_hidden_ToolsetId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Execution) GetToolName() string {
+	if x != nil {
+		if x.xxx_hidden_ToolName != nil {
+			return *x.xxx_hidden_ToolName
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Execution) GetPhase() string {
+	if x != nil {
+		if x.xxx_hidden_Phase != nil {
+			return *x.xxx_hidden_Phase
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Execution) GetMediationSurface() string {
+	if x != nil {
+		if x.xxx_hidden_MediationSurface != nil {
+			return *x.xxx_hidden_MediationSurface
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Execution) GetMethod() string {
+	if x != nil {
+		if x.xxx_hidden_Method != nil {
+			return *x.xxx_hidden_Method
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Execution) GetPrincipalKind() string {
+	if x != nil {
+		if x.xxx_hidden_PrincipalKind != nil {
+			return *x.xxx_hidden_PrincipalKind
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_Execution) GetIdentityStamped() bool {
+	if x != nil {
+		return x.xxx_hidden_IdentityStamped
+	}
+	return false
+}
+
+func (x *Finding_Execution) SetExecutionId(v string) {
+	x.xxx_hidden_ExecutionId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 10)
+}
+
+func (x *Finding_Execution) SetMcpServerId(v string) {
+	x.xxx_hidden_McpServerId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 10)
+}
+
+func (x *Finding_Execution) SetMetaMcpServerId(v string) {
+	x.xxx_hidden_MetaMcpServerId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 10)
+}
+
+func (x *Finding_Execution) SetToolsetId(v string) {
+	x.xxx_hidden_ToolsetId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 10)
+}
+
+func (x *Finding_Execution) SetToolName(v string) {
+	x.xxx_hidden_ToolName = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 10)
+}
+
+func (x *Finding_Execution) SetPhase(v string) {
+	x.xxx_hidden_Phase = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 10)
+}
+
+func (x *Finding_Execution) SetMediationSurface(v string) {
+	x.xxx_hidden_MediationSurface = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 10)
+}
+
+func (x *Finding_Execution) SetMethod(v string) {
+	x.xxx_hidden_Method = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 10)
+}
+
+func (x *Finding_Execution) SetPrincipalKind(v string) {
+	x.xxx_hidden_PrincipalKind = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 10)
+}
+
+func (x *Finding_Execution) SetIdentityStamped(v bool) {
+	x.xxx_hidden_IdentityStamped = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 10)
+}
+
+func (x *Finding_Execution) HasExecutionId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
+}
+
+func (x *Finding_Execution) HasMcpServerId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
+}
+
+func (x *Finding_Execution) HasMetaMcpServerId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
+func (x *Finding_Execution) HasToolsetId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
+}
+
+func (x *Finding_Execution) HasToolName() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
+}
+
+func (x *Finding_Execution) HasPhase() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
+}
+
+func (x *Finding_Execution) HasMediationSurface() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 6)
+}
+
+func (x *Finding_Execution) HasMethod() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 7)
+}
+
+func (x *Finding_Execution) HasPrincipalKind() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 8)
+}
+
+func (x *Finding_Execution) HasIdentityStamped() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 9)
+}
+
+func (x *Finding_Execution) ClearExecutionId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
+	x.xxx_hidden_ExecutionId = nil
+}
+
+func (x *Finding_Execution) ClearMcpServerId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
+	x.xxx_hidden_McpServerId = nil
+}
+
+func (x *Finding_Execution) ClearMetaMcpServerId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_MetaMcpServerId = nil
+}
+
+func (x *Finding_Execution) ClearToolsetId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 3)
+	x.xxx_hidden_ToolsetId = nil
+}
+
+func (x *Finding_Execution) ClearToolName() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
+	x.xxx_hidden_ToolName = nil
+}
+
+func (x *Finding_Execution) ClearPhase() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 5)
+	x.xxx_hidden_Phase = nil
+}
+
+func (x *Finding_Execution) ClearMediationSurface() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 6)
+	x.xxx_hidden_MediationSurface = nil
+}
+
+func (x *Finding_Execution) ClearMethod() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 7)
+	x.xxx_hidden_Method = nil
+}
+
+func (x *Finding_Execution) ClearPrincipalKind() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 8)
+	x.xxx_hidden_PrincipalKind = nil
+}
+
+func (x *Finding_Execution) ClearIdentityStamped() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 9)
+	x.xxx_hidden_IdentityStamped = false
+}
+
+type Finding_Execution_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ExecutionId      *string
+	McpServerId      *string
+	MetaMcpServerId  *string
+	ToolsetId        *string
+	ToolName         *string
+	Phase            *string
+	MediationSurface *string
+	Method           *string
+	PrincipalKind    *string
+	IdentityStamped  *bool
+}
+
+func (b0 Finding_Execution_builder) Build() *Finding_Execution {
+	m0 := &Finding_Execution{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.ExecutionId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 10)
+		x.xxx_hidden_ExecutionId = b.ExecutionId
+	}
+	if b.McpServerId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 10)
+		x.xxx_hidden_McpServerId = b.McpServerId
+	}
+	if b.MetaMcpServerId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 10)
+		x.xxx_hidden_MetaMcpServerId = b.MetaMcpServerId
+	}
+	if b.ToolsetId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 10)
+		x.xxx_hidden_ToolsetId = b.ToolsetId
+	}
+	if b.ToolName != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 10)
+		x.xxx_hidden_ToolName = b.ToolName
+	}
+	if b.Phase != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 10)
+		x.xxx_hidden_Phase = b.Phase
+	}
+	if b.MediationSurface != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 10)
+		x.xxx_hidden_MediationSurface = b.MediationSurface
+	}
+	if b.Method != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 10)
+		x.xxx_hidden_Method = b.Method
+	}
+	if b.PrincipalKind != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 10)
+		x.xxx_hidden_PrincipalKind = b.PrincipalKind
+	}
+	if b.IdentityStamped != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 10)
+		x.xxx_hidden_IdentityStamped = *b.IdentityStamped
 	}
 	return m0
 }
@@ -967,7 +1796,7 @@ var File_gram_risk_v1_finding_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_finding_proto_rawDesc = "" +
 	"\n" +
-	"\x1agram/risk/v1/finding.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xf6\x06\n" +
+	"\x1agram/risk/v1/finding.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x93\x10\n" +
 	"\aFinding\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -1004,19 +1833,62 @@ const file_gram_risk_v1_finding_proto_rawDesc = "" +
 	"\x0fexcluded_reason\x18\x19 \x01(\tR\x0eexcludedReason\x12'\n" +
 	"\x0fexcluded_detail\x18\x1a \x01(\tR\x0eexcludedDetail\x12\x1d\n" +
 	"\n" +
-	"event_kind\x18\x1b \x01(\tR\teventKind:\n" +
+	"event_kind\x18\x1b \x01(\tR\teventKind\x12C\n" +
+	"\vattribution\x18\x1c \x01(\v2!.gram.risk.v1.Finding.AttributionR\vattribution\x12=\n" +
+	"\texecution\x18\x1d \x01(\v2\x1f.gram.risk.v1.Finding.ExecutionR\texecution\x12Y\n" +
+	"\x13enforcement_outcome\x18\x1e \x01(\x0e2(.gram.risk.v1.Finding.EnforcementOutcomeR\x12enforcementOutcome\x1a\x8e\x02\n" +
+	"\vAttribution\x12\x17\n" +
+	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12(\n" +
+	"\x10external_user_id\x18\x03 \x01(\tR\x0eexternalUserId\x12!\n" +
+	"\fassistant_id\x18\x04 \x01(\tR\vassistantId\x12,\n" +
+	"\x12message_created_at\x18\x05 \x01(\tR\x10messageCreatedAt\x12\x1f\n" +
+	"\vchat_source\x18\x06 \x01(\tR\n" +
+	"chatSource\x12\x12\n" +
+	"\x04team\x18\a \x01(\tR\x04team\x12\x1d\n" +
+	"\n" +
+	"user_email\x18\b \x01(\tR\tuserEmail\x1a\xe8\x02\n" +
+	"\tExecution\x12!\n" +
+	"\fexecution_id\x18\x01 \x01(\tR\vexecutionId\x12\"\n" +
+	"\rmcp_server_id\x18\x02 \x01(\tR\vmcpServerId\x12+\n" +
+	"\x12meta_mcp_server_id\x18\x03 \x01(\tR\x0fmetaMcpServerId\x12\x1d\n" +
+	"\n" +
+	"toolset_id\x18\x04 \x01(\tR\ttoolsetId\x12\x1b\n" +
+	"\ttool_name\x18\x05 \x01(\tR\btoolName\x12\x14\n" +
+	"\x05phase\x18\x06 \x01(\tR\x05phase\x12+\n" +
+	"\x11mediation_surface\x18\a \x01(\tR\x10mediationSurface\x12\x16\n" +
+	"\x06method\x18\b \x01(\tR\x06method\x12%\n" +
+	"\x0eprincipal_kind\x18\t \x01(\tR\rprincipalKind\x12)\n" +
+	"\x10identity_stamped\x18\n" +
+	" \x01(\bR\x0fidentityStamped\"\xbf\x02\n" +
+	"\x12EnforcementOutcome\x12#\n" +
+	"\x1fENFORCEMENT_OUTCOME_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aENFORCEMENT_OUTCOME_LOGGED\x10\x01\x12\x1e\n" +
+	"\x1aENFORCEMENT_OUTCOME_DENIED\x10\x02\x12 \n" +
+	"\x1cENFORCEMENT_OUTCOME_WITHHELD\x10\x03\x12&\n" +
+	"\"ENFORCEMENT_OUTCOME_WARNED_PENDING\x10\x04\x12+\n" +
+	"'ENFORCEMENT_OUTCOME_WARNED_ACKNOWLEDGED\x10\x05\x12(\n" +
+	"$ENFORCEMENT_OUTCOME_WARNED_ABANDONED\x10\x06\x12#\n" +
+	"\x1fENFORCEMENT_OUTCOME_QUARANTINED\x10\a:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
-var file_gram_risk_v1_finding_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_gram_risk_v1_finding_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_gram_risk_v1_finding_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_gram_risk_v1_finding_proto_goTypes = []any{
-	(*Finding)(nil), // 0: gram.risk.v1.Finding
+	(Finding_EnforcementOutcome)(0), // 0: gram.risk.v1.Finding.EnforcementOutcome
+	(*Finding)(nil),                 // 1: gram.risk.v1.Finding
+	(*Finding_Attribution)(nil),     // 2: gram.risk.v1.Finding.Attribution
+	(*Finding_Execution)(nil),       // 3: gram.risk.v1.Finding.Execution
 }
 var file_gram_risk_v1_finding_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	2, // 0: gram.risk.v1.Finding.attribution:type_name -> gram.risk.v1.Finding.Attribution
+	3, // 1: gram.risk.v1.Finding.execution:type_name -> gram.risk.v1.Finding.Execution
+	0, // 2: gram.risk.v1.Finding.enforcement_outcome:type_name -> gram.risk.v1.Finding.EnforcementOutcome
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_gram_risk_v1_finding_proto_init() }
@@ -1029,13 +1901,14 @@ func file_gram_risk_v1_finding_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gram_risk_v1_finding_proto_rawDesc), len(file_gram_risk_v1_finding_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   1,
+			NumEnums:      1,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_gram_risk_v1_finding_proto_goTypes,
 		DependencyIndexes: file_gram_risk_v1_finding_proto_depIdxs,
+		EnumInfos:         file_gram_risk_v1_finding_proto_enumTypes,
 		MessageInfos:      file_gram_risk_v1_finding_proto_msgTypes,
 	}.Build()
 	File_gram_risk_v1_finding_proto = out.File
