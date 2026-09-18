@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -17,11 +18,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 const (
@@ -125,8 +132,10 @@ type Plugin struct {
 	// SkillCount is how many skills the plugin carries.
 	SkillCount int64 `json:"skill_count"`
 
-	// Assignments summarizes who receives the plugin.
-	Assignments PluginAssignmentSummary `json:"assignments"`
+	// Assignments summarizes who receives the plugin for administrative reads.
+	// Member reads omit it entirely rather than returning zero-valued counts that
+	// could be mistaken for a complete recipient summary.
+	Assignments *PluginAssignmentSummary `json:"assignments,omitempty"`
 
 	// Publication is the plugin's package publication state.
 	Publication           string                 `json:"publication"`
@@ -219,19 +228,20 @@ type GetPluginOutput struct {
 	// plugin identity and its complete canonical assignment set. It remains
 	// valid until that state changes; a future write must also use unexpired
 	// assignment references from the same or a fresher read.
-	AssignmentVersion string `json:"assignment_version"`
+	AssignmentVersion string `json:"assignment_version,omitempty"`
 
 	// Assignments are the current assignment targets that can be named without
-	// exposing an individual identity or stale internal principal.
-	Assignments []PluginAssignmentOption `json:"assignments"`
+	// exposing an individual identity or stale internal principal. Member reads
+	// omit this administrative field entirely.
+	Assignments []PluginAssignmentOption `json:"assignments,omitempty"`
 
 	// AssignmentDetailsComplete is false when at least one current assignment
 	// cannot be safely represented as a reviewed role or directory target.
-	AssignmentDetailsComplete bool `json:"assignment_details_complete"`
+	AssignmentDetailsComplete *bool `json:"assignment_details_complete,omitempty"`
 
 	// AssignmentsTruncated is true when more than 100 current assignments can be
 	// represented and the returned list is only a prefix.
-	AssignmentsTruncated bool `json:"assignments_truncated"`
+	AssignmentsTruncated *bool `json:"assignments_truncated,omitempty"`
 
 	// ReferencesExpireAt applies to every assignment reference in this result.
 	ReferencesExpireAt string `json:"references_expire_at,omitempty"`
@@ -245,10 +255,14 @@ type GetPluginOutput struct {
 // and resolves the exact plugin a distribution names.
 type PluginsService struct {
 	db                   *pgxpool.Pool
+	authorization        *authz.Engine
+	dashboardURL         *url.URL
+	serverURL            *url.URL
 	budget               OperationBudget
 	cursors              *pluginCursorCodec
 	assignmentReferences *subjectReferenceCodec
 	assignmentVersionKey []byte
+	remoteSessions       MemberMCPConnectionReader
 	now                  func() time.Time
 
 	mutationFlags             feature.Provider
@@ -276,10 +290,14 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 	}
 	return &PluginsService{
 		db:                    db,
+		authorization:         nil,
+		dashboardURL:          nil,
+		serverURL:             nil,
 		budget:                budget,
 		cursors:               cursor,
 		assignmentReferences:  references,
 		assignmentVersionKey:  versionKey,
+		remoteSessions:        nil,
 		now:                   time.Now,
 		mutationFlags:         nil,
 		organizations:         nil,
@@ -288,6 +306,42 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		mutationReceipts:      nil,
 		distributionAdmission: admission.NewGuard(nil, nil),
 	}
+}
+
+func (s *PluginsService) WithAuthorization(engine *authz.Engine) *PluginsService {
+	if s != nil {
+		s.authorization = engine
+	}
+	return s
+}
+
+func (s *PluginsService) WithRemoteSessions(remoteSessions *remotesessions.ChallengeManager) *PluginsService {
+	if remoteSessions == nil {
+		return s
+	}
+	return s.withMemberMCPConnectionReader(remoteSessions)
+}
+
+func (s *PluginsService) withMemberMCPConnectionReader(reader MemberMCPConnectionReader) *PluginsService {
+	if s != nil {
+		s.remoteSessions = reader
+	}
+	return s
+}
+
+func (s *PluginsService) WithInstallLinks(dashboardURL, serverURL *url.URL) *PluginsService {
+	if s == nil {
+		return s
+	}
+	if validDashboardURL(dashboardURL) {
+		copyURL := *dashboardURL
+		s.dashboardURL = &copyURL
+	}
+	if serverURL != nil && serverURL.Scheme == "https" && serverURL.Host != "" && serverURL.User == nil {
+		copyURL := *serverURL
+		s.serverURL = &copyURL
+	}
+	return s
 }
 
 func (s *PluginsService) WithDistributionAdmissionReads(read distributionAdmissionReader) *PluginsService {
@@ -308,6 +362,19 @@ func (s *PluginsService) ResolveAssignmentReferences(ctx context.Context, tx pgx
 
 func (s *PluginsService) valid() bool {
 	return s != nil && s.db != nil && s.budget.valid() && s.cursors != nil && s.assignmentReferences != nil && len(s.assignmentVersionKey) > 0 && s.now != nil
+}
+
+func (s *PluginsService) requestMCPAccessURL(ctx context.Context, organizationID, mcpID, name string) string {
+	if s == nil || s.dashboardURL == nil || mcpID == "" {
+		return ""
+	}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID != organizationID || strings.TrimSpace(authCtx.OrganizationSlug) == "" {
+		return ""
+	}
+	return mcpaccess.RequestAccessURL(s.dashboardURL, authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
+		Scope: string(authz.ScopeMCPConnect), ResourceID: mcpID, ResourceName: name,
+	})
 }
 
 func (s *PluginsService) ListPlugins(ctx context.Context, principal Principal, input ListPluginsInput) (ListPluginsOutput, error) {
@@ -363,6 +430,156 @@ func (s *PluginsService) ListPlugins(ctx context.Context, principal Principal, i
 		output.NextCursor = cursor
 	}
 	return output, nil
+}
+
+func (s *PluginsService) IsOrganizationAdmin(ctx context.Context, principal Principal) (bool, error) {
+	grants, ok := authz.GrantsFromContext(ctx)
+	if !ok {
+		return false, ErrUnavailable
+	}
+	allowed, err := authz.GrantsAuthorize(grants, authz.Check{
+		Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil,
+	})
+	if err != nil {
+		return false, fmt.Errorf("authorize plugin inventory access: %w", err)
+	}
+	return allowed, nil
+}
+
+func (s *PluginsService) ListAssignedPlugins(ctx context.Context, principal Principal, input ListPluginsInput) (ListPluginsOutput, error) {
+	if !s.valid() || s.authorization == nil {
+		return ListPluginsOutput{}, ErrUnavailable
+	}
+	if err := s.authorization.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: principal.OrganizationID}); err != nil {
+		return ListPluginsOutput{}, err
+	}
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return ListPluginsOutput{}, err
+	}
+	q := platformrepo.New(s.db)
+	project, err := s.resolveProject(ctx, q, principal, input.ProjectID)
+	if err != nil {
+		return ListPluginsOutput{}, err
+	}
+	after, err := s.cursors.Decode(input.Cursor, principal, project.ID)
+	if err != nil {
+		return ListPluginsOutput{}, err
+	}
+	principalURNs, err := s.deliveryPrincipalURNs(ctx, principal)
+	if err != nil {
+		return ListPluginsOutput{}, err
+	}
+	limit := maxPluginPageSize
+	if input.Limit > 0 {
+		limit = min(input.Limit, maxPluginPageSize)
+	}
+	rows, err := q.ListPlatformMCPAssignedPluginInventory(ctx, platformrepo.ListPlatformMCPAssignedPluginInventoryParams{
+		ProjectID: project.ID, OrganizationID: principal.OrganizationID, PrincipalUrns: principalURNs,
+		UseAfter: after != uuid.Nil, AfterID: after, ResultLimit: int32(limit + 1), // #nosec G115 -- bounded above.
+	})
+	if err != nil {
+		return ListPluginsOutput{}, fmt.Errorf("list assigned platform mcp plugins: %w", err)
+	}
+	rows, more := boundedRows(rows, limit)
+	output := ListPluginsOutput{ProjectID: project.ID.String(), Plugins: make([]Plugin, 0, len(rows))}
+	for _, row := range rows {
+		output.Plugins = append(output.Plugins, assignedPlugin(row.ID, row.Name, row.Slug, row.Description.String, row.IsDefault, row.ServerCount, row.SkillCount))
+	}
+	if more && len(rows) > 0 {
+		output.NextCursor, err = s.cursors.Encode(pluginCursor{
+			OrganizationID: principal.OrganizationID, Binding: principalCursorBinding(principal),
+			ProjectID: project.ID.String(), AfterPluginID: rows[len(rows)-1].ID.String(),
+		})
+		if err != nil {
+			return ListPluginsOutput{}, err
+		}
+	}
+	return output, nil
+}
+
+func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Principal, input GetPluginInput) (GetPluginOutput, error) {
+	if !s.valid() || s.authorization == nil {
+		return GetPluginOutput{}, ErrUnavailable
+	}
+	if strings.TrimSpace(input.Plugin) == "" {
+		return GetPluginOutput{}, ErrPluginNotFound
+	}
+	if err := s.authorization.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: principal.OrganizationID}); err != nil {
+		return GetPluginOutput{}, err
+	}
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return GetPluginOutput{}, err
+	}
+	q := platformrepo.New(s.db)
+	project, err := s.resolveProject(ctx, q, principal, input.ProjectID)
+	if err != nil {
+		return GetPluginOutput{}, err
+	}
+	principalURNs, err := s.deliveryPrincipalURNs(ctx, principal)
+	if err != nil {
+		return GetPluginOutput{}, err
+	}
+	matches, err := q.ResolvePlatformMCPAssignedPluginTarget(ctx, platformrepo.ResolvePlatformMCPAssignedPluginTargetParams{
+		ProjectID: project.ID, OrganizationID: principal.OrganizationID, PrincipalUrns: principalURNs, Target: strings.TrimSpace(input.Plugin),
+	})
+	if err != nil {
+		return GetPluginOutput{}, fmt.Errorf("resolve assigned platform mcp plugin: %w", err)
+	}
+	if len(matches) == 0 {
+		return GetPluginOutput{}, ErrPluginNotFound
+	}
+	if len(matches) > 1 {
+		return GetPluginOutput{}, ErrPluginAmbiguous
+	}
+	target := matches[0]
+	servers, err := q.ListPlatformMCPPluginServers(ctx, platformrepo.ListPlatformMCPPluginServersParams{
+		PluginID: target.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, ResultLimit: maxPluginMembers + 1,
+	})
+	if err != nil {
+		return GetPluginOutput{}, fmt.Errorf("list assigned platform mcp plugin servers: %w", err)
+	}
+	skills, err := q.ListPlatformMCPPluginSkills(ctx, platformrepo.ListPlatformMCPPluginSkillsParams{
+		PluginID: uuid.NullUUID{UUID: target.ID, Valid: true}, ProjectID: project.ID,
+		OrganizationID: principal.OrganizationID, ResultLimit: maxPluginMembers + 1,
+	})
+	if err != nil {
+		return GetPluginOutput{}, fmt.Errorf("list assigned platform mcp plugin skills: %w", err)
+	}
+	servers, serversTruncated := boundedRows(servers, maxPluginMembers)
+	skills, skillsTruncated := boundedRows(skills, maxPluginMembers)
+	output := GetPluginOutput{
+		ProjectID: project.ID.String(),
+		Plugin:    assignedPlugin(target.ID, target.Name, target.Slug, target.Description.String, target.IsDefault, target.ServerCount, target.SkillCount),
+		Servers:   make([]PluginServer, 0, len(servers)), Skills: make([]PluginSkill, 0, len(skills)),
+		Truncated: serversTruncated || skillsTruncated,
+	}
+	for _, server := range servers {
+		backend := "mcp_server"
+		if server.ToolsetBacked {
+			backend = "toolset"
+		}
+		output.Servers = append(output.Servers, PluginServer{DisplayName: server.DisplayName, Backend: backend, MCPSlug: server.McpSlug, Policy: server.Policy, Enabled: server.Enabled})
+	}
+	for _, skill := range skills {
+		pinned := ""
+		if skill.PinnedVersionID.Valid {
+			pinned = skill.PinnedVersionID.UUID.String()
+		}
+		output.Skills = append(output.Skills, PluginSkill{Name: skill.SkillName, PinnedVersionID: pinned, FollowsLatest: !skill.PinnedVersionID.Valid})
+	}
+	return output, nil
+}
+
+func (s *PluginsService) deliveryPrincipalURNs(ctx context.Context, principal Principal) ([]string, error) {
+	user, err := usersrepo.New(s.db).GetUser(ctx, principal.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("load plugin recipient: %w", err)
+	}
+	principals, err := plugindelivery.ResolveDeliveryPrincipals(ctx, s.db, principal.OrganizationID, user.Email, principal.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve plugin recipient principals: %w", err)
+	}
+	return principals, nil
 }
 
 func (s *PluginsService) ListPluginAssignments(ctx context.Context, principal Principal, input ListPluginAssignmentsInput) (ListPluginAssignmentsOutput, error) {
@@ -456,6 +673,8 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		}
 	}
 	currentAssignments, detailsComplete := currentPluginAssignments(availableAssignments, assignments)
+	assignmentVersion := pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, assignments)
+	publicAssignments := publicAssignmentOptions(currentAssignments)
 
 	output := GetPluginOutput{
 		ProjectID: project.ID.String(),
@@ -464,10 +683,10 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		Plugin:                    pluginFromInventoryRow(platformrepo.ListPlatformMCPPluginInventoryRow(row)),
 		Servers:                   make([]PluginServer, 0, len(servers)),
 		Skills:                    make([]PluginSkill, 0, len(skills)),
-		AssignmentVersion:         pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, assignments),
-		Assignments:               publicAssignmentOptions(currentAssignments),
-		AssignmentDetailsComplete: detailsComplete,
-		AssignmentsTruncated:      assignmentsTruncated,
+		AssignmentVersion:         assignmentVersion,
+		Assignments:               publicAssignments,
+		AssignmentDetailsComplete: &detailsComplete,
+		AssignmentsTruncated:      &assignmentsTruncated,
 		Truncated:                 serversTruncated || skillsTruncated,
 	}
 	if s.distributionAdmissionRead != nil {
@@ -687,6 +906,13 @@ func canonicalPluginAssignmentURN(value string) string {
 	return value
 }
 
+func assignedPlugin(id uuid.UUID, name, slug, description string, isDefault bool, serverCount, skillCount int64) Plugin {
+	return Plugin{
+		ID: id.String(), Name: name, Slug: slug, Description: description, IsDefault: isDefault,
+		ServerCount: serverCount, SkillCount: skillCount, Publication: PluginPublicationPublished,
+	}
+}
+
 func pluginFromInventoryRow(row platformrepo.ListPlatformMCPPluginInventoryRow) Plugin {
 	publication := PluginPublicationNoRepository
 	switch {
@@ -703,7 +929,7 @@ func pluginFromInventoryRow(row platformrepo.ListPlatformMCPPluginInventoryRow) 
 		IsDefault:   row.IsDefault,
 		ServerCount: row.ServerCount,
 		SkillCount:  row.SkillCount,
-		Assignments: PluginAssignmentSummary{
+		Assignments: &PluginAssignmentSummary{
 			AllMembers: row.WildcardAssignmentCount > 0,
 			Roles:      row.RoleAssignmentCount,
 			Users:      row.UserAssignmentCount,

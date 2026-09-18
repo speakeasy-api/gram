@@ -175,8 +175,10 @@ type Service struct {
 	distributionAdmission *admission.Guard
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
@@ -1917,10 +1919,15 @@ func requirePluginAPIKeyCreator(ctx context.Context, db usersrepo.DBTX, organiza
 		return fmt.Errorf("get plugin api key creator: %w", err)
 	}
 	if len(members) == 0 {
-		return fmt.Errorf("created by user id %q is not a member of the organization", userID)
+		return fmt.Errorf("%w: created by user id %q", ErrPluginAPIKeyCreatorNotMember, userID)
 	}
 	return nil
 }
+
+// ErrPluginAPIKeyCreatorNotMember reports that the publish actor is not a
+// current member of the project's organization. Retrying the same publish
+// cannot change that.
+var ErrPluginAPIKeyCreatorNotMember = errors.New("plugin publish actor is not a member of the organization")
 
 func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput) (*PublishProjectResult, error) {
 	if !UsableAPIKeyCreatorID(input.CreatedByUserID) {

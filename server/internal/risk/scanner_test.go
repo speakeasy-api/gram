@@ -672,6 +672,11 @@ func TestScanner_PubsubDegradationFailsOpen(t *testing.T) {
 		{name: "deadline", dispatcher: &fakeEnforcementDispatcher{fn: func(enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
 			return enforcereply.Outcome{ByLane: map[enforcereply.Lane]*riskv1.EnforcementReply{}, Deadline: true}, nil
 		}}},
+		{name: "truncated clean reply", dispatcher: &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
+			lane := request.Lanes[0]
+			reply := riskv1.EnforcementReply_builder{Scanner: new(lane.Scanner), Status: new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)}.Build()
+			return enforcereply.Outcome{ByLane: map[enforcereply.Lane]*riskv1.EnforcementReply{lane: reply}, Complete: true, Truncated: true}, nil
+		}}},
 		{name: "error reply", dispatcher: &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
 			lane := request.Lanes[0]
 			reply := riskv1.EnforcementReply_builder{Scanner: new(lane.Scanner), Status: new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR)}.Build()
@@ -701,6 +706,12 @@ func TestScanner_PubsubDegradationFailsOpen(t *testing.T) {
 			result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "alice@example.com", message.User, ""))
 			require.NoError(t, err)
 			require.Nil(t, result)
+			outcome, err := scanner.ScanForInferenceEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "alice@example.com", message.User, ""))
+			require.NoError(t, err, "degraded scans preserve legacy fail-open disposition")
+			require.NotNil(t, outcome)
+			require.False(t, outcome.Complete, "degraded scans cannot establish accepted inference history")
+			require.Equal(t, result, outcome.Result)
+			require.NoError(t, ctx.Err(), "the inner deadline need not expire the outer request")
 			require.Equal(t, int32(0), pii.callCount.Load())
 		})
 	}
@@ -1430,4 +1441,80 @@ func TestScanner_CustomDetectionScopeNarrowsEnforcement(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, risk_analysis.SourceCustom, result.Source)
 	require.Equal(t, "custom.acme_token", result.RuleID)
+}
+
+func TestScanner_CustomDetectionScopeLimitsIncompleteEvaluation(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.NotNil(t, authCtx.ProjectID)
+
+	_, err := riskrepo.New(ti.conn).CreateCustomDetectionRule(ctx, riskrepo.CreateCustomDetectionRuleParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		RuleID:         "custom.acme_token",
+		Title:          "ACME token",
+		Description:    "ACME token",
+		// A malformed stored rule simulates custom analyzer failure.
+		DetectionExpr: pgtype.Text{String: `invalid CEL expression`, Valid: true},
+		Severity:      "high",
+	})
+	require.NoError(t, err)
+
+	analyzerConfig, err := risk_analysis.WithDetectionScopes(nil, []risk_analysis.DetectionScopeConfig{
+		{Category: "custom", ScopeInclude: `kind in ["tool_request"]`, ScopeExempt: ""},
+	})
+	require.NoError(t, err)
+
+	policyID := uuid.New()
+	_, err = riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:                   policyID,
+		ProjectID:            *authCtx.ProjectID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		Name:                 "custom scoped",
+		Sources:              []string{},
+		PresidioEntities:     nil,
+		PromptInjectionRules: nil,
+		DisabledRules:        nil,
+		CustomRuleIds:        []string{"custom.acme_token"},
+		AnalyzerConfig:       analyzerConfig,
+		Enabled:              true,
+		Action:               "block",
+		AudienceType:         "everyone",
+		AutoName:             false,
+		UserMessage:          pgtype.Text{},
+	})
+	require.NoError(t, err)
+	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
+
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
+		nil,
+		nil,
+		nil,
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name     string
+		kind     message.Type
+		complete bool
+	}{
+		{name: "out of scope", kind: message.User, complete: true},
+		{name: "in scope", kind: message.ToolRequest, complete: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			outcome, err := scanner.ScanForInferenceEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "deploy ACME-ABC12345 now", tc.kind, "Bash"))
+			require.NoError(t, err)
+			require.NotNil(t, outcome)
+			require.Nil(t, outcome.Result, "broken custom rules preserve fail-open disposition")
+			require.Equal(t, tc.complete, outcome.Complete, "only required custom evaluation gates acceptance")
+		})
+	}
 }

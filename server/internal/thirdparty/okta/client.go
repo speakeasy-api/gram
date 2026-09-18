@@ -42,6 +42,9 @@ const (
 	defaultRequestsPerMinute = 300
 )
 
+// hardMaxPages bounds any listing whatever the caller asks for.
+const hardMaxPages = 500
+
 // defaultScopes are requested on every normal token mint.
 var defaultScopes = []string{"okta.apps.read", "okta.users.read", "okta.groups.read"}
 
@@ -242,15 +245,15 @@ func (c *httpClient) ListApps(ctx context.Context, req ListAppsRequest) ([]App, 
 	}
 	setLimit(q, req.Limit)
 
-	raw, err := listAll[appJSON](ctx, c, "/api/v1/apps", q)
-	if err != nil {
+	raw, err := listAll[appJSON](ctx, c, "/api/v1/apps", q, req.MaxPages)
+	if err != nil && !errors.Is(err, ErrTooManyPages) {
 		return nil, err
 	}
 	out := make([]App, 0, len(raw))
 	for _, a := range raw {
 		out = append(out, a.toApp())
 	}
-	return out, nil
+	return out, err
 }
 
 func (c *httpClient) GetApp(ctx context.Context, appID string) (*App, error) {
@@ -272,8 +275,8 @@ func (c *httpClient) ListAppUsers(ctx context.Context, req ListAppUsersRequest) 
 	q := url.Values{}
 	setLimit(q, req.Limit)
 
-	raw, err := listAll[appUserJSON](ctx, c, "/api/v1/apps/"+url.PathEscape(req.AppID)+"/users", q)
-	if err != nil {
+	raw, err := listAll[appUserJSON](ctx, c, "/api/v1/apps/"+url.PathEscape(req.AppID)+"/users", q, req.MaxPages)
+	if err != nil && !errors.Is(err, ErrTooManyPages) {
 		return nil, err
 	}
 	out := make([]AppUser, 0, len(raw))
@@ -287,7 +290,7 @@ func (c *httpClient) ListAppUsers(ctx context.Context, req ListAppUsersRequest) 
 			LastUpdated: u.LastUpdated,
 		})
 	}
-	return out, nil
+	return out, err
 }
 
 func (c *httpClient) ListAppGroups(ctx context.Context, req ListAppGroupsRequest) ([]AppGroup, error) {
@@ -297,15 +300,15 @@ func (c *httpClient) ListAppGroups(ctx context.Context, req ListAppGroupsRequest
 	q := url.Values{}
 	setLimit(q, req.Limit)
 
-	raw, err := listAll[appGroupJSON](ctx, c, "/api/v1/apps/"+url.PathEscape(req.AppID)+"/groups", q)
-	if err != nil {
+	raw, err := listAll[appGroupJSON](ctx, c, "/api/v1/apps/"+url.PathEscape(req.AppID)+"/groups", q, req.MaxPages)
+	if err != nil && !errors.Is(err, ErrTooManyPages) {
 		return nil, err
 	}
 	out := make([]AppGroup, 0, len(raw))
 	for _, g := range raw {
 		out = append(out, AppGroup(g))
 	}
-	return out, nil
+	return out, err
 }
 
 func (c *httpClient) ListGroups(ctx context.Context, req ListGroupsRequest) ([]Group, error) {
@@ -316,7 +319,7 @@ func (c *httpClient) ListGroups(ctx context.Context, req ListGroupsRequest) ([]G
 	}
 	setLimit(q, req.Limit)
 
-	raw, err := listAll[groupJSON](ctx, c, "/api/v1/groups", q)
+	raw, err := listAll[groupJSON](ctx, c, "/api/v1/groups", q, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -420,13 +423,20 @@ func (c *httpClient) apiURL(base, id string, q url.Values) *url.URL {
 	return target
 }
 
-func listAll[T any](ctx context.Context, c *httpClient, path string, q url.Values) ([]T, error) {
+// listAll follows Link pages up to maxPages (zero uses the client cap; the
+// hard ceiling applies regardless of which caller memoized the client). On
+// ErrTooManyPages it returns the pages it did fetch alongside the error.
+func listAll[T any](ctx context.Context, c *httpClient, path string, q url.Values, maxPages int) ([]T, error) {
+	if maxPages <= 0 {
+		maxPages = c.maxPages
+	}
+	maxPages = min(maxPages, hardMaxPages)
 	target := c.apiURL(path, "", q)
 	items := make([]T, 0)
 	pages := 0
 	for target != nil {
-		if pages >= c.maxPages {
-			return nil, fmt.Errorf("%w: %s after %d pages", ErrTooManyPages, path, pages)
+		if pages >= maxPages {
+			return items, fmt.Errorf("%w: %s after %d pages", ErrTooManyPages, path, pages)
 		}
 		pages++
 
@@ -873,4 +883,12 @@ func newAPIError(method, path string, status int, body []byte) *APIError {
 		summary = parsed.ErrorDescription
 	}
 	return &APIError{Method: method, Path: "/" + strings.TrimLeft(path, "/"), StatusCode: status, ErrorCode: code, Summary: summary}
+}
+
+// ListUsers reads a single page; pagination links are deliberately not followed.
+func (c *httpClient) ListUsers(ctx context.Context, req ListUsersRequest) ([]User, error) {
+	q := url.Values{}
+	setLimit(q, req.Limit)
+	users, _, err := getJSON[[]User](ctx, c, c.apiURL("/api/v1/users", "", q))
+	return users, err
 }

@@ -14,14 +14,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestExpansionAdmissionRuntimeDisabled(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), true, false)
+	admission := networkingress.NewExpansionAdmission(ti.features, true, false)
 	require.ErrorContains(t, admission.CheckExpansion(ctx, ti.orgID), "network ingress is disabled")
 	_, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
 	require.Error(t, err)

@@ -6,14 +6,14 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { NetworkAccessSection } from "./NetworkAccessSection";
 
 const testState = vi.hoisted(() => ({
-  rolloutStatus: "enabled" as
+  entitled: true,
+  featureStatus: "success" as "pending" | "success" | "error",
+  rolloutStatus: undefined as
     | "loading"
     | "enabled"
     | "disabled"
-    | "missing"
-    | "error",
-  entitled: true,
-  featureStatus: "success" as "pending" | "success" | "error",
+    | "error"
+    | undefined,
   featureFetching: false,
   orgAdmin: true,
   ingressEnabled: true,
@@ -61,12 +61,28 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-1" }),
 }));
 
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: testState.rolloutStatus }),
-}));
-
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => testState.orgAdmin }),
+}));
+
+vi.mock("@/hooks/useNetworkIngressRollout", () => ({
+  useNetworkIngressRollout: () => {
+    const status =
+      testState.rolloutStatus ??
+      (testState.featureStatus === "pending"
+        ? "loading"
+        : testState.featureStatus === "error"
+          ? "error"
+          : testState.entitled
+            ? "enabled"
+            : "disabled");
+
+    return {
+      status,
+      rolloutEnabled: status === "enabled",
+      canManageIngress: testState.orgAdmin,
+    };
+  },
 }));
 
 vi.mock("@/hooks/useToolsetUrl", () => ({
@@ -194,9 +210,9 @@ const endpoints: McpEndpoint[] = [
 ];
 
 beforeEach(() => {
-  testState.rolloutStatus = "enabled";
   testState.entitled = true;
   testState.featureStatus = "success";
+  testState.rolloutStatus = undefined;
   testState.featureFetching = false;
   testState.orgAdmin = true;
   testState.ingressEnabled = true;
@@ -215,17 +231,54 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("NetworkAccessSection", () => {
-  it.each(["loading", "disabled", "missing", "error"] as const)(
-    "renders nothing when the rollout flag is %s",
-    (rolloutStatus) => {
-      testState.rolloutStatus = rolloutStatus;
-      const { container } = render(
+  it("renders nothing when the staff entitlement is disabled", () => {
+    testState.entitled = false;
+    const { container } = render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+    );
+
+    expect(container.textContent).toBe("");
+  });
+
+  it.each(["loading", "error"] as const)(
+    "keeps the section visible while entitlement lookup is %s",
+    (status) => {
+      testState.rolloutStatus = status;
+      testState.featureStatus = status === "loading" ? "pending" : "error";
+
+      render(
         <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
       );
 
-      expect(container.textContent).toBe("");
+      expect(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(
+          status === "loading"
+            ? /Checking private network availability/
+            : /Private network availability could not be checked/,
+        ),
+      ).toBeTruthy();
     },
   );
+
+  it("keeps a stored private mode visible when the staff entitlement is disabled", () => {
+    testState.entitled = false;
+    render(
+      <NetworkAccessSection
+        mcpServer={{ ...baseServer, networkAccessMode: "private_only" }}
+        endpoints={endpoints}
+      />,
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: "Network access mode" }).textContent,
+    ).toContain("Private only");
+    expect(
+      screen.getByText("https://private.example.ts.net/mcp/hosted-mcp"),
+    ).toBeTruthy();
+  });
 
   it("does not query ingress for a non-admin and reports unavailable state", () => {
     testState.orgAdmin = false;

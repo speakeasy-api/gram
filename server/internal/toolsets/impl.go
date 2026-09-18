@@ -724,6 +724,13 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.E(oops.CodeUnexpected, err, "failed to delete toolset").LogError(ctx, logger)
 	}
 
+	if err := tr.DeleteAssistantToolsetsByToolset(ctx, repo.DeleteAssistantToolsetsByToolsetParams{
+		ToolsetID: deleted.ID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to detach assistant toolsets").LogError(ctx, logger)
+	}
+
 	if err := s.audit.LogToolsetDelete(ctx, dbtx, audit.LogToolsetDeleteEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,

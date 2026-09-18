@@ -1,55 +1,65 @@
 /**
- * One palette for the whole insights board.
+ * The insights board's colors, taken from the shared chart palette.
  *
- * The ranked cards and the trend chart were drawing from different sets — the
- * cards from saturated hues at low alpha, the chart from the generic series
- * colours, which led with black and pure blue. Two palettes on one screen read
- * as two unrelated products, so both now come from here.
- *
- * The hues are deliberately desaturated: a card's fill sits under its own
- * labels, and a stacked chart puts ten of them side by side. At full
- * saturation that is a set of highlighter pens; muted, it stays a chart.
+ * This file used to carry a hue set of its own — desaturated, close in spirit
+ * to the shared one, but a separate list all the same. That is the same "two
+ * palettes read as two products" problem it was written to solve, one level
+ * up: the Costs board and this one sat side by side in the same nav and did
+ * not match. Both now draw from `@/components/chart/palette`, so a change
+ * there reaches every chart in the dashboard, and this board follows the
+ * theme (the old literals were light-mode only).
  */
-const INSIGHT_HUES = {
-  blue: "#5b83a8",
-  violet: "#8779ad",
-  teal: "#4f938c",
-  rose: "#bf6274",
-  olive: "#7d9459",
-  amber: "#b08a55",
-  plum: "#96688a",
-  steel: "#6b7f96",
-  clay: "#c08268",
-  sage: "#6f9b7e",
-} as const;
+import {
+  useOtherSeriesColor,
+  useSeriesColors,
+} from "@/components/chart/useSeriesColors";
 
-/** One hue per card, so the board reads as six answers rather than one list. */
-export const CARD_COLORS = {
-  servers: INSIGHT_HUES.blue,
-  tools: INSIGHT_HUES.violet,
-  clients: INSIGHT_HUES.teal,
-  errors: INSIGHT_HUES.rose,
-  skills: INSIGHT_HUES.olive,
-  people: INSIGHT_HUES.amber,
-} as const;
+export type InsightCardKey =
+  | "servers"
+  | "tools"
+  | "clients"
+  | "errors"
+  | "skills"
+  | "people";
 
 /**
- * Series colours for the trend chart, ordered so neighbouring stack segments
- * stay distinguishable. Starts on the same blue the servers card uses, since
- * the chart is stacked by server.
+ * One palette slot per card, so the board reads as six answers rather than one
+ * list. Servers take slot 0 because the trend chart is stacked by server and
+ * leads on the same color; errors take the rose slot, the nearest thing to a
+ * warning tone in a ramp that reserves red for actual risk.
  */
-export const INSIGHT_SERIES_COLORS = [
-  INSIGHT_HUES.blue,
-  INSIGHT_HUES.violet,
-  INSIGHT_HUES.teal,
-  INSIGHT_HUES.amber,
-  INSIGHT_HUES.plum,
-  INSIGHT_HUES.olive,
-  INSIGHT_HUES.clay,
-  INSIGHT_HUES.steel,
-  INSIGHT_HUES.sage,
-  INSIGHT_HUES.rose,
-] as const;
+const CARD_SLOT: Record<InsightCardKey, number> = {
+  servers: 0,
+  errors: 1,
+  skills: 2,
+  tools: 3,
+  people: 4,
+  clients: 5,
+};
 
-/** Everything past the palette folds into one muted grey rather than cycling. */
-export const INSIGHT_OTHER_COLOR = "#b9bcc0";
+export function useCardColors(): Record<InsightCardKey, string> {
+  const series = useSeriesColors();
+  const at = (slot: number): string => series[slot % series.length]!;
+  return {
+    servers: at(CARD_SLOT.servers),
+    tools: at(CARD_SLOT.tools),
+    clients: at(CARD_SLOT.clients),
+    errors: at(CARD_SLOT.errors),
+    skills: at(CARD_SLOT.skills),
+    people: at(CARD_SLOT.people),
+  };
+}
+
+/**
+ * Series colors for the trend chart. The shared ramp in its own order, which
+ * starts on the same blue the servers card uses — the chart is stacked by
+ * server, so the two agree on their leading color.
+ */
+export function useInsightSeriesColors(): string[] {
+  return useSeriesColors();
+}
+
+/** Everything past the ramp folds into one muted neutral rather than cycling. */
+export function useInsightOtherColor(): string {
+  return useOtherSeriesColor();
+}

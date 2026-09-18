@@ -195,6 +195,21 @@ describe("usePrivateMcpServerUrls", () => {
     },
   );
 
+  it("keeps private URLs visible after the staff entitlement is removed", () => {
+    hookState.rolloutEnabled = false;
+    const { result } = renderHook(() =>
+      usePrivateMcpServerUrls(privateServer, endpoints),
+    );
+
+    expect(result.current.privateMcpUrls).toEqual([
+      "https://private.example.ts.net/mcp/platform-server",
+    ]);
+    expect(result.current.privateInstallPageUrls).toEqual([
+      "https://api.example.com/mcp/platform-server/install?network=private",
+    ]);
+    expect(result.current.canReadPrivateUrls).toBe(true);
+  });
+
   it("discards cached ingress data after admin access is revoked", () => {
     hookState.canManageIngress = false;
     const { result } = renderHook(() =>

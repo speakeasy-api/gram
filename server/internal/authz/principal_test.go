@@ -199,6 +199,11 @@ func TestValidatePrincipal(t *testing.T) {
 	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewSystemPrincipal("issuer-metadata-refresh"))
 	require.ErrorIs(t, err, ErrPrincipalInvalid)
 
+	// A workload inherits its authority from its assigned agent; it never
+	// holds a grant directly.
+	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewWorkloadPrincipal(uuid.New(), "repo:acme/payments-api:ref:refs/heads/main"))
+	require.ErrorIs(t, err, ErrPrincipalInvalid)
+
 	conn.Close()
 	err = ValidatePrincipal(ctx, conn, organizationID, rolePrincipal)
 	require.Error(t, err)
