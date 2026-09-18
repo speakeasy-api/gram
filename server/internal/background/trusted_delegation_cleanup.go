@@ -79,16 +79,43 @@ func trustedDelegationCleanupRunTimeout() time.Duration {
 
 func AddTrustedDelegationCleanupSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
 	id := fmt.Sprintf("v1:trusted-delegation-cleanup:%s", temporalEnv.Queue())
-	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
-		ID:      id,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		Spec:    client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: time.Hour}}},
+	sc := temporalEnv.Client().ScheduleClient()
+	options := client.ScheduleOptions{
+		ID:            id,
+		CatchupWindow: time.Hour - time.Second,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		Spec:          client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: time.Hour}}},
 		Action: &client.ScheduleWorkflowAction{
 			ID: id + "/scheduled", Workflow: TrustedDelegationCleanupWorkflow,
 			TaskQueue: string(temporalEnv.Queue()), WorkflowRunTimeout: trustedDelegationCleanupRunTimeout(),
 		},
-	})
-	if err != nil && !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+	}
+	_, err := sc.Create(ctx, options)
+	if errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+		err = sc.GetHandle(ctx, id).Update(ctx, client.ScheduleUpdateOptions{
+			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
+				schedule := input.Description.Schedule
+				action, ok := schedule.Action.(*client.ScheduleWorkflowAction)
+				if !ok || action.TaskQueue != string(temporalEnv.Queue()) {
+					return nil, fmt.Errorf("trusted delegation cleanup schedule is owned by another task queue")
+				}
+				if action.WorkflowRunTimeout == trustedDelegationCleanupRunTimeout() &&
+					schedule.Policy != nil && schedule.Policy.CatchupWindow == options.CatchupWindow {
+					return nil, temporal.ErrSkipScheduleUpdate
+				}
+				// Preserve operator pause state and other settings while migrating limits.
+				action.WorkflowRunTimeout = trustedDelegationCleanupRunTimeout()
+				if schedule.Policy == nil {
+					schedule.Policy = &client.SchedulePolicies{}
+				}
+				schedule.Policy.CatchupWindow = options.CatchupWindow
+				return &client.ScheduleUpdate{Schedule: &schedule}, nil
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("update trusted delegation cleanup schedule: %w", err)
+		}
+	} else if err != nil {
 		return fmt.Errorf("create trusted delegation cleanup schedule: %w", err)
 	}
 	return nil

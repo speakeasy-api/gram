@@ -148,6 +148,7 @@ func TestFederatedOfflinePolicyDiscoveryPresence(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := federatedFixture(t)
 			p.client.Scope = []string{"openid", "email", "offline_access"}
+			p.metadata.ScopesSupported = nil
 			require.NoError(t, json.Unmarshal([]byte(tc.document), &p.metadata))
 			policy, err := p.OfflinePolicy()
 			require.NoError(t, err)
