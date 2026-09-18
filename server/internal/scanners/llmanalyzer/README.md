@@ -37,8 +37,10 @@ text and no entity type).
 
 ## Architecture
 
-One model call per message, then fan-out to policies by source. Both lanes
-run in `gram streams`; the API server and the worker only publish requests.
+One model call per request, then fan-out to policies by source. The sync
+lane sends one request per message; the async lane sends one per policy
+and message (see below). Both lanes run in `gram streams`; the API server
+and the worker only publish requests.
 
 ### Sync lane (block / warn / quarantine)
 
@@ -98,9 +100,10 @@ scanners.PublishFindings ─► Finding topic ─► FindingCHWriter ─► Clic
   flagged orgs). It acks analyzer failures with nothing published and nacks
   only when the findings publish fails. A batch whose LLM publish fails fails
   the activity, because nothing else scans those sources for the org.
-- `AnalyzeBatch` runs per policy, so N policies produce N requests per
-  message. Collapsing them with a verdict cache is a planned follow-up
-  (plan §7), not part of v0.
+- `AnalyzeBatch` runs per policy, so N policies with covered sources produce
+  N requests, and N model calls, per message. A verdict cache that collapses
+  them to about one call per message is deferred to a follow-up; v0 pays the
+  N calls.
 
 ## Prompt contract
 
