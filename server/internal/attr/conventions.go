@@ -235,10 +235,15 @@ const (
 	// admitted rather than a bare "admitted", so the values are
 	// "admitted_open", "admitted_open_not_listed",
 	// "admitted_open_oversized", "admitted_catalog_exact",
-	// "admitted_catalog_pattern", "admitted_custom", "denied_disabled",
+	// "admitted_catalog_pattern", "admitted_custom",
+	// "admitted_platform_assistant", "denied_disabled",
 	// "denied_not_listed", "denied_oversized", and "denied_unknown_mode".
 	// Chart the admitted_* values as a group; there is no single value
 	// meaning "admitted".
+	//
+	// "admitted_platform_assistant" is a document Gram publishes for one of
+	// its own assistants, admitted on every issuer that accepts CIMD at all
+	// and recorded under whichever mode that issuer runs.
 	//
 	// "admitted_open_not_listed" is the catalog-gap signal on an issuer that
 	// refuses nobody: the client got in, and no rule anywhere covered it.
@@ -366,15 +371,21 @@ const (
 	// McpEntryPointKey is the bounded entry-point dimension on the
 	// mcp.toolset_slug_fallback counter: which public surface resolved a
 	// request through the legacy toolsets.mcp_slug lookup.
-	McpEntryPointKey              = attribute.Key("gram.mcp.entry_point")
-	McpRequestedTagsKey           = attribute.Key("gram.mcp.requested_tags")
-	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
-	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
-	McpServerIDKey                = attribute.Key("gram.mcp_server.id")
-	MetaMcpServerIDKey            = attribute.Key("gram.meta_mcp_server.id")
-	MetaMemberBackendKey          = attribute.Key("gram.meta.member.backend")
-	MetaDispatchOutcomeKey        = attribute.Key("gram.meta.dispatch.outcome")
-	McpURLKey                     = attribute.Key("gram.mcp.url")
+	McpEntryPointKey       = attribute.Key("gram.mcp.entry_point")
+	McpRequestedTagsKey    = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey    = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey    = attribute.Key("gram.mcp.tools_filtered")
+	McpServerIDKey         = attribute.Key("gram.mcp_server.id")
+	MetaMcpServerIDKey     = attribute.Key("gram.meta_mcp_server.id")
+	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
+	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
+	McpURLKey              = attribute.Key("gram.mcp.url")
+	// McpClientNameKey / McpClientVersionKey carry the MCP caller's
+	// self-reported identity from the initialize handshake (or the
+	// per-request _meta hint). Untrusted client input: attribution only,
+	// never authorization.
+	McpClientNameKey              = attribute.Key("gram.mcp.client.name")
+	McpClientVersionKey           = attribute.Key("gram.mcp.client.version")
 	ToolVariationsGroupIDKey      = attribute.Key("gram.tool_variations_group.id")
 	MetricNameKey                 = attribute.Key("gram.metric.name")
 	MimeTypeKey                   = attribute.Key("mime.type")
@@ -417,6 +428,18 @@ const (
 	// manual consent-page or admin action. Used as a metric dimension on
 	// gram.remote_session.upstream_refresh.
 	OAuthRefreshTriggerKey = attribute.Key("gram.oauth.refresh_trigger")
+
+	// OAuthValidationTriggerKey names which caller presented a stored remote
+	// session credential to its upstream: the consent page's Verify, the
+	// connect callback, or the idle keepalive re-check. Used as a metric
+	// dimension on gram.remote_session.validation.
+	OAuthValidationTriggerKey = attribute.Key("gram.oauth.validation_trigger")
+
+	// OAuthIssuerMetadataRefreshReasonKey names why a remote session issuer's
+	// metadata was refreshed: the on-use cadence or an upstream signal that the
+	// stored endpoints drifted. Used as a metric dimension on
+	// gram.remote_session_issuer.metadata_refresh.
+	OAuthIssuerMetadataRefreshReasonKey = attribute.Key("gram.oauth.issuer_metadata_refresh_reason")
 
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
@@ -507,6 +530,8 @@ const (
 	RemoteSessionIDKey                  = attribute.Key("gram.remote_session.id")
 	RemoteSessionClientMigratedCountKey = attribute.Key("gram.remote_session_client.migrated_count")
 	RemoteSessionRevokeDroppedCountKey  = attribute.Key("gram.remote_session.revoke_dropped_count")
+	// RemoteSessionRecheckCountKey is how many grants one keepalive re-check pass actually probed; skipped and rate-limited claims are not counted.
+	RemoteSessionRecheckCountKey = attribute.Key("gram.remote_session.recheck_count")
 	// RemoteSessionAccessExpiresAtKey is the upstream-reported deadline of a
 	// remote session's access token.
 	RemoteSessionAccessExpiresAtKey = attribute.Key("gram.remote_session.access_expires_at")
@@ -539,6 +564,7 @@ const (
 	RiskPathKey                    = attribute.Key("gram.risk.path")
 	RiskStartPosKey                = attribute.Key("gram.risk.start_pos")
 	RiskEndPosKey                  = attribute.Key("gram.risk.end_pos")
+	RiskEnforcementTruncatedKey    = attribute.Key("gram.risk.enforcement_truncated")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -1712,6 +1738,20 @@ func SlogOAuthRefreshTrigger(v string) slog.Attr {
 	return slog.String(string(OAuthRefreshTriggerKey), v)
 }
 
+func OAuthValidationTrigger[V ~string](v V) attribute.KeyValue {
+	return OAuthValidationTriggerKey.String(string(v))
+}
+func SlogOAuthValidationTrigger(v string) slog.Attr {
+	return slog.String(string(OAuthValidationTriggerKey), v)
+}
+
+func OAuthIssuerMetadataRefreshReason[V ~string](v V) attribute.KeyValue {
+	return OAuthIssuerMetadataRefreshReasonKey.String(string(v))
+}
+func SlogOAuthIssuerMetadataRefreshReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthIssuerMetadataRefreshReasonKey), string(v))
+}
+
 func OAuthErrorDescription(v string) attribute.KeyValue {
 	return OAuthErrorDescriptionKey.String(v)
 }
@@ -2080,6 +2120,11 @@ func SlogRemoteSessionID(v string) slog.Attr {
 	return slog.String(string(RemoteSessionIDKey), v)
 }
 
+func RemoteSessionRecheckCount(v int) attribute.KeyValue { return RemoteSessionRecheckCountKey.Int(v) }
+func SlogRemoteSessionRecheckCount(v int) slog.Attr {
+	return slog.Int(string(RemoteSessionRecheckCountKey), v)
+}
+
 func RemoteSessionClientMigratedCount(v int64) attribute.KeyValue {
 	return RemoteSessionClientMigratedCountKey.Int64(v)
 }
@@ -2214,6 +2259,10 @@ func SlogRiskScanBatchIndex(v int) slog.Attr      { return slog.Int(string(RiskS
 
 func RiskScanTextSize(v int) attribute.KeyValue { return RiskScanTextSizeKey.Int(v) }
 func SlogRiskScanTextSize(v int) slog.Attr      { return slog.Int(string(RiskScanTextSizeKey), v) }
+
+func RiskEnforcementTruncated(v bool) attribute.KeyValue {
+	return RiskEnforcementTruncatedKey.Bool(v)
+}
 
 func RiskScanRequestID(v string) attribute.KeyValue { return RiskScanRequestIDKey.String(v) }
 func SlogRiskScanRequestID(v string) slog.Attr {
@@ -2365,6 +2414,14 @@ func SlogToolsetMCPEnabled(v bool) slog.Attr      { return slog.Bool(string(Tool
 
 func McpURL(v string) attribute.KeyValue { return McpURLKey.String(v) }
 func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey), v) }
+
+func McpClientName(v string) attribute.KeyValue { return McpClientNameKey.String(v) }
+func SlogMcpClientName(v string) slog.Attr      { return slog.String(string(McpClientNameKey), v) }
+
+func McpClientVersion(v string) attribute.KeyValue { return McpClientVersionKey.String(v) }
+func SlogMcpClientVersion(v string) slog.Attr {
+	return slog.String(string(McpClientVersionKey), v)
+}
 
 func McpMethod(v string) attribute.KeyValue { return McpMethodKey.String(v) }
 func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMethodKey), v) }

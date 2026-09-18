@@ -238,6 +238,22 @@ export function ToolSelectionPanel({
     }
   }, [q, filteredServers]);
 
+  // Flattened to one server, every tool is already on screen unexpanded, so
+  // there is nothing for a pinned list to rescue.
+  const flat = flattenSingleServer && servers.length === 1;
+
+  const selectedToolRows = useMemo(() => {
+    // The prefix is what separates two servers of the same name in different
+    // projects, so the pinned row carries it as the server rows do.
+    const serverNameById = new Map(
+      servers.map((s) => [s.id, `${s.namePrefix ?? ""}${s.name}`]),
+    );
+    return selectedTools.map((t) => ({
+      ...t,
+      serverName: serverNameById.get(t.serverId) ?? "",
+    }));
+  }, [selectedTools, servers]);
+
   const annotationSectionVisible = annotationSelectionSupported;
   // Whether any annotation is actually counted, not whether tools happen to be
   // loaded: a server that resolves its tools per caller reports no counts, and
@@ -383,6 +399,46 @@ export function ToolSelectionPanel({
               </div>
             </div>
 
+            {/* A picked tool sits inside a collapsed server, so the panel could
+                say "3 selected" while showing none of them. Held at the top,
+                unfiltered by the search below it. */}
+            {(!flat || !!q) && selectedToolRows.length > 0 && (
+              <div className="border-border mx-3 mb-3 border">
+                <div className="bg-muted/40 text-muted-foreground text-eyebrow border-border border-b px-3 py-1.5">
+                  Selected ({selectedToolRows.length})
+                </div>
+                {selectedToolRows.map((row) => (
+                  <button
+                    key={`${row.serverId}:${row.toolName}`}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={true}
+                    onClick={() => toggleTool(row.serverId, row.toolName)}
+                    className="hover:bg-muted/40 border-border flex w-full items-center gap-3 border-b px-3 py-2 text-left text-sm last:border-b-0"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="border-primary bg-primary text-primary-foreground flex size-4 shrink-0 items-center justify-center border"
+                    >
+                      <Check className="size-3" />
+                    </span>
+                    <span
+                      title={row.toolName}
+                      className="min-w-0 flex-1 truncate"
+                    >
+                      {row.toolName}
+                    </span>
+                    <span
+                      title={row.serverName}
+                      className="text-muted-foreground shrink-0 text-xs"
+                    >
+                      {row.serverName}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="border-border mx-3 mb-3 border">
               {filteredServers.length === 0 ? (
                 <div className="text-muted-foreground px-3 py-3 text-sm">
@@ -401,7 +457,7 @@ export function ToolSelectionPanel({
                     onToggleExpanded={toggleExpanded}
                     onToggleTool={toggleTool}
                     onBatchToggleTools={batchToggleTools}
-                    flat={flattenSingleServer && servers.length === 1}
+                    flat={flat}
                   />
                 ))
               )}

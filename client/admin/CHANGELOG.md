@@ -1,5 +1,35 @@
 # admin
 
+## 0.4.3
+
+### Patch Changes
+
+- 6f6ab02: Replace the admin trial extension action with Change end date. Operators can shorten or extend a running trial to any future UTC calendar date, with an audit record of the previous and new end dates. New and restarted trials still default to fourteen days.
+
+## Unreleased
+
+### Minor Changes
+
+- Add totals-only organization meter usage charts for storage, MCP bandwidth,
+  and risk scans, with daily, weekly, monthly, and cumulative views, billing
+  cycles, shareable date filters, and an authenticated admin usage endpoint.
+  Admin startup now requires primary and read-replica ClickHouse connections;
+  meter usage reads from the replica without a telemetry enablement flag.
+  Filter changes retain the previous report with an updating indicator and
+  matching labels; chart axes use integer ticks for small usage quantities.
+
+## 0.4.2
+
+### Patch Changes
+
+- f5fb216: Operators can start or restart an enterprise trial from the admin organization overview trial panel, including orgs that never trialled and expired trials that have not converted or been demoted.
+
+## 0.4.1
+
+### Patch Changes
+
+- fc61b11: Group standalone admin navigation into Account Management and Platform Management sections.
+
 ## 0.4.0
 
 ### Minor Changes

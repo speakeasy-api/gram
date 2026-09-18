@@ -2,16 +2,22 @@ package remotesessions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
 // untrustedDocumentError marks a discovery document that parsed but that Gram
@@ -107,10 +113,11 @@ func mapDiscoveryError(ctx context.Context, logger *slog.Logger, err error, unre
 	msg, _ := discoveryFailureMessage(err)
 	_, untrusted := errors.AsType[*untrustedDocumentError](err)
 	_, fetchFailed := errors.AsType[*discoveryError](err)
+	_, keySetFetchFailed := errors.AsType[*keySetRefreshError](err)
 	switch {
 	case untrusted:
 		return oops.E(oops.CodeInvalid, err, "%s", msg).LogError(ctx, logger)
-	case fetchFailed:
+	case fetchFailed, keySetFetchFailed:
 		return oops.E(unreachable, err, "%s", msg).LogError(ctx, logger)
 	default:
 		// Unreachable today: discoverIssuerMetadata only ever returns the two
@@ -131,6 +138,9 @@ func discoveryFailureMessage(err error) (msg string, transient bool) {
 	}
 	if de, ok := errors.AsType[*discoveryError](err); ok {
 		return de.UserMessage(), de.transient()
+	}
+	if ke, ok := errors.AsType[*keySetRefreshError](err); ok {
+		return fmt.Sprintf("Could not refresh the JWK Set at %s", ke.uri), true
 	}
 	return "issuer metadata could not be fetched", false
 }
@@ -155,10 +165,24 @@ func discoveryFailureMessage(err error) (msg string, transient bool) {
 // Gram's own behavior and display fields cannot be expressed through them —
 // see UpdateRemoteSessionIssuerDiscoveredMetadata, which has no parameter for
 // slug, issuer, name, logo, client setup documentation, oidc, or passthrough.
-func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer repo.RemoteSessionIssuer) (repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams, []string, error) {
+func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolver *jwks.Resolver, tunnels *tunnelrouting.HTTPClient, issuer repo.RemoteSessionIssuer) (repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams, []string, error) {
 	var zero repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams
 
-	discovered, err := discoverIssuerMetadata(ctx, policy, issuer.Issuer)
+	tunnel, err := issuerTunnelTransport(tunnels, issuer.TunneledMcpServerID)
+	if err != nil {
+		return zero, nil, &discoveryError{
+			WellKnownURL: issuer.Issuer,
+			Status:       0,
+			cause:        fmt.Errorf("select issuer discovery transport: %w", err),
+			definitive:   false,
+		}
+	}
+	var doer httpDoer = issuerDiscoveryHTTPClient(policy)
+	if tunnel != nil {
+		doer = tunnel
+	}
+
+	discovered, err := discoverIssuerMetadataWithDoer(ctx, doer, issuer.Issuer)
 	if err != nil {
 		return zero, nil, err
 	}
@@ -182,8 +206,89 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		}
 	}
 
-	return discoveredMetadataParams(doc, discovered.unreadable, issuer), discovered.warnings, nil
+	// The origin fallback is safe for ordinary metadata, but its key URL is
+	// authoritative only for the exact configured issuer. Otherwise a
+	// path-scoped issuer could silently adopt keys advertised for another
+	// authorization server at the same origin.
+	if doc.JwksURI != "" && doc.Issuer != issuer.Issuer {
+		return zero, nil, &untrustedDocumentError{
+			reason: fmt.Sprintf("metadata document advertises issuer %q, but this identity provider is configured as %q; refusing to trust its jwks_uri", truncateForMessage(doc.Issuer), issuer.Issuer),
+		}
+	}
+
+	// The key set rides the issuer's binding like the discovery document that
+	// advertised it. An issuer inside a customer network publishes its
+	// jwks_uri there too, and a direct fetch of it would fail every refresh
+	// and stamp a last-error on a provider that is working.
+	keySet, err := refreshIssuerKeySet(ctx, resolver, tunnel, doc.JwksURI, issuer)
+	if err != nil {
+		return zero, nil, err
+	}
+
+	return discoveredMetadataParams(doc, discovered.unreadable, keySet, issuer), discovered.warnings, nil
 }
+
+type refreshedIssuerKeySet struct {
+	document  json.RawMessage
+	fetchedAt pgtype.Timestamptz
+	expiresAt pgtype.Timestamptz
+	etag      string
+}
+
+func refreshIssuerKeySet(ctx context.Context, resolver *jwks.Resolver, tunnel httpDoer, jwksURI string, issuer repo.RemoteSessionIssuer) (refreshedIssuerKeySet, error) {
+	var zero refreshedIssuerKeySet
+	if jwksURI == "" {
+		return zero, nil
+	}
+
+	source, err := jwks.NewRemoteSource(jwksURI)
+	if err != nil {
+		return zero, &untrustedDocumentError{reason: fmt.Sprintf("metadata document advertises an invalid jwks_uri: %v", err)}
+	}
+	if tunnel != nil {
+		source = source.WithTransport(tunnel)
+	}
+
+	cache := jwks.CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}
+	if issuer.JwksUri.Valid && issuer.JwksUri.String == jwksURI {
+		cache.Document = json.RawMessage(issuer.Jwks)
+		cache.ETag = conv.FromPGTextOrEmpty[string](issuer.JwksEtag)
+		if issuer.JwksFetchedAt.Valid {
+			cache.RefreshedAt = issuer.JwksFetchedAt.Time
+		}
+	}
+	// ExpiresAt deliberately remains zero: this is the explicit refresh
+	// operation, so it must consult the upstream even when the stored cache is
+	// still fresh. A usable stored document and ETag still enable a 304.
+	result, err := resolver.Resolve(ctx, source, cache)
+	if err != nil {
+		if errors.Is(err, jwks.ErrKeySetInvalid) || errors.Is(err, jwks.ErrKeySetTooLarge) || errors.Is(err, jwks.ErrPrivateKeyMaterial) || errors.Is(err, jwks.ErrSymmetricKeyMaterial) {
+			return zero, &untrustedDocumentError{reason: "jwks_uri did not return a valid public JWK Set"}
+		}
+		return zero, &keySetRefreshError{uri: jwksURI, cause: err}
+	}
+	if result.Outcome != jwks.CacheOutcomeRefreshed && result.Outcome != jwks.CacheOutcomeNotModified {
+		return zero, fmt.Errorf("explicit JWKS refresh unexpectedly returned %q", result.Outcome)
+	}
+
+	now := time.Now()
+	return refreshedIssuerKeySet{
+		document:  result.Document,
+		fetchedAt: pgtype.Timestamptz{Time: now, InfinityModifier: pgtype.Finite, Valid: true},
+		expiresAt: pgtype.Timestamptz{Time: now.Add(result.TTL), InfinityModifier: pgtype.Finite, Valid: true},
+		etag:      result.ETag,
+	}, nil
+}
+
+type keySetRefreshError struct {
+	uri   string
+	cause error
+}
+
+func (e *keySetRefreshError) Error() string {
+	return fmt.Sprintf("refresh key set at %s: %v", e.uri, e.cause)
+}
+func (e *keySetRefreshError) Unwrap() error { return e.cause }
 
 // vetRefreshedDocument is the distrust gate a fetched document must pass
 // before it may overwrite an issuer's stored metadata. Gram distrusts the
@@ -239,7 +344,7 @@ func vetRefreshedDocument(doc rfc8414Document, issuer repo.RemoteSessionIssuer) 
 // discoveredMetadataParams maps a vetted document onto the parameters that
 // persist it over issuer's row. unreadable is the well-known URL discovery
 // could not read this run, or "" when every candidate answered.
-func discoveredMetadataParams(doc rfc8414Document, unreadable string, issuer repo.RemoteSessionIssuer) repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams {
+func discoveredMetadataParams(doc rfc8414Document, unreadable string, keySet refreshedIssuerKeySet, issuer repo.RemoteSessionIssuer) repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams {
 	return repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams{
 		// An endpoint the issuer has stopped advertising arrives here as an
 		// empty string, which the query clears to NULL. Manual endpoint
@@ -256,6 +361,10 @@ func discoveredMetadataParams(doc rfc8414Document, unreadable string, issuer rep
 		RevocationEndpoint:                doc.RevocationEndpoint,
 		RegistrationEndpoint:              doc.RegistrationEndpoint,
 		JwksUri:                           doc.JwksURI,
+		Jwks:                              string(keySet.document),
+		JwksFetchedAt:                     keySet.fetchedAt,
+		JwksCacheExpiresAt:                keySet.expiresAt,
+		JwksEtag:                          keySet.etag,
 		ServiceDocumentation:              doc.ServiceDocumentation,
 		OpPolicyUri:                       doc.OpPolicyURI,
 		OpTosUri:                          doc.OpTosURI,
@@ -306,10 +415,17 @@ func discoveredMetadataParams(doc rfc8414Document, unreadable string, issuer rep
 // the miss.
 const refreshConflictMessage = "identity provider changed while its metadata was being fetched; retry the refresh"
 
+func sameMetadataRefreshSnapshot(a, b repo.RemoteSessionIssuer) bool {
+	return sameTimestamp(a.MetadataFetchedAt, b.MetadataFetchedAt) && sameTimestamp(a.UpdatedAt, b.UpdatedAt)
+}
+
 // discoveryRetryURL is the well-known URL a transient failure left unread, or "" when the failure is definitive.
 func discoveryRetryURL(err error) string {
 	if de, ok := errors.AsType[*discoveryError](err); ok && de.transient() {
 		return de.WellKnownURL
+	}
+	if ke, ok := errors.AsType[*keySetRefreshError](err); ok {
+		return ke.uri
 	}
 	return ""
 }

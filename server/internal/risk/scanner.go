@@ -1000,6 +1000,10 @@ func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance meteri
 		}
 		return findings
 	}
+	if outcome.Truncated {
+		// The dispatcher already logs the truncation; only annotate the span here.
+		trace.SpanFromContext(ctx).SetAttributes(attr.RiskEnforcementTruncated(true))
+	}
 
 	for _, lane := range lanes {
 		reply := outcome.ByLane[lane]
@@ -1009,6 +1013,8 @@ func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance meteri
 			laneErr := outcome.Failed[lane]
 			if errors.Is(laneErr, context.DeadlineExceeded) || (laneErr == nil && outcome.Deadline) {
 				reason = "deadline"
+			} else if errors.Is(laneErr, context.Canceled) {
+				continue
 			} else if laneErr != nil {
 				reason = "request_error"
 			}

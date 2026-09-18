@@ -339,6 +339,8 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Header.Del(wire.HeaderTunnelForwardToken)
+	requireActive := r.Header.Get(wire.HeaderTunnelRequireActive) == "1"
+	r.Header.Del(wire.HeaderTunnelRequireActive)
 
 	// Forwarding is internal-only; gram-server supplies the tunnel ID header.
 	tunnelID := r.Header.Get(wire.HeaderTunnelID)
@@ -348,21 +350,60 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 	}
 	consumerSession := strings.TrimSpace(r.Header.Get(wire.HeaderTunnelConsumerSession))
 	exactSession := strings.TrimSpace(r.Header.Get(wire.HeaderTunnelAgentSession))
-	entry, failure := g.reg.beginForward(tunnelID, consumerSession, exactSession, time.Now().UTC(), g.cfg.MaxStreamsPerTunnel)
-	switch failure {
-	case forwardReserved:
-	case forwardBusy:
-		// Live sessions exist but all are at their substream cap. The gateway
-		// is healthy: callers must not unpublish its route; they may retry
-		// another gateway or surface the 502.
-		w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorTunnelBusy)
-		http.Error(w, "MCP server is temporarily unavailable", http.StatusBadGateway)
-		return
-	default:
-		// Distinguish known tunnel/no live session from auth failures.
-		w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorNoLiveSession)
-		http.Error(w, "tunnel has no live agent session", http.StatusBadGateway)
-		return
+	checker, hasChecker := g.keys.(ActiveTunnelChecker)
+	if requireActive {
+		if !hasChecker {
+			g.logger.ErrorContext(r.Context(), "tunnel active check unavailable", slog.String("tunnel_id", tunnelID))
+			w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorActiveCheckFailed)
+			http.Error(w, "tunnel active check unavailable", http.StatusBadGateway)
+			return
+		}
+	}
+
+	var entry *sessEntry
+	for {
+		var failure forwardFailure
+		entry, failure = g.reg.beginForward(tunnelID, consumerSession, exactSession, time.Now().UTC(), g.cfg.MaxStreamsPerTunnel)
+		switch failure {
+		case forwardReserved:
+		case forwardBusy:
+			// Live sessions exist but all are at their substream cap. The gateway
+			// is healthy: callers must not unpublish its route; they may retry
+			// another gateway or surface the 502.
+			w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorTunnelBusy)
+			http.Error(w, "MCP server is temporarily unavailable", http.StatusBadGateway)
+			return
+		default:
+			// Distinguish known tunnel/no live session from auth failures.
+			w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorNoLiveSession)
+			http.Error(w, "tunnel has no live agent session", http.StatusBadGateway)
+			return
+		}
+		if !requireActive {
+			break
+		}
+
+		checkCtx, cancel := routeOperationContext(r.Context())
+		active, err := checker.IsActive(checkCtx, tunnelID, entry.keyHash)
+		cancel()
+		if err != nil {
+			g.reg.finishForward(entry, time.Now().UTC())
+			g.logger.WarnContext(r.Context(), "tunnel active check failed",
+				slog.String("tunnel_id", tunnelID), slog.Any("error", err))
+			w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorActiveCheckFailed)
+			http.Error(w, "tunnel active check failed", http.StatusBadGateway)
+			return
+		}
+		if active {
+			break
+		}
+
+		// Key rotation can leave an old-key session beside a valid replacement.
+		// Remove only the stale session and keep looking before declaring the
+		// whole gateway route dead.
+		g.reg.finishForward(entry, time.Now().UTC())
+		g.reg.remove(tunnelID, entry)
+		_ = entry.session.Close()
 	}
 	r.Header.Del(wire.HeaderTunnelID)
 	r.Header.Del(wire.HeaderTunnelConsumerSession)
@@ -393,8 +434,9 @@ func (g *Gateway) newSessionProxy(tunnelID string, session *yamux.Session) http.
 			req.URL.Scheme = "http"
 			req.URL.Host = "tunnel" // ignored; substreamTransport dials the session
 		},
-		Transport:     substreamTransport(session),
-		FlushInterval: -1, // stream SSE immediately
+		Transport:      substreamTransport(session),
+		FlushInterval:  -1, // stream SSE immediately
+		ModifyResponse: stripUpstreamTunnelError,
 		ErrorHandler: func(rw http.ResponseWriter, _ *http.Request, err error) {
 			g.logger.Warn("tunnel forward failed",
 				slog.String("tunnel_id", tunnelID), slog.Any("error", err))
@@ -402,6 +444,13 @@ func (g *Gateway) newSessionProxy(tunnelID string, session *yamux.Session) http.
 			rw.WriteHeader(http.StatusBadGateway)
 		},
 	}
+}
+
+func stripUpstreamTunnelError(resp *http.Response) error {
+	// Only the gateway may instruct gram-server to retry or unpublish a route.
+	// Never trust this internal control header from an upstream.
+	resp.Header.Del(wire.HeaderTunnelError)
+	return nil
 }
 
 // RevokeTunnel closes this gateway's sessions and globally removes every route

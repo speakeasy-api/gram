@@ -37,6 +37,12 @@ type RemoteSessionIssuer struct {
 	RegistrationEndpoint *string
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string
+	// When Gram last successfully fetched or revalidated the JWK Set. Null until
+	// the first successful refresh.
+	JwksFetchedAt *string
+	// When the persisted JWK Set becomes stale under the upstream cache policy.
+	// Null until the first successful refresh.
+	JwksCacheExpiresAt *string
 	// RFC 8414 service_documentation; developer documentation for the issuer. Null
 	// when not advertised.
 	ServiceDocumentation *string
@@ -61,6 +67,9 @@ type RemoteSessionIssuer struct {
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported bool
+	// When set, calls to this issuer's OAuth endpoints ride this MCP tunnel
+	// instead of dialing directly.
+	TunneledMcpServerID *string
 	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
 	// captured by discovery.
 	UserinfoEndpoint *string

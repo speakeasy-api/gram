@@ -75,7 +75,8 @@ export function MarketplaceCard({
           </strong>{" "}
           to the marketplace repository so that the repository is discoverable
           inside of Claude, Codex and other platforms when adding the plugin
-          repository.
+          repository. Collaborators are added as repository admins, which Cursor
+          requires to serve this marketplace to your team.
         </p>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <span className="text-muted-foreground inline-flex items-center gap-1.5 text-sm">
@@ -230,7 +231,8 @@ export function UninitializedMarketplaceCard({
           </strong>{" "}
           to the marketplace repository so that the repository is discoverable
           inside of Claude, Codex and other platforms when adding the plugin
-          repository.
+          repository. Collaborators are added as repository admins, which Cursor
+          requires to serve this marketplace to your team.
         </p>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <span className="text-muted-foreground inline-flex items-start gap-2 text-sm">

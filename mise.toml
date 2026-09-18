@@ -1,6 +1,6 @@
 #:schema https://mise.en.dev/schema/mise.json
 
-min_version = "2026.7.6"
+min_version = "2026.9.9"
 
 [settings]
 pin = true
@@ -21,11 +21,12 @@ pin = true
 apko = "1.2.31"
 flyctl = "0.4.77"
 gh = "2.100.0"
-go = "1.27.0"
+go = "1.27.1"
 golangci-lint = "2.13.2"
 gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.2"
+stripe = "1.50.11"
 melange = "0.56.5"
 # Authoritative Node pin. `.node-version` mirrors it and must be kept in sync:
 # aube resolves its own runtime and cannot read this file, so without that
@@ -90,6 +91,12 @@ CLICKHOUSE_HTTP_PORT = "8123"
 CLICKHOUSE_NATIVE_PORT = "9440"
 CLICKHOUSE_DATABASE = "gram"
 CLICKHOUSE_INSECURE = true
+CLICKHOUSE_READ_USERNAME = "{{env.CLICKHOUSE_USERNAME}}"
+CLICKHOUSE_READ_PASSWORD = "{{env.CLICKHOUSE_PASSWORD}}"
+CLICKHOUSE_READ_HOST = "{{env.CLICKHOUSE_HOST}}"
+CLICKHOUSE_READ_NATIVE_PORT = "{{env.CLICKHOUSE_NATIVE_PORT}}"
+CLICKHOUSE_READ_DATABASE = "{{env.CLICKHOUSE_DATABASE}}"
+CLICKHOUSE_READ_CA_FILE = "{{config_root}}/local/clickhouse/certs/ca-cert.pem"
 GRAM_CLICKHOUSE_URL = "clickhouse://{{env.CLICKHOUSE_USERNAME}}:{{env.CLICKHOUSE_PASSWORD}}@{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?secure=true&skip_verify=true"
 ## golang-migrate requires database, username, and password as query parameters.
 GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}?database={{env.CLICKHOUSE_DATABASE}}&username={{env.CLICKHOUSE_USERNAME}}&password={{env.CLICKHOUSE_PASSWORD}}&secure=true&skip_verify=true&x-multi-statement=true"
@@ -215,6 +222,11 @@ OTLP_HTTP_PORT = "4318"
 OTEL_EXPORTER_OTLP_ENDPOINT = "http://{{env.OTLP_GRPC_HOST}}:{{env.OTLP_GRPC_PORT}}"
 OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
 OTEL_RESOURCE_ATTRIBUTES = "worktree=main"
+## Where the shared collector's demo-activity pipeline posts rewritten Claude
+## Code logs (see local/otel/gram-demo-forward.yaml). host.docker.internal
+## because localhost inside that container is the container; the port follows
+## this worktree's, which git:workinit remaps for parallel trees.
+GRAM_DEMO_OTLP_LOGS_ENDPOINT = "https://host.docker.internal:{{env.GRAM_SERVER_PORT}}/rpc/hooks.otel/v1/logs"
 ## Change these to 0 to disable OpenTelemetry traces and metrics to be emitted.
 GRAM_ENABLE_OTEL_TRACES = 1
 GRAM_ENABLE_OTEL_METRICS = 1

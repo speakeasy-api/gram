@@ -290,6 +290,29 @@ WHERE du.organization_id = @organization_id
   AND attribute.value IS NOT NULL
 ORDER BY email, attribute.key, attribute.value;
 
+-- name: ResolveIDJAGUsersByEmail :many
+-- The directory row is the provisioning gate. A stored user_id wins; only a
+-- NULL link falls back to live email matching. Both paths require an active
+-- Gram user and active membership in the same organization. Two distinct
+-- matches are returned so the caller can fail closed on ambiguity.
+SELECT DISTINCT candidate.id AS user_id
+FROM directory_users AS du
+JOIN users AS candidate
+  ON (du.user_id IS NOT NULL AND candidate.id = du.user_id)
+  OR (du.user_id IS NULL AND LOWER(candidate.email) = LOWER(du.email))
+JOIN organization_user_relationships AS membership
+  ON membership.user_id = candidate.id
+  AND membership.organization_id = du.organization_id
+  AND membership.deleted_at IS NULL
+WHERE du.organization_id = @organization_id
+  AND LOWER(du.email) = LOWER(@email)
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND candidate.deleted_at IS NULL
+  AND candidate.workos_deleted_at IS NULL
+ORDER BY candidate.id
+LIMIT 2;
+
 -- name: DirectoryAttributeValueExists :one
 SELECT EXISTS(
   SELECT 1

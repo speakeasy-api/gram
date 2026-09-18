@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
-import { ExternalLink, Plus, Sparkles } from "lucide-react";
+import { ExternalLink, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
@@ -553,19 +553,5 @@ export function HooksSetupDialog({
         </div>
       </Dialog.Content>
     </Dialog>
-  );
-}
-
-export function HooksSetupButton(): JSX.Element {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <>
-      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
-        <Plus className="h-4 w-4" />
-        Add provider
-      </Button>
-      <HooksSetupDialog open={open} onOpenChange={setOpen} />
-    </>
   );
 }

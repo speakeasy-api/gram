@@ -1,5 +1,109 @@
 # server
 
+## 2.8.0
+
+### Minor Changes
+
+- fc270cd: Allow organization administrators to configure the exact remote-session issuer and client pair Gram uses for trusted identity-provider login. The API validates tenant scope, required upstream scopes, and token-endpoint authentication, audits effective link changes, and prevents linked clients from being invalidated or deleted.
+
+### Patch Changes
+
+- 30d5584: Adds storage for organization-scoped Okta identity provider connections.
+- 2c13f85: Caller-canceled enforcement lane failures no longer count as enforcement degradation. Deadline and other lane failures still degrade.
+- bba144d: Show the no-data state on a tool usage timeline whose every bucket is empty, rather than a labelled but blank chart, and stop the log detail sheet from holding the previous record's payload on screen while the next one is highlighted — one call's arguments could appear under another call's heading
+- 249dd28: Add an injectable Okta Management API client (`server/internal/thirdparty/okta`) with private_key_jwt + DPoP authentication, nonce and rate-limit handling, and an in-memory fake for tests. The client is not wired into `deps.go` yet; wiring lands with the first consumer.
+- 2b12f7b: OTLP exports accepted on `/otel/v1/logs` and `/otel/v1/metrics` now also run the hooks telemetry writers, so Claude Code and Codex usage exported to the native ingest endpoint is attributed to users and counted on usage, cost, and identity pages. Previously those exports only reached the Event Feed.
+- dc5fa70: Route PostHog SDK logs through the structured logger and evaluate feature flags individually so local evaluation warnings no longer land as errors on every flag check.
+
+## 2.7.0
+
+### Minor Changes
+
+- 4be868f: Accept ID-JAG JWT bearer grants at user session token endpoints configured with a trusted remote session issuer. Successful exchanges issue short-lived, resource-bound access tokens without refresh tokens, and authorization server metadata advertises the grant only when the issuer is configured to accept it.
+- 6f6ab02: Replace the admin trial extension action with Change end date. Operators can shorten or extend a running trial to any future UTC calendar date, with an audit record of the previous and new end dates. New and restarted trials still default to fourteen days.
+- 6f0271b: Capture Pi (pi.dev) sessions, and enforce policy on them, alongside the agents
+  Gram already observes. Pi has no hook configuration dialect to render into and
+  no MCP client of its own: its only integration point is a TypeScript extension
+  loaded into the Pi process. The observability package for Pi is therefore a
+  generated extension that forwards Pi's lifecycle events to the hooks relay over
+  NDJSON stdio, where the existing redaction, credential, and decision paths turn
+  them into canonical hook events. Prompts, tool calls and their results, per-turn
+  tokens and cost, and session start/end all land in the dashboard under the `pi`
+  source, and a policy deny blocks the prompt or tool call inside Pi rather than
+  being reported after the fact.
+  
+  MCP for Pi comes from third-party extensions that bridge servers in as ordinary
+  Pi tools, which leaves tool names as the only signal that a call left the
+  machine. The relay reads the config those extensions share (`.pi/mcp.json`,
+  `~/.pi/agent/mcp.json`), reports the servers a workspace can reach as an
+  inventory snapshot at session start — with credentials redacted — and attributes
+  tool calls to the matching server so Pi traffic is visible to Shadow MCP rather
+  than appearing as unattributed local tools.
+  
+  The package is downloadable per platform from the plugins page, ships in the
+  published marketplace repo for extraction into `~/.pi/agent/` or a repository's
+  `.pi/`, and `speakeasy-hooks install --provider=pi` renders the same extension
+  locally. Pi also joins the setup walkthrough and the shared agent-provider
+  catalog, so it carries its own name and mark everywhere a captured session's
+  source is shown.
+- 8fafae0: Remote session issuers can be bound to a tunneled MCP server, so Gram routes persisted issuer metadata refreshes and back-channel OAuth calls through the tunnel when the authorization server is unreachable from the public internet. That covers the whole back channel: the code exchange, token refresh, revocation, dynamic client registration, the issuer's JWK Set, and the userinfo and introspection calls that name a session's owner. Every issuer endpoint routed through the tunnel must be reachable from the same local origin as `TUNNEL_LOCAL_MCP_URL`; the agent pins tunneled requests to that origin while preserving their paths and queries. Discover by URL still uses Gram's direct egress; private issuer endpoints, including the DCR endpoint, can be entered manually in issuer settings. Platform admins can manage the binding from the issuer settings page; tunnel bindings and tunneled dynamic client registration remain platform-admin-only. Adding an MCP Catalogue server whose provider is already set up as a bound issuer is refused rather than registered over direct egress. Replacing a client registration the identity provider no longer recognizes also rides the binding, so a private provider's clients recover on their own instead of failing every login until an administrator re-registers them by hand.
+- 8464d04: Add `private_key_jwt` authentication for remote OAuth token exchanges and refreshes. Remote session clients can select an attached organization JSON Web Key Set and configure whether signed client assertions use the issuer URL or token endpoint URL as their audience.
+
+### Patch Changes
+
+- f7ae834: The MCP gateway now recognises which AI tool is calling it and enforces the organization's decision for that tool. A caller is matched by its CIMD vendor key, its OAuth client id, or the client name it reports at initialize, and a tool the organization has blocked is refused at the gateway. Blocking only takes effect for callers that present a CIMD client id; anything else stays unreviewed.
+- 74257f7: MCP server and Platform MCP logins now reconcile organization memberships from WorkOS before checking access, the same way dashboard login does, so a valid member no longer needs a separate dashboard login to connect. Membership additions from WorkOS also drop the cached organization list immediately.
+- a5d8539: Assistants can authenticate to CIMD-capable MCP OAuth servers with a stable Client ID Metadata Document instead of dynamic client registration. The existing one-client-per-assistant DCR path remains the default and the fallback when CIMD is unsupported.
+- df885d9: Shadow AI now reports ChatGPT Classic as running, not just installed. The scan target carries the app's process name alongside the bundle id it already had, so a device agent distinguishes the app being open from the app merely being present. Classic stays distinguishable from the current ChatGPT app, which ships under a different bundle id.
+- a191074: Shadow AI now detects the current ChatGPT desktop app, which ships under a different bundle id than ChatGPT Classic and so was previously invisible to device scans. The two builds are separate targets: an organization sees which of them a device has installed and running, and can decide about each.
+  
+  The ChatGPT gateway matchers move from the Classic target onto the new ChatGPT one. Both builds authorize through the same documents, so the gateway cannot tell them apart and a decision recorded against Classic would have reached every ChatGPT caller. An organization that blocked ChatGPT Classic to refuse ChatGPT traffic should record that decision against ChatGPT instead; Classic remains visible on the device but is no longer enforceable on its own.
+- 0fecf64: Assign access challenge roles before resolving requests.
+- e599d45: Serve the hooks@0.3.30 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 29b0b09: Reduce noisy failures from canceled guardrail workbench evaluations and limit oversized session replays. The workbench now reports when a session contains more messages than the replay can evaluate.
+- 57312da: Grant marketplace repo collaborators admin access so platforms that gate marketplace setup on repository admin — such as Cursor's "Serve Marketplace From Cursor" — can be enabled without editing the repo on GitHub.
+- 5d874f2: Shadow AI now detects Pi (pi.dev) on enrolled devices. The scan target catalog gains Pi as a coding harness, matched by its `pi` binary and process name and by its `~/.pi` configuration directory, so a device running Pi is reported instead of coming back clean. Pi ships no MCP client of its own — servers reach it only through third-party extensions that register them as ordinary Pi tools — so it joins as a detection-only target: it publishes no client identity document, and a decision about it is recorded but not enforceable.
+- f7ae834: Platform MCP gains two Shadow AI tools. `list_shadow_ai_inventory` returns the AI tools an organization's devices have been seen running, with each tool's access decision; `list_ai_scan_library` returns the scan target library those detections are matched against. Both require an org admin on every call.
+- 4918df0: The Watchdog page now shows when risk analysis last ran: "Analyzing now", "Last analyzed 4m ago", or "No recent analysis". The same status is available as `risk.getAnalysisStatus` in the management API and as the `get_risk_analysis_status` Platform MCP tool.
+- 253fb3c: Test-only: drive workload assertions against a dev-idp standing in for the workload platform, served over HTTPS with real discovery and a published key set: verification with a key set fetched over the network, including key rotation and an unreachable issuer, and the full admission pipeline over real issuer and admission rows, covering tenancy, withdrawn issuers, project-tier isolation and the absence of requests to an untrusted issuer. devidptest gains opt-in TLS, key rotation, stopping and request counting to support it
+- 3784893: Add a `workload` kind to the session subject URN, so a machine vouched for by an external issuer can be the subject of a Gram-issued session. The identity carries the issuer alongside the subject it asserted, since a `sub` is unique within an issuer and never across one
+
+## 2.6.0
+
+### Minor Changes
+
+- f5fb216: Operators can start or restart an enterprise trial from the admin organization overview trial panel, including orgs that never trialled and expired trials that have not converted or been demoted.
+- 9277ff7: Enrich remote sessions from verified JWT access tokens (RFC 9068): when the exchange or refresh returns no ID token and userinfo names no identity, a JWT access token signed by the issuer's published keys supplies the subject, email, and scopes. JWKS consumers now honour an explicit key_ops, keeping a key only when it names verify.
+- ef652ab: Re-check idle remote sessions that carry no refresh token or refresh expiry on a keepalive sweep, so a revoked no-expiry credential reads rejected (or inactive when the provider's introspection says so) within the re-check interval without anyone opening the consent page. A grant is due once its last verdict, or its connection when it has none, is older than the interval, so a fresh connection is left to the connect-time verification. The sweep runs on the server process, is paced per issuer host fleet-wide, records nothing for tunneled members whose tunnel is down, and reports its probes under the new `keepalive` trigger on `gram.remote_session.validation`. `--remote-session-recheck-interval` (`GRAM_REMOTE_SESSION_RECHECK_INTERVAL`) defaults to 24h; zero or negative disables the sweep.
+- 8936131: Gateway server instructions are editable: the gateway settings tab gains an Instructions section, and the metaMcp update endpoint accepts `instructions` and `instructions_mode`. Custom text is appended to Gram's built-in drill-down guidance by default, or replaces it when the mode is set to replace. Gateways without custom text keep serving the built-in text.
+- 8710c79: Add incremental meter usage reporting for stored-message tokens, MCP ingress/egress bytes, and risk-scanning volume. The additive `usage.getMeterUsage` API returns exact integer daily totals and bounded facet breakdowns for UTC-midnight windows up to three calendar months. The API and dashboard report ordinary usage only; correction readings are excluded.
+  
+  The billing explorer now uses these readings while retaining independent contract-position and invoice estimates. Totals, daily averages, chart axes, and breakdown rows use compact KTok/MTok/BTok or binary KiB/MiB/GiB units, with full values available on hover. Project breakdowns show available project slugs consistently in charts and tables, falling back to IDs when unavailable. Switching breakdowns keeps the chart and legend synchronized, including transitions between total-only and stacked views. Reset sits beside the period controls and matches the Refresh button's sizing. API deployments must configure the dedicated `CLICKHOUSE_READ_*` connection with a SELECT-only reader before rollout; meter reporting never falls back to the writer connection.
+  
+  Insert-triggered materialized views maintain daily SummingMergeTree series without historical rebuilds. Queries sum unmerged increments and rank series in storage order with bounded top-six state. Duplicate deliveries count unless prevented by the producer or corrected out of band; raw-table replacement merges do not retract summary contributions. The single schema migration does not backfill existing readings, and no summary worker or publication privileges are required.
+- 1c632ce: Recover automatically from expired upstream dynamic client registrations. Remote session clients now record the expiry the identity provider reported at registration. When a provider stops recognizing a client (`invalid_client` on refresh), Gram confirms it against the token endpoint and re-registers the client in place at the identity provider's registration endpoint before the next login, revoking the sessions bound to the old client. Organization administrators can also rotate a client on demand from its settings page.
+
+### Patch Changes
+
+- ff7b5fc: Refresh remote session issuer metadata reactively when an upstream answer says the stored endpoints drifted: a token endpoint answering 404 or 410 on refresh or code exchange, or an ID token signed under a key the issuer's published key set lacks, requests a refresh outside the daily cadence, at most once per issuer every ten minutes. A 404 or 410 carrying an OAuth error body (`invalid_grant`, `invalid_client`, ...) and a kid-less ID token are not treated as drift, and an issuer whose last refresh failed definitively waits for the hourly retry window instead. The `gram.remote_session_issuer.metadata_refresh` metric now carries the trigger reason and a `skipped_recent` outcome.
+- 1eadeae: Refresh remote session issuer metadata reactively when the stored userinfo or introspection endpoint answers 404 or 410 without an OAuth error body, under the new `enrichment_endpoint_missing` reason on `gram.remote_session_issuer.metadata_refresh`. A 404 or 410 carrying an OAuth error body (`invalid_token`, `invalid_client`, ...) is the endpoint answering, not drift, and requests nothing. The refresh follows the existing reactive cadence: at most once per issuer every ten minutes.
+- 8e15be1: Add a partial index on `remote_sessions` covering the keepalive re-check population (no refresh token, no refresh expiry) ordered by its due clock, so the re-check claim query walks the index instead of sequentially scanning the table on every tick.
+
+## 2.5.0
+
+### Minor Changes
+
+- 17a5d8a: Persist RFC 9728 protected-resource display metadata (resource_name, resource_documentation, resource_policy_uri, resource_tos_uri) on the issuer a direct-remote Platform MCP attachment creates, re-probe it when the remote MCP server is updated, expose it on remoteMcp.discoverProtectedResourceMetadata, and link documentation, policy, and terms on the consent card.
+- 8b5b56f: Add rollout-gated Tailscale private network setup and hosted MCP server network access controls.
+- 10bfee9: Allow organization administrators to link a user-session issuer to an organization-level or global trusted remote-session issuer. Remote-issuer lifecycle preflights and mutations now protect active trust links, and metadata refreshes persist and revalidate the trusted issuer's public JWK Set atomically.
+
+### Patch Changes
+
+- efa78b6: Fix realtime risk enforcement failing open for non-UUID operation ids.
+- 7fe38bd: Identity map syncs that lose the single-writer lock now defer to the running replacement instead of failing and retrying.
+- ed85d07: feat(platform-mcp): enforce Shadow MCP approvals across direct-remote distribution
+- 4b1bcd8: feat(platform-mcp): report Shadow MCP distribution admission and guide the reviewed workflow
+
 ## 2.4.0
 
 ### Minor Changes

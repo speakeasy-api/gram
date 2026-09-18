@@ -21,7 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -517,11 +516,9 @@ func TestHandleIDPCallback_MetaEndpointResumption(t *testing.T) {
 	t.Run("resumes onto the meta endpoint", func(t *testing.T) {
 		t.Parallel()
 		mock := &mockIdentityResolver{
-			exchangeResult:  &identity.IDPUserInfo{Sub: "idp-user-123", Email: "test@example.com", Name: "Test User"},
-			upsertResult:    "user-" + uuid.NewString()[:8],
-			hasAccessResult: &sessions.Organization{ID: "org-id-placeholder", Name: "Test Org"},
-			hasAccessEmail:  "test@example.com",
-			hasAccessOK:     true,
+			exchangeResult: &identity.IDPUserInfo{Sub: "idp-user-123", Email: "test@example.com", Name: "Test User"},
+			upsertResult:   "user-" + uuid.NewString()[:8],
+			hasAccessOK:    true,
 		}
 		ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
 		authCtx, ok := contextvalues.GetAuthContext(ctx)

@@ -82,6 +82,9 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 	if strings.TrimSpace(payload.Issuer) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").LogError(ctx, logger)
 	}
+	if conv.PtrValOr(payload.TunneledMcpServerID, "") != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "a global identity provider cannot be bound to a project tunnel").LogError(ctx, logger)
+	}
 
 	// Operator-supplied and later rendered as a link, so it is validated here.
 	// An empty value stays legal: the create query stores it as NULL.
@@ -157,6 +160,7 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
+		TunneledMcpServerID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		// Discovered fields forwarded from the draft. Omitted fields store NULL
 		// ("not captured"), like code_challenge_methods_supported above.
 		UserinfoEndpoint:                           conv.PtrToPGTextEmpty(payload.UserinfoEndpoint),
@@ -249,9 +253,10 @@ func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.Lis
 	items := make([]*adminrsgen.GlobalRemoteSessionIssuer, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, &adminrsgen.GlobalRemoteSessionIssuer{
-			Issuer:            mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
-			GlobalClientCount: int(row.GlobalClientCount),
-			TenantClientCount: int(row.TenantClientCount),
+			Issuer:                        mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
+			GlobalClientCount:             int(row.GlobalClientCount),
+			TenantClientCount:             int(row.TenantClientCount),
+			TrustedUserSessionIssuerCount: int(row.TrustedUserSessionIssuerCount),
 		})
 	}
 
@@ -290,9 +295,10 @@ func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGl
 	}
 
 	return &adminrsgen.GlobalRemoteSessionIssuer{
-		Issuer:            mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
-		GlobalClientCount: int(row.GlobalClientCount),
-		TenantClientCount: int(row.TenantClientCount),
+		Issuer:                        mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
+		GlobalClientCount:             int(row.GlobalClientCount),
+		TenantClientCount:             int(row.TenantClientCount),
+		TrustedUserSessionIssuerCount: int(row.TrustedUserSessionIssuerCount),
 	}, nil
 }
 
@@ -313,6 +319,9 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 	}
 	if payload.Issuer != nil && strings.TrimSpace(*payload.Issuer) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer cannot be set to empty").LogError(ctx, logger)
+	}
+	if conv.PtrValOr(payload.TunneledMcpServerID, "") != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "a global identity provider cannot be bound to a project tunnel").LogError(ctx, logger)
 	}
 
 	// Operator-supplied and later rendered as a link, so it is validated here.
@@ -365,7 +374,12 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	updated, err := repo.New(dbtx).UpdateGlobalRemoteSessionIssuer(ctx, repo.UpdateGlobalRemoteSessionIssuerParams{
+	txRepo := repo.New(dbtx)
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer configuration").LogError(ctx, logger)
+	}
+
+	updated, err := txRepo.UpdateGlobalRemoteSessionIssuer(ctx, repo.UpdateGlobalRemoteSessionIssuerParams{
 		// Trimmed so the stored slug/issuer match what the emptiness validation
 		// above saw; whitespace-only never reaches here, so the trimmed-empty →
 		// NULL (keep) behavior of PtrToPGTextTrimmed cannot trigger.
@@ -409,6 +423,12 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 			return nil, oops.E(oops.CodeNotFound, err, "global remote session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update global remote session issuer").LogError(ctx, logger)
+	}
+	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
+		if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
+			return nil, oops.E(oops.CodeBadRequest, err, "update would make a client ineligible for identity-provider login: %v", err).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "validate clients that trust global remote session issuer").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -496,6 +516,13 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 			return oops.E(oops.CodeConflict, nil, "global remote session issuer has active clients: %d global, %d tenant-owned; delete the global client(s) here, tenant-owned clients must be removed by their owning organizations", globalCount, tenantCount).LogError(ctx, logger)
 		}
 	}
+	trustedCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, issuerID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "count user session issuers that trust global issuer").LogError(ctx, logger)
+	}
+	if trustedCount > 0 {
+		return oops.E(oops.CodeConflict, nil, "global remote session issuer is trusted by %d active tenant-owned user session issuer(s); they must be unlinked by their owning organizations", trustedCount).LogError(ctx, logger)
+	}
 
 	deleted, err := txRepo.DeleteGlobalRemoteSessionIssuer(ctx, issuerID)
 	if err != nil {
@@ -571,7 +598,7 @@ func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *admi
 		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
 	}
 
-	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, existing)
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.jwksResolver, s.tunnels, existing)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
 	}
@@ -582,12 +609,33 @@ func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *admi
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	updated, err := repo.New(dbtx).UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
+	txRepo := repo.New(dbtx)
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer configuration").LogError(ctx, logger)
+	}
+	locked, err := txRepo.GetGlobalRemoteSessionIssuerByIDForUpdate(ctx, issuerID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer").LogError(ctx, logger)
+	}
+	if !sameMetadataRefreshSnapshot(locked, existing) {
+		return nil, oops.E(oops.CodeConflict, nil, "%s", refreshConflictMessage).LogError(ctx, logger)
+	}
+
+	updated, err := txRepo.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update global remote session issuer discovered metadata").LogError(ctx, logger)
+	}
+	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
+		if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
+			return nil, oops.E(oops.CodeBadRequest, err, "refreshed metadata would make a client ineligible for identity-provider login: %v", err).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "validate clients after refreshing global remote session issuer").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -785,13 +833,14 @@ func (s *Service) GetGlobalIssuerMigratePreflight(ctx context.Context, payload *
 	}
 
 	return &adminrsgen.IssuerMigratePreflight{
-		ClientCount:               int(preflight.clientCount),
-		McpServerNames:            preflight.mcpServerNames,
-		EndpointMismatches:        issuerFieldMismatchViews(preflight.endpointMismatches),
-		ConflictingMcpServerNames: preflight.conflictingMcpServerNames,
-		Warnings:                  issuerFieldMismatchViews(preflight.warnings),
-		CanMigrate:                preflight.canMigrate(),
-		TargetTenantClientCount:   int(targetTenantClients),
+		ClientCount:                   int(preflight.clientCount),
+		McpServerNames:                preflight.mcpServerNames,
+		EndpointMismatches:            issuerFieldMismatchViews(preflight.endpointMismatches),
+		ConflictingMcpServerNames:     preflight.conflictingMcpServerNames,
+		Warnings:                      issuerFieldMismatchViews(preflight.warnings),
+		TrustedUserSessionIssuerCount: int(preflight.trustedUserSessionIssuerCount),
+		CanMigrate:                    preflight.canMigrate(),
+		TargetTenantClientCount:       int(targetTenantClients),
 	}, nil
 }
 
@@ -964,17 +1013,18 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 	}
 
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
-		ProjectID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:          pgtype.Text{String: "", Valid: false},
-		RemoteSessionIssuerID:   issuerID,
-		ClientID:                clientID,
-		ClientSecretEncrypted:   secretCiphertext,
-		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
-		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
-		Scope:                   payload.Scope,
-		Audience:                conv.PtrToPGText(payload.Audience),
-		LegacyCallbackUrl:       false,
+		ProjectID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:                  pgtype.Text{String: "", Valid: false},
+		RemoteSessionIssuerID:           issuerID,
+		ClientID:                        clientID,
+		ClientSecretEncrypted:           secretCiphertext,
+		ClientIDIssuedAt:                conv.ToPGTimestamptz(time.Now().UTC()),
+		ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
+		Scope:                           payload.Scope,
+		Audience:                        conv.PtrToPGText(payload.Audience),
+		LegacyCallbackUrl:               false,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create global remote session client").LogError(ctx, logger)
@@ -1094,11 +1144,12 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 	}
 
 	updated, err := repo.New(dbtx).UpdateGlobalRemoteSessionClient(ctx, repo.UpdateGlobalRemoteSessionClientParams{
-		ClientSecretEncrypted:   clientSecretEncrypted,
-		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
-		Scope:                   payload.Scope,
-		Audience:                conv.PtrToPGText(payload.Audience),
-		ID:                      clientID,
+		ClientSecretEncrypted:           clientSecretEncrypted,
+		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
+		Scope:                           payload.Scope,
+		Audience:                        conv.PtrToPGText(payload.Audience),
+		ID:                              clientID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

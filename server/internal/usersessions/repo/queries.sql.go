@@ -155,7 +155,9 @@ INSERT INTO user_session_issuers (
     slug,
     authn_challenge_mode,
     session_duration,
-    client_id_metadata_admission_mode
+    client_id_metadata_admission_mode,
+    trusted_remote_session_issuer_id,
+    trusted_remote_session_client_id
 )
 VALUES (
     NULL,
@@ -163,16 +165,20 @@ VALUES (
     $2,
     $3,
     $4,
-    'open'
+    'open',
+    $5::uuid,
+    $6::uuid
 )
-RETURNING id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOrganizationUserSessionIssuerParams struct {
-	OrganizationID     pgtype.Text
-	Slug               string
-	AuthnChallengeMode string
-	SessionDuration    pgtype.Interval
+	OrganizationID               pgtype.Text
+	Slug                         string
+	AuthnChallengeMode           string
+	SessionDuration              pgtype.Interval
+	TrustedRemoteSessionIssuerID uuid.NullUUID
+	TrustedRemoteSessionClientID uuid.NullUUID
 }
 
 func (q *Queries) CreateOrganizationUserSessionIssuer(ctx context.Context, arg CreateOrganizationUserSessionIssuerParams) (UserSessionIssuer, error) {
@@ -181,18 +187,22 @@ func (q *Queries) CreateOrganizationUserSessionIssuer(ctx context.Context, arg C
 		arg.Slug,
 		arg.AuthnChallengeMode,
 		arg.SessionDuration,
+		arg.TrustedRemoteSessionIssuerID,
+		arg.TrustedRemoteSessionClientID,
 	)
 	var i UserSessionIssuer
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
 		&i.OrganizationID,
+		&i.AttachmentScope,
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
 		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -503,7 +513,7 @@ VALUES (
     -- the mode afterwards through the update endpoint.
     'open'
 )
-RETURNING id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionIssuerParams struct {
@@ -527,12 +537,14 @@ func (q *Queries) CreateUserSessionIssuer(ctx context.Context, arg CreateUserSes
 		&i.ID,
 		&i.ProjectID,
 		&i.OrganizationID,
+		&i.AttachmentScope,
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
 		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -637,7 +649,7 @@ WHERE issuer.id = $1
       AND project.deleted IS FALSE
       AND project.organization_id = issuer.organization_id
   )
-RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 `
 
 type DeleteOrganizationUserSessionIssuerParams struct {
@@ -652,12 +664,14 @@ func (q *Queries) DeleteOrganizationUserSessionIssuer(ctx context.Context, arg D
 		&i.ID,
 		&i.ProjectID,
 		&i.OrganizationID,
+		&i.AttachmentScope,
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
 		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -730,7 +744,7 @@ WHERE issuer.id = $1
       AND meta_mcp_server.user_session_issuer_id = issuer.id
       AND meta_mcp_server.deleted IS FALSE
   )
-RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 `
 
 type DeleteUserSessionIssuerParams struct {
@@ -750,12 +764,14 @@ func (q *Queries) DeleteUserSessionIssuer(ctx context.Context, arg DeleteUserSes
 		&i.ID,
 		&i.ProjectID,
 		&i.OrganizationID,
+		&i.AttachmentScope,
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
 		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -847,7 +863,7 @@ func (q *Queries) GetLatestLiveUserSessionToolSelection(ctx context.Context, arg
 }
 
 const getOrganizationUserSessionIssuerByID = `-- name: GetOrganizationUserSessionIssuerByID :one
-SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE id = $1
   AND project_id IS NULL
@@ -867,12 +883,14 @@ func (q *Queries) GetOrganizationUserSessionIssuerByID(ctx context.Context, arg 
 		&i.ID,
 		&i.ProjectID,
 		&i.OrganizationID,
+		&i.AttachmentScope,
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
 		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -915,7 +933,7 @@ func (q *Queries) GetOrganizationUserSessionIssuerCimdClientByID(ctx context.Con
 }
 
 const getProjectUserSessionIssuerByID = `-- name: GetProjectUserSessionIssuerByID :one
-SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE id = $1
   AND project_id = $2::uuid
@@ -934,12 +952,14 @@ func (q *Queries) GetProjectUserSessionIssuerByID(ctx context.Context, arg GetPr
 		&i.ID,
 		&i.ProjectID,
 		&i.OrganizationID,
+		&i.AttachmentScope,
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
 		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1224,7 +1244,7 @@ func (q *Queries) GetUserSessionConsentByID(ctx context.Context, arg GetUserSess
 }
 
 const getUserSessionIssuerByID = `-- name: GetUserSessionIssuerByID :one
-SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE id = $1
   AND (project_id = $2::uuid OR (project_id IS NULL AND organization_id = $3::text))
@@ -1244,12 +1264,14 @@ func (q *Queries) GetUserSessionIssuerByID(ctx context.Context, arg GetUserSessi
 		&i.ID,
 		&i.ProjectID,
 		&i.OrganizationID,
+		&i.AttachmentScope,
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
 		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1259,7 +1281,7 @@ func (q *Queries) GetUserSessionIssuerByID(ctx context.Context, arg GetUserSessi
 }
 
 const getUserSessionIssuerBySlug = `-- name: GetUserSessionIssuerBySlug :one
-SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE slug = $1 AND project_id = $2::uuid AND deleted IS FALSE
 `
@@ -1281,12 +1303,14 @@ func (q *Queries) GetUserSessionIssuerBySlug(ctx context.Context, arg GetUserSes
 		&i.ID,
 		&i.ProjectID,
 		&i.OrganizationID,
+		&i.AttachmentScope,
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
 		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1593,7 +1617,7 @@ func (q *Queries) ListOrganizationUserSessionIssuerToolsets(ctx context.Context,
 }
 
 const listOrganizationUserSessionIssuers = `-- name: ListOrganizationUserSessionIssuers :many
-SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE project_id IS NULL
   AND organization_id = $1::text
@@ -1622,12 +1646,14 @@ func (q *Queries) ListOrganizationUserSessionIssuers(ctx context.Context, arg Li
 			&i.ID,
 			&i.ProjectID,
 			&i.OrganizationID,
+			&i.AttachmentScope,
 			&i.Slug,
 			&i.AuthnChallengeMode,
 			&i.SessionDuration,
 			&i.Classification,
 			&i.ClientIDMetadataAdmissionMode,
 			&i.TrustedRemoteSessionIssuerID,
+			&i.TrustedRemoteSessionClientID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -2037,7 +2063,7 @@ func (q *Queries) ListUserSessionIssuerCimdClientsByIssuerID(ctx context.Context
 }
 
 const listUserSessionIssuersByProjectID = `-- name: ListUserSessionIssuersByProjectID :many
-SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE (project_id = $1::uuid OR (project_id IS NULL AND organization_id = $2::text))
   AND deleted IS FALSE
@@ -2071,12 +2097,14 @@ func (q *Queries) ListUserSessionIssuersByProjectID(ctx context.Context, arg Lis
 			&i.ID,
 			&i.ProjectID,
 			&i.OrganizationID,
+			&i.AttachmentScope,
 			&i.Slug,
 			&i.AuthnChallengeMode,
 			&i.SessionDuration,
 			&i.Classification,
 			&i.ClientIDMetadataAdmissionMode,
 			&i.TrustedRemoteSessionIssuerID,
+			&i.TrustedRemoteSessionClientID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -2324,7 +2352,7 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 }
 
 const lockOrganizationUserSessionIssuer = `-- name: LockOrganizationUserSessionIssuer :one
-SELECT id
+SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE id = $1
   AND project_id IS NULL
@@ -2338,11 +2366,27 @@ type LockOrganizationUserSessionIssuerParams struct {
 	OrganizationID string
 }
 
-func (q *Queries) LockOrganizationUserSessionIssuer(ctx context.Context, arg LockOrganizationUserSessionIssuerParams) (uuid.UUID, error) {
+func (q *Queries) LockOrganizationUserSessionIssuer(ctx context.Context, arg LockOrganizationUserSessionIssuerParams) (UserSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, lockOrganizationUserSessionIssuer, arg.ID, arg.OrganizationID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const lockUserSessionIssuer = `-- name: LockUserSessionIssuer :one
@@ -2888,12 +2932,22 @@ SET
     authn_challenge_mode = COALESCE($2::text, authn_challenge_mode),
     session_duration = COALESCE($3::interval, session_duration),
     client_id_metadata_admission_mode = COALESCE($4::text, client_id_metadata_admission_mode),
+    trusted_remote_session_issuer_id = CASE
+        WHEN $5::text IS NULL THEN trusted_remote_session_issuer_id
+        WHEN BTRIM($5::text) = '' THEN NULL
+        ELSE $5::text::uuid
+    END,
+    trusted_remote_session_client_id = CASE
+        WHEN $6::text IS NULL THEN trusted_remote_session_client_id
+        WHEN BTRIM($6::text) = '' THEN NULL
+        ELSE $6::text::uuid
+    END,
     updated_at = clock_timestamp()
-WHERE id = $5
+WHERE id = $7
   AND project_id IS NULL
-  AND organization_id = $6::text
+  AND organization_id = $8::text
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOrganizationUserSessionIssuerParams struct {
@@ -2901,6 +2955,8 @@ type UpdateOrganizationUserSessionIssuerParams struct {
 	AuthnChallengeMode            pgtype.Text
 	SessionDuration               pgtype.Interval
 	ClientIDMetadataAdmissionMode pgtype.Text
+	TrustedRemoteSessionIssuerID  pgtype.Text
+	TrustedRemoteSessionClientID  pgtype.Text
 	ID                            uuid.UUID
 	OrganizationID                string
 }
@@ -2911,6 +2967,8 @@ func (q *Queries) UpdateOrganizationUserSessionIssuer(ctx context.Context, arg U
 		arg.AuthnChallengeMode,
 		arg.SessionDuration,
 		arg.ClientIDMetadataAdmissionMode,
+		arg.TrustedRemoteSessionIssuerID,
+		arg.TrustedRemoteSessionClientID,
 		arg.ID,
 		arg.OrganizationID,
 	)
@@ -2919,12 +2977,14 @@ func (q *Queries) UpdateOrganizationUserSessionIssuer(ctx context.Context, arg U
 		&i.ID,
 		&i.ProjectID,
 		&i.OrganizationID,
+		&i.AttachmentScope,
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
 		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -3097,7 +3157,7 @@ SET
 WHERE id = $5
   AND project_id = $6::uuid
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateUserSessionIssuerParams struct {
@@ -3123,12 +3183,14 @@ func (q *Queries) UpdateUserSessionIssuer(ctx context.Context, arg UpdateUserSes
 		&i.ID,
 		&i.ProjectID,
 		&i.OrganizationID,
+		&i.AttachmentScope,
 		&i.Slug,
 		&i.AuthnChallengeMode,
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
 		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

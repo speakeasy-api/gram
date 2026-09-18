@@ -69,7 +69,7 @@ import {
  */
 
 // Shared height for every control in the toolbar (40px).
-const CONTROL_HEIGHT = "h-10";
+export const CONTROL_HEIGHT = "h-10";
 
 // The toolbar's shell (the grey bar) — one definition whether the bar
 // lays out a single row or composes Toolbar.Row children.

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -41,34 +42,35 @@ func TestMCPFromInventoryLabelsOwnershipAndNeverProbesLegacy(t *testing.T) {
 	mcpID, projectID, registrationID := uuid.New(), uuid.New(), uuid.New()
 	complete := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 
-	platform := mcpFromInventory(mcpID, projectID, "Project", "project", "Reviewed", "reviewed", "private", "dashboard_managed", MCPBackendRemote, registrationID, "catalog", "registry", "reviewed/server", "registered", complete, complete, complete, complete, "ready", "checked", "expires", map[uuid.UUID][]MCPDistribution{registrationID: {{PluginID: "plugin", State: "attached", PublicationState: "published"}}})
+	platform := mcpFromInventory(mcpID, projectID, "Project", "project", "Reviewed", "reviewed", "private", "dashboard_managed", MCPBackendRemote, "https://mcp.example.test/platform", registrationID, "catalog", "registry", "reviewed/server", "registered", complete, complete, complete, complete, "ready", "checked", "expires", map[uuid.UUID][]MCPDistribution{registrationID: {{PluginID: "plugin", State: "attached", PublicationState: "published"}}})
 	require.Equal(t, "platform_managed", platform.Model)
 	require.Equal(t, MCPBackendRemote, platform.BackendKind)
+	require.Empty(t, platform.UpstreamURL, "Platform-managed inventory remains scoped to its reviewed source identity")
 	require.Equal(t, "reviewed_catalogue", platform.Source.Kind)
 	require.Equal(t, "ready", platform.Readiness.State)
 	require.Len(t, platform.Distributions, 1)
 	require.True(t, platform.Registration.ComponentsComplete)
 	require.Equal(t, []string{"read", "dashboard_setup", "update_mcp_metadata", "disable_mcp"}, platform.Operations)
 
-	disabled := mcpFromInventory(mcpID, projectID, "Project", "project", "Reviewed", "reviewed", "disabled", "dashboard_managed", MCPBackendRemote, registrationID, "catalog", "registry", "reviewed/server", "registered", complete, complete, complete, complete, "ready", "checked", "expires", nil)
+	disabled := mcpFromInventory(mcpID, projectID, "Project", "project", "Reviewed", "reviewed", "disabled", "dashboard_managed", MCPBackendRemote, "https://mcp.example.test/platform", registrationID, "catalog", "registry", "reviewed/server", "registered", complete, complete, complete, complete, "ready", "checked", "expires", nil)
 	require.False(t, disabled.EffectiveEnabled)
 	require.Equal(t, "unknown", disabled.Readiness.State, "disabled Platform-managed MCPs do not expose stale readiness as effective")
 	require.Empty(t, disabled.Readiness.CheckedAt)
 	require.Equal(t, []string{"read", "dashboard_setup", "update_mcp_metadata", "enable_mcp"}, disabled.Operations)
 
-	incomplete := mcpFromInventory(mcpID, projectID, "Project", "project", "Incomplete", "incomplete", "private", "dashboard_managed", MCPBackendRemote, registrationID, "catalog", "registry", "reviewed/incomplete", "pending", uuid.NullUUID{UUID: uuid.Nil, Valid: true}, complete, complete, complete, "", "", "", nil)
+	incomplete := mcpFromInventory(mcpID, projectID, "Project", "project", "Incomplete", "incomplete", "private", "dashboard_managed", MCPBackendRemote, "https://mcp.example.test/incomplete", registrationID, "catalog", "registry", "reviewed/incomplete", "pending", uuid.NullUUID{UUID: uuid.Nil, Valid: true}, complete, complete, complete, "", "", "", nil)
 	require.False(t, incomplete.Registration.ComponentsComplete, "zero UUID sentinels represent missing persisted components")
 	require.NotNil(t, incomplete.Distributions, "registered rows without distributions retain the stable empty array")
 	require.Empty(t, incomplete.Distributions)
 
-	dashboard := mcpFromInventory(mcpID, projectID, "Project", "project", "Dashboard", "dashboard", "private", "dashboard_managed", MCPBackendTunneled, uuid.Nil, "", "", "", "", uuid.NullUUID{}, uuid.NullUUID{}, uuid.NullUUID{}, uuid.NullUUID{}, "", "", "", nil)
+	dashboard := mcpFromInventory(mcpID, projectID, "Project", "project", "Dashboard", "dashboard", "private", "dashboard_managed", MCPBackendTunneled, "", uuid.Nil, "", "", "", "", uuid.NullUUID{}, uuid.NullUUID{}, uuid.NullUUID{}, uuid.NullUUID{}, "", "", "", nil)
 	require.Equal(t, "dashboard_managed", dashboard.Model)
 	require.Equal(t, MCPBackendTunneled, dashboard.BackendKind)
 	require.Equal(t, "dashboard_source", dashboard.Source.Kind, "the compatibility source kind remains unchanged")
 	require.Equal(t, "unsupported", dashboard.Readiness.State)
 	require.Equal(t, []string{"read", "dashboard_setup"}, dashboard.Operations)
 
-	legacy := mcpFromInventory(mcpID, projectID, "Project", "project", "Legacy", "legacy", "disabled", "legacy", MCPBackendLegacy, uuid.Nil, "", "", "", "", uuid.NullUUID{}, uuid.NullUUID{}, uuid.NullUUID{}, uuid.NullUUID{}, "ready", "checked", "expires", nil)
+	legacy := mcpFromInventory(mcpID, projectID, "Project", "project", "Legacy", "legacy", "disabled", "legacy", MCPBackendLegacy, "", uuid.Nil, "", "", "", "", uuid.NullUUID{}, uuid.NullUUID{}, uuid.NullUUID{}, uuid.NullUUID{}, "ready", "checked", "expires", nil)
 	require.Equal(t, "legacy", legacy.Model)
 	require.Equal(t, "unsupported", legacy.Readiness.State, "legacy rows never use readiness evidence or trigger egress")
 	require.False(t, legacy.EffectiveEnabled)
@@ -84,6 +86,86 @@ func TestLifecycleMetadataVersionChangesOnlyWithMutableInventoryState(t *testing
 	require.NotEqual(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Renamed", "example", "private"))
 	require.NotEqual(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "disabled"))
 	require.NotEqual(t, baseline, lifecycleMetadataVersion(lifecycleMetadataVersionKey("other-key"), "mcp", "project", "Example", "example", "private"))
+}
+
+func TestInventoryLookupAndDetailExposeDashboardManagedRemoteUpstreamURL(t *testing.T) {
+	t.Parallel()
+
+	mcpID := uuid.New()
+	projectID := uuid.New()
+	remoteID := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	const upstreamURL = "https://mcp.example.test/microsoft-365"
+
+	lookup := mcpFromInventoryRow(platformrepo.ListPlatformMCPInventoryRow{
+		McpServerID:       mcpID,
+		ProjectID:         projectID,
+		ProjectName:       "Default",
+		ProjectSlug:       "default",
+		McpSlug:           pgtype.Text{String: "microsoft-365-fc1d", Valid: true},
+		Visibility:        "private",
+		RemoteMcpServerID: remoteID,
+		UpstreamUrl:       upstreamURL,
+	}, nil)
+	require.Equal(t, upstreamURL, lookup.UpstreamURL)
+	require.Equal(t, "dashboard_mcp_settings", lookup.DashboardPath)
+
+	detail := mcpFromInventoryItem(platformrepo.GetPlatformMCPInventoryItemRow{
+		McpServerID:       mcpID,
+		ProjectID:         projectID,
+		ProjectName:       "Default",
+		ProjectSlug:       "default",
+		McpSlug:           pgtype.Text{String: "microsoft-365-fc1d", Valid: true},
+		Visibility:        "private",
+		RemoteMcpServerID: remoteID,
+		UpstreamUrl:       upstreamURL,
+	}, nil)
+	require.Equal(t, upstreamURL, detail.UpstreamURL)
+	require.Equal(t, "dashboard_mcp_settings", detail.DashboardPath)
+}
+
+func TestInventoryPreservesDashboardManagedRemoteUpstreamURL(t *testing.T) {
+	t.Parallel()
+
+	const upstreamURL = "https://mcp.example.test/microsoft-365?tenant=example#configuration"
+	mcp := mcpFromInventoryRow(platformrepo.ListPlatformMCPInventoryRow{
+		McpServerID:       uuid.New(),
+		ProjectID:         uuid.New(),
+		Visibility:        "private",
+		RemoteMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		UpstreamUrl:       upstreamURL,
+	}, nil)
+
+	require.Equal(t, upstreamURL, mcp.UpstreamURL)
+	require.Equal(t, "dashboard_mcp_settings", mcp.DashboardPath)
+}
+
+func TestInventoryDoesNotExposeUpstreamURLForNonRemoteBackends(t *testing.T) {
+	t.Parallel()
+
+	backendID := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	for _, backend := range []struct {
+		kind      MCPBackendKind
+		tunneled  uuid.NullUUID
+		toolset   uuid.NullUUID
+		unproxied uuid.NullUUID
+	}{
+		{kind: MCPBackendTunneled, tunneled: backendID},
+		{kind: MCPBackendHosted, toolset: backendID},
+		{kind: MCPBackendUnproxied, unproxied: backendID},
+		{kind: MCPBackendLegacy},
+	} {
+		mcp := mcpFromInventoryRow(platformrepo.ListPlatformMCPInventoryRow{
+			McpServerID:          uuid.New(),
+			ProjectID:            uuid.New(),
+			Visibility:           "private",
+			TunneledMcpServerID:  backend.tunneled,
+			ToolsetID:            backend.toolset,
+			UnproxiedMcpServerID: backend.unproxied,
+			UpstreamUrl:          "https://must-not-be-exposed.example.test/mcp",
+		}, nil)
+		require.Equal(t, backend.kind, mcp.BackendKind)
+		require.Empty(t, mcp.UpstreamURL)
+	}
 }
 
 func TestInventoryModelRecognizesEveryDashboardBackend(t *testing.T) {
@@ -145,6 +227,7 @@ func TestMCPInventoryOutputProjectsOnlyAllowlistedFields(t *testing.T) {
 		EffectiveEnabled: true,
 		Model:            "platform_managed",
 		BackendKind:      MCPBackendRemote,
+		UpstreamURL:      "https://mcp.example.test/upstream",
 		Source:           MCPSource{Kind: "reviewed_catalogue", Provider: "provider", Reference: "reference"},
 		Registration:     &MCPRegistration{ID: "registration", Status: "registered", ComponentsComplete: true},
 		Readiness:        MCPReadiness{State: "ready", CheckedAt: "checked", ExpiresAt: "expires"},
@@ -155,7 +238,7 @@ func TestMCPInventoryOutputProjectsOnlyAllowlistedFields(t *testing.T) {
 
 	require.ElementsMatch(t, []string{
 		"mcps", "next_cursor",
-		"id", "project_id", "project_name", "project_slug", "name", "slug", "version", "visibility", "effective_enabled", "model", "backend_kind",
+		"id", "project_id", "project_name", "project_slug", "name", "slug", "version", "visibility", "effective_enabled", "model", "backend_kind", "upstream_url",
 		"source", "kind", "provider", "reference",
 		"registration", "id", "status", "components_complete",
 		"readiness", "state", "checked_at", "expires_at",

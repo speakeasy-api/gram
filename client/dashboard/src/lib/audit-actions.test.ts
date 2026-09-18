@@ -41,6 +41,12 @@ function goAuditActions(): string[] {
 }
 
 describe("AUDIT_ACTIONS", () => {
+  it("describes changed trial end dates", () => {
+    expect(
+      staticActionPhrase("organization:enterprise_trial_end_changed"),
+    ).toBe("changed enterprise trial end date");
+  });
+
   // Guards the exhaustive switch in staticActionPhrase: it only proves every
   // action has a phrase if this list matches what the server can emit.
   it("matches the Action constants declared in server/internal/audit", () => {
@@ -55,9 +61,12 @@ describe("AUDIT_ACTIONS", () => {
     }
   });
 
-  it("describes enterprise conversion against its organization subject", () => {
-    expect(staticActionPhrase("organization:enterprise_trial_converted")).toBe(
-      "converted enterprise trial for",
+  it("describes starting a new enterprise trial separately from arming one", () => {
+    expect(staticActionPhrase("organization:enterprise_trial_started")).toBe(
+      "started a new enterprise trial",
+    );
+    expect(staticActionPhrase("organization:enterprise_trial_armed")).toBe(
+      "started enterprise trial",
     );
   });
 

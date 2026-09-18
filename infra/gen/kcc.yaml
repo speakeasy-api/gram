@@ -1027,6 +1027,7 @@ pubsub:
           string message_type = 21;
           string policy_link_reason = 22;
           string external_conversation_id = 23;
+          bool content_truncated = 24;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -1101,6 +1102,7 @@ pubsub:
           bytes meter_reading = 24;
           string policy_link_reason = 25;
           string external_conversation_id = 26;
+          bool content_truncated = 27;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -1272,7 +1274,7 @@ pubsub:
         deadLetterTopicRef:
           name: gram-metering-v1-meter-reading-ch-writer-dlq
         maxDeliveryAttempts: 10
-      messageRetentionDuration: 2678400s
+      messageRetentionDuration: 345600s
       retainAckedMessages: true
       retryPolicy:
         maximumBackoff: 600s
@@ -1286,7 +1288,7 @@ pubsub:
     name: gram-metering-v1-meter-reading-stripe-exporter
     spec:
       ackDeadlineSeconds: 60
-      messageRetentionDuration: 2678400s
+      messageRetentionDuration: 345600s
       retainAckedMessages: true
       retryPolicy:
         maximumBackoff: 600s
@@ -1700,7 +1702,7 @@ pubsub:
       proto_message: gram-metering-v1-meter-reading
     name: gram-metering-v1-meter-reading
     spec:
-      messageRetentionDuration: 2678400s
+      messageRetentionDuration: 345600s
       schemaSettings:
         encoding: BINARY
         schemaRef:
@@ -1711,7 +1713,7 @@ pubsub:
       proto_message: gram-metering-v1-meter-reading-ch-writer
     name: gram-metering-v1-meter-reading-ch-writer-dlq
     spec:
-      messageRetentionDuration: 2678400s
+      messageRetentionDuration: 345600s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-networkingress-v1-reconcile-requested

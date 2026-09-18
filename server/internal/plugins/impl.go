@@ -64,6 +64,10 @@ import (
 // Strict enough to prevent path traversal in API URL construction.
 var validGitHubUsername = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$`)
 
+// marketplaceCollaboratorPermission is admin because some marketplace setup
+// (e.g. Cursor's "Serve Marketplace From Cursor") requires repo admin.
+const marketplaceCollaboratorPermission = "admin"
+
 // GitHubPublisher is the interface for creating repos and pushing files to GitHub.
 type GitHubPublisher interface {
 	CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error
@@ -1338,6 +1342,8 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		filename = "observability-copilot"
 	case "openclaw":
 		filename = "observability-openclaw"
+	case "pi":
+		filename = "observability-pi"
 	}
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
@@ -2317,7 +2323,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	}
 
 	for _, username := range input.GitHubUsernames {
-		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, username, "pull"); err != nil {
+		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, username, marketplaceCollaboratorPermission); err != nil {
 			s.logger.WarnContext(ctx, "failed to add collaborator (non-fatal)",
 				attr.SlogOrganizationID(input.OrganizationID),
 				attr.SlogGitHubUsername(username),

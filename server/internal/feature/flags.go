@@ -124,6 +124,18 @@ const (
 	// billing is generally available.
 	FlagPaygSelfServeBilling Flag = "gram-payg-self-serve-billing"
 
+	// FlagAssistantOAuthCIMD gates outbound Client ID Metadata Document
+	// (CIMD) support for assistant MCP OAuth clients. When on, and the
+	// upstream authorization server advertises
+	// client_id_metadata_document_supported, assistants publish a stable
+	// metadata document and send its URL as client_id instead of dynamic
+	// client registration. Off (the default) keeps the DCR reuse path.
+	// Gram-hosted issuers admit assistant documents ahead of their CIMD
+	// admission policy, so enabling this never depends on a catalog preset
+	// or a per-issuer custom URL. Targeted by PostHog organization group
+	// (org slug). Removed once CIMD is GA.
+	FlagAssistantOAuthCIMD Flag = "assistant-oauth-cimd"
+
 	// FlagMCPApproval gates the MCP approval workflow end to end: the
 	// approval queue, evidence gathering, deciding, and the promotion of
 	// blocked-server redemptions into approval requests (orgs off the flag
@@ -148,11 +160,6 @@ const (
 	// state from before. Fails closed: research must not run while the state
 	// of its stop control is unknown.
 	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
-
-	// FlagNetworkIngressRollout is temporary release clearance for private
-	// network expansion. It is evaluated against the canonical organization
-	// group and never substitutes for RBAC or the durable product entitlement.
-	FlagNetworkIngressRollout Flag = "gram-network-ingress-rollout"
 
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its

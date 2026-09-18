@@ -72,7 +72,9 @@ ORDER BY meta_mcp_servers.created_at DESC, meta_mcp_servers.id DESC;
 -- issuer resolves to the preserved or freshly minted one), so the narg here
 -- never arrives null from production code. A null visibility preserves the
 -- stored value so callers that do not manage visibility cannot re-enable a
--- disabled gateway.
+-- disabled gateway. Instructions follow the same set-flag shape as
+-- network_access_mode because null is a meaningful stored value (serve the
+-- built-in instructions), so COALESCE cannot distinguish omit from clear.
 UPDATE meta_mcp_servers
 SET name = @name,
     user_session_issuer_id = sqlc.narg('user_session_issuer_id'),
@@ -80,6 +82,10 @@ SET name = @name,
     network_access_mode = CASE
         WHEN @network_access_mode_set::boolean THEN sqlc.narg('network_access_mode')
         ELSE network_access_mode
+    END,
+    instructions = CASE
+        WHEN @instructions_set::boolean THEN sqlc.narg('instructions')
+        ELSE instructions
     END,
     updated_at = clock_timestamp()
 WHERE id = @id
@@ -327,6 +333,36 @@ WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
   AND s.remote_session_issuer_id = @remote_session_issuer_id
+ORDER BY m.sort_order, m.created_at, m.id;
+
+-- name: ListMetaMCPProxiedMemberResources :many
+-- Every proxied member's authorization server and RFC 8707 resource, filtered
+-- as ListMetaMCPMembersForRemoteSessionIssuer but across all issuers, so a
+-- consent render resolves resource display ownership for every card from one
+-- read.
+SELECT
+    s.remote_session_issuer_id,
+    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+ AND s.visibility <> 'disabled'
+LEFT JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = m.project_id
+ AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = m.project_id
+ AND t.deleted IS FALSE
+WHERE m.meta_mcp_server_id = @meta_mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+  AND s.slug IS NOT NULL
+  AND s.remote_session_issuer_id IS NOT NULL
+  AND (r.id IS NOT NULL OR t.id IS NOT NULL)
 ORDER BY m.sort_order, m.created_at, m.id;
 
 -- name: AutoAttachMemberProviderClient :execrows

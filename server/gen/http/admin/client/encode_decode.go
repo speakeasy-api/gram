@@ -4560,11 +4560,20 @@ func EncodeListOrganizationsRequest(encoder func(*http.Request) goahttp.Encoder)
 		for _, value := range p.TrialStates {
 			values.Add("trial_states", value)
 		}
-		for _, value := range p.DisabledStates {
-			values.Add("disabled_states", value)
+		if p.DisabledStatus != nil {
+			values.Add("disabled_status", *p.DisabledStatus)
 		}
-		if p.IncludeDisabled != nil {
-			values.Add("include_disabled", fmt.Sprintf("%v", *p.IncludeDisabled))
+		if p.MinMembers != nil {
+			values.Add("min_members", fmt.Sprintf("%v", *p.MinMembers))
+		}
+		if p.MaxMembers != nil {
+			values.Add("max_members", fmt.Sprintf("%v", *p.MaxMembers))
+		}
+		if p.CreatedFrom != nil {
+			values.Add("created_from", *p.CreatedFrom)
+		}
+		if p.CreatedTo != nil {
+			values.Add("created_to", *p.CreatedTo)
 		}
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
@@ -11452,6 +11461,1194 @@ func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildStartTrialRequest instantiates a HTTP request object with method and
+// path set to call the "admin" service "startTrial" endpoint
+func (c *Client) BuildStartTrialRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: StartTrialAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "startTrial", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeStartTrialRequest returns an encoder for requests sent to the admin
+// startTrial server.
+func EncodeStartTrialRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.StartTrialPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "startTrial", "*admin.StartTrialPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewStartTrialRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "startTrial", err)
+		}
+		return nil
+	}
+}
+
+// DecodeStartTrialResponse returns a decoder for responses returned by the
+// admin startTrial endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeStartTrialResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeStartTrialResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body StartTrialResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startTrial", err)
+			}
+			err = ValidateStartTrialResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startTrial", err)
+			}
+			res := NewStartTrialAdminOrganizationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body StartTrialUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startTrial", err)
+			}
+			err = ValidateStartTrialUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startTrial", err)
+			}
+			return nil, NewStartTrialUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body StartTrialForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startTrial", err)
+			}
+			err = ValidateStartTrialForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startTrial", err)
+			}
+			return nil, NewStartTrialForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body StartTrialBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startTrial", err)
+			}
+			err = ValidateStartTrialBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startTrial", err)
+			}
+			return nil, NewStartTrialBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body StartTrialNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startTrial", err)
+			}
+			err = ValidateStartTrialNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startTrial", err)
+			}
+			return nil, NewStartTrialNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body StartTrialConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startTrial", err)
+			}
+			err = ValidateStartTrialConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startTrial", err)
+			}
+			return nil, NewStartTrialConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body StartTrialUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startTrial", err)
+			}
+			err = ValidateStartTrialUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startTrial", err)
+			}
+			return nil, NewStartTrialUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body StartTrialInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startTrial", err)
+			}
+			err = ValidateStartTrialInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startTrial", err)
+			}
+			return nil, NewStartTrialInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body StartTrialInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "startTrial", err)
+				}
+				err = ValidateStartTrialInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "startTrial", err)
+				}
+				return nil, NewStartTrialInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body StartTrialUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "startTrial", err)
+				}
+				err = ValidateStartTrialUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "startTrial", err)
+				}
+				return nil, NewStartTrialUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "startTrial", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body StartTrialGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startTrial", err)
+			}
+			err = ValidateStartTrialGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startTrial", err)
+			}
+			return nil, NewStartTrialGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "startTrial", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildChangeTrialEndDateRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "changeTrialEndDate" endpoint
+func (c *Client) BuildChangeTrialEndDateRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ChangeTrialEndDateAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "changeTrialEndDate", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeChangeTrialEndDateRequest returns an encoder for requests sent to the
+// admin changeTrialEndDate server.
+func EncodeChangeTrialEndDateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ChangeTrialEndDatePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "changeTrialEndDate", "*admin.ChangeTrialEndDatePayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewChangeTrialEndDateRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "changeTrialEndDate", err)
+		}
+		return nil
+	}
+}
+
+// DecodeChangeTrialEndDateResponse returns a decoder for responses returned by
+// the admin changeTrialEndDate endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeChangeTrialEndDateResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeChangeTrialEndDateResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ChangeTrialEndDateResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			res := NewChangeTrialEndDateAdminOrganizationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ChangeTrialEndDateUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ChangeTrialEndDateForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ChangeTrialEndDateBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ChangeTrialEndDateNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ChangeTrialEndDateConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ChangeTrialEndDateUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ChangeTrialEndDateInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ChangeTrialEndDateInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+				}
+				err = ValidateChangeTrialEndDateInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+				}
+				return nil, NewChangeTrialEndDateInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ChangeTrialEndDateUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+				}
+				err = ValidateChangeTrialEndDateUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+				}
+				return nil, NewChangeTrialEndDateUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "changeTrialEndDate", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ChangeTrialEndDateGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "changeTrialEndDate", err)
+			}
+			err = ValidateChangeTrialEndDateGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "changeTrialEndDate", err)
+			}
+			return nil, NewChangeTrialEndDateGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "changeTrialEndDate", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetMeterUsageRequest instantiates a HTTP request object with method and
+// path set to call the "admin" service "getMeterUsage" endpoint
+func (c *Client) BuildGetMeterUsageRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMeterUsageAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getMeterUsage", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMeterUsageRequest returns an encoder for requests sent to the admin
+// getMeterUsage server.
+func EncodeGetMeterUsageRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetMeterUsagePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getMeterUsage", "*admin.GetMeterUsagePayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		values.Add("family", p.Family)
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetMeterUsageResponse returns a decoder for responses returned by the
+// admin getMeterUsage endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetMeterUsageResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMeterUsageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMeterUsageResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			res := NewGetMeterUsageAdminMeterUsageResponseOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body GetMeterUsageUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body GetMeterUsageUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMeterUsageForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMeterUsageBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMeterUsageNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMeterUsageConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMeterUsageUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMeterUsageInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMeterUsageInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+				}
+				err = ValidateGetMeterUsageInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+				}
+				return nil, NewGetMeterUsageInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMeterUsageUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+				}
+				err = ValidateGetMeterUsageUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+				}
+				return nil, NewGetMeterUsageUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getMeterUsage", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMeterUsageGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMeterUsage", err)
+			}
+			err = ValidateGetMeterUsageGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMeterUsage", err)
+			}
+			return nil, NewGetMeterUsageGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getMeterUsage", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetSupportMatrixRequest instantiates a HTTP request object with method
+// and path set to call the "admin" service "getSupportMatrix" endpoint
+func (c *Client) BuildGetSupportMatrixRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetSupportMatrixAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getSupportMatrix", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetSupportMatrixRequest returns an encoder for requests sent to the
+// admin getSupportMatrix server.
+func EncodeGetSupportMatrixRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetSupportMatrixPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getSupportMatrix", "*admin.GetSupportMatrixPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetSupportMatrixResponse returns a decoder for responses returned by
+// the admin getSupportMatrix endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetSupportMatrixResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetSupportMatrixResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetSupportMatrixResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSupportMatrix", err)
+			}
+			err = ValidateGetSupportMatrixResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSupportMatrix", err)
+			}
+			res := NewGetSupportMatrixSupportMatrixOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetSupportMatrixUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSupportMatrix", err)
+			}
+			err = ValidateGetSupportMatrixUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSupportMatrix", err)
+			}
+			return nil, NewGetSupportMatrixUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetSupportMatrixForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSupportMatrix", err)
+			}
+			err = ValidateGetSupportMatrixForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSupportMatrix", err)
+			}
+			return nil, NewGetSupportMatrixForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetSupportMatrixBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSupportMatrix", err)
+			}
+			err = ValidateGetSupportMatrixBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSupportMatrix", err)
+			}
+			return nil, NewGetSupportMatrixBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetSupportMatrixNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSupportMatrix", err)
+			}
+			err = ValidateGetSupportMatrixNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSupportMatrix", err)
+			}
+			return nil, NewGetSupportMatrixNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetSupportMatrixConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSupportMatrix", err)
+			}
+			err = ValidateGetSupportMatrixConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSupportMatrix", err)
+			}
+			return nil, NewGetSupportMatrixConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetSupportMatrixUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSupportMatrix", err)
+			}
+			err = ValidateGetSupportMatrixUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSupportMatrix", err)
+			}
+			return nil, NewGetSupportMatrixUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetSupportMatrixInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSupportMatrix", err)
+			}
+			err = ValidateGetSupportMatrixInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSupportMatrix", err)
+			}
+			return nil, NewGetSupportMatrixInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetSupportMatrixInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getSupportMatrix", err)
+				}
+				err = ValidateGetSupportMatrixInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getSupportMatrix", err)
+				}
+				return nil, NewGetSupportMatrixInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetSupportMatrixUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getSupportMatrix", err)
+				}
+				err = ValidateGetSupportMatrixUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getSupportMatrix", err)
+				}
+				return nil, NewGetSupportMatrixUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getSupportMatrix", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetSupportMatrixGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSupportMatrix", err)
+			}
+			err = ValidateGetSupportMatrixGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSupportMatrix", err)
+			}
+			return nil, NewGetSupportMatrixGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getSupportMatrix", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateSupportMatrixRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "updateSupportMatrix"
+// endpoint
+func (c *Client) BuildUpdateSupportMatrixRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateSupportMatrixAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "updateSupportMatrix", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateSupportMatrixRequest returns an encoder for requests sent to the
+// admin updateSupportMatrix server.
+func EncodeUpdateSupportMatrixRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.UpdateSupportMatrixPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "updateSupportMatrix", "*admin.UpdateSupportMatrixPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewUpdateSupportMatrixRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "updateSupportMatrix", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateSupportMatrixResponse returns a decoder for responses returned
+// by the admin updateSupportMatrix endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUpdateSupportMatrixResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateSupportMatrixResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateSupportMatrixResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
+			}
+			err = ValidateUpdateSupportMatrixResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
+			}
+			res := NewUpdateSupportMatrixSupportMatrixOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateSupportMatrixUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
+			}
+			err = ValidateUpdateSupportMatrixUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
+			}
+			return nil, NewUpdateSupportMatrixUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateSupportMatrixForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
+			}
+			err = ValidateUpdateSupportMatrixForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
+			}
+			return nil, NewUpdateSupportMatrixForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateSupportMatrixBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
+			}
+			err = ValidateUpdateSupportMatrixBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
+			}
+			return nil, NewUpdateSupportMatrixBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateSupportMatrixNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
+			}
+			err = ValidateUpdateSupportMatrixNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
+			}
+			return nil, NewUpdateSupportMatrixNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateSupportMatrixConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
+			}
+			err = ValidateUpdateSupportMatrixConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
+			}
+			return nil, NewUpdateSupportMatrixConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateSupportMatrixUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
+			}
+			err = ValidateUpdateSupportMatrixUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
+			}
+			return nil, NewUpdateSupportMatrixUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateSupportMatrixInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
+			}
+			err = ValidateUpdateSupportMatrixInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
+			}
+			return nil, NewUpdateSupportMatrixInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateSupportMatrixInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
+				}
+				err = ValidateUpdateSupportMatrixInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
+				}
+				return nil, NewUpdateSupportMatrixInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateSupportMatrixUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
+				}
+				err = ValidateUpdateSupportMatrixUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
+				}
+				return nil, NewUpdateSupportMatrixUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "updateSupportMatrix", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateSupportMatrixGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
+			}
+			err = ValidateUpdateSupportMatrixGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
+			}
+			return nil, NewUpdateSupportMatrixGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "updateSupportMatrix", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -11599,8 +12796,9 @@ func unmarshalRemoteSessionIssuerDuplicateMatchResponseBodyToTypesRemoteSessionI
 // *GlobalRemoteSessionIssuerResponseBody.
 func unmarshalGlobalRemoteSessionIssuerResponseBodyToAdminGlobalRemoteSessionIssuer(v *GlobalRemoteSessionIssuerResponseBody) *admin.GlobalRemoteSessionIssuer {
 	res := &admin.GlobalRemoteSessionIssuer{
-		GlobalClientCount: *v.GlobalClientCount,
-		TenantClientCount: *v.TenantClientCount,
+		GlobalClientCount:             *v.GlobalClientCount,
+		TenantClientCount:             *v.TenantClientCount,
+		TrustedUserSessionIssuerCount: *v.TrustedUserSessionIssuerCount,
 	}
 	res.Issuer = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v.Issuer)
 
@@ -11625,12 +12823,15 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		RevocationEndpoint:                v.RevocationEndpoint,
 		RegistrationEndpoint:              v.RegistrationEndpoint,
 		JwksURI:                           v.JwksURI,
+		JwksFetchedAt:                     v.JwksFetchedAt,
+		JwksCacheExpiresAt:                v.JwksCacheExpiresAt,
 		ServiceDocumentation:              v.ServiceDocumentation,
 		OpPolicyURI:                       v.OpPolicyURI,
 		OpTosURI:                          v.OpTosURI,
 		Oidc:                              *v.Oidc,
 		Passthrough:                       *v.Passthrough,
 		ClientIDMetadataDocumentSupported: *v.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               v.TunneledMcpServerID,
 		UserinfoEndpoint:                  v.UserinfoEndpoint,
 		IntrospectionEndpoint:             v.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
@@ -11763,6 +12964,282 @@ func unmarshalAssetResponseBodyToAdminAsset(v *AssetResponseBody) *admin.Asset {
 		ContentLength: *v.ContentLength,
 		CreatedAt:     *v.CreatedAt,
 		UpdatedAt:     *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalMeterUsageWindowResponseBodyToAdminMeterUsageWindow builds a value
+// of type *admin.MeterUsageWindow from a value of type
+// *MeterUsageWindowResponseBody.
+func unmarshalMeterUsageWindowResponseBodyToAdminMeterUsageWindow(v *MeterUsageWindowResponseBody) *admin.MeterUsageWindow {
+	res := &admin.MeterUsageWindow{
+		From: *v.From,
+		To:   *v.To,
+	}
+
+	return res
+}
+
+// unmarshalAdminMeterUsageBucketResponseBodyToAdminAdminMeterUsageBucket
+// builds a value of type *admin.AdminMeterUsageBucket from a value of type
+// *AdminMeterUsageBucketResponseBody.
+func unmarshalAdminMeterUsageBucketResponseBodyToAdminAdminMeterUsageBucket(v *AdminMeterUsageBucketResponseBody) *admin.AdminMeterUsageBucket {
+	res := &admin.AdminMeterUsageBucket{
+		From:  *v.From,
+		To:    *v.To,
+		Total: *v.Total,
+	}
+
+	return res
+}
+
+// unmarshalSupportMethodResponseBodyToAdminSupportMethod builds a value of
+// type *admin.SupportMethod from a value of type *SupportMethodResponseBody.
+func unmarshalSupportMethodResponseBodyToAdminSupportMethod(v *SupportMethodResponseBody) *admin.SupportMethod {
+	res := &admin.SupportMethod{
+		ID:     *v.ID,
+		Name:   *v.Name,
+		Vendor: *v.Vendor,
+		Plans:  *v.Plans,
+	}
+	res.Facts = make(map[string]*admin.SupportFact, len(v.Facts))
+	for key, val := range v.Facts {
+		tk := key
+		if val == nil {
+			res.Facts[tk] = nil
+			continue
+		}
+		res.Facts[tk] = unmarshalSupportFactResponseBodyToAdminSupportFact(val)
+	}
+
+	return res
+}
+
+// unmarshalSupportFactResponseBodyToAdminSupportFact builds a value of type
+// *admin.SupportFact from a value of type *SupportFactResponseBody.
+func unmarshalSupportFactResponseBodyToAdminSupportFact(v *SupportFactResponseBody) *admin.SupportFact {
+	res := &admin.SupportFact{
+		Status: *v.Status,
+		Note:   *v.Note,
+		Verify: *v.Verify,
+	}
+
+	return res
+}
+
+// unmarshalSupportPlatformResponseBodyToAdminSupportPlatform builds a value of
+// type *admin.SupportPlatform from a value of type
+// *SupportPlatformResponseBody.
+func unmarshalSupportPlatformResponseBodyToAdminSupportPlatform(v *SupportPlatformResponseBody) *admin.SupportPlatform {
+	res := &admin.SupportPlatform{
+		ID:      *v.ID,
+		Name:    *v.Name,
+		Vendor:  *v.Vendor,
+		Family:  *v.Family,
+		Surface: *v.Surface,
+	}
+
+	return res
+}
+
+// unmarshalSupportCapabilityResponseBodyToAdminSupportCapability builds a
+// value of type *admin.SupportCapability from a value of type
+// *SupportCapabilityResponseBody.
+func unmarshalSupportCapabilityResponseBodyToAdminSupportCapability(v *SupportCapabilityResponseBody) *admin.SupportCapability {
+	res := &admin.SupportCapability{
+		ID:    *v.ID,
+		Name:  *v.Name,
+		Group: *v.Group,
+	}
+
+	return res
+}
+
+// unmarshalSupportDraftResponseBodyToAdminSupportDraft builds a value of type
+// *admin.SupportDraft from a value of type *SupportDraftResponseBody.
+func unmarshalSupportDraftResponseBodyToAdminSupportDraft(v *SupportDraftResponseBody) *admin.SupportDraft {
+	res := &admin.SupportDraft{}
+	res.Mappings = make(map[string]*admin.SupportMapping, len(v.Mappings))
+	for key, val := range v.Mappings {
+		tk := key
+		if val == nil {
+			res.Mappings[tk] = nil
+			continue
+		}
+		res.Mappings[tk] = unmarshalSupportMappingResponseBodyToAdminSupportMapping(val)
+	}
+	res.References = make(map[string]map[string]*admin.SupportFact, len(v.References))
+	for key, val := range v.References {
+		tk := key
+		tvb := make(map[string]*admin.SupportFact, len(val))
+		for key, val := range val {
+			tk := key
+			if val == nil {
+				tvb[tk] = nil
+				continue
+			}
+			tvb[tk] = unmarshalSupportFactResponseBodyToAdminSupportFact(val)
+		}
+		res.References[tk] = tvb
+	}
+
+	return res
+}
+
+// unmarshalSupportMappingResponseBodyToAdminSupportMapping builds a value of
+// type *admin.SupportMapping from a value of type *SupportMappingResponseBody.
+func unmarshalSupportMappingResponseBodyToAdminSupportMapping(v *SupportMappingResponseBody) *admin.SupportMapping {
+	res := &admin.SupportMapping{
+		Applicability: *v.Applicability,
+		Conditions:    *v.Conditions,
+	}
+	res.Facts = make(map[string]*admin.SupportFact, len(v.Facts))
+	for key, val := range v.Facts {
+		tk := key
+		if val == nil {
+			res.Facts[tk] = nil
+			continue
+		}
+		res.Facts[tk] = unmarshalSupportFactResponseBodyToAdminSupportFact(val)
+	}
+
+	return res
+}
+
+// marshalAdminSupportDraftToSupportDraftRequestBody builds a value of type
+// *SupportDraftRequestBody from a value of type *admin.SupportDraft.
+func marshalAdminSupportDraftToSupportDraftRequestBody(v *admin.SupportDraft) *SupportDraftRequestBody {
+	res := &SupportDraftRequestBody{}
+	if v.Mappings != nil {
+		res.Mappings = make(map[string]*SupportMappingRequestBody, len(v.Mappings))
+		for key, val := range v.Mappings {
+			tk := key
+			if val == nil {
+				res.Mappings[tk] = nil
+				continue
+			}
+			res.Mappings[tk] = marshalAdminSupportMappingToSupportMappingRequestBody(val)
+		}
+	}
+	if v.References != nil {
+		res.References = make(map[string]map[string]*SupportFactRequestBody, len(v.References))
+		for key, val := range v.References {
+			tk := key
+			tvb := make(map[string]*SupportFactRequestBody, len(val))
+			for key, val := range val {
+				tk := key
+				if val == nil {
+					tvb[tk] = nil
+					continue
+				}
+				tvb[tk] = marshalAdminSupportFactToSupportFactRequestBody(val)
+			}
+			res.References[tk] = tvb
+		}
+	}
+
+	return res
+}
+
+// marshalAdminSupportMappingToSupportMappingRequestBody builds a value of type
+// *SupportMappingRequestBody from a value of type *admin.SupportMapping.
+func marshalAdminSupportMappingToSupportMappingRequestBody(v *admin.SupportMapping) *SupportMappingRequestBody {
+	res := &SupportMappingRequestBody{
+		Applicability: v.Applicability,
+		Conditions:    v.Conditions,
+	}
+	if v.Facts != nil {
+		res.Facts = make(map[string]*SupportFactRequestBody, len(v.Facts))
+		for key, val := range v.Facts {
+			tk := key
+			if val == nil {
+				res.Facts[tk] = nil
+				continue
+			}
+			res.Facts[tk] = marshalAdminSupportFactToSupportFactRequestBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalAdminSupportFactToSupportFactRequestBody builds a value of type
+// *SupportFactRequestBody from a value of type *admin.SupportFact.
+func marshalAdminSupportFactToSupportFactRequestBody(v *admin.SupportFact) *SupportFactRequestBody {
+	res := &SupportFactRequestBody{
+		Status: v.Status,
+		Note:   v.Note,
+		Verify: v.Verify,
+	}
+
+	return res
+}
+
+// marshalSupportDraftRequestBodyToAdminSupportDraft builds a value of type
+// *admin.SupportDraft from a value of type *SupportDraftRequestBody.
+func marshalSupportDraftRequestBodyToAdminSupportDraft(v *SupportDraftRequestBody) *admin.SupportDraft {
+	res := &admin.SupportDraft{}
+	if v.Mappings != nil {
+		res.Mappings = make(map[string]*admin.SupportMapping, len(v.Mappings))
+		for key, val := range v.Mappings {
+			tk := key
+			if val == nil {
+				res.Mappings[tk] = nil
+				continue
+			}
+			res.Mappings[tk] = marshalSupportMappingRequestBodyToAdminSupportMapping(val)
+		}
+	}
+	if v.References != nil {
+		res.References = make(map[string]map[string]*admin.SupportFact, len(v.References))
+		for key, val := range v.References {
+			tk := key
+			tvb := make(map[string]*admin.SupportFact, len(val))
+			for key, val := range val {
+				tk := key
+				if val == nil {
+					tvb[tk] = nil
+					continue
+				}
+				tvb[tk] = marshalSupportFactRequestBodyToAdminSupportFact(val)
+			}
+			res.References[tk] = tvb
+		}
+	}
+
+	return res
+}
+
+// marshalSupportMappingRequestBodyToAdminSupportMapping builds a value of type
+// *admin.SupportMapping from a value of type *SupportMappingRequestBody.
+func marshalSupportMappingRequestBodyToAdminSupportMapping(v *SupportMappingRequestBody) *admin.SupportMapping {
+	res := &admin.SupportMapping{
+		Applicability: v.Applicability,
+		Conditions:    v.Conditions,
+	}
+	if v.Facts != nil {
+		res.Facts = make(map[string]*admin.SupportFact, len(v.Facts))
+		for key, val := range v.Facts {
+			tk := key
+			if val == nil {
+				res.Facts[tk] = nil
+				continue
+			}
+			res.Facts[tk] = marshalSupportFactRequestBodyToAdminSupportFact(val)
+		}
+	}
+
+	return res
+}
+
+// marshalSupportFactRequestBodyToAdminSupportFact builds a value of type
+// *admin.SupportFact from a value of type *SupportFactRequestBody.
+func marshalSupportFactRequestBodyToAdminSupportFact(v *SupportFactRequestBody) *admin.SupportFact {
+	res := &admin.SupportFact{
+		Status: v.Status,
+		Note:   v.Note,
+		Verify: v.Verify,
 	}
 
 	return res

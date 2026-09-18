@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
@@ -49,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
@@ -70,18 +72,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
-func newWorkerCommand() *cli.Command {
-	var shutdownFuncs []func(context.Context) error
-
-	flags := []cli.Flag{
-		&cli.StringFlag{
-			Name:     "server-url",
-			Usage:    "The public URL of the server",
-			EnvVars:  []string{"GRAM_SERVER_URL"},
-			Required: true,
-		},
+func workerRuntimeFlags() []cli.Flag {
+	return []cli.Flag{
 		&cli.StringFlag{
 			Name:     "environment",
 			Usage:    "The current server environment", // local, dev, prod
@@ -101,12 +96,6 @@ func newWorkerCommand() *cli.Command {
 			Value:   "default",
 		},
 		&cli.StringFlag{
-			Name:    "temporal-task-queue",
-			Usage:   "Task queue of the Temporal server",
-			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
-			Value:   "main",
-		},
-		&cli.StringFlag{
 			Name:    "temporal-client-cert",
 			Usage:   "Client cert of the Temporal server",
 			EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
@@ -115,12 +104,6 @@ func newWorkerCommand() *cli.Command {
 			Name:    "temporal-client-key",
 			Usage:   "Client key of the Temporal server",
 			EnvVars: []string{"TEMPORAL_CLIENT_KEY"},
-		},
-		&cli.StringFlag{
-			Name:    "control-address",
-			Value:   ":8081",
-			Usage:   "HTTP address to listen on",
-			EnvVars: []string{"GRAM_WORKER_CONTROL_ADDRESS"},
 		},
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -143,6 +126,31 @@ func newWorkerCommand() *cli.Command {
 			Name:    "with-otel-metrics",
 			Usage:   "Enable OpenTelemetry metrics",
 			EnvVars: []string{"GRAM_ENABLE_OTEL_METRICS"},
+		},
+	}
+}
+
+func newWorkerCommand() *cli.Command {
+	var shutdownFuncs []func(context.Context) error
+
+	flags := append(workerRuntimeFlags(),
+		&cli.StringFlag{
+			Name:     "server-url",
+			Usage:    "The public URL of the server",
+			EnvVars:  []string{"GRAM_SERVER_URL"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:    "temporal-task-queue",
+			Usage:   "Task queue of the Temporal server",
+			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
+			Value:   "main",
+		},
+		&cli.StringFlag{
+			Name:    "control-address",
+			Value:   ":8081",
+			Usage:   "HTTP address to listen on",
+			EnvVars: []string{"GRAM_WORKER_CONTROL_ADDRESS"},
 		},
 		&cli.StringFlag{
 			Name:     "assets-backend",
@@ -188,6 +196,17 @@ func newWorkerCommand() *cli.Command {
 			Usage:    "List of CIDR blocks to block for SSRF protection",
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "tunnel-forward-token",
+			Usage:    "Shared secret presented to the tunnel gateway forward listener to authenticate gram-worker",
+			Required: true,
+			EnvVars:  []string{"GRAM_TUNNEL_FORWARD_TOKEN"},
+		},
+		&cli.StringSliceFlag{
+			Name:    "tunnel-gateway-cidr-blocks",
+			Usage:   "CIDR blocks the tunnel gateway advertise addresses live in (cluster pod range). Allowlisted past the guardian egress policy for tunnel forwards only; unset means tunnels to private addresses fail closed",
+			EnvVars: []string{"GRAM_TUNNEL_GATEWAY_CIDR_BLOCKS"},
 		},
 		&cli.StringFlag{
 			Name:     "polar-api-key",
@@ -312,12 +331,10 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_EMAIL_TEMPLATE_IDS"},
 			Required: false,
 		},
-	}
+	)
 
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, customDomainFlags()...)
-	flags = append(flags, networkIngressQueueFlags()...)
-	flags = append(flags, networkIngressProviderFlags()...)
 	flags = append(flags, redisFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 	flags = append(flags, functionsFlags()...)
@@ -599,7 +616,7 @@ func newWorkerCommand() *cli.Command {
 
 			riskSignaler := background.NewThrottledSignaler(
 				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
-				30*time.Second,
+				analysisstatus.SignalCooldown,
 				logger,
 			)
 			// riskSignaler.Shutdown is flushed synchronously after temporalWorker.Run
@@ -709,6 +726,27 @@ func newWorkerCommand() *cli.Command {
 
 			chatClient := chat.NewAgenticChatClient(completionsClient)
 
+			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a
+			// typo here would strand tunnels fail-closed with no signal. Reject
+			// misconfiguration at startup instead.
+			tunnelGatewayCIDRs := c.StringSlice("tunnel-gateway-cidr-blocks")
+			for _, cidr := range tunnelGatewayCIDRs {
+				if _, _, err := net.ParseCIDR(cidr); err != nil {
+					return fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
+				}
+			}
+
+			// Back-channel OAuth calls (token refresh, revocation) for
+			// tunnel-bound remote session clients ride this transport instead
+			// of dialing from cloud egress. The refresh sweep runs here, so
+			// the worker needs the same tunnel reach as the HTTP server.
+			tunnelHTTPClient := tunnelrouting.NewHTTPClient(
+				route.NewRedis(redisClient),
+				c.String("tunnel-forward-token"),
+				guardianPolicy,
+				tunnelGatewayCIDRs,
+			)
+
 			assistantRuntime, err := newAssistantRuntime(ctx, logger, tracerProvider, c, guardianPolicy, db, serverURL)
 			if err != nil {
 				return err
@@ -758,67 +796,64 @@ func newWorkerCommand() *cli.Command {
 			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
-			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, auditLogger)
+			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnelHTTPClient, auditLogger)
+			gcpIdentity := newGCPIdentity(ctx, logger, c)
+			kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("build kms signing client factory: %w", err)
+			}
+			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-				GuardianPolicy:            guardianPolicy,
-				DB:                        db,
-				EncryptionClient:          encryptionClient,
-				FeatureProvider:           featureFlags,
-				AssetStorage:              assetStorage,
-				SlackClient:               slackClient,
-				ChatMessageWriter:         chatWriter,
-				ChatClient:                chatClient,
-				OpenRouter:                openRouter,
-				OpenRouterSpend:           openRouter,
-				K8sClient:                 k8sClient,
-				ExpectedTargetCNAME:       c.String("custom-domain-cname"),
-				ExpectedARecords:          customDomainARecords,
-				GitHubEvidenceToken:       c.String("github-evidence-token"),
-				SiteURL:                   siteURL,
-				BillingTracker:            billingTracker,
-				BillingRepository:         billingRepo,
-				StripeClient:              stripeClient,
-				TUMMeterStreamingEnabled:  c.Bool(stripeTUMMeterStreamingFlagName),
-				RedisClient:               redisClient,
-				PosthogClient:             posthogClient,
-				EmailService:              emailService,
-				FunctionsDeployer:         functionsOrchestrator,
-				FunctionsVersion:          runnerVersion,
-				RagService:                ragService,
-				MCPRegistryClient:         mcpRegistryClient,
-				TelemetryLogger:           telemetryLogger,
-				ClickhouseConn:            chDB,
-				TelemetryRepo:             telemetryrepo.New(chDB),
-				TriggersApp:               triggerApp,
-				CacheAdapter:              remoteSessionsCache,
-				IssuerMetadataRefresher:   issuerMetadataRefresher,
-				AssistantsCore:            assistantsCore,
-				TemporalEnv:               temporalEnv,
-				PIIScanner:                piiScanner,
-				PIScanner:                 piScanner,
-				CustomRuleScanner:         customRuleScanner,
-				BuiltinPresets:            builtinPresets,
-				ShadowMCPClient:           shadowMCPClient,
-				AuditLogger:               auditLogger,
-				WorkOSClient:              backgroundWorkOSClient,
-				ProductFeatures:           productFeatures,
-				PluginPublisher:           pluginPublisher,
-				Publishers:                publishers,
-				TrialEmailsService:        trialEmailsService,
-				RiskFingerprinter:         riskFingerprinter,
-				DisableRiskRetroReconcile: c.Bool("disable-clickhouse-risk-retro-reconcile"),
+				GuardianPolicy:               guardianPolicy,
+				TunnelHTTPClient:             tunnelHTTPClient,
+				DB:                           db,
+				EncryptionClient:             encryptionClient,
+				FeatureProvider:              featureFlags,
+				AssetStorage:                 assetStorage,
+				SlackClient:                  slackClient,
+				ChatMessageWriter:            chatWriter,
+				ChatClient:                   chatClient,
+				OpenRouter:                   openRouter,
+				OpenRouterSpend:              openRouter,
+				K8sClient:                    k8sClient,
+				ExpectedTargetCNAME:          c.String("custom-domain-cname"),
+				ExpectedARecords:             customDomainARecords,
+				GitHubEvidenceToken:          c.String("github-evidence-token"),
+				SiteURL:                      siteURL,
+				BillingTracker:               billingTracker,
+				BillingRepository:            billingRepo,
+				StripeClient:                 stripeClient,
+				RedisClient:                  redisClient,
+				PosthogClient:                posthogClient,
+				EmailService:                 emailService,
+				FunctionsDeployer:            functionsOrchestrator,
+				FunctionsVersion:             runnerVersion,
+				RagService:                   ragService,
+				MCPRegistryClient:            mcpRegistryClient,
+				TelemetryLogger:              telemetryLogger,
+				ClickhouseConn:               chDB,
+				TelemetryRepo:                telemetryrepo.New(chDB),
+				TriggersApp:                  triggerApp,
+				CacheAdapter:                 remoteSessionsCache,
+				IssuerMetadataRefresher:      issuerMetadataRefresher,
+				RemoteSessionAssertionSigner: clientAssertionSigner,
+				AssistantsCore:               assistantsCore,
+				TemporalEnv:                  temporalEnv,
+				PIIScanner:                   piiScanner,
+				PIScanner:                    piScanner,
+				CustomRuleScanner:            customRuleScanner,
+				BuiltinPresets:               builtinPresets,
+				ShadowMCPClient:              shadowMCPClient,
+				AuditLogger:                  auditLogger,
+				WorkOSClient:                 backgroundWorkOSClient,
+				ProductFeatures:              productFeatures,
+				PluginPublisher:              pluginPublisher,
+				Publishers:                   publishers,
+				TrialEmailsService:           trialEmailsService,
+				RiskFingerprinter:            riskFingerprinter,
+				DisableRiskRetroReconcile:    c.Bool("disable-clickhouse-risk-retro-reconcile"),
 			})
-
-			networkIngressConfig, err := networkIngressConfigFromCLI(c)
-			if err != nil {
-				return err
-			}
-			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, networkIngressConfig)
-			if err != nil {
-				return err
-			}
-			temporalWorker.RegisterNetworkIngress(executor, networkIngressConfig.ReconcileTaskQueue)
 
 			// Flush the throttle's queued trailing risk signals before this Action
 			// returns, while the Temporal client is still open. The cli After hook runs

@@ -16,6 +16,12 @@ import (
 // CreateIssuerRequestBody is the type of the "organizationUserSessionIssuers"
 // service "createIssuer" endpoint HTTP request body.
 type CreateIssuerRequestBody struct {
+	// Organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Omit to leave enterprise-managed authorization disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// Organization-level remote_session_client Gram uses with the trusted issuer.
+	// Must be supplied together with trusted_remote_session_issuer_id.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
 	// slugs may repeat.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
@@ -28,6 +34,14 @@ type CreateIssuerRequestBody struct {
 // UpdateIssuerRequestBody is the type of the "organizationUserSessionIssuers"
 // service "updateIssuer" endpoint HTTP request body.
 type UpdateIssuerRequestBody struct {
+	// Organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Omit to leave unchanged; pass an empty string to clear the
+	// link.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// Organization-level remote_session_client Gram uses with the trusted issuer.
+	// Omit to leave unchanged; pass an empty string to clear the link. The
+	// resulting issuer and client must either both be configured or both be absent.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 	// The user_session_issuer id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Rename the slug.
@@ -80,8 +94,14 @@ type CreateIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Gram uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListIssuersResponseBody is the type of the "organizationUserSessionIssuers"
@@ -117,8 +137,14 @@ type GetIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Gram uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateIssuerResponseBody is the type of the "organizationUserSessionIssuers"
@@ -146,8 +172,14 @@ type UpdateIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Gram uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetIssuerDeletePreflightResponseBody is the type of the
@@ -2125,8 +2157,14 @@ type UserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Gram uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // OrganizationUserSessionIssuerReferenceResponseBody is used to define fields
@@ -2170,6 +2208,8 @@ func NewCreateIssuerResponseBody(res *types.UserSessionIssuer) *CreateIssuerResp
 		AuthnChallengeMode:            res.AuthnChallengeMode,
 		SessionDurationHours:          res.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}
@@ -2208,6 +2248,8 @@ func NewGetIssuerResponseBody(res *types.UserSessionIssuer) *GetIssuerResponseBo
 		AuthnChallengeMode:            res.AuthnChallengeMode,
 		SessionDurationHours:          res.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}
@@ -2225,6 +2267,8 @@ func NewUpdateIssuerResponseBody(res *types.UserSessionIssuer) *UpdateIssuerResp
 		AuthnChallengeMode:            res.AuthnChallengeMode,
 		SessionDurationHours:          res.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}
@@ -3820,9 +3864,11 @@ func NewDeleteCimdClientGatewayErrorResponseBody(res *goa.ServiceError) *DeleteC
 // createIssuer endpoint payload.
 func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string) *organizationusersessionissuers.CreateIssuerPayload {
 	v := &organizationusersessionissuers.CreateIssuerPayload{
-		Slug:                 *body.Slug,
-		AuthnChallengeMode:   *body.AuthnChallengeMode,
-		SessionDurationHours: *body.SessionDurationHours,
+		TrustedRemoteSessionIssuerID: body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID: body.TrustedRemoteSessionClientID,
+		Slug:                         *body.Slug,
+		AuthnChallengeMode:           *body.AuthnChallengeMode,
+		SessionDurationHours:         *body.SessionDurationHours,
 	}
 	v.SessionToken = sessionToken
 
@@ -3854,6 +3900,8 @@ func NewGetIssuerPayload(id string, sessionToken *string) *organizationusersessi
 // updateIssuer endpoint payload.
 func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string) *organizationusersessionissuers.UpdateIssuerPayload {
 	v := &organizationusersessionissuers.UpdateIssuerPayload{
+		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:  body.TrustedRemoteSessionClientID,
 		ID:                            *body.ID,
 		Slug:                          body.Slug,
 		AuthnChallengeMode:            body.AuthnChallengeMode,
@@ -3940,6 +3988,12 @@ func ValidateCreateIssuerRequestBody(body *CreateIssuerRequestBody) (err error) 
 	}
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
+	}
+	if body.TrustedRemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.TrustedRemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
 	}
 	if body.AuthnChallengeMode != nil {
 		if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {

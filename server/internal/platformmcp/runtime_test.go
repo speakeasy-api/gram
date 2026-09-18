@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -87,7 +89,7 @@ func TestRuntimeHandlerClassifiesAuthenticationFailures(t *testing.T) {
 	}
 }
 
-func TestRuntimeHandlerRequiresLiveOrganizationAdmin(t *testing.T) {
+func TestRuntimeHandlerRequiresLiveOrganizationMembership(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -96,9 +98,9 @@ func TestRuntimeHandlerRequiresLiveOrganizationAdmin(t *testing.T) {
 		status    int
 		telemetry OAuthEvent
 	}{
-		{name: "denied", err: ErrForbidden, status: http.StatusForbidden, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "access_denied", Reason: "authorization_denied"}},
-		{name: "unavailable", err: ErrUnavailable, status: http.StatusServiceUnavailable, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable"}},
-		{name: "unexpected error", err: errors.New("authorization store unavailable"), status: http.StatusServiceUnavailable, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable"}},
+		{name: "denied", err: ErrForbidden, status: http.StatusForbidden, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "access_denied", Reason: "membership_denied"}},
+		{name: "unavailable", err: ErrUnavailable, status: http.StatusServiceUnavailable, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable", Reason: "authorization_unavailable"}},
+		{name: "unexpected error", err: errors.New("authorization store unavailable"), status: http.StatusServiceUnavailable, telemetry: OAuthEvent{Operation: "runtime_auth", Outcome: "temporarily_unavailable", Reason: "authorization_unavailable"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -123,7 +125,7 @@ func TestRuntimeHandlerRecordsReadyAfterSuccessfulToolsList(t *testing.T) {
 	t.Parallel()
 
 	recorder := &testReadinessRecorder{}
-	handler := NewRuntime(
+	runtime := NewRuntime(
 		testenv.NewLogger(t),
 		&testAuthenticator{principal: testPrincipal()},
 		testGate{enabled: true},
@@ -135,7 +137,9 @@ func TestRuntimeHandlerRecordsReadyAfterSuccessfulToolsList(t *testing.T) {
 		nil,
 		recorder,
 		nil,
-	).Handler()
+	)
+	require.Greater(t, len(runtime.registrar.For(AudienceExternal)), 32, "exercise internal SDK pagination")
+	handler := runtime.Handler()
 	req := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	req.Header.Set("Authorization", "Bearer access-token")
 	req.Header.Set("Content-Type", "application/json")
@@ -147,6 +151,100 @@ func TestRuntimeHandlerRecordsReadyAfterSuccessfulToolsList(t *testing.T) {
 	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
 	require.Equal(t, 1, recorder.calls)
 	require.Equal(t, testPrincipal(), recorder.principal)
+}
+
+func TestRuntimeHandlerFiltersToolsListByPreparedGrants(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name        string
+		grants      []authz.Grant
+		contains    []string
+		notContains []string
+	}{
+		{
+			name:        "project reader",
+			grants:      []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, "project-1")},
+			contains:    []string{"get_platform_context", "list_projects", "list_my_sessions"},
+			notContains: []string{"find_mcp", "list_skills", "create_skill", "distribute_skill"},
+		},
+		{
+			name:        "skill reader",
+			grants:      []authz.Grant{authz.NewGrant(authz.ScopeSkillRead, "skill-1")},
+			contains:    []string{"get_platform_context", "list_skills", "get_skill"},
+			notContains: []string{"list_projects", "create_skill", "distribute_skill"},
+		},
+		{
+			name:        "skill writer",
+			grants:      []authz.Grant{authz.NewGrant(authz.ScopeSkillWrite, "skill-1")},
+			contains:    []string{"list_skills", "create_skill", "add_skill_version", "update_skill_metadata"},
+			notContains: []string{"list_projects", "distribute_skill"},
+		},
+		{
+			name:        "organization admin",
+			grants:      []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, testPrincipal().OrganizationID)},
+			contains:    []string{"get_platform_context", "distribute_skill"},
+			notContains: []string{"list_projects", "list_skills", "create_skill"},
+		},
+		{
+			name:        "missing prepared grants",
+			grants:      nil,
+			contains:    []string{},
+			notContains: []string{"get_platform_context", "list_projects", "list_skills", "distribute_skill"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			authorizer := &testAuthorizer{grants: tc.grants}
+			handler := NewRuntime(
+				testenv.NewLogger(t),
+				&testAuthenticator{principal: testPrincipal()},
+				testGate{enabled: true},
+				authorizer,
+				"",
+				"test-cursor-key",
+				nil,
+				nil,
+				nil,
+				nil,
+				nil,
+			).Handler()
+			req := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+			req.Header.Set("Authorization", "Bearer access-token")
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
+			res := httptest.NewRecorder()
+
+			handler.ServeHTTP(res, req)
+
+			require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+			var response struct {
+				Result struct {
+					Tools []struct {
+						Name string `json:"name"`
+					} `json:"tools"`
+					NextCursor string `json:"nextCursor"`
+					TTLMs      int    `json:"ttlMs"`
+					CacheScope string `json:"cacheScope"`
+				} `json:"result"`
+			}
+			require.NoError(t, json.Unmarshal(res.Body.Bytes(), &response))
+			names := make([]string, 0, len(response.Result.Tools))
+			for _, tool := range response.Result.Tools {
+				names = append(names, tool.Name)
+			}
+			for _, name := range tc.contains {
+				require.Contains(t, names, name)
+			}
+			for _, name := range tc.notContains {
+				require.NotContains(t, names, name)
+			}
+			require.Empty(t, response.Result.NextCursor)
+			require.Zero(t, response.Result.TTLMs)
+			require.Equal(t, "private", response.Result.CacheScope)
+		})
+	}
 }
 
 func TestRuntimeAuthenticateAcceptsCaseInsensitiveBearer(t *testing.T) {
@@ -225,8 +323,29 @@ func (g testGate) Enabled(_ context.Context, _ string) (bool, error) {
 }
 
 type testAuthorizer struct {
-	err   error
-	calls int
+	err    error
+	calls  int
+	grants []authz.Grant
+}
+
+func (a *testAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
+	a.calls++
+	if a.err != nil {
+		return ctx, a.err
+	}
+	ctx = contextWithPrincipal(ctx, principal)
+	if a.grants != nil {
+		ctx = authz.GrantsToContext(ctx, a.grants)
+	}
+	return ctx, nil
+}
+
+func (a *testAuthorizer) AuthorizeExternalCall(_ context.Context, _ Principal, _ ExternalAuthorization) error {
+	return a.err
+}
+
+func (a *testAuthorizer) RequireLiveMembership(_ context.Context, _ Principal) error {
+	return a.err
 }
 
 func (a *testAuthorizer) RequireLiveOrgAdmin(_ context.Context, _ Principal) error {

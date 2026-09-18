@@ -204,6 +204,26 @@ type Client struct {
 	// endpoint.
 	ServeImageDoer goahttp.Doer
 
+	// StartTrial Doer is the HTTP client used to make requests to the startTrial
+	// endpoint.
+	StartTrialDoer goahttp.Doer
+
+	// ChangeTrialEndDate Doer is the HTTP client used to make requests to the
+	// changeTrialEndDate endpoint.
+	ChangeTrialEndDateDoer goahttp.Doer
+
+	// GetMeterUsage Doer is the HTTP client used to make requests to the
+	// getMeterUsage endpoint.
+	GetMeterUsageDoer goahttp.Doer
+
+	// GetSupportMatrix Doer is the HTTP client used to make requests to the
+	// getSupportMatrix endpoint.
+	GetSupportMatrixDoer goahttp.Doer
+
+	// UpdateSupportMatrix Doer is the HTTP client used to make requests to the
+	// updateSupportMatrix endpoint.
+	UpdateSupportMatrixDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -271,6 +291,11 @@ func NewClient(
 		MigrateToGlobalIssuerDoer:                 doer,
 		UploadPlatformImageDoer:                   doer,
 		ServeImageDoer:                            doer,
+		StartTrialDoer:                            doer,
+		ChangeTrialEndDateDoer:                    doer,
+		GetMeterUsageDoer:                         doer,
+		GetSupportMatrixDoer:                      doer,
+		UpdateSupportMatrixDoer:                   doer,
 		RestoreResponseBody:                       restoreBody,
 		scheme:                                    scheme,
 		host:                                      host,
@@ -1409,5 +1434,125 @@ func (c *Client) ServeImage() goa.Endpoint {
 			return nil, err
 		}
 		return &admin.ServeImageResponseData{Result: res.(*admin.ServeImageResult), Body: resp.Body}, nil
+	}
+}
+
+// StartTrial returns an endpoint that makes HTTP requests to the admin service
+// startTrial server.
+func (c *Client) StartTrial() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeStartTrialRequest(c.encoder)
+		decodeResponse = DecodeStartTrialResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildStartTrialRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.StartTrialDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "startTrial", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ChangeTrialEndDate returns an endpoint that makes HTTP requests to the admin
+// service changeTrialEndDate server.
+func (c *Client) ChangeTrialEndDate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeChangeTrialEndDateRequest(c.encoder)
+		decodeResponse = DecodeChangeTrialEndDateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildChangeTrialEndDateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ChangeTrialEndDateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "changeTrialEndDate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMeterUsage returns an endpoint that makes HTTP requests to the admin
+// service getMeterUsage server.
+func (c *Client) GetMeterUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMeterUsageRequest(c.encoder)
+		decodeResponse = DecodeGetMeterUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMeterUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMeterUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getMeterUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSupportMatrix returns an endpoint that makes HTTP requests to the admin
+// service getSupportMatrix server.
+func (c *Client) GetSupportMatrix() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSupportMatrixRequest(c.encoder)
+		decodeResponse = DecodeGetSupportMatrixResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSupportMatrixRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSupportMatrixDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getSupportMatrix", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateSupportMatrix returns an endpoint that makes HTTP requests to the
+// admin service updateSupportMatrix server.
+func (c *Client) UpdateSupportMatrix() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateSupportMatrixRequest(c.encoder)
+		decodeResponse = DecodeUpdateSupportMatrixResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateSupportMatrixRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateSupportMatrixDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "updateSupportMatrix", err)
+		}
+		return decodeResponse(resp)
 	}
 }

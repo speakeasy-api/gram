@@ -136,12 +136,14 @@ export function PrivateNetworkSetupSheet({
             onClientSecretChange={setClientSecret}
           />
           <div className="space-y-2">
-            <Label htmlFor="private-hostname">Private hostname label</Label>
+            <Label htmlFor="private-hostname">
+              Organization private hostname
+            </Label>
             <Input
               id="private-hostname"
               value={hostname}
               onChange={(value) => setHostname(value.toLowerCase())}
-              placeholder="acme-mcp"
+              placeholder="acme-gram"
               validate={(value) =>
                 HOSTNAME_PATTERN.test(value.toLowerCase()) ||
                 "Use a lowercase DNS label containing letters, numbers, or hyphens."
@@ -149,8 +151,12 @@ export function PrivateNetworkSetupSheet({
               autoComplete="off"
             />
             <Text small muted>
-              This label is immutable after setup. Tailscale supplies the
-              complete <code>.ts.net</code> name.
+              Choose a durable label for the organization, not an individual MCP
+              server. MCP servers opt in separately and keep their own endpoint
+              paths on the shared hostname. Tailscale appends your
+              tailnet&apos;s
+              <code>.ts.net</code> suffix. This label cannot be changed after
+              setup.
             </Text>
           </div>
           <div className="flex items-start justify-between gap-6 border p-4">

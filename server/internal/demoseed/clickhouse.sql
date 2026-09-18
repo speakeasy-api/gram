@@ -81,6 +81,8 @@ DELETE FROM authz_challenges WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM skill_session_versions WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspace';
+DELETE FROM billing_meter_daily_summaries WHERE organization_id = 'org_gram_demo_workspace';
+DELETE FROM billing_meter_readings_by_time WHERE organization_id = 'org_gram_demo_workspace';
 
 -- Inserts must never race rows from the previous seed generation. The Go
 -- runner polls this same condition before advancing past the delete phase, and
@@ -88,8 +90,12 @@ DELETE FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspa
 SELECT throwIf(
   (SELECT count() FROM telemetry_logs WHERE gram_project_id IN
      (toUUID('dec0de00-0000-4000-a000-000000000001'))
-   ) != 0,
-  'demo seed preflight: telemetry rows remain after scoped deletes');
+   )
+  + (SELECT count() FROM billing_meter_readings_by_time
+     WHERE organization_id = 'org_gram_demo_workspace')
+  + (SELECT count() FROM billing_meter_daily_summaries
+     WHERE organization_id = 'org_gram_demo_workspace') != 0,
+  'demo seed preflight: source or summary rows remain after scoped deletes');
 
 -- Tool-execution rows: 3-12 per chat (hash-picked, so busy chats and quick
 -- ones both exist). gram.toolset.slug makes the Insights CTE's direct branch
@@ -110,10 +116,13 @@ SELECT
     '{"gram.tool.urn":"tools:http:acme:', tool_name, '"',
     ',"gram.tool.name":"', tool_name, '"',
     ',"gram.toolset.slug":"', if(i % 5 = 0, 'acme-ops', 'acme-support-tools'), '"',
-    ',"http.response.status_code":', toString(if(
-        (tool_name = 'process_refund' AND day_off <= 2 AND cityHash64('err', i, k) % 2 = 0)
-        OR cityHash64('errbg', i, k) % 30 = 0, 500, 200)),
+    ',"http.response.status_code":', toString(if(failed, 500, 200)),
     ',"http.server.request.duration":', toString(round(0.05 + (cityHash64(i, k) % 200) / 100, 3)),
+    -- The arguments and the result, as a real tool call records them. Without
+    -- these the log detail sheet has nothing to show but the tool's name, and
+    -- reports the payload as withheld by tool_io_logs.
+    ',"gen_ai.tool.call.arguments":"', tool_args, '"',
+    ',"gen_ai.tool.call.result":"', tool_result, '"',
     ',"gen_ai.conversation.id":"', chat_id, '"',
     ',"gram.project.id":"', toString(proj), '"',
     ',"user.email":"', email, '"',
@@ -135,7 +144,16 @@ SELECT
       AND (email = 'mateo@demo.getgram.ai'
         OR (email = 'lucas@demo.getgram.ai' AND cityHash64('acct', i) % 3 = 0)),
       'personal', 'team'), '"',
-    ',"gram.hook.source":"', hook, '"}'
+    ',"gram.hook.source":"', hook, '"',
+    -- What the caller said it was at the MCP initialize handshake. Sessions
+    -- that predate the handshake being recorded report nothing, which is why
+    -- a slice here carries no client at all: the dashboard folds those into
+    -- "unattributed", and a demo where every call is attributed would hide
+    -- that bucket entirely.
+    if(client_seen,
+       concat(',"gram.mcp.client.name":"', client_name, '"',
+              ',"gram.mcp.client.version":"', client_version, '"'), ''),
+    '}'
   ),
   '{"gram.deployment.id":"demo-seed"}',
   proj,
@@ -163,11 +181,84 @@ FROM (
     arrayElement(['["developer","viewer"]', '["developer"]', '["admin","developer"]', '["developer"]', '["analyst","viewer"]', '["admin","viewer"]'], uidx) AS rolesjson,
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
     if((number + 1) % 2 = 1, 'claude-code', 'cursor') AS hook,
-    arrayElement(['search_logs', 'get_metrics', 'query_db', 'get_customer',
-                  'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
-                 1 + (cityHash64('tool', number, k) % 8)) AS tool_name,
+    -- The MCP client follows the harness the chat ran in: a Claude Code chat
+    -- calls from Claude Code or the Claude web app, a Cursor chat from Cursor
+    -- or the VS Code extension. A client drawn independently of the harness
+    -- would make "top clients" and "top agents" disagree for no reason.
+    if(hook = 'claude-code',
+       arrayElement([1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1],
+                    1 + reinterpretAsUInt8(unhex(substring(h, 15, 2))) % 16),
+       arrayElement([3, 3, 3, 3, 3, 4, 3, 3, 4, 3, 3, 3, 4, 3, 3, 4],
+                    1 + reinterpretAsUInt8(unhex(substring(h, 15, 2))) % 16)) AS cidx,
+    arrayElement(['Claude Code', 'claude-ai', 'Cursor', 'Visual Studio Code'], cidx) AS client_name,
+    -- A real fleet is spread over a few releases, weighted toward the newest.
+    arrayElement(multiIf(
+      cidx = 1, ['2.4.1', '2.4.1', '2.4.1', '2.3.8', '2.2.0'],
+      cidx = 2, ['1.0.0', '1.0.0', '1.0.0', '1.0.0', '1.0.0'],
+      cidx = 3, ['1.7.42', '1.7.42', '1.7.39', '1.6.14', '1.6.14'],
+      ['1.104.2', '1.104.2', '1.103.1', '1.103.1', '1.102.0']),
+      1 + reinterpretAsUInt8(unhex(substring(h, 17, 2))) % 5) AS client_version,
+    cityHash64('cliseen', number) % 8 > 0 AS client_seen,
+    -- Each client reaches for a different part of the catalog, so "most used
+    -- tools by client" is a real breakdown rather than the same eight tools
+    -- in the same proportions under every client.
+    arrayElement(
+      ['search_logs', 'get_metrics', 'query_db', 'get_customer',
+       'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
+      arrayElement(multiIf(
+        cidx = 1, [1, 1, 2, 3, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 7, 8],
+        cidx = 2, [4, 4, 4, 6, 6, 6, 2, 2, 4, 6, 4, 6, 4, 6, 2, 4],
+        cidx = 3, [1, 1, 1, 2, 2, 3, 3, 3, 7, 7, 8, 1, 2, 3, 7, 8],
+        [2, 2, 4, 4, 5, 5, 5, 8, 8, 2, 4, 5, 8, 2, 5, 8]),
+        1 + toUInt32(cityHash64('toolslot', number, k) % 16))) AS tool_name,
     arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
                  1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
+    -- One predicate for the status code and the result payload: a call that
+    -- returns 500 must not also carry a success body.
+    (tool_name = 'process_refund' AND day_off <= 2 AND cityHash64('err', i, k) % 2 = 0)
+      OR cityHash64('errbg', i, k) % 30 = 0 AS failed,
+    -- Short per-call ids so two calls to the same tool do not read as one
+    -- request replayed.
+    substring(lower(hex(MD5(concat('gram-demo-toolio-', toString(i), '-', toString(k))))), 1, 8) AS io_id,
+    toUInt32(cityHash64('iomag', i, k) % 900) AS io_mag,
+    -- Arguments and result are written per tool. Their JSON quotes are escaped
+    -- because these land INSIDE the attributes JSON document, as string values.
+    multiIf(
+      tool_name = 'search_logs',
+        '{\\"query\\":\\"level:error service:payments-api\\",\\"limit\\":100}',
+      tool_name = 'get_metrics',
+        '{\\"metric\\":\\"http.server.request.duration\\",\\"service\\":\\"payments-api\\",\\"window\\":\\"15m\\"}',
+      tool_name = 'query_db',
+        '{\\"sql\\":\\"SELECT id, status FROM refunds WHERE created_at > now() - interval 1 day LIMIT 50\\"}',
+      tool_name = 'get_customer',
+        concat('{\\"customer_id\\":\\"cus_', io_id, '\\"}'),
+      tool_name = 'list_deploys',
+        '{\\"service\\":\\"payments-api\\",\\"limit\\":10}',
+      tool_name = 'process_refund',
+        concat('{\\"order_id\\":\\"ord_', io_id, '\\",\\"amount_cents\\":', toString(1200 + io_mag * 7), ',\\"reason\\":\\"duplicate_charge\\"}'),
+      tool_name = 'fetch_traces',
+        concat('{\\"trace_id\\":\\"', io_id, io_id, '\\",\\"service\\":\\"payments-api\\"}'),
+      '{\\"service\\":\\"payments-api\\"}') AS tool_args,
+    multiIf(
+      failed AND tool_name = 'process_refund',
+        concat('{\\"error\\":\\"refund declined by the payment processor\\",\\"code\\":\\"processor_declined\\",\\"order_id\\":\\"ord_', io_id, '\\"}'),
+      failed,
+        concat('{\\"error\\":\\"upstream returned 500 after ', toString(1 + io_mag % 3), ' retries\\",\\"code\\":\\"upstream_error\\"}'),
+      tool_name = 'search_logs',
+        concat('{\\"matches\\":', toString(io_mag), ',\\"truncated\\":', if(io_mag > 500, 'true', 'false'), '}'),
+      tool_name = 'get_metrics',
+        concat('{\\"p50_ms\\":', toString(20 + io_mag % 80), ',\\"p95_ms\\":', toString(200 + io_mag), ',\\"error_rate\\":0.0', toString(io_mag % 9), '}'),
+      tool_name = 'query_db',
+        concat('{\\"rows\\":', toString(io_mag % 50), ',\\"elapsed_ms\\":', toString(8 + io_mag % 120), '}'),
+      tool_name = 'get_customer',
+        concat('{\\"customer_id\\":\\"cus_', io_id, '\\",\\"plan\\":\\"enterprise\\",\\"status\\":\\"active\\"}'),
+      tool_name = 'list_deploys',
+        concat('{\\"deploys\\":', toString(1 + io_mag % 9), ',\\"latest\\":\\"v2026.9.', toString(io_mag % 40), '\\"}'),
+      tool_name = 'process_refund',
+        concat('{\\"refund_id\\":\\"ref_', io_id, '\\",\\"status\\":\\"succeeded\\",\\"amount_cents\\":', toString(1200 + io_mag * 7), '}'),
+      tool_name = 'fetch_traces',
+        concat('{\\"spans\\":', toString(3 + io_mag % 40), ',\\"root_service\\":\\"payments-api\\"}'),
+      concat('{\\"status\\":\\"healthy\\",\\"checks_passed\\":', toString(4 + io_mag % 5), '}')) AS tool_result,
     arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
                  1 + reinterpretAsUInt8(unhex(substring(h, 3, 2))) % 16) AS hour_off,
     toDateTime64(toStartOfDay(now()), 9)
@@ -431,9 +522,21 @@ FROM (
     arrayElement(['Frontline Support', 'Frontline Support', 'Infra', 'Reliability', 'Billing Ops', 'Leadership'], uidx) AS team,
     arrayElement(['["developer","viewer"]', '["developer"]', '["admin","developer"]', '["developer"]', '["analyst","viewer"]', '["admin","viewer"]'], uidx) AS rolesjson,
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
-    arrayElement(['search_logs', 'get_metrics', 'query_db', 'get_customer',
-                  'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
-                 1 + (cityHash64('tool', number, k) % 8)) AS tool_name,
+    -- Odd chats ran in Claude Code, so the client is the Claude pair.
+    arrayElement([1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 15, 2))) % 16) AS cidx,
+    -- Same client-aware draw as the hosted tool call this row is correlated
+    -- with by call_demo_<i>_<k>. Drawing independently would give one call two
+    -- different tool names depending on which row you read it from.
+    arrayElement(
+      ['search_logs', 'get_metrics', 'query_db', 'get_customer',
+       'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
+      arrayElement(multiIf(
+        cidx = 1, [1, 1, 2, 3, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 7, 8],
+        cidx = 2, [4, 4, 4, 6, 6, 6, 2, 2, 4, 6, 4, 6, 4, 6, 2, 4],
+        cidx = 3, [1, 1, 1, 2, 2, 3, 3, 3, 7, 7, 8, 1, 2, 3, 7, 8],
+        [2, 2, 4, 4, 5, 5, 5, 8, 8, 2, 4, 5, 8, 2, 5, 8]),
+        1 + toUInt32(cityHash64('toolslot', number, k) % 16))) AS tool_name,
     arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
                  1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
     arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
@@ -467,7 +570,11 @@ SELECT
     ',"gram.hook.event":"PostToolUse"',
     ',"gram.tool.name":"Skill"',
     ',"gen_ai.tool.call.arguments":"{\\"skill\\":\\"', skill, '\\"}"',
-    ',"gen_ai.tool.call.result":"ok"',
+    -- Skills fail like anything else that shells out. Without this the skills
+    -- half of the erroring-targets list is permanently empty.
+    if(cityHash64('sklerr', i, j) % 12 = 0,
+       ',"gram.hook.error":"skill step exited non-zero"',
+       ',"gen_ai.tool.call.result":"ok"'),
     ',"gen_ai.conversation.id":"', chat_id, '"',
     ',"gram.project.id":"', toString(proj), '"',
     ',"user.email":"', email, '"',
@@ -505,6 +612,77 @@ FROM (
     toUnixTimestamp64Nano(chat_dt) AS nano
   FROM numbers(180)
   WHERE (number + 1) % 2 = 1
+);
+
+-- Calls the Gram hook denied before they ran (PreToolUse). These are the only
+-- rows that carry gram.hook.block_reason, so without them the blocked status
+-- filter on Tool Logs and the blocked counters on Insights are dead controls in
+-- the demo org. Denials cluster on the destructive tools, and on the two users
+-- whose roles do not carry production access.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id)
+SELECT
+  nano,
+  nano,
+  'WARN',
+  concat('Hook: blocked ', tool_name),
+  lower(hex(MD5(concat('gram-demo-blocktrace-', toString(i))))),
+  concat(
+    '{"gram.event.source":"hook"',
+    ',"gram.hook.source":"', hook, '"',
+    ',"gram.hook.event":"PreToolUse"',
+    ',"gram.tool.name":"', tool_name, '"',
+    ',"gram.tool_call.source":"acme-internal-mcp"',
+    ',"gram.hook.block_reason":"', block_reason, '"',
+    ',"gen_ai.conversation.id":"', chat_id, '"',
+    ',"gram.project.id":"', toString(proj), '"',
+    ',"user.email":"', email, '"',
+    ',"gram.hook.hostname":"', hostname, '"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  concat('hooks:', tool_name),
+  'gram-hooks',
+  chat_id
+FROM (
+  SELECT
+    number + 1 AS i,
+    lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS h,
+    concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
+           substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    -- The chat's own owner, by the same formula every other block uses. Drawing
+    -- the person independently would file the block under a conversation
+    -- somebody else was having.
+    arrayElement([3, 3, 3, 3, 3, 1, 1, 1, 1, 4, 4, 4, 2, 2, 5, 6],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 13, 2))) % 16) AS uidx,
+    arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                  'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'], uidx) AS email,
+    arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local',
+                  'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
+    if((number + 1) % 2 = 1, 'claude-code', 'cursor') AS hook,
+    arrayElement(['process_refund', 'process_refund', 'query_db', 'restart_service', 'run_payroll'],
+                 1 + toUInt32(cityHash64('blkt', number) % 5)) AS tool_name,
+    multiIf(
+      tool_name = 'process_refund', 'refunds above the approval threshold require a human',
+      tool_name = 'query_db', 'query touches a table holding customer PII',
+      tool_name = 'restart_service', 'production restart outside the change window',
+      'payroll tools are not callable by agents') AS block_reason,
+    arrayElement([0, 0, 1, 1, 2, 2, 3, 4, 5, 7, 8, 11],
+                 1 + toUInt32(cityHash64('blkd', number) % 12)) AS day_off,
+    arrayElement([9, 10, 11, 11, 13, 14, 15, 16, 16, 17],
+                 1 + toUInt32(cityHash64('blkh', number) % 10)) AS hour_off,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(day_off) + toIntervalHour(hour_off)
+      + toIntervalMinute(cityHash64('blkm', number) % 60) AS ts0,
+    toUnixTimestamp64Nano(if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0)) AS nano
+  FROM numbers(150)
+  -- Billing and part-time roles, i.e. the people a policy is written for:
+  -- mateo, hana, lucas. Selecting the chats they own keeps the denial and the
+  -- conversation it happened in agreeing about who was there. Roughly a third
+  -- of chats qualify, so 150 candidates yield ~46 denials.
+  WHERE uidx IN (4, 5, 6)
 );
 
 -- Cursor provenance (even chats): one cursor:usage:metrics row per chat.
@@ -642,9 +820,21 @@ FROM (
     arrayElement(['Frontline Support', 'Frontline Support', 'Infra', 'Reliability', 'Billing Ops', 'Leadership'], uidx) AS team,
     arrayElement(['["developer","viewer"]', '["developer"]', '["admin","developer"]', '["developer"]', '["analyst","viewer"]', '["admin","viewer"]'], uidx) AS rolesjson,
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
-    arrayElement(['search_logs', 'get_metrics', 'query_db', 'get_customer',
-                  'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
-                 1 + (cityHash64('tool', number, k) % 8)) AS tool_name,
+    -- Even chats ran in Cursor, so the client is the Cursor pair.
+    arrayElement([3, 3, 3, 3, 3, 4, 3, 3, 4, 3, 3, 3, 4, 3, 3, 4],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 15, 2))) % 16) AS cidx,
+    -- Same client-aware draw as the hosted tool call this row is correlated
+    -- with by call_demo_<i>_<k>. Drawing independently would give one call two
+    -- different tool names depending on which row you read it from.
+    arrayElement(
+      ['search_logs', 'get_metrics', 'query_db', 'get_customer',
+       'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
+      arrayElement(multiIf(
+        cidx = 1, [1, 1, 2, 3, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 7, 8],
+        cidx = 2, [4, 4, 4, 6, 6, 6, 2, 2, 4, 6, 4, 6, 4, 6, 2, 4],
+        cidx = 3, [1, 1, 1, 2, 2, 3, 3, 3, 7, 7, 8, 1, 2, 3, 7, 8],
+        [2, 2, 4, 4, 5, 5, 5, 8, 8, 2, 4, 5, 8, 2, 5, 8]),
+        1 + toUInt32(cityHash64('toolslot', number, k) % 16))) AS tool_name,
     arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
                  1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
     arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
@@ -789,7 +979,14 @@ SELECT
          'https://postgres.internal.example.com/mcp', 'https://support-tools.example.com/mcp',
          'https://prod-admin.example.com/mcp', 'https://warehouse.example.com/mcp',
          'https://incidents.example.com/mcp', 'https://payroll.example.com/mcp'], sidx), '"',
-    ',"gen_ai.tool.call.result":"ok"',
+    -- Unsanctioned servers are where calls actually fail: expired personal
+    -- tokens, rate limits, servers nobody owns. A shadow inventory that is
+    -- 100% healthy hides the reason anyone looks at this page.
+    if(failed,
+       concat(',"gram.hook.error":"', arrayElement(
+         ['upstream returned 401', 'upstream returned 429', 'connection reset by peer',
+          'upstream timed out after 30s'], 1 + toUInt32(cityHash64('sherr', number) % 4)), '"'),
+       ',"gen_ai.tool.call.result":"ok"'),
     ',"gram.project.id":"', toString(proj), '"',
     ',"user.email":"', arrayElement(
         ['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
@@ -804,10 +1001,29 @@ SELECT
 FROM (
   SELECT
     number,
-    1 + toUInt32(cityHash64('sht', number) % 15) AS sidx,
+    -- Shadow usage is long-tailed: two or three servers carry most of the
+    -- traffic and the rest are occasional. A uniform draw across all fifteen
+    -- makes every ranking flat and every server look equally worth chasing.
+    arrayElement([1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5, 5, 6, 7, 8, 9,
+                  10, 11, 1, 2, 3, 12, 13, 2, 1, 14, 15, 1, 2, 3, 1, 5],
+                 1 + toUInt32(cityHash64('sht', number) % 32)) AS sidx,
+    -- The servers touching money and production access fail more than the
+    -- read-only ones, which is what makes an erroring-servers list useful.
+    (sidx IN (8, 12, 15) AND cityHash64('shf', number) % 4 = 0)
+      OR cityHash64('shfbg', number) % 14 = 0 AS failed,
     toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
-    toUnixTimestamp64Nano(subtractMinutes(subtractHours(now64(9), 3 + toInt64(number) * 9),
-                                          toInt64(cityHash64('shj', number) % 300))) AS nano
+    -- Spread over the same trailing fortnight as the chat traffic and weighted
+    -- to working hours, rather than a fixed nine-hour drumbeat marching back
+    -- two months past every other row in the org.
+    lower(hex(MD5(concat('gram-demo-shadowslot-', toString(number))))) AS sh,
+    arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
+                 1 + reinterpretAsUInt8(unhex(substring(sh, 1, 2))) % 16) AS day_off,
+    arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
+                 1 + reinterpretAsUInt8(unhex(substring(sh, 3, 2))) % 16) AS hour_off,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(day_off) + toIntervalHour(hour_off)
+      + toIntervalMinute(reinterpretAsUInt8(unhex(substring(sh, 5, 2))) % 60) AS ts0,
+    toUnixTimestamp64Nano(if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0)) AS nano
   FROM numbers(180)
 );
 
@@ -818,6 +1034,20 @@ FROM (
 -- signal) matching the ReplacingMergeTree key. Priya carries two devices so
 -- the users/devices counts differ. Versions stamp installed rows only —
 -- running detections usually cannot extract one.
+-- Cline and Continue are the editor-extension case: both ship a CLI and both
+-- carry a wildcard config dir for their version-stamped VS Code extension
+-- directory, so they are also the rows that exercise the glob path end to
+-- end. Zed and Goose are the two new targets that publish CIMD, so they are
+-- the ones carrying a real decision below.
+--
+-- The two assistants are deliberately a pair: both speak MCP to Gram like a
+-- harness does without being coding tools, but Hermes publishes a CIMD
+-- document and OpenClaw does not. So a decision on Hermes is enforceable and
+-- shows as one, while OpenClaw reads unreviewed however hard somebody wants
+-- to block it — the same contrast the Harnesses tab draws between Codex and
+-- Cursor.
+-- Keep every comment above this statement: ClickHouse parses the VALUES list
+-- as data and cannot skip a comment between rows.
 INSERT INTO ai_detections
   (organization_id, target_id, device_serial, user_email, signal, category,
    version, first_seen, last_seen, updated_at)
@@ -873,11 +1103,66 @@ VALUES
   ('org_gram_demo_workspace', 'lmstudio', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
    'local_model', '0.3.9', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 72 HOUR, now64(9)),
   ('org_gram_demo_workspace', 'aider', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
-   'harness', '0.86.1', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 120 HOUR, now64(9));
+   'harness', '0.86.1', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 120 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'installed',
+   'assistant', '0.4.1', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 11 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'running',
+   'assistant', '', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 11 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-LUCAS', 'lucas@demo.getgram.ai', 'installed',
+   'assistant', '0.4.0', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 40 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'installed',
+   'assistant', '0.4.1', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 6 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'running',
+   'assistant', '', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 6 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MSTUDIO-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'assistant', '0.3.8', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 64 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'hermes-agent', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'assistant', '1.2.0', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 14 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'hermes-agent', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'running',
+   'assistant', '', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 14 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'hermes-agent', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
+   'assistant', '1.1.4', now64(9) - INTERVAL 3 DAY, now64(9) - INTERVAL 30 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cline', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'installed',
+   'harness', '4.1.17', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 3 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cline', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 3 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cline', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'harness', '4.1.12', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 20 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cline', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '4.1.17', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 9 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'continue', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
+   'harness', '2.1.0', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 44 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'zed', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'installed',
+   'harness', '0.221.4', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 5 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'zed', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 5 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'zed', 'DEMO-MBP-LUCAS', 'lucas@demo.getgram.ai', 'installed',
+   'harness', '0.221.4', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 16 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'goose', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '1.34.2', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 34 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'goose', 'DEMO-MSTUDIO-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '1.33.0', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 58 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'warp', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'installed',
+   'harness', '0.2026.08.19', now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 7 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'warp', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 7 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'warp', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'installed',
+   'harness', '0.2026.08.19', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 21 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'msty', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'assistant', '1.9.2', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 26 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'msty', 'DEMO-MBP-LUCAS', 'lucas@demo.getgram.ai', 'installed',
+   'assistant', '1.9.0', now64(9) - INTERVAL 3 DAY, now64(9) - INTERVAL 52 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'jan', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'installed',
+   'local_model', '0.8.4', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 13 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'jan', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'running',
+   'local_model', '', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 13 HOUR, now64(9));
 
 -- Scan receipts: one per device per day over the trailing 5 days, proving
 -- every enrolled device scanned recently (the page's freshness story and the
--- provable-coverage contract for zero-match devices).
+-- provable-coverage contract for zero-match devices). match_count is the
+-- number of matches the agent reported, and every reported match becomes one
+-- ai_detections row, so each device's count here must equal that device's row
+-- count in the detections insert above — add a detection, update this array.
 INSERT INTO ai_scan_receipts
   (organization_id, device_serial, user_email, scan_started_at,
    scan_completed_at, target_list_version, match_count, received_at)
@@ -892,7 +1177,7 @@ SELECT
   ts - toIntervalSecond(6),
   ts - toIntervalSecond(1),
   3,
-  arrayElement([4, 4, 7, 2, 6, 2, 1], didx),
+  arrayElement([10, 8, 9, 4, 8, 9, 4], didx),
   ts
 FROM (
   SELECT
@@ -1299,6 +1584,11 @@ SELECT
     ',"gram.project.id":"', toString(proj), '"',
     ',"user.email":"', email, '"',
     ',"gram.external_user.id":"', email, '"',
+    -- A gateway handshakes once per session and every member dispatch in that
+    -- session inherits the client, which is why these proxy hops carry one.
+    if(client_seen,
+       concat(',"gram.mcp.client.name":"', client_name, '"',
+              ',"gram.mcp.client.version":"', client_version, '"'), ''),
     ',"gram.hook.source":"claude-code"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',
@@ -1312,11 +1602,26 @@ FROM (
     lower(hex(MD5('gram-demo-metamcp-1'))) AS gh,
     concat(substring(gh, 1, 8), '-', substring(gh, 9, 4), '-5', substring(gh, 14, 3), '-8',
            substring(gh, 18, 3), '-', substring(gh, 21, 12)) AS gateway,
-    -- Funnel shape: every walk lists, most describe a server, fewer pull schemas.
-    multiIf(number % 10 < 5, 'list_servers', number % 10 < 8, 'describe_server', 'describe_tools') AS tool_name,
     arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
                   'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
                  1 + (cityHash64('gwu', number) % 6)) AS email,
+    -- Keyed on the person, not the row: one gateway session walks the catalog
+    -- and then calls, so discovery and dispatch have to agree on who did it.
+    -- An independent per-row draw would have the same session change client
+    -- between listing a server and calling it.
+    arrayElement([1, 1, 1, 1, 2, 2, 2, 3, 3, 5, 1, 2, 1, 3, 2, 4],
+                 1 + (cityHash64('gwcli', email) % 16)) AS cidx,
+    arrayElement(['Claude Code', 'Cursor', 'Visual Studio Code', 'mcp-inspector', 'claude-ai'], cidx) AS client_name,
+    arrayElement(multiIf(
+      cidx = 1, ['2.4.1', '2.4.1', '2.3.8'],
+      cidx = 2, ['1.7.42', '1.7.42', '1.6.14'],
+      cidx = 3, ['1.104.2', '1.103.1', '1.103.1'],
+      cidx = 4, ['0.16.2', '0.16.2', '0.15.0'],
+      ['1.0.0', '1.0.0', '1.0.0']),
+      1 + (cityHash64('gwcliv', email) % 3)) AS client_version,
+    cityHash64('gwcliseen', email) % 9 > 0 AS client_seen,
+    -- Funnel shape: every walk lists, most describe a server, fewer pull schemas.
+    multiIf(number % 10 < 5, 'list_servers', number % 10 < 8, 'describe_server', 'describe_tools') AS tool_name,
     toDateTime64(toStartOfDay(now()), 9)
       - toIntervalDay(number % 12) + toIntervalHour(8 + (cityHash64('gwh', number) % 11))
       + toIntervalMinute(cityHash64('gwm', number) % 60) AS ts0,
@@ -1355,6 +1660,11 @@ SELECT
     ',"gram.project.id":"', toString(proj), '"',
     ',"user.email":"', email, '"',
     ',"gram.external_user.id":"', email, '"',
+    -- A gateway handshakes once per session and every member dispatch in that
+    -- session inherits the client, which is why these proxy hops carry one.
+    if(client_seen,
+       concat(',"gram.mcp.client.name":"', client_name, '"',
+              ',"gram.mcp.client.version":"', client_version, '"'), ''),
     ',"gram.hook.source":"claude-code"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',
@@ -1388,6 +1698,20 @@ FROM (
     arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
                   'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
                  1 + (cityHash64('gwu2', number) % 6)) AS email,
+    -- Gateway endpoints see more kinds of client than a hosted server does:
+    -- agent harnesses plus the MCP Inspector someone left open. Keyed on the
+    -- person so a caller presents the same client here as in discovery.
+    arrayElement([1, 1, 1, 1, 2, 2, 2, 3, 3, 5, 1, 2, 1, 3, 2, 4],
+                 1 + (cityHash64('gwcli', email) % 16)) AS cidx,
+    arrayElement(['Claude Code', 'Cursor', 'Visual Studio Code', 'mcp-inspector', 'claude-ai'], cidx) AS client_name,
+    arrayElement(multiIf(
+      cidx = 1, ['2.4.1', '2.4.1', '2.3.8'],
+      cidx = 2, ['1.7.42', '1.7.42', '1.6.14'],
+      cidx = 3, ['1.104.2', '1.103.1', '1.103.1'],
+      cidx = 4, ['0.16.2', '0.16.2', '0.15.0'],
+      ['1.0.0', '1.0.0', '1.0.0']),
+      1 + (cityHash64('gwcliv', email) % 3)) AS client_version,
+    cityHash64('gwcliseen', email) % 9 > 0 AS client_seen,
     toDateTime64(toStartOfDay(now()), 9)
       - toIntervalDay(number % 12) + toIntervalHour(8 + (cityHash64('gwh2', number) % 11))
       + toIntervalMinute(cityHash64('gwm2', number) % 60) AS ts0,
@@ -1420,6 +1744,11 @@ SELECT
     ',"gram.project.id":"', toString(proj), '"',
     ',"user.email":"', email, '"',
     ',"gram.external_user.id":"', email, '"',
+    -- A gateway handshakes once per session and every member dispatch in that
+    -- session inherits the client, which is why these proxy hops carry one.
+    if(client_seen,
+       concat(',"gram.mcp.client.name":"', client_name, '"',
+              ',"gram.mcp.client.version":"', client_version, '"'), ''),
     ',"gram.hook.source":"claude-code"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',
@@ -1442,6 +1771,17 @@ FROM (
     arrayElement(['list_pull_requests', 'get_issue', 'search_code'], 1 + (cityHash64('gwgt', number) % 3)) AS tool_name,
     concat('tools:externalmcp:', remote, ':', tool_name) AS tool_urn,
     if(cityHash64('gwge', number) % 8 = 0, 502, 200) AS status,
+    arrayElement([1, 1, 1, 1, 2, 2, 2, 3, 3, 5, 1, 2, 1, 3, 2, 4],
+                 1 + (cityHash64('gwgcli', number) % 16)) AS cidx,
+    arrayElement(['Claude Code', 'Cursor', 'Visual Studio Code', 'mcp-inspector', 'claude-ai'], cidx) AS client_name,
+    arrayElement(multiIf(
+      cidx = 1, ['2.4.1', '2.4.1', '2.3.8'],
+      cidx = 2, ['1.7.42', '1.7.42', '1.6.14'],
+      cidx = 3, ['1.104.2', '1.103.1', '1.103.1'],
+      cidx = 4, ['0.16.2', '0.16.2', '0.15.0'],
+      ['1.0.0', '1.0.0', '1.0.0']),
+      1 + (cityHash64('gwgcliv', number) % 3)) AS client_version,
+    cityHash64('gwgcliseen', number) % 9 > 0 AS client_seen,
     arrayElement(['amara@demo.getgram.ai', 'priya@demo.getgram.ai', 'mateo@demo.getgram.ai'],
                  1 + (cityHash64('gwgu', number) % 3)) AS email,
     -- Only while GitHub was still a member: four to eleven days back.
@@ -1504,6 +1844,118 @@ FROM (
     toUnixTimestamp64Nano(if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0)) AS nano
   FROM numbers(40)
 );
+
+-- Meter usage is independent of telemetry-derived invoice estimates. Every
+-- meter has 96 immutable facts across 12 days, with enough facets for a remainder.
+INSERT INTO billing_meter_readings_by_time
+  (id, organization_id, project_id, meter_id, operation_id, unit,
+   measurement_method, value, occurred_at, produced_at, corrects_reading_id, attributes)
+SELECT
+  toUUID(concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3),
+                '-8', substring(h, 18, 3), '-', substring(h, 21, 12))),
+  'org_gram_demo_workspace',
+  toUUID('dec0de00-0000-4000-a000-000000000001'),
+  meter,
+  concat('gram-demo-meter-operation-', toString(number)),
+  if(meter_index IN (2, 3), 'bytes', 'stokens'),
+  if(meter_index IN (2, 3), 'http_body_bytes', 'tiktoken_o200k_base'),
+  toInt64((1000 + cityHash64('meter-volume', number) % 9000)
+    * if(meter_index IN (2, 3), 64, 1)),
+  least(toDateTime64(toStartOfDay(now('UTC')), 9, 'UTC') - toIntervalDay(intDiv(sample, 8))
+    + toIntervalHour(8 + sample % 8), now64(9, 'UTC') - toIntervalMinute(30)),
+  now64(9, 'UTC'),
+  NULL,
+  multiIf(
+    meter_index = 1,
+    map(
+      'codec', 'o200k_base',
+      'model', arrayElement(['claude-sonnet-4', 'gpt-4.1'], 1 + sample % 2),
+      'provider', arrayElement(['anthropic', 'openai'], 1 + sample % 2),
+      'hook_source', arrayElement(['claude-code', 'cursor'], 1 + sample % 2),
+      'hook_hostname', concat('gram-demo-device-', toString(1 + sample % 8)),
+      'account_type', if(sample % 3 = 0, 'personal', 'enterprise'),
+      'billing_mode', if(sample % 3 = 0, 'flat_rate', 'usage_based'),
+      'workload_source', arrayElement(['hook', 'import', 'assistant', 'native'], 1 + sample % 4),
+      'assistant_id', if(sample % 4 = 2, 'gram-demo-managed-agent-1', ''),
+      'billing_user_id', concat('user_demo_', person),
+      'billing_user_account_email', concat(person, '@demo.getgram.ai'),
+      'billing_user_division_name', if(sample % 2 = 0, 'Product', 'Operations'),
+      'billing_user_department_name', arrayElement(
+        ['Engineering', 'Support', 'Security', 'Design', 'Finance', 'Sales', 'Research', ''], 1 + sample % 8),
+      'billing_user_job_title', if(sample % 2 = 0, 'Engineer', 'Specialist'),
+      'billing_user_employee_type', if(sample % 3 = 0, 'Contractor', 'Full-time'),
+      'billing_user_cost_center_name', concat('DEMO-', toString(1 + sample % 8)),
+      'billing_user_rbac_roles', if(sample % 2 = 0, '["member"]', '["admin","member"]'),
+      'billing_user_directory_groups', if(sample % 2 = 0, '["Engineering"]', '["Operations","Security"]')),
+    meter_index IN (2, 3),
+    map(
+      'mcp_server_type', if(sample % 2 = 0, 'externalmcp', 'toolset'),
+      'mcp_server_id', concat('gram-demo-meter-server-', toString(1 + sample % 8)),
+      'mcp_server_slug', concat('acme-demo-server-', toString(1 + sample % 4)),
+      'custom_domain', if(sample % 3 = 0, 'mcp.demo.getgram.ai', ''),
+      'request_path', concat('/mcp/acme-demo-server-', toString(1 + sample % 4))),
+    map(
+      'codec', 'o200k_base',
+      'risk_policy_id', if(sample % 4 = 0, '', 'dec0de00-0000-4000-a000-00000000f001'),
+      'risk_policy_version', if(sample % 4 = 0, '', toString(1 + sample % 2)),
+      'risk_policy_link_status', if(sample % 4 = 0, 'unlinked', 'linked'),
+      'risk_policy_link_reason', if(sample % 4 = 0, 'direct_scan', ''),
+      'scan_execution_path', if(sample % 2 = 0, 'inline', 'background'),
+      'message_type', arrayElement(['user', 'assistant', 'tool_result'], 1 + sample % 3),
+      'message_link_status', if(sample % 4 = 0, 'unlinked', 'linked'),
+      'message_link_reason', if(sample % 4 = 0, 'no_message', ''),
+      'hook_source', if(sample % 2 = 0, 'claude-code', 'cursor'),
+      'message_user_id', concat('user_demo_', person),
+      'model', if(meter_index IN (6, 7), 'gpt-4.1-mini', ''),
+      'provider', if(meter_index IN (6, 7), 'openai', ''),
+      'tool_name', if(sample % 3 = 2, 'search_code', '')))
+FROM (
+  SELECT
+    number,
+    1 + number % 9 AS meter_index,
+    intDiv(number, 9) AS sample,
+    arrayElement([
+      'gram.agent_session.storage', 'gram.mcp.bandwidth.ingress', 'gram.mcp.bandwidth.egress',
+      'gram.risk.scan.gitleaks', 'gram.risk.scan.presidio', 'gram.risk.scan.prompt_injection',
+      'gram.risk.scan.prompt_policy', 'gram.risk.scan.custom_rules', 'gram.risk.scan.cli_destructive'
+    ], meter_index) AS meter,
+    arrayElement(['amara', 'jonas', 'priya', 'mateo', 'hana', 'lucas'], 1 + sample % 6) AS person,
+    lower(hex(MD5(concat('gram-demo-meter-reading-', toString(number))))) AS h
+  FROM numbers(864)
+);
+
+-- One identical physical redelivery per meter. Raw FINAL still collapses the
+-- ledger read, while the incremental summary intentionally counts each delivery.
+INSERT INTO billing_meter_readings_by_time
+  (id, organization_id, project_id, meter_id, operation_id, unit,
+   measurement_method, value, occurred_at, produced_at, corrects_reading_id, attributes)
+SELECT id, organization_id, project_id, meter_id, operation_id, unit,
+       measurement_method, value, occurred_at, produced_at, corrects_reading_id, attributes
+FROM billing_meter_readings_by_time FINAL
+WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'usage'
+ORDER BY meter_id, operation_id
+LIMIT 1 BY meter_id
+SETTINGS do_not_merge_across_partitions_select_final = 1;
+
+SELECT throwIf(
+  (SELECT count() FROM billing_meter_readings_by_time FINAL
+   WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'usage') != 864,
+  'demo seed postflight: meter usage missing or duplicated')
+SETTINGS do_not_merge_across_partitions_select_final = 1;
+
+SELECT throwIf(
+  (SELECT uniqExact(meter_id) FROM billing_meter_readings_by_time FINAL
+   WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'usage') != 9
+  OR (SELECT count() FROM billing_meter_readings_by_time FINAL
+      WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind != 'usage') != 0,
+  'demo seed postflight: meter families missing or unexpected non-usage readings')
+SETTINGS do_not_merge_across_partitions_select_final = 1;
+
+SELECT throwIf(
+  (SELECT sum(reading_count) FROM billing_meter_daily_summaries
+   WHERE organization_id = 'org_gram_demo_workspace'
+     AND facet = 'total') != 873,
+  'demo seed postflight: ordinary meter deliveries missing or duplicated');
 
 -- Postflight asserts: rows landed, the cost/session MVs actually fired, and
 -- nothing leaked outside the demo scope. throwIf aborts the script (non-zero
@@ -1605,8 +2057,17 @@ SELECT throwIf(
 
 SELECT throwIf(
   (SELECT uniqExact(target_id) FROM ai_detections
-   WHERE organization_id = 'org_gram_demo_workspace') < 6,
+   WHERE organization_id = 'org_gram_demo_workspace') < 15,
   'demo seed postflight: ai_detections missing targets');
+
+-- Each AI Discovery tab reads one category, so a category with no rows is an
+-- empty page. Assert all three survived the reseed rather than only the
+-- target count, which cannot tell a missing tab from a missing tool.
+SELECT throwIf(
+  (SELECT uniqExact(category) FROM ai_detections
+   WHERE organization_id = 'org_gram_demo_workspace'
+     AND category IN ('harness', 'assistant', 'local_model')) < 3,
+  'demo seed postflight: ai_detections must cover harness, assistant and local_model');
 
 SELECT throwIf(
   (SELECT count() FROM ai_scan_receipts
@@ -1653,3 +2114,20 @@ SELECT throwIf(
      AND toString(resource_attributes.gram.deployment.id) != 'demo-seed'
    ) > 0,
   'demo seed postflight: demo-project telemetry rows missing the demo-seed marker');
+
+-- The Shadow AI inventory is pinned exactly, not bounded. Its size is what
+-- seed/demo/PAGES.md documents and what the per-device receipt counts above
+-- must add up to, and both drifted once already when detections were added
+-- without either being updated. An exact count fails the seed the moment the
+-- three stop agreeing, and the category check guards that every kind of tool
+-- the catalog distinguishes is represented on the page, since a category with
+-- no rows renders as an empty filter.
+SELECT throwIf(
+  (SELECT count() FROM ai_detections
+   WHERE organization_id = 'org_gram_demo_workspace') <> 52,
+  'demo seed postflight: expected exactly 52 demo AI detection rows, so update PAGES.md and the receipt match counts alongside any change');
+
+SELECT throwIf(
+  (SELECT uniqExact(category) FROM ai_detections
+   WHERE organization_id = 'org_gram_demo_workspace') <> 3,
+  'demo seed postflight: demo AI detections must cover harness, assistant and local_model');

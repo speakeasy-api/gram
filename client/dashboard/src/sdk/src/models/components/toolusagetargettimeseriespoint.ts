@@ -47,6 +47,10 @@ export type ToolUsageTargetTimeSeriesPointTargetType = ClosedEnum<
  */
 export type ToolUsageTargetTimeSeriesPoint = {
   /**
+   * Number of tool usage events denied by a hook in the bucket
+   */
+  blockedCount: number;
+  /**
    * Bucket start time in Unix nanoseconds as a string for JavaScript integer safety
    */
   bucketStartNs: string;
@@ -58,6 +62,10 @@ export type ToolUsageTargetTimeSeriesPoint = {
    * Number of failed tool usage events in the bucket
    */
   failureCount: number;
+  /**
+   * Number of tool usage events observed starting but never finishing in the bucket
+   */
+  pendingCount: number;
   /**
    * Stable target identifier used by filters and chart grouping
    */
@@ -94,9 +102,11 @@ export const ToolUsageTargetTimeSeriesPoint$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    blocked_count: z.int(),
     bucket_start_ns: z.string(),
     event_count: z.int(),
     failure_count: z.int(),
+    pending_count: z.int(),
     target_id: z.string(),
     target_kind: ToolUsageTargetTimeSeriesPointTargetKind$inboundSchema,
     target_label: z.string(),
@@ -104,9 +114,11 @@ export const ToolUsageTargetTimeSeriesPoint$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "blocked_count": "blockedCount",
       "bucket_start_ns": "bucketStartNs",
       "event_count": "eventCount",
       "failure_count": "failureCount",
+      "pending_count": "pendingCount",
       "target_id": "targetId",
       "target_kind": "targetKind",
       "target_label": "targetLabel",

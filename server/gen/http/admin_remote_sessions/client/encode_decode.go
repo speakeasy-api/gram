@@ -3796,8 +3796,9 @@ func unmarshalRemoteSessionIssuerDuplicateMatchResponseBodyToTypesRemoteSessionI
 // value of type *GlobalRemoteSessionIssuerResponseBody.
 func unmarshalGlobalRemoteSessionIssuerResponseBodyToAdminremotesessionsGlobalRemoteSessionIssuer(v *GlobalRemoteSessionIssuerResponseBody) *adminremotesessions.GlobalRemoteSessionIssuer {
 	res := &adminremotesessions.GlobalRemoteSessionIssuer{
-		GlobalClientCount: *v.GlobalClientCount,
-		TenantClientCount: *v.TenantClientCount,
+		GlobalClientCount:             *v.GlobalClientCount,
+		TenantClientCount:             *v.TenantClientCount,
+		TrustedUserSessionIssuerCount: *v.TrustedUserSessionIssuerCount,
 	}
 	res.Issuer = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v.Issuer)
 
@@ -3822,12 +3823,15 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		RevocationEndpoint:                v.RevocationEndpoint,
 		RegistrationEndpoint:              v.RegistrationEndpoint,
 		JwksURI:                           v.JwksURI,
+		JwksFetchedAt:                     v.JwksFetchedAt,
+		JwksCacheExpiresAt:                v.JwksCacheExpiresAt,
 		ServiceDocumentation:              v.ServiceDocumentation,
 		OpPolicyURI:                       v.OpPolicyURI,
 		OpTosURI:                          v.OpTosURI,
 		Oidc:                              *v.Oidc,
 		Passthrough:                       *v.Passthrough,
 		ClientIDMetadataDocumentSupported: *v.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               v.TunneledMcpServerID,
 		UserinfoEndpoint:                  v.UserinfoEndpoint,
 		IntrospectionEndpoint:             v.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
@@ -3899,19 +3903,21 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 // *RemoteSessionClientResponseBody.
 func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *RemoteSessionClientResponseBody) *types.RemoteSessionClient {
 	res := &types.RemoteSessionClient{
-		ID:                      *v.ID,
-		ProjectID:               *v.ProjectID,
-		OrganizationID:          *v.OrganizationID,
-		RemoteSessionIssuerID:   *v.RemoteSessionIssuerID,
-		ClientID:                *v.ClientID,
-		ClientIDMetadataURI:     v.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *v.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
-		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         v.JSONWebKeySetID,
-		Audience:                v.Audience,
-		CreatedAt:               *v.CreatedAt,
-		UpdatedAt:               *v.UpdatedAt,
+		ID:                              *v.ID,
+		ProjectID:                       *v.ProjectID,
+		OrganizationID:                  *v.OrganizationID,
+		RemoteSessionIssuerID:           *v.RemoteSessionIssuerID,
+		ClientID:                        *v.ClientID,
+		ClientIDMetadataURI:             v.ClientIDMetadataURI,
+		ClientIDIssuedAt:                *v.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           v.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              v.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         v.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: v.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 v.JSONWebKeySetID,
+		Audience:                        v.Audience,
+		CreatedAt:                       *v.CreatedAt,
+		UpdatedAt:                       *v.UpdatedAt,
 	}
 	res.UserSessionIssuerIds = make([]string, len(v.UserSessionIssuerIds))
 	for i, val := range v.UserSessionIssuerIds {

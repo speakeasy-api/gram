@@ -3,6 +3,8 @@ package remotesessions
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -22,6 +24,7 @@ type tokenResponse struct {
 	RefreshExpiresIn       int64  `json:"refresh_expires_in"`
 	RefreshTokenExpiresIn  int64  `json:"refresh_token_expires_in"`
 	Scope                  string `json:"scope"`
+	scopePresent           bool
 
 	// IDToken is verified and reduced to claims at the exchange; never persisted or logged.
 	IDToken string `json:"id_token"`
@@ -29,6 +32,32 @@ type tokenResponse struct {
 	// raw is the response body the fields above were decoded from, kept so
 	// the non-standard members a provider adds can be retained.
 	raw []byte
+}
+
+func (t *tokenResponse) UnmarshalJSON(data []byte) error {
+	type wire tokenResponse
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(data, &members); err != nil {
+		return fmt.Errorf("decode token response members: %w", err)
+	}
+	// A null scope is an unreported one; any other non-string is malformed.
+	scope, scopePresent := members["scope"]
+	if scopePresent {
+		scope = bytes.TrimSpace(scope)
+		switch {
+		case string(scope) == "null":
+			scopePresent = false
+		case len(scope) == 0 || scope[0] != '"':
+			return errors.New("token response scope must be a string")
+		}
+	}
+	var decoded wire
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return fmt.Errorf("decode token response: %w", err)
+	}
+	*t = tokenResponse(decoded)
+	t.scopePresent = scopePresent
+	return nil
 }
 
 // tokenResponseRetainedMembers are the provider metadata members a token
@@ -123,6 +152,11 @@ func credentialMemberName(name string) bool {
 // runs and drops empties, so no blank scope is ever persisted.
 func (t tokenResponse) Scopes() []string {
 	return strings.Fields(t.Scope)
+}
+
+// ScopeReported distinguishes omission from Gram's compatibility exception: an explicitly empty token-response scope.
+func (t tokenResponse) ScopeReported() bool {
+	return t.scopePresent
 }
 
 // RefreshTokenTimeoutSeconds normalizes the standard sliding idle timeout and

@@ -537,7 +537,7 @@ func BuildListOrganizationActivityPayload(adminListOrganizationActivityOrganizat
 
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
-func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStates string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
+func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStatus string, adminListOrganizationsMinMembers string, adminListOrganizationsMaxMembers string, adminListOrganizationsCreatedFrom string, adminListOrganizationsCreatedTo string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
 	var err error
 	var q *string
 	{
@@ -569,24 +569,60 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 			}
 		}
 	}
-	var disabledStates []string
+	var disabledStatus *string
 	{
-		if adminListOrganizationsDisabledStates != "" {
-			err = json.Unmarshal([]byte(adminListOrganizationsDisabledStates), &disabledStates)
+		if adminListOrganizationsDisabledStatus != "" {
+			disabledStatus = &adminListOrganizationsDisabledStatus
+			if !(*disabledStatus == "all" || *disabledStatus == "active" || *disabledStatus == "disabled") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("disabled_status", *disabledStatus, []any{"all", "active", "disabled"}))
+			}
 			if err != nil {
-				return nil, fmt.Errorf("invalid JSON for disabledStates, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+				return nil, err
 			}
 		}
 	}
-	var includeDisabled *bool
+	var minMembers *int64
 	{
-		if adminListOrganizationsIncludeDisabled != "" {
-			var val bool
-			val, err = strconv.ParseBool(adminListOrganizationsIncludeDisabled)
-			includeDisabled = &val
+		if adminListOrganizationsMinMembers != "" {
+			val, err := strconv.ParseInt(adminListOrganizationsMinMembers, 10, 64)
+			minMembers = &val
 			if err != nil {
-				return nil, fmt.Errorf("invalid value for includeDisabled, must be BOOL")
+				return nil, fmt.Errorf("invalid value for minMembers, must be INT64")
 			}
+			if *minMembers < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("min_members", *minMembers, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var maxMembers *int64
+	{
+		if adminListOrganizationsMaxMembers != "" {
+			val, err := strconv.ParseInt(adminListOrganizationsMaxMembers, 10, 64)
+			maxMembers = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for maxMembers, must be INT64")
+			}
+			if *maxMembers < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("max_members", *maxMembers, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var createdFrom *string
+	{
+		if adminListOrganizationsCreatedFrom != "" {
+			createdFrom = &adminListOrganizationsCreatedFrom
+		}
+	}
+	var createdTo *string
+	{
+		if adminListOrganizationsCreatedTo != "" {
+			createdTo = &adminListOrganizationsCreatedTo
 		}
 	}
 	var cursor *string
@@ -642,8 +678,11 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 	v.AccountType = accountType
 	v.AccountTypes = accountTypes
 	v.TrialStates = trialStates
-	v.DisabledStates = disabledStates
-	v.IncludeDisabled = includeDisabled
+	v.DisabledStatus = disabledStatus
+	v.MinMembers = minMembers
+	v.MaxMembers = maxMembers
+	v.CreatedFrom = createdFrom
+	v.CreatedTo = createdTo
 	v.Cursor = cursor
 	v.Limit = limit
 	v.Sort = sort
@@ -1050,10 +1089,13 @@ func BuildCreateGlobalIssuerPayload(adminCreateGlobalIssuerBody string, adminCre
 	{
 		err = json.Unmarshal([]byte(adminCreateGlobalIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"userinfo_endpoint\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"userinfo_endpoint\": \"abc123\"\n   }'")
 		}
 		if body.LogoAssetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+		}
+		if body.TunneledMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -1082,6 +1124,7 @@ func BuildCreateGlobalIssuerPayload(adminCreateGlobalIssuerBody string, adminCre
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               body.TunneledMcpServerID,
 		UserinfoEndpoint:                  body.UserinfoEndpoint,
 		IntrospectionEndpoint:             body.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
@@ -1238,7 +1281,7 @@ func BuildUpdateGlobalIssuerPayload(adminUpdateGlobalIssuerBody string, adminUpd
 	{
 		err = json.Unmarshal([]byte(adminUpdateGlobalIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"userinfo_endpoint\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"abc123\",\n      \"userinfo_endpoint\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
@@ -1269,6 +1312,7 @@ func BuildUpdateGlobalIssuerPayload(adminUpdateGlobalIssuerBody string, adminUpd
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               body.TunneledMcpServerID,
 		UserinfoEndpoint:                  body.UserinfoEndpoint,
 		IntrospectionEndpoint:             body.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
@@ -1552,6 +1596,191 @@ func BuildServeImagePayload(adminServeImageID string) (*admin.ServeImageForm, er
 	}
 	v := &admin.ServeImageForm{}
 	v.ID = id
+
+	return v, nil
+}
+
+// BuildStartTrialPayload builds the payload for the admin startTrial endpoint
+// from CLI flags.
+func BuildStartTrialPayload(adminStartTrialBody string, adminStartTrialAdminSessionToken string) (*admin.StartTrialPayload, error) {
+	var err error
+	var body StartTrialRequestBody
+	{
+		err = json.Unmarshal([]byte(adminStartTrialBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"days\": 2,\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		if body.Days < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.days", body.Days, 1, true))
+		}
+		if body.Days > 365 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.days", body.Days, 365, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminStartTrialAdminSessionToken != "" {
+			adminSessionToken = &adminStartTrialAdminSessionToken
+		}
+	}
+	v := &admin.StartTrialPayload{
+		ID:   body.ID,
+		Days: body.Days,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildChangeTrialEndDatePayload builds the payload for the admin
+// changeTrialEndDate endpoint from CLI flags.
+func BuildChangeTrialEndDatePayload(adminChangeTrialEndDateBody string, adminChangeTrialEndDateAdminSessionToken string) (*admin.ChangeTrialEndDatePayload, error) {
+	var err error
+	var body ChangeTrialEndDateRequestBody
+	{
+		err = json.Unmarshal([]byte(adminChangeTrialEndDateBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ends_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.ends_at", body.EndsAt, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminChangeTrialEndDateAdminSessionToken != "" {
+			adminSessionToken = &adminChangeTrialEndDateAdminSessionToken
+		}
+	}
+	v := &admin.ChangeTrialEndDatePayload{
+		ID:     body.ID,
+		EndsAt: body.EndsAt,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetMeterUsagePayload builds the payload for the admin getMeterUsage
+// endpoint from CLI flags.
+func BuildGetMeterUsagePayload(adminGetMeterUsageOrganizationID string, adminGetMeterUsageFamily string, adminGetMeterUsageFrom string, adminGetMeterUsageTo string, adminGetMeterUsageAdminSessionToken string) (*admin.GetMeterUsagePayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetMeterUsageOrganizationID
+	}
+	var family string
+	{
+		family = adminGetMeterUsageFamily
+		if !(family == "agent_session_storage" || family == "mcp_bandwidth" || family == "risk_content_scans") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("family", family, []any{"agent_session_storage", "mcp_bandwidth", "risk_content_scans"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var from *string
+	{
+		if adminGetMeterUsageFrom != "" {
+			from = &adminGetMeterUsageFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if adminGetMeterUsageTo != "" {
+			to = &adminGetMeterUsageTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetMeterUsageAdminSessionToken != "" {
+			adminSessionToken = &adminGetMeterUsageAdminSessionToken
+		}
+	}
+	v := &admin.GetMeterUsagePayload{}
+	v.OrganizationID = organizationID
+	v.Family = family
+	v.From = from
+	v.To = to
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetSupportMatrixPayload builds the payload for the admin
+// getSupportMatrix endpoint from CLI flags.
+func BuildGetSupportMatrixPayload(adminGetSupportMatrixAdminSessionToken string) (*admin.GetSupportMatrixPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminGetSupportMatrixAdminSessionToken != "" {
+			adminSessionToken = &adminGetSupportMatrixAdminSessionToken
+		}
+	}
+	v := &admin.GetSupportMatrixPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildUpdateSupportMatrixPayload builds the payload for the admin
+// updateSupportMatrix endpoint from CLI flags.
+func BuildUpdateSupportMatrixPayload(adminUpdateSupportMatrixBody string, adminUpdateSupportMatrixAdminSessionToken string) (*admin.UpdateSupportMatrixPayload, error) {
+	var err error
+	var body UpdateSupportMatrixRequestBody
+	{
+		err = json.Unmarshal([]byte(adminUpdateSupportMatrixBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"draft\": {\n         \"mappings\": {\n            \"abc123\": {\n               \"applicability\": \"applicable\",\n               \"conditions\": \"aaa\",\n               \"facts\": {\n                  \"abc123\": {\n                     \"note\": \"aaa\",\n                     \"status\": \"partial\",\n                     \"verify\": false\n                  }\n               }\n            }\n         },\n         \"references\": {\n            \"abc123\": {\n               \"abc123\": {\n                  \"note\": \"aaa\",\n                  \"status\": \"partial\",\n                  \"verify\": false\n               }\n            }\n         }\n      },\n      \"revision\": \"aaa\"\n   }'")
+		}
+		if body.Draft == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("draft", "body"))
+		}
+		if utf8.RuneCountInString(body.Revision) < 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.revision", body.Revision, utf8.RuneCountInString(body.Revision), 64, true))
+		}
+		if utf8.RuneCountInString(body.Revision) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.revision", body.Revision, utf8.RuneCountInString(body.Revision), 64, false))
+		}
+		if body.Draft != nil {
+			if err2 := ValidateSupportDraftRequestBody(body.Draft); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminUpdateSupportMatrixAdminSessionToken != "" {
+			adminSessionToken = &adminUpdateSupportMatrixAdminSessionToken
+		}
+	}
+	v := &admin.UpdateSupportMatrixPayload{
+		Revision: body.Revision,
+	}
+	if body.Draft != nil {
+		v.Draft = marshalSupportDraftRequestBodyToAdminSupportDraft(body.Draft)
+	}
+	v.AdminSessionToken = adminSessionToken
 
 	return v, nil
 }

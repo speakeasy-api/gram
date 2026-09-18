@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -38,12 +39,18 @@ func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.Me
 		auditLogger:     nil,
 		serverURL:       nil,
 		refresher:       nil,
+		rotator:         nil,
 		productFeatures: nil,
 		logger:          logger,
 		tracer:          tp.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
 		db:              db,
 		enc:             enc,
 		policy:          policy,
-		revoker:         NewUpstreamRevoker(logger, tp, mp, db, enc, policy),
+		tunnels:         nil,
+		jwksResolver:    jwks.NewResolver(policy, mp, logger),
+		// No tunnel transport: a global identity provider cannot be bound to a
+		// project tunnel, so revocation always dials directly. A binding that
+		// somehow existed would fail closed rather than silently dial out.
+		revoker: NewUpstreamRevoker(logger, tp, mp, db, enc, policy, nil),
 	}
 }

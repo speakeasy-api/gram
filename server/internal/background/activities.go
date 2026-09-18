@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
@@ -140,7 +141,6 @@ type Activities struct {
 	reapFlyApps                     *activities.ReapFlyApps
 	refreshBillingUsage             *activities.RefreshBillingUsage
 	snapshotBillingCycleUsage       *activities.SnapshotBillingCycleUsage
-	reportTUMUsageToStripe          *activities.ReportTUMUsageToStripe
 	weeklyUsageSummary              *activities.WeeklyUsageSummary
 	forwardTokenUsageToPostHog      *activities.ForwardTokenUsageToPostHog
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
@@ -201,6 +201,7 @@ func NewActivities(
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	guardianPolicy *guardian.Policy,
+	tunnelHTTPClient *tunnelrouting.HTTPClient,
 	db *pgxpool.Pool,
 	encryption *encryption.Client,
 	features feature.Provider,
@@ -246,9 +247,10 @@ func NewActivities(
 	githubEvidenceToken string,
 	riskFingerprinter risk.Fingerprinter,
 	disableRiskRetroReconcile bool,
-	tumMeterStreamingEnabled bool,
 	idTokenVerifier remotesessions.IDTokenVerifier,
 	issuerMetadataRefresher *remotesessions.IssuerMetadataRefresher,
+	remoteSessionEnricher *remotesessions.SessionEnricher,
+	remoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner,
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
@@ -327,9 +329,11 @@ func NewActivities(
 		remoteSessionRefresh = activities.NewRemoteSessionRefresh(
 			logger,
 			db,
-			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, cacheAdapter,
+			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, tunnelHTTPClient, cacheAdapter,
 				remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier),
 				remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher),
+				remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher),
+				remotesessions.WithRefreshTokenEndpointAssertionSigner(remoteSessionAssertionSigner),
 			),
 		)
 	}
@@ -424,7 +428,6 @@ func NewActivities(
 		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		snapshotBillingCycleUsage:       activities.NewSnapshotBillingCycleUsage(logger, db, chConn, cacheAdapter, emailService),
-		reportTUMUsageToStripe:          activities.NewReportTUMUsageToStripe(logger, db, stripeClient, !tumMeterStreamingEnabled),
 		weeklyUsageSummary:              activities.NewWeeklyUsageSummary(logger, db, chConn, emailService, siteURL),
 		forwardTokenUsageToPostHog:      activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
@@ -728,10 +731,6 @@ func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) e
 
 func (a *Activities) SnapshotBillingCycleUsage(ctx context.Context, orgIDs []string) error {
 	return a.snapshotBillingCycleUsage.Do(ctx, orgIDs)
-}
-
-func (a *Activities) ReportTUMUsageToStripe(ctx context.Context, input activities.ReportTUMUsageToStripeInput) error {
-	return a.reportTUMUsageToStripe.Do(ctx, input)
 }
 
 func (a *Activities) ForwardTokenUsageToPostHog(ctx context.Context, orgIDs []string) error {

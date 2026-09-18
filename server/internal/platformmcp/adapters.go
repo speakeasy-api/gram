@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -86,8 +87,9 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 }
 
 type LiveOrgAdminAuthorizer struct {
-	db     *pgxpool.Pool
-	engine *authz.Engine
+	db           *pgxpool.Pool
+	engine       *authz.Engine
+	dashboardURL *url.URL
 }
 
 func jwtAuthenticationStoreError(err error) error {
@@ -98,11 +100,19 @@ func jwtAuthenticationStoreError(err error) error {
 }
 
 func NewLiveOrgAdminAuthorizer(db *pgxpool.Pool, engine *authz.Engine) *LiveOrgAdminAuthorizer {
-	return &LiveOrgAdminAuthorizer{db: db, engine: engine}
+	return &LiveOrgAdminAuthorizer{db: db, engine: engine, dashboardURL: nil}
 }
 
-// LiveOrganizationSelector returns only organizations where the current user
-// holds the same live org:admin grant required to authorize Platform MCP.
+func (a *LiveOrgAdminAuthorizer) WithDashboardURL(dashboardURL *url.URL) *LiveOrgAdminAuthorizer {
+	if a != nil && validDashboardURL(dashboardURL) {
+		copyURL := *dashboardURL
+		a.dashboardURL = &copyURL
+	}
+	return a
+}
+
+// LiveOrganizationSelector returns active organization memberships. Per-call
+// RBAC determines what the user may do after connecting.
 type LiveOrganizationSelector struct {
 	db         *pgxpool.Pool
 	authorizer Authorizer
@@ -122,11 +132,12 @@ func (s *LiveOrganizationSelector) EligibleOrganizations(ctx context.Context, us
 	}
 	options := make([]OrganizationOption, 0, len(organizations))
 	for _, organization := range organizations {
-		if err := s.authorizer.RequireLiveOrgAdmin(ctx, Principal{UserID: userID, OrganizationID: organization.ID, ConnectionID: "", Generation: "", ClientID: "", Surface: SurfacePlatformMCP}); err != nil {
+		principal := Principal{UserID: userID, OrganizationID: organization.ID, ConnectionID: "", Generation: "", ClientID: "", Surface: SurfacePlatformMCP}
+		if err := s.authorizer.RequireLiveMembership(ctx, principal); err != nil {
 			if isAuthorizationDenied(err) {
 				continue
 			}
-			return nil, fmt.Errorf("check organization admin eligibility: %w", err)
+			return nil, fmt.Errorf("check organization membership eligibility: %w", err)
 		}
 		options = append(options, OrganizationOption{ID: organization.ID, Name: organization.Name})
 	}
@@ -141,11 +152,10 @@ func isAuthorizationDenied(err error) bool {
 	return errors.As(err, &shareable) && shareable.Code == oops.CodeForbidden
 }
 
-func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, principal Principal) error {
-	if a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+func (a *LiveOrgAdminAuthorizer) RequireLiveMembership(ctx context.Context, principal Principal) error {
+	if a == nil || a.db == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return ErrUnavailable
 	}
-
 	member, err := organizationsrepo.New(a.db).HasActiveOrganizationUser(ctx, organizationsrepo.HasActiveOrganizationUserParams{
 		UserID:         principal.UserID,
 		OrganizationID: principal.OrganizationID,
@@ -155,6 +165,43 @@ func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, princi
 	}
 	if !member {
 		return ErrForbidden
+	}
+	return nil
+}
+
+// HasLiveOrgAdmin checks current membership and grants without recording a
+// denied access challenge. Use it only for capability-shaped presentation; an
+// attempted admin operation must still call RequireLiveOrgAdmin.
+func (a *LiveOrgAdminAuthorizer) HasLiveOrgAdmin(ctx context.Context, principal Principal) (bool, error) {
+	if a == nil || a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+		return false, ErrUnavailable
+	}
+	if err := a.RequireLiveMembership(ctx, principal); err != nil {
+		return false, err
+	}
+	principals, err := authz.ResolveUserPrincipals(ctx, a.db, principal.OrganizationID, principal.UserID)
+	if err != nil {
+		return false, fmt.Errorf("resolve live admin principals: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, a.db, principal.OrganizationID, principals)
+	if err != nil {
+		return false, fmt.Errorf("load live admin grants: %w", err)
+	}
+	allowed, err := authz.GrantsAuthorize(grants, authz.Check{
+		Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil,
+	})
+	if err != nil {
+		return false, fmt.Errorf("authorize live admin grants: %w", err)
+	}
+	return allowed, nil
+}
+
+func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, principal Principal) error {
+	if a == nil || a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+		return ErrUnavailable
+	}
+	if err := a.RequireLiveMembership(ctx, principal); err != nil {
+		return err
 	}
 
 	principals, err := authz.ResolveUserPrincipals(ctx, a.db, principal.OrganizationID, principal.UserID)
@@ -292,12 +339,15 @@ type PostgresReader struct {
 	inventoryCursor     *inventoryCursorCodec
 	metadataVersionKey  []byte
 	riskReads           *RiskReadService
+	riskAnalysisStatus  *RiskAnalysisStatusService
 	dataExports         *DataExportReadService
 	dataExportMutations *dataExportMutationService
 	recentToolCalls     *RecentToolCallReadService
 	eventFeed           *EventFeedReadService
+	authz               *authz.Engine
 	shadowInventory     *ShadowInventoryService
 	shadowDecisions     *ShadowDecisionService
+	shadowAI            *ShadowAIService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -309,13 +359,23 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		inventoryCursor:     nil,
 		metadataVersionKey:  nil,
 		riskReads:           nil,
+		riskAnalysisStatus:  nil,
 		dataExports:         nil,
 		dataExportMutations: nil,
 		recentToolCalls:     nil,
 		eventFeed:           nil,
+		authz:               nil,
 		shadowInventory:     nil,
 		shadowDecisions:     nil,
+		shadowAI:            nil,
 	}
+}
+
+func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {
+	if r != nil {
+		r.authz = engine
+	}
+	return r
 }
 
 func (r *PostgresReader) WithShadowDecisions(service *ShadowDecisionService) *PostgresReader {
@@ -332,6 +392,22 @@ func (r *PostgresReader) WithShadowInventory(service *ShadowInventoryService) *P
 	return r
 }
 
+// WithRiskAnalysisStatus attaches the Watchdog analysis run-state reads. A nil
+// or incomplete service leaves the tool served as a stub.
+func (r *PostgresReader) WithRiskAnalysisStatus(service *RiskAnalysisStatusService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.riskAnalysisStatus = service
+	}
+	return r
+}
+
+func (r *PostgresReader) WithShadowAI(service *ShadowAIService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.shadowAI = service
+	}
+	return r
+}
+
 func (r *PostgresReader) setInventoryCursorKey(keyMaterial string) {
 	codec, err := newInventoryCursorCodec(keyMaterial)
 	if err == nil {
@@ -343,26 +419,68 @@ func (r *PostgresReader) setInventoryCursorKey(keyMaterial string) {
 	}
 }
 
+const (
+	projectCandidatePageSize = 100
+	maxProjectCandidates     = 1000
+)
+
 func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, input ListProjectsInput) (ListProjectsOutput, error) {
-	if r.reader == nil {
+	if r.reader == nil || r.authz == nil {
 		return ListProjectsOutput{}, ErrUnavailable
 	}
 	limit := boundedLimit(input.Limit)
-	rows, err := r.reader.ListProjectsLimited(ctx, principal.OrganizationID, int32(limit+1)) // #nosec G115 -- boundedLimit caps the value at 100.
-	if err != nil {
-		return ListProjectsOutput{}, fmt.Errorf("list platform mcp projects: %w", err)
+	projects := make([]Project, 0, limit+1)
+	filtered := false
+	exhausted := false
+	afterID := uuid.Nil
+	candidatesRead := 0
+
+	for len(projects) <= limit && candidatesRead < maxProjectCandidates {
+		pageLimit := min(projectCandidatePageSize, maxProjectCandidates-candidatesRead)
+		rows, err := r.reader.ListProjectsPage(ctx, principal.OrganizationID, afterID, int32(pageLimit)) // #nosec G115 -- both constants fit in int32.
+		if err != nil {
+			return ListProjectsOutput{}, fmt.Errorf("list platform mcp project page: %w", err)
+		}
+		if len(rows) == 0 {
+			exhausted = true
+			break
+		}
+		candidatesRead += len(rows)
+		afterID = rows[len(rows)-1].ID
+
+		checks := make([]authz.Check, 0, len(rows))
+		for _, row := range rows {
+			checks = append(checks, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: row.ID.String(), Dimensions: nil})
+		}
+		allowed, err := r.authz.FindMatched(ctx, checks)
+		if err != nil {
+			return ListProjectsOutput{}, fmt.Errorf("filter platform mcp project page: %w", err)
+		}
+		for i, row := range rows {
+			if !allowed[i] {
+				filtered = true
+				continue
+			}
+			if len(projects) <= limit {
+				projects = append(projects, Project{ID: row.ID.String(), Name: row.Name, Slug: row.Slug})
+			}
+		}
+		if len(rows) < pageLimit {
+			exhausted = true
+			break
+		}
 	}
 
-	rows, truncated := boundedRows(rows, limit)
-	output := ListProjectsOutput{Projects: make([]Project, 0, len(rows)), Truncated: truncated}
-	for _, row := range rows {
-		output.Projects = append(output.Projects, Project{ID: row.ID.String(), Name: row.Name, Slug: row.Slug})
-	}
-	return output, nil
+	projects, visibleTruncated := boundedRows(projects, limit)
+	return ListProjectsOutput{
+		Projects:              projects,
+		Truncated:             visibleTruncated || !exhausted,
+		authorizationFiltered: filtered,
+	}, nil
 }
 
 func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input FindMCPInput) (FindMCPOutput, error) {
-	if r.reader == nil || r.inventory == nil || r.inventoryCursor == nil {
+	if r.reader == nil || r.inventory == nil || r.inventoryCursor == nil || r.authz == nil {
 		return FindMCPOutput{}, ErrUnavailable
 	}
 	if input.ProjectID != "" && input.ProjectSlug != "" {
@@ -387,6 +505,12 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 		if err != nil {
 			return FindMCPOutput{}, err
 		}
+		if err := r.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: cursorProject.ID.String(), Dimensions: nil}); err != nil {
+			if isAuthorizationDenied(err) {
+				return FindMCPOutput{}, ErrForbidden
+			}
+			return FindMCPOutput{}, err
+		}
 		projectID = uuid.NullUUID{UUID: cursorProject.ID, Valid: true}
 	}
 
@@ -402,10 +526,18 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 	if query != "" {
 		limit = min(limit, 10)
 	}
+	allowedMCPIDs, err := r.allowedMCPIDs(ctx, principal.OrganizationID, projectID, afterID, query)
+	if err != nil {
+		return FindMCPOutput{}, err
+	}
+	if len(allowedMCPIDs) == 0 {
+		return FindMCPOutput{MCPs: []MCP{}, NextCursor: ""}, nil
+	}
 	rows, err := r.inventory.ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
 		OrganizationID: principal.OrganizationID,
 		ConnectionID:   connectionID, ConnectionGeneration: generation,
 		UserID: inventoryText(principal.UserID), ActingSurface: inventoryText(string(principal.surface())),
+		SkipAuthorizationFilter: false, AllowedMcpIds: allowedMCPIDs,
 		ProjectID: projectID, AfterMcpID: afterID, QueryText: query, ReadinessState: inventoryText(input.Readiness),
 		LimitValue: int32(limit + 1), // #nosec G115 -- boundedLimit caps the value at 100.
 	})
@@ -454,7 +586,7 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 }
 
 func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error) {
-	if r.reader == nil || r.inventory == nil {
+	if r.reader == nil || r.inventory == nil || r.authz == nil {
 		return MCP{}, ErrUnavailable
 	}
 	projectID, err := uuid.Parse(input.ProjectID)
@@ -464,6 +596,12 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 	mcpID, err := uuid.Parse(input.MCPID)
 	if err != nil {
 		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
+	}
+	if err := r.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, mcpID.String(), projectID.String())); err != nil {
+		if isAuthorizationDenied(err) {
+			return MCP{}, ErrForbidden
+		}
+		return MCP{}, err
 	}
 	connectionID, generation, err := inventoryConnection(principal)
 	if err != nil {
@@ -516,6 +654,39 @@ func inventoryMCPDisplayName(mcp *MCP) string {
 		return mcp.Slug
 	}
 	return mcp.ID
+}
+
+const maxInventoryAuthorizationCandidates = 1000
+
+func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID string, projectID, afterID uuid.NullUUID, query string) ([]uuid.UUID, error) {
+	servers, err := r.inventory.ListPlatformMCPInventoryAuthorizationCandidatePage(ctx, platformrepo.ListPlatformMCPInventoryAuthorizationCandidatePageParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		AfterMcpID:     afterID,
+		QueryText:      query,
+		LimitValue:     maxInventoryAuthorizationCandidates + 1,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list platform mcp authorization candidates: %w", err)
+	}
+	if len(servers) > maxInventoryAuthorizationCandidates {
+		return nil, fmt.Errorf("%w: inventory authorization candidate limit exceeded", ErrUnavailable)
+	}
+	checks := make([]authz.Check, 0, len(servers))
+	for _, server := range servers {
+		checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, server.ID.String(), server.ProjectID.String()))
+	}
+	matched, err := r.authz.FindMatched(ctx, checks)
+	if err != nil {
+		return nil, fmt.Errorf("filter platform mcp authorization candidates: %w", err)
+	}
+	ids := make([]uuid.UUID, 0, len(servers))
+	for i, server := range servers {
+		if matched[i] {
+			ids = append(ids, server.ID)
+		}
+	}
+	return ids, nil
 }
 
 func (r *PostgresReader) resolveInventoryProject(ctx context.Context, organizationID string, input FindMCPInput) (ResolvedProject, error) {

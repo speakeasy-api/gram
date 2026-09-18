@@ -2361,6 +2361,8 @@ func unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer(v *UserSessi
 		AuthnChallengeMode:            *v.AuthnChallengeMode,
 		SessionDurationHours:          *v.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: *v.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  v.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:  v.TrustedRemoteSessionClientID,
 		CreatedAt:                     *v.CreatedAt,
 		UpdatedAt:                     *v.UpdatedAt,
 	}

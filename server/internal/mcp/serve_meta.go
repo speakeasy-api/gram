@@ -184,6 +184,14 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		}
 	}
 
+	// Hand back the session the handshake was recorded under, as the hosted
+	// surface does. Without it a client that sent no Mcp-Session-Id gets a
+	// freshly minted id on every request, and nothing it does later can be
+	// tied back to the identity it reported at initialize.
+	if req.Method == "initialize" {
+		w.Header().Set("Mcp-Session-Id", gate.sessionID)
+	}
+
 	body, err := s.handleMetaMCPRequest(ctx, logger, mcpEndpoint, metaServer, gate, &req, r.Header.Get(mcpversions.HTTPHeader))
 
 	switch {
@@ -224,9 +232,9 @@ func (s *Service) handleMetaMCPRequest(
 	case "ping":
 		return handlePing(ctx, logger, req.ID, serverInfoMetaServer)
 	case "initialize":
-		return s.handleMetaInitialize(ctx, logger, req, gate.protocolVersion.InEffect)
+		return s.handleMetaInitialize(ctx, logger, metaServer, gate, req, gate.protocolVersion.InEffect)
 	case "server/discover":
-		return s.handleMetaServerDiscover(ctx, logger, req)
+		return s.handleMetaServerDiscover(ctx, logger, metaServer, req)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
@@ -328,6 +336,8 @@ func invalidMetaProtocolVersionError(req *rawRequest, declared string) *oops.MCP
 func (s *Service) handleMetaInitialize(
 	ctx context.Context,
 	logger *slog.Logger,
+	metaServer *metamcprepo.MetaMcpServer,
+	gate *metaGateContext,
 	req *rawRequest,
 	negotiated string,
 ) (json.RawMessage, error) {
@@ -337,6 +347,15 @@ func (s *Service) handleMetaInitialize(
 	if err != nil {
 		logger.WarnContext(ctx, "failed to parse meta mcp initialize params", attr.SlogError(err))
 	}
+
+	// Record who handshaked so every member dispatch in this session can
+	// attribute its tool calls to a client. Scoped to the gateway, not to a
+	// toolset: members each carry their own slug.
+	storeSessionClientInfo(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct // only the record's identity fields matter here
+		projectID:       gate.projectID,
+		sessionID:       gate.sessionID,
+		clientInfoScope: metaClientInfoScope(gate.metaServerID),
+	}, params.ClientInfo.Name, params.ClientInfo.Version, params.ProtocolVersion)
 
 	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, negotiated)
 	s.metrics.RecordMCPInitialize(ctx, params.ProtocolVersion, negotiated)
@@ -349,7 +368,7 @@ func (s *Service) handleMetaInitialize(
 				"tools": json.RawMessage("{}"),
 			},
 			ServerInfo:   serverInfoMetaServer,
-			Instructions: metamcp.Instructions,
+			Instructions: metamcp.ResolveInstructions(conv.FromPGText[string](metaServer.Instructions)),
 		},
 		serverIdentity: serverInfoMetaServer,
 		cacheHints:     nil,
@@ -364,8 +383,16 @@ func (s *Service) handleMetaInitialize(
 func (s *Service) handleMetaServerDiscover(
 	ctx context.Context,
 	logger *slog.Logger,
+	metaServer *metamcprepo.MetaMcpServer,
 	req *rawRequest,
 ) (json.RawMessage, error) {
+	hints := cacheHintsCallerUniform
+	if metaServer.UserSessionIssuerID.Valid {
+		// Custom instructions are protected by the issuer gate even when
+		// every authorized caller receives the same self-description.
+		hints = cacheHintsCallerVarying
+	}
+
 	result := &result[metamcp.DiscoverResult]{
 		ID: req.ID,
 		Result: metamcp.DiscoverResult{
@@ -374,12 +401,10 @@ func (s *Service) handleMetaServerDiscover(
 				"tools": json.RawMessage("{}"),
 			},
 			ServerInfo:   serverInfoMetaServer,
-			Instructions: metamcp.Instructions,
+			Instructions: metamcp.ResolveInstructions(conv.FromPGText[string](metaServer.Instructions)),
 		},
 		serverIdentity: serverInfoMetaServer,
-		// The self-description is assembled from constants, so every caller of
-		// this endpoint receives the same payload.
-		cacheHints: cacheHintsCallerUniform,
+		cacheHints:     hints,
 	}
 	bs, err := json.Marshal(result)
 	if err != nil {

@@ -152,7 +152,8 @@ function PublishPrompt({ onPublish }: { onPublish: () => void }): JSX.Element {
           Speakeasy publishes a private repo that acts as your plugin
           marketplace. It ships with the observability plugin and receives any
           plugins you build later, so this only happens once per project. You
-          can add GitHub usernames who get read access.
+          can add GitHub usernames, who become admins on the repo so they can
+          connect it to Cursor, Claude and other marketplaces.
         </p>
       </div>
       <Button variant="primary" size="sm" onClick={onPublish}>

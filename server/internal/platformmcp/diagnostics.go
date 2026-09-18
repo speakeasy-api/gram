@@ -351,9 +351,9 @@ type GetMCPDiagnosticsOutput struct {
 	// OrganizationOutcomes is the same summary across the organization's
 	// projects. It is what makes the scope check answerable server-side.
 	OrganizationOutcomes MCPOutcomeSummary `json:"organization_outcomes"`
-	// OrganizationOutcomesPartial reports that the comparison covered only the
-	// first maxOverviewProjects projects. When it is true the attribution's
-	// scope is forced to unknown rather than asserted from partial coverage.
+	// OrganizationOutcomesPartial reports that the comparison did not cover every
+	// organization project because RBAC filtered the list or maxOverviewProjects
+	// truncated it. When true, attribution scope remains unknown.
 	OrganizationOutcomesPartial bool                `json:"organization_outcomes_partial"`
 	Clients                     []MCPClientEvidence `json:"clients"`
 	ClientsTruncated            bool                `json:"clients_truncated"`
@@ -501,7 +501,7 @@ func (s *DiagnosticsService) organizationProjectIDs(ctx context.Context, princip
 	for _, project := range projects.Projects {
 		ids = append(ids, project.ID)
 	}
-	return ids, projects.Truncated, nil
+	return ids, projects.Truncated || projects.authorizationFiltered, nil
 }
 
 // currentReadiness loads the persisted readiness result without probing the

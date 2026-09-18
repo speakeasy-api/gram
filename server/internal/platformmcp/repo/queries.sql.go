@@ -2424,8 +2424,60 @@ func (q *Queries) GetPlatformMCPFeedbackByIdempotencyKey(ctx context.Context, ar
 	return i, err
 }
 
+const getPlatformMCPInstallTarget = `-- name: GetPlatformMCPInstallTarget :one
+SELECT
+    m.name,
+    m.slug,
+    CASE
+      WHEN m.visibility <> 'disabled'
+        AND m.unproxied_mcp_server_id IS NULL
+      THEN COALESCE(endpoint.slug, '')
+      ELSE ''
+    END::text AS endpoint_slug
+FROM mcp_servers m
+JOIN projects project
+  ON project.id = m.project_id
+  AND project.organization_id = $1
+  AND project.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT e.slug
+  FROM mcp_endpoints e
+  WHERE e.mcp_server_id = m.id
+    AND e.project_id = m.project_id
+    AND e.custom_domain_id IS NULL
+    AND e.deleted IS FALSE
+  ORDER BY e.created_at ASC, e.id ASC
+  LIMIT 1
+) endpoint ON TRUE
+WHERE m.id = $2
+  AND m.project_id = $3
+  AND m.deleted IS FALSE
+`
+
+type GetPlatformMCPInstallTargetParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPInstallTargetRow struct {
+	Name         pgtype.Text
+	Slug         pgtype.Text
+	EndpointSlug string
+}
+
+// Tenant-scoped exact MCP target plus its canonical public endpoint. Disabled
+// and unproxied servers deliberately expose no endpoint even if an endpoint row
+// remains, because neither can be dispatched through Gram's public MCP route.
+func (q *Queries) GetPlatformMCPInstallTarget(ctx context.Context, arg GetPlatformMCPInstallTargetParams) (GetPlatformMCPInstallTargetRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPInstallTarget, arg.OrganizationID, arg.McpServerID, arg.ProjectID)
+	var i GetPlatformMCPInstallTargetRow
+	err := row.Scan(&i.Name, &i.Slug, &i.EndpointSlug)
+	return i, err
+}
+
 const getPlatformMCPInventoryItem = `-- name: GetPlatformMCPInventoryItem :one
-SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
+SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, upstream_url, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
 FROM (
     SELECT
         m.id AS mcp_server_id,
@@ -2439,6 +2491,7 @@ FROM (
         m.tunneled_mcp_server_id,
         m.toolset_id,
         m.unproxied_mcp_server_id,
+        COALESCE(remote.url, '') AS upstream_url,
         COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
         COALESCE(registration.source_kind, '') AS source_kind,
         COALESCE(registration.catalog_provider, '') AS catalog_provider,
@@ -2456,6 +2509,10 @@ FROM (
       ON project.id = m.project_id
      AND project.organization_id = $1
      AND project.deleted IS FALSE
+    LEFT JOIN remote_mcp_servers AS remote
+      ON remote.id = m.remote_mcp_server_id
+     AND remote.project_id = m.project_id
+     AND remote.deleted IS FALSE
     LEFT JOIN LATERAL (
         SELECT registration.id, registration.organization_id, registration.project_id, registration.source_kind, registration.catalog_provider, registration.catalog_reference, registration.status, registration.remote_mcp_server_id, registration.remote_mcp_server_owned, registration.user_session_issuer_id, registration.user_session_issuer_owned, registration.mcp_server_id, registration.mcp_server_owned, registration.mcp_endpoint_id, registration.mcp_endpoint_owned, registration.connection_id, registration.connection_generation, registration.user_id, registration.acting_surface, registration.created_at, registration.updated_at, registration.deleted_at, registration.deleted
         FROM platform_mcp_catalog_registrations AS registration
@@ -2513,6 +2570,7 @@ type GetPlatformMCPInventoryItemRow struct {
 	TunneledMcpServerID             uuid.NullUUID
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
+	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
 	CatalogProvider                 string
@@ -2550,6 +2608,7 @@ func (q *Queries) GetPlatformMCPInventoryItem(ctx context.Context, arg GetPlatfo
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.UpstreamUrl,
 		&i.RegistrationID,
 		&i.SourceKind,
 		&i.CatalogProvider,
@@ -4347,6 +4406,156 @@ func (q *Queries) ListOwnedChatTranscriptMessagesForRecall(ctx context.Context, 
 	return items, nil
 }
 
+const listPlatformMCPAssignedPluginInventory = `-- name: ListPlatformMCPAssignedPluginInventory :many
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.description,
+    COALESCE(p.is_default, FALSE) AS is_default,
+    (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+    (
+      SELECT count(*)
+      FROM skill_distributions sd
+      JOIN skills sk
+        ON sk.id = sd.skill_id
+        AND sk.project_id = sd.project_id
+        AND sk.archived_at IS NULL
+      WHERE sd.plugin_id = p.id
+        AND sd.project_id = p.project_id
+        AND sd.channel = 'plugin'
+        AND sd.assistant_id IS NULL
+        AND sd.revoked_at IS NULL
+    ) AS skill_count,
+    (gc.id IS NOT NULL)::boolean AS repository_connected,
+    TRUE::boolean AS published
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+JOIN plugin_github_connections gc
+  ON gc.project_id = p.project_id
+  AND gc.marketplace_token IS NOT NULL
+WHERE p.project_id = $1
+  AND p.organization_id = $2
+  AND p.deleted IS FALSE
+  AND COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> ''
+  AND EXISTS (
+    SELECT 1
+    FROM plugin_assignments pa
+    WHERE pa.plugin_id = p.id
+      AND pa.organization_id = $2
+      AND pa.principal_urn = ANY($3::text[])
+  )
+  AND (NOT $4::boolean OR p.id > $5)
+ORDER BY p.id ASC
+LIMIT $6
+`
+
+type ListPlatformMCPAssignedPluginInventoryParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	PrincipalUrns  []string
+	UseAfter       bool
+	AfterID        uuid.UUID
+	ResultLimit    int32
+}
+
+type ListPlatformMCPAssignedPluginInventoryRow struct {
+	ID                  uuid.UUID
+	Name                string
+	Slug                string
+	Description         pgtype.Text
+	IsDefault           bool
+	ServerCount         int64
+	SkillCount          int64
+	RepositoryConnected bool
+	Published           bool
+}
+
+// Member-facing plugin inventory. A row is visible only when the package is
+// published and at least one current assignment matches the authenticated
+// caller's server-resolved principals. Assignment identities and counts never
+// cross this query boundary.
+func (q *Queries) ListPlatformMCPAssignedPluginInventory(ctx context.Context, arg ListPlatformMCPAssignedPluginInventoryParams) ([]ListPlatformMCPAssignedPluginInventoryRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPAssignedPluginInventory,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.PrincipalUrns,
+		arg.UseAfter,
+		arg.AfterID,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPAssignedPluginInventoryRow
+	for rows.Next() {
+		var i ListPlatformMCPAssignedPluginInventoryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.IsDefault,
+			&i.ServerCount,
+			&i.SkillCount,
+			&i.RepositoryConnected,
+			&i.Published,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPCatalogRegistrationsByRemoteMcpServer = `-- name: ListPlatformMCPCatalogRegistrationsByRemoteMcpServer :many
+SELECT id, user_session_issuer_id
+FROM platform_mcp_catalog_registrations
+WHERE remote_mcp_server_id = $1
+  AND organization_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+type ListPlatformMCPCatalogRegistrationsByRemoteMcpServerParams struct {
+	RemoteMcpServerID uuid.NullUUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+}
+
+type ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow struct {
+	ID                  uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+}
+
+func (q *Queries) ListPlatformMCPCatalogRegistrationsByRemoteMcpServer(ctx context.Context, arg ListPlatformMCPCatalogRegistrationsByRemoteMcpServerParams) ([]ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPCatalogRegistrationsByRemoteMcpServer, arg.RemoteMcpServerID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow
+	for rows.Next() {
+		var i ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow
+		if err := rows.Scan(&i.ID, &i.UserSessionIssuerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPClientConnectionsForUpdate = `-- name: ListPlatformMCPClientConnectionsForUpdate :many
 SELECT id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, authorization_expires_at, reauthorization_required_at, reauthorization_reason, revoked_at, created_at, updated_at
 FROM platform_mcp_connections
@@ -4456,6 +4665,7 @@ SELECT
     m.tunneled_mcp_server_id,
     m.toolset_id,
     m.unproxied_mcp_server_id,
+    COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
     COALESCE(registration.catalog_provider, '') AS catalog_provider,
@@ -4473,6 +4683,10 @@ JOIN projects AS project
   ON project.id = m.project_id
  AND project.organization_id = $1
  AND project.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS remote
+  ON remote.id = m.remote_mcp_server_id
+ AND remote.project_id = m.project_id
+ AND remote.deleted IS FALSE
 LEFT JOIN LATERAL (
     SELECT registration.id, registration.organization_id, registration.project_id, registration.source_kind, registration.catalog_provider, registration.catalog_reference, registration.status, registration.remote_mcp_server_id, registration.remote_mcp_server_owned, registration.user_session_issuer_id, registration.user_session_issuer_owned, registration.mcp_server_id, registration.mcp_server_owned, registration.mcp_endpoint_id, registration.mcp_endpoint_owned, registration.connection_id, registration.connection_generation, registration.user_id, registration.acting_surface, registration.created_at, registration.updated_at, registration.deleted_at, registration.deleted
     FROM platform_mcp_catalog_registrations AS registration
@@ -4503,46 +4717,49 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) AS readiness ON TRUE
 WHERE m.deleted IS FALSE
-  AND ($6::uuid IS NULL OR m.project_id = $6::uuid)
-  AND ($7::uuid IS NULL OR m.id > $7::uuid)
+  AND ($6::boolean OR m.id = ANY($7::uuid[]))
+  AND ($8::uuid IS NULL OR m.project_id = $8::uuid)
+  AND ($9::uuid IS NULL OR m.id > $9::uuid)
   AND (
-      $8::text = ''
-      OR m.id::text ILIKE '%' || $8::text || '%'
-      OR COALESCE(m.name, '') ILIKE '%' || $8::text || '%'
-      OR COALESCE(m.slug, '') ILIKE '%' || $8::text || '%'
+      $10::text = ''
+      OR m.id::text ILIKE '%' || $10::text || '%'
+      OR COALESCE(m.name, '') ILIKE '%' || $10::text || '%'
+      OR COALESCE(m.slug, '') ILIKE '%' || $10::text || '%'
   )
   AND (
-      $9::text IS NULL
+      $11::text IS NULL
       OR COALESCE(
           NULLIF(readiness.state, ''),
           CASE
               WHEN registration.id IS NOT NULL THEN 'unknown'
               ELSE 'unsupported'
           END
-      ) = $9::text
+      ) = $11::text
   )
 ORDER BY
     CASE
-        WHEN $8::text <> ''
-         AND (m.id::text = $8::text OR LOWER(COALESCE(m.name, '')) = LOWER($8::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($8::text))
+        WHEN $10::text <> ''
+         AND (m.id::text = $10::text OR LOWER(COALESCE(m.name, '')) = LOWER($10::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($10::text))
         THEN 0
         ELSE 1
     END,
     m.id ASC
-LIMIT $10
+LIMIT $12
 `
 
 type ListPlatformMCPInventoryParams struct {
-	OrganizationID       string
-	ConnectionID         uuid.NullUUID
-	ConnectionGeneration uuid.NullUUID
-	UserID               pgtype.Text
-	ActingSurface        pgtype.Text
-	ProjectID            uuid.NullUUID
-	AfterMcpID           uuid.NullUUID
-	QueryText            string
-	ReadinessState       pgtype.Text
-	LimitValue           int32
+	OrganizationID          string
+	ConnectionID            uuid.NullUUID
+	ConnectionGeneration    uuid.NullUUID
+	UserID                  pgtype.Text
+	ActingSurface           pgtype.Text
+	SkipAuthorizationFilter bool
+	AllowedMcpIds           []uuid.UUID
+	ProjectID               uuid.NullUUID
+	AfterMcpID              uuid.NullUUID
+	QueryText               string
+	ReadinessState          pgtype.Text
+	LimitValue              int32
 }
 
 type ListPlatformMCPInventoryRow struct {
@@ -4557,6 +4774,7 @@ type ListPlatformMCPInventoryRow struct {
 	TunneledMcpServerID             uuid.NullUUID
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
+	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
 	CatalogProvider                 string
@@ -4572,8 +4790,11 @@ type ListPlatformMCPInventoryRow struct {
 }
 
 // One bounded, tenant-qualified inventory projection for every Platform MCP
-// read surface. It reads persisted readiness/distribution state only; it never
-// contacts a remote MCP or provider.
+// read surface. Callers supply the live RBAC-filtered MCP IDs so authorization
+// is applied before LIMIT/cursor pagination. It reads persisted readiness and
+// distribution state only; it never contacts a remote MCP or provider.
+// skip_authorization_filter is reserved for trusted internal services whose own
+// authorization boundary is broader than this member-facing read path.
 func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatformMCPInventoryParams) ([]ListPlatformMCPInventoryRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPInventory,
 		arg.OrganizationID,
@@ -4581,6 +4802,8 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 		arg.ConnectionGeneration,
 		arg.UserID,
 		arg.ActingSurface,
+		arg.SkipAuthorizationFilter,
+		arg.AllowedMcpIds,
 		arg.ProjectID,
 		arg.AfterMcpID,
 		arg.QueryText,
@@ -4606,6 +4829,7 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
+			&i.UpstreamUrl,
 			&i.RegistrationID,
 			&i.SourceKind,
 			&i.CatalogProvider,
@@ -4619,6 +4843,111 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 			&i.ReadinessCheckedAt,
 			&i.ReadinessExpiresAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPInventoryAuthorizationCandidatePage = `-- name: ListPlatformMCPInventoryAuthorizationCandidatePage :many
+SELECT m.id, m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+  AND ($2::uuid IS NULL OR m.project_id = $2::uuid)
+  AND ($3::uuid IS NULL OR m.id > $3::uuid)
+  AND (
+      $4::text = ''
+      OR m.id::text ILIKE '%' || $4::text || '%'
+      OR COALESCE(m.name, '') ILIKE '%' || $4::text || '%'
+      OR COALESCE(m.slug, '') ILIKE '%' || $4::text || '%'
+  )
+ORDER BY
+    CASE
+        WHEN $4::text <> ''
+         AND (m.id::text = $4::text OR LOWER(COALESCE(m.name, '')) = LOWER($4::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($4::text))
+        THEN 0
+        ELSE 1
+    END,
+    m.id ASC
+LIMIT LEAST(GREATEST($5::integer, 1), 1001)
+`
+
+type ListPlatformMCPInventoryAuthorizationCandidatePageParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	AfterMcpID     uuid.NullUUID
+	QueryText      string
+	LimitValue     int32
+}
+
+type ListPlatformMCPInventoryAuthorizationCandidatePageRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Lightweight, bounded candidate selection before live RBAC evaluation. Match
+// the inventory projection's safe project/cursor/query filters and search order
+// so hidden resources do not consume caller-visible result pages.
+func (q *Queries) ListPlatformMCPInventoryAuthorizationCandidatePage(ctx context.Context, arg ListPlatformMCPInventoryAuthorizationCandidatePageParams) ([]ListPlatformMCPInventoryAuthorizationCandidatePageRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPInventoryAuthorizationCandidatePage,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.AfterMcpID,
+		arg.QueryText,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPInventoryAuthorizationCandidatePageRow
+	for rows.Next() {
+		var i ListPlatformMCPInventoryAuthorizationCandidatePageRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPInventoryAuthorizationCandidates = `-- name: ListPlatformMCPInventoryAuthorizationCandidates :many
+SELECT m.id, m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+ORDER BY m.id
+`
+
+type ListPlatformMCPInventoryAuthorizationCandidatesRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ListPlatformMCPInventoryAuthorizationCandidates(ctx context.Context, organizationID string) ([]ListPlatformMCPInventoryAuthorizationCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPInventoryAuthorizationCandidates, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPInventoryAuthorizationCandidatesRow
+	for rows.Next() {
+		var i ListPlatformMCPInventoryAuthorizationCandidatesRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -6315,6 +6644,108 @@ func (q *Queries) RecordPlatformMCPSetupMilestone(ctx context.Context, arg Recor
 		arg.AttemptID,
 	)
 	return err
+}
+
+const resolvePlatformMCPAssignedPluginTarget = `-- name: ResolvePlatformMCPAssignedPluginTarget :many
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.description,
+    COALESCE(p.is_default, FALSE) AS is_default,
+    (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+    (
+      SELECT count(*)
+      FROM skill_distributions sd
+      JOIN skills sk
+        ON sk.id = sd.skill_id
+        AND sk.project_id = sd.project_id
+        AND sk.archived_at IS NULL
+      WHERE sd.plugin_id = p.id
+        AND sd.project_id = p.project_id
+        AND sd.channel = 'plugin'
+        AND sd.assistant_id IS NULL
+        AND sd.revoked_at IS NULL
+    ) AS skill_count
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+JOIN plugin_github_connections gc
+  ON gc.project_id = p.project_id
+  AND gc.marketplace_token IS NOT NULL
+WHERE p.project_id = $1
+  AND p.organization_id = $2
+  AND p.deleted IS FALSE
+  AND COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> ''
+  AND EXISTS (
+    SELECT 1
+    FROM plugin_assignments pa
+    WHERE pa.plugin_id = p.id
+      AND pa.organization_id = $2
+      AND pa.principal_urn = ANY($3::text[])
+  )
+  AND (
+    p.id::text = $4::text
+    OR lower(p.slug) = lower($4::text)
+    OR lower(p.name) = lower($4::text)
+  )
+ORDER BY p.id
+LIMIT 2
+`
+
+type ResolvePlatformMCPAssignedPluginTargetParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	PrincipalUrns  []string
+	Target         string
+}
+
+type ResolvePlatformMCPAssignedPluginTargetRow struct {
+	ID          uuid.UUID
+	Name        string
+	Slug        string
+	Description pgtype.Text
+	IsDefault   bool
+	ServerCount int64
+	SkillCount  int64
+}
+
+// Exact member target resolution over the same assigned, published set as the
+// member list. Missing, unpublished, unassigned, and cross-tenant targets all
+// collapse to the same not-found result.
+func (q *Queries) ResolvePlatformMCPAssignedPluginTarget(ctx context.Context, arg ResolvePlatformMCPAssignedPluginTargetParams) ([]ResolvePlatformMCPAssignedPluginTargetRow, error) {
+	rows, err := q.db.Query(ctx, resolvePlatformMCPAssignedPluginTarget,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.PrincipalUrns,
+		arg.Target,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResolvePlatformMCPAssignedPluginTargetRow
+	for rows.Next() {
+		var i ResolvePlatformMCPAssignedPluginTargetRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.IsDefault,
+			&i.ServerCount,
+			&i.SkillCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const resolvePlatformMCPPluginTarget = `-- name: ResolvePlatformMCPPluginTarget :many

@@ -68,8 +68,14 @@ type CreateUserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
-	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Gram uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -97,8 +103,14 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
-	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Gram uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListUserSessionIssuersResponseBody is the type of the "userSessionIssuers"
@@ -134,8 +146,14 @@ type GetUserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
-	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Gram uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CreateUserSessionIssuerUnauthorizedResponseBody is the type of the
@@ -1113,8 +1131,14 @@ type UserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
-	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Gram uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // NewCreateUserSessionIssuerRequestBody builds the HTTP request body from the
@@ -1154,6 +1178,8 @@ func NewCreateUserSessionIssuerUserSessionIssuerOK(body *CreateUserSessionIssuer
 		AuthnChallengeMode:            *body.AuthnChallengeMode,
 		SessionDurationHours:          *body.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:  body.TrustedRemoteSessionClientID,
 		CreatedAt:                     *body.CreatedAt,
 		UpdatedAt:                     *body.UpdatedAt,
 	}
@@ -1322,6 +1348,8 @@ func NewUpdateUserSessionIssuerUserSessionIssuerOK(body *UpdateUserSessionIssuer
 		AuthnChallengeMode:            *body.AuthnChallengeMode,
 		SessionDurationHours:          *body.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:  body.TrustedRemoteSessionClientID,
 		CreatedAt:                     *body.CreatedAt,
 		UpdatedAt:                     *body.UpdatedAt,
 	}
@@ -1658,6 +1686,8 @@ func NewGetUserSessionIssuerUserSessionIssuerOK(body *GetUserSessionIssuerRespon
 		AuthnChallengeMode:            *body.AuthnChallengeMode,
 		SessionDurationHours:          *body.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:  body.TrustedRemoteSessionClientID,
 		CreatedAt:                     *body.CreatedAt,
 		UpdatedAt:                     *body.UpdatedAt,
 	}
@@ -2003,6 +2033,12 @@ func ValidateCreateUserSessionIssuerResponseBody(body *CreateUserSessionIssuerRe
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
 		}
 	}
+	if body.TrustedRemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.TrustedRemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -2049,6 +2085,12 @@ func ValidateUpdateUserSessionIssuerResponseBody(body *UpdateUserSessionIssuerRe
 		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
 		}
+	}
+	if body.TrustedRemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.TrustedRemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2112,6 +2154,12 @@ func ValidateGetUserSessionIssuerResponseBody(body *GetUserSessionIssuerResponse
 		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
 		}
+	}
+	if body.TrustedRemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.TrustedRemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -3366,6 +3414,12 @@ func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) 
 		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
 		}
+	}
+	if body.TrustedRemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.TrustedRemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

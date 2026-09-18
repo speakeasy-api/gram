@@ -80,13 +80,14 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 	}
 
 	if err := s.audit.LogUserSessionIssuerCreate(ctx, dbtx, audit.LogUserSessionIssuerCreateEvent{
-		OrganizationID:       authCtx.ActiveOrganizationID,
-		ProjectID:            *authCtx.ProjectID,
-		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:     authCtx.Email,
-		ActorSlug:            nil,
-		UserSessionIssuerURN: urn.NewUserSessionIssuer(row.ID),
-		Slug:                 row.Slug,
+		OrganizationID:                 authCtx.ActiveOrganizationID,
+		ProjectID:                      *authCtx.ProjectID,
+		Actor:                          urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:               authCtx.Email,
+		ActorSlug:                      nil,
+		UserSessionIssuerURN:           urn.NewUserSessionIssuer(row.ID),
+		Slug:                           row.Slug,
+		UserSessionIssuerSnapshotAfter: UserSessionIssuerView(row),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log user session issuer creation").LogError(ctx, logger)
 	}
@@ -427,6 +428,8 @@ func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer 
 		AuthnChallengeMode:            row.AuthnChallengeMode,
 		SessionDurationHours:          int(dur / time.Hour),
 		ClientIDMetadataAdmissionMode: string(mode),
+		TrustedRemoteSessionIssuerID:  conv.FromNullableUUID(row.TrustedRemoteSessionIssuerID),
+		TrustedRemoteSessionClientID:  conv.FromNullableUUID(row.TrustedRemoteSessionClientID),
 		CreatedAt:                     row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                     row.UpdatedAt.Time.Format(time.RFC3339),
 	}

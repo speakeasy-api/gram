@@ -5,10 +5,12 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"log"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"testing"
@@ -35,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	jsonwebkeysetsrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -51,11 +54,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
-var infra *testenv.Environment
+var (
+	infra                *testenv.Environment
+	testIssuerTLSRootCAs *x509.CertPool
+)
 
 func TestMain(m *testing.M) {
+	certificateServer := httptest.NewTLSServer(nil)
+	testIssuerTLSRootCAs = x509.NewCertPool()
+	testIssuerTLSRootCAs.AddCert(certificateServer.Certificate())
+	certificateServer.Close()
+
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
@@ -84,21 +96,40 @@ type testInstance struct {
 	sessionManager *sessions.Manager
 	envEntries     *environments.EnvironmentEntries
 	redisCache     *cache.RedisCacheAdapter
+	tunnelRoutes   *route.RouteTable
 	features       *productfeatures.Client
 }
 
+type testServiceConfig struct {
+	tunnelRouting bool
+	maxDBConns    int32
+}
+
 func newTestService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestServiceWithConfig(t, testServiceConfig{tunnelRouting: false})
+}
+
+func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardian.WithTLSRootCAs(testIssuerTLSRootCAs))
 	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
+	if cfg.maxDBConns > 0 {
+		poolConfig := conn.Config()
+		conn.Close()
+		poolConfig.MaxConns = cfg.maxDBConns
+		conn, err = pgxpool.NewWithConfig(ctx, poolConfig)
+		require.NoError(t, err)
+		t.Cleanup(conn.Close)
+	}
 
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
@@ -114,6 +145,12 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	serverURL, err := url.Parse(testServerURL)
 	require.NoError(t, err)
+	var tunnelRoutes *route.RouteTable
+	var tunnels *tunnelrouting.HTTPClient
+	if cfg.tunnelRouting {
+		tunnelRoutes = route.NewRouteTable()
+		tunnels = tunnelrouting.NewHTTPClient(tunnelRoutes, "test-forward-token", guardianPolicy, []string{"127.0.0.0/8"})
+	}
 
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 
@@ -127,9 +164,10 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		enc,
 		envEntries,
 		guardianPolicy,
+		tunnels,
 		audit.NewLogger(),
 		serverURL,
-		remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), conn, enc, guardianPolicy, redisCache),
+		remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), conn, enc, guardianPolicy, tunnels, redisCache),
 		features,
 	)
 
@@ -139,6 +177,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager: sessionManager,
 		envEntries:     envEntries,
 		redisCache:     redisCache,
+		tunnelRoutes:   tunnelRoutes,
 		features:       features,
 	}
 }
@@ -272,6 +311,73 @@ func seedOrganizationTierUserSessionIssuer(t *testing.T, ctx context.Context, co
 	})
 	require.NoError(t, err)
 	return id
+}
+
+// createTrustedOrganizationTierUserSessionIssuer creates an organization-level
+// user-session issuer whose trust anchor is remoteIssuerID.
+func createTrustedOrganizationTierUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string, remoteIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	return createTrustedOrganizationTierUserSessionIssuerForOrganization(t, ctx, conn, authCtx.ActiveOrganizationID, slug, remoteIssuerID)
+}
+
+// createTrustedOrganizationTierUserSessionIssuerForOrganization bypasses the
+// management API's tenant validation so lifecycle tests can cover malformed or
+// legacy cross-tenant references defensively.
+func createTrustedOrganizationTierUserSessionIssuerForOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug string, remoteIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	issuer, err := usersessionsrepo.New(conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               conv.ToPGText(organizationID),
+		Slug:                         slug,
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+		TrustedRemoteSessionIssuerID: conv.ToNullUUID(remoteIssuerID),
+		TrustedRemoteSessionClientID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+func createTrustedClientOrganizationTierUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string, remoteIssuerID, remoteClientID uuid.UUID) uuid.UUID {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	return createTrustedClientOrganizationTierUserSessionIssuerForOrganization(t, ctx, conn, slug, authCtx.ActiveOrganizationID, remoteIssuerID, remoteClientID)
+}
+
+func createTrustedClientOrganizationTierUserSessionIssuerForOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug, organizationID string, remoteIssuerID, remoteClientID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	issuer, err := usersessionsrepo.New(conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               conv.ToPGText(organizationID),
+		Slug:                         slug,
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+		TrustedRemoteSessionIssuerID: conv.ToNullUUID(remoteIssuerID),
+		TrustedRemoteSessionClientID: conv.ToNullUUID(remoteClientID),
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+func clearTrustedRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	empty := ""
+	_, err := usersessionsrepo.New(conn).UpdateOrganizationUserSessionIssuer(ctx, usersessionsrepo.UpdateOrganizationUserSessionIssuerParams{
+		Slug:                          pgtype.Text{},
+		AuthnChallengeMode:            pgtype.Text{},
+		SessionDuration:               pgtype.Interval{},
+		ClientIDMetadataAdmissionMode: pgtype.Text{},
+		TrustedRemoteSessionIssuerID:  conv.PtrToPGText(&empty),
+		TrustedRemoteSessionClientID:  conv.PtrToPGText(&empty),
+		ID:                            issuerID,
+		OrganizationID:                authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
 }
 
 func countRemoteSessionClientUserSessionIssuerBindings(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, userIssuerID uuid.UUID) int {
@@ -466,6 +572,43 @@ func seedOrgLevelRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.P
 		}))
 	}
 	return created.ID
+}
+
+func seedTrustedIdentityProviderClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	organizationID := conv.ToPGText(authCtx.ActiveOrganizationID)
+
+	issuer, err := repo.New(conn).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{},
+		OrganizationID:                    organizationID,
+		Slug:                              slug,
+		Issuer:                            "https://" + slug + ".example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://" + slug + ".example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://" + slug + ".example.com/token"),
+		ScopesSupported:                   []string{"openid", "email", "offline_access"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+	})
+	require.NoError(t, err)
+	client, err := repo.New(conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:                       uuid.NullUUID{},
+		OrganizationID:                  organizationID,
+		RemoteSessionIssuerID:           issuer.ID,
+		ClientID:                        slug + "-client",
+		ClientSecretEncrypted:           conv.ToPGText("encrypted-test-secret"),
+		ClientIDIssuedAt:                conv.ToPGTimestamptz(time.Now().UTC()),
+		ClientSecretExpiresAt:           pgtype.Timestamptz{},
+		TokenEndpointAuthMethod:         conv.ToPGText("client_secret_basic"),
+		TokenEndpointAuthAudienceFormat: pgtype.Text{},
+		Scope:                           []string{"openid", "email", "offline_access"},
+		Audience:                        pgtype.Text{},
+		LegacyCallbackUrl:               false,
+	})
+	require.NoError(t, err)
+	return issuer.ID, client.ID
 }
 
 // seedRemoteClientAtTier creates a remote client with explicit tenancy and
@@ -740,9 +883,8 @@ func revokeJsonWebKey(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 	require.NoError(t, err)
 }
 
-// forceTokenEndpointAuthMethod writes a token_endpoint_auth_method the Goa enum
-// does not yet accept. private_key_jwt arrives with AIM-156; until then the only
-// way to exercise the rules that guard it is to plant the value directly.
+// forceTokenEndpointAuthMethod writes a client auth method directly for fixture
+// scenarios that need to bypass the management handler's coupling checks.
 func forceTokenEndpointAuthMethod(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID uuid.UUID, projectID uuid.UUID, method string) {
 	t.Helper()
 

@@ -51,6 +51,11 @@ export class Risk extends ClientSDK {
     return (this._policies ??= new Policies(this._options));
   }
 
+  private _signals?: Signals;
+  get signals(): Signals {
+    return (this._signals ??= new Signals(this._options));
+  }
+
   private _blocks?: Blocks;
   get blocks(): Blocks {
     return (this._blocks ??= new Blocks(this._options));
@@ -59,11 +64,6 @@ export class Risk extends ClientSDK {
   private _overview?: Overview;
   get overview(): Overview {
     return (this._overview ??= new Overview(this._options));
-  }
-
-  private _signals?: Signals;
-  get signals(): Signals {
-    return (this._signals ??= new Signals(this._options));
   }
 
   private _categories?: Categories;

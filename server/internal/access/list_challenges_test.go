@@ -12,6 +12,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -95,6 +96,10 @@ func TestListChallenges_ReturnsCHData(t *testing.T) {
 	require.Equal(t, "user:test-user", c.PrincipalUrn)
 	require.Equal(t, "deny", c.Outcome)
 	require.Equal(t, "org:admin", c.Scope)
+	require.Equal(t, map[string]string{
+		"resource_kind": "org",
+		"resource_id":   authCtx.ActiveOrganizationID,
+	}, c.Selector)
 
 	// No resolution yet.
 	require.Nil(t, c.ResolvedAt)
@@ -488,6 +493,20 @@ func insertCHChallengeUnattributed(t *testing.T, ti *testInstance, orgID, challe
 func insertCHChallengeRow(t *testing.T, ti *testInstance, orgID, challengeID, outcome, principalURN, scope, resourceKind, resourceID string, userID, userEmail *string) {
 	t.Helper()
 
+	selector := ""
+	if scope != "" && resourceKind != "" && resourceID != "" {
+		value := authz.NewSelector(authz.Scope(scope), resourceID)
+		value[authz.SelectorKeyResourceKind] = resourceKind
+		encoded, err := value.MarshalJSON()
+		require.NoError(t, err)
+		selector = string(encoded)
+	}
+	insertCHChallengeRowWithSelector(t, ti, orgID, challengeID, outcome, principalURN, scope, resourceKind, resourceID, selector, userID, userEmail)
+}
+
+func insertCHChallengeRowWithSelector(t *testing.T, ti *testInstance, orgID, challengeID, outcome, principalURN, scope, resourceKind, resourceID, selector string, userID, userEmail *string) {
+	t.Helper()
+
 	err := ti.chConn.Exec(t.Context(), `
 		INSERT INTO authz_challenges (
 			id, timestamp, organization_id, project_id,
@@ -508,7 +527,7 @@ func insertCHChallengeRow(t *testing.T, ti *testInstance, orgID, challengeID, ou
 			?, ?,
 			array(),
 			'require', ?, 'no_grants',
-			?, ?, ?, '',
+			?, ?, ?, ?,
 			array(),
 			array(), array(), array(), array(),
 			array(), array(), array(), array(),
@@ -518,7 +537,7 @@ func insertCHChallengeRow(t *testing.T, ti *testInstance, orgID, challengeID, ou
 		principalURN,
 		userID, userEmail,
 		outcome,
-		scope, resourceKind, resourceID,
+		scope, resourceKind, resourceID, selector,
 	)
 	require.NoError(t, err)
 }

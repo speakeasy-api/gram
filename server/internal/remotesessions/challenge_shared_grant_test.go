@@ -83,7 +83,7 @@ func seedSharedGrantAcrossIssuers(t *testing.T) (context.Context, sharedGrantFix
 	}
 }
 
-func newTestUpstreamRevoker(t *testing.T, ti *testInstance) *remotesessions.UpstreamRevoker {
+func newTestUpstreamRevoker(t *testing.T, ti *testInstance, signers ...remotesessions.TokenEndpointAssertionSigner) *remotesessions.UpstreamRevoker {
 	t.Helper()
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
@@ -95,6 +95,8 @@ func newTestUpstreamRevoker(t *testing.T, ti *testInstance) *remotesessions.Upst
 		ti.conn,
 		testenv.NewEncryptionClient(t),
 		policy,
+		nil,
+		signers...,
 	)
 }
 
@@ -568,6 +570,7 @@ func seedRefreshableSharedGrant(t *testing.T, slug string, handler http.HandlerF
 		ti.conn,
 		enc,
 		policy,
+		nil,
 		cache.NoopCache,
 		mustURL(t, "http://localhost"),
 	)

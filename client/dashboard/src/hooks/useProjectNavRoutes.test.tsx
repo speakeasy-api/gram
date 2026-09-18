@@ -24,6 +24,12 @@ function route(title: string, url: string): AppRoute {
 }
 
 const routes = {
+  mcpSessions: route("MCP Sessions", "mcp-sessions"),
+  remoteIdentityProviders: route(
+    "Remote Identity Providers",
+    "remote-identity-providers",
+  ),
+  agents: route("Agent Identity", "agent-management"),
   agentSessions: route("Agent Sessions", "agent-sessions"),
   assistants: route("Assistants", "assistants"),
   catalog: route("Catalog", "catalog"),
@@ -46,6 +52,7 @@ const routes = {
   riskOverview: route("Risk Overview", "risk"),
   watchdog: route("Watchdog", "watchdog"),
   settings: route("Project settings", "settings"),
+  shadowAI: route("Shadow AI", "shadow-ai"),
   shadowMCP: route("Shadow MCP", "shadow-mcp"),
   sources: route("Sources", "sources"),
 };
@@ -78,6 +85,8 @@ beforeEach(() => {
   testState.projectId = "project_a";
   testState.orgMemoryEnabled = false;
   testState.featureFlags = {
+    [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
+    [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
     [FEATURE_FLAGS.assistants]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag("loading"),
@@ -85,20 +94,77 @@ beforeEach(() => {
 });
 
 describe("useProjectNavRoutes", () => {
-  it("does not include a dedicated Shadow AI destination", () => {
-    const { result } = renderHook(() => useProjectNavRoutes());
+  it.each(["loading", "disabled", "missing", "error"] as const)(
+    "hides agent management when its rollout is %s",
+    (status) => {
+      testState.featureFlags[FEATURE_FLAGS.agentManagement] = { status };
+      const { result } = renderHook(() => useProjectNavRoutes());
+      expect(
+        result.current.some((entry) => entry.route === routes.agents),
+      ).toBe(false);
+    },
+  );
 
-    expect(
-      result.current.some((entry) => entry.route.title === "Shadow AI"),
-    ).toBe(false);
+  it("includes sessions and remote providers in project navigation", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    expect(result.current.map((entry) => entry.route)).toEqual(
+      expect.arrayContaining([
+        routes.mcpSessions,
+        routes.remoteIdentityProviders,
+      ]),
+    );
   });
 
-  it("uses Shadow MCP as the sidebar destination while leaving Approval Requests out of nav", () => {
+  it("includes Agent Identity for owners without requiring role grants", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const agents = result.current.find(
+      (entry) => entry.route === routes.agents,
+    );
+
+    expect(agents?.scope).toEqual([]);
+  });
+
+  it("uses the selected project's read grant for MCP Sessions", () => {
+    const { result, rerender } = renderHook(() => useProjectNavRoutes());
+    const sessions = () =>
+      result.current.find((entry) => entry.route === routes.mcpSessions);
+    expect(sessions()?.scope).toEqual(["project:read"]);
+    expect(sessions()?.resourceId).toBe("project_a");
+    testState.projectId = "project_b";
+    rerender();
+    expect(sessions()?.resourceId).toBe("project_b");
+  });
+
+  it("lists Identity before MCP Gateway, Security and Policy, and Observability", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const navRoutes = result.current.map((entry) => entry.route);
+    expect(navRoutes.slice(2, 6)).toEqual([
+      routes.identities,
+      routes.agents,
+      routes.mcpSessions,
+      routes.remoteIdentityProviders,
+    ]);
+    expect(navRoutes.indexOf(routes.playground)).toBeLessThan(
+      navRoutes.indexOf(routes.riskOverview),
+    );
+    expect(navRoutes.indexOf(routes.shadowAI)).toBeLessThan(
+      navRoutes.indexOf(routes.costs),
+    );
+  });
+
+  it("uses Shadow AI as the nav destination, with Shadow MCP folded into it", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+
+    const titles = result.current.map((entry) => entry.route.title);
+    expect(titles).toContain("Shadow AI");
+    expect(titles).not.toContain("Shadow MCP");
+  });
+
+  it("leaves Approval Requests out of nav", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
 
     const navTitles = result.current.map((entry) => entry.route.title);
 
-    expect(navTitles).toContain("Shadow MCP");
     expect(navTitles).not.toContain("Approval Requests");
   });
 
@@ -132,6 +198,8 @@ describe("useProjectNavRoutes", () => {
     "preserves opt-in and opt-out navigation while flags are %s",
     (status) => {
       testState.featureFlags = {
+        [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
+        [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
         [FEATURE_FLAGS.assistants]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag(status),
@@ -151,6 +219,8 @@ describe("useProjectNavRoutes", () => {
 
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
+      [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
+      [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
       [FEATURE_FLAGS.assistants]: { status: "enabled" },
       [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
       [FEATURE_FLAGS.riskWatchdog]: { status: "enabled" },

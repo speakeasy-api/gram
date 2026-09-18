@@ -361,7 +361,7 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
 			}
-			stripeMeterEvents, err := newStripeMeterEventClient(guardianPolicy, c)
+			stripeMeterEvents, err := newStripeMeterEventClient(logger, guardianPolicy, c)
 			if err != nil {
 				return fmt.Errorf("failed to create Stripe meter event client: %w", err)
 			}
@@ -637,7 +637,7 @@ func newStreamsCommand() *cli.Command {
 			// Start subscription receivers in this block
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
-				if queue := c.String(networkIngressQueueFlag); queue != "" && queue == string(temporalEnv.Queue()) {
+				if queue := c.String(networkIngressQueueFlag); queue != "" {
 					client := &background.NetworkIngressClient{Client: temporalEnv.Client(), Queue: queue}
 					mustReceiveBatchWithResult(rg, &networkingressv1.ReconcileRequested{}, &networkingressv1.Reconciler{}, networkingress.NewReconcileHandler(logger, queue, client.SignalNetworkIngress), gcp.BatchReceiveSettings{MaxMessages: 100, MaxBytes: constants.MiB, MaxLatency: time.Second})
 				}

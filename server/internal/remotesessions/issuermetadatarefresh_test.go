@@ -37,11 +37,11 @@ import (
 // newIssuerMetadataRefresher builds the refresher over the test database with a manual metric reader.
 func newIssuerMetadataRefresher(t *testing.T, ti *testInstance) (*remotesessions.IssuerMetadataRefresher, *sdkmetric.ManualReader) {
 	t.Helper()
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{}, guardian.WithTLSRootCAs(testIssuerTLSRootCAs))
 	require.NoError(t, err)
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	return remotesessions.NewIssuerMetadataRefresher(testenv.NewLogger(t), provider, ti.conn, policy, audit.NewLogger()), reader
+	return remotesessions.NewIssuerMetadataRefresher(testenv.NewLogger(t), provider, ti.conn, policy, nil, audit.NewLogger()), reader
 }
 
 // metadataTracking is the tracking state a test stamps on an issuer row; a nil errorAt with an error means now.
@@ -427,6 +427,43 @@ func TestIssuerMetadataRefresh_Refresh_TransientFailureRetriesWithinTheHour(t *t
 	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure])
 }
 
+func TestIssuerMetadataRefresh_Refresh_JWKSFailureRetriesTheKeyURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	refresher, reader := newIssuerMetadataRefresher(t, ti)
+	var upstream *httptest.Server
+	upstream = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/oauth-authorization-server":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"issuer":                 upstream.URL,
+				"authorization_endpoint": upstream.URL + "/authorize",
+				"token_endpoint":         upstream.URL + "/token",
+				"jwks_uri":               upstream.URL + "/jwks",
+			})
+		case "/jwks":
+			w.WriteHeader(http.StatusServiceUnavailable)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	now := time.Now()
+	id := createProjectIssuer(t, ctx, ti, "refresh-jwks-transient", upstream.URL)
+	outcome, err := refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+
+	after := loadIssuerByID(t, ctx, ti, id)
+	require.Equal(t, upstream.URL+"/jwks", after.MetadataLastErrorUrl.String, after.MetadataLastError.String)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure, outcome)
+	require.False(t, fetchDue(t, ctx, ti, id, now))
+	require.True(t, fetchDue(t, ctx, ti, id, now.Add(61*time.Minute)))
+	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure])
+}
+
 func TestIssuerMetadataRefresh_Refresh_NewerFetchDuringDiscoveryIsConflict(t *testing.T) {
 	t.Parallel()
 
@@ -564,6 +601,65 @@ func TestIssuerMetadataRefresh_Refresh_DefinitiveFailureWaitsForTheDailyCutoff(t
 
 	require.False(t, fetchDue(t, ctx, ti, id, now.Add(23*time.Hour)), "not due again until a day after the failure")
 	require.True(t, fetchDue(t, ctx, ti, id, now.Add(25*time.Hour)))
+	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure])
+}
+
+func TestIssuerMetadataRefresh_RefreshIncompatibleWithTrustedClientBacksOff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	refresher, reader := newIssuerMetadataRefresher(t, ti)
+	upstream := fakeIssuerServer(t, func(doc map[string]any) {
+		doc["scopes_supported"] = []string{"openid"}
+	})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	now := time.Now()
+	past := now.Add(-25 * time.Hour).Truncate(time.Microsecond)
+
+	issuer, err := repo.New(ti.conn).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{},
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "refresh-trusted-incompatible",
+		Issuer:                            upstream.URL,
+		AuthorizationEndpoint:             conv.ToPGText(upstream.URL + "/authorize"),
+		TokenEndpoint:                     conv.ToPGText(upstream.URL + "/token"),
+		ScopesSupported:                   []string{"openid", "email", "offline_access"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+	})
+	require.NoError(t, err)
+	client, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:                       uuid.NullUUID{},
+		OrganizationID:                  conv.ToPGText(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID:           issuer.ID,
+		ClientID:                        "refresh-trusted-incompatible-client",
+		ClientSecretEncrypted:           conv.ToPGText("encrypted-test-secret"),
+		ClientIDIssuedAt:                conv.ToPGTimestamptz(now),
+		ClientSecretExpiresAt:           pgtype.Timestamptz{},
+		TokenEndpointAuthMethod:         conv.ToPGText("client_secret_basic"),
+		TokenEndpointAuthAudienceFormat: pgtype.Text{},
+		Scope:                           []string{"openid", "email", "offline_access"},
+		Audience:                        pgtype.Text{},
+		LegacyCallbackUrl:               false,
+	})
+	require.NoError(t, err)
+	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "refresh-trusted-incompatible-usi", issuer.ID, client.ID)
+	setIssuerMetadataTracking(t, ctx, ti, issuer.ID, metadataTracking{document: "", fetchedAt: &past, lastError: "", errorAt: nil, errorURL: ""})
+
+	outcome, err := refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, issuer.ID))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure, outcome)
+
+	after := loadIssuerByID(t, ctx, ti, issuer.ID)
+	require.Equal(t, past, after.MetadataFetchedAt.Time, "the incompatible capability write must roll back")
+	require.Contains(t, after.ScopesSupported, "email")
+	require.Equal(t, "issuer metadata is incompatible with a trusted identity-provider client", after.MetadataLastError.String)
+	require.True(t, after.MetadataLastErrorAt.Valid)
+	require.False(t, after.MetadataLastErrorUrl.Valid)
+	require.False(t, fetchDue(t, ctx, ti, issuer.ID, now.Add(23*time.Hour)))
+	require.True(t, fetchDue(t, ctx, ti, issuer.ID, now.Add(25*time.Hour)))
 	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure])
 }
 
@@ -924,6 +1020,7 @@ func TestIssuerMetadataRefresh_NoteUse_ListClientsRefreshesTheIssuerItRenders(t 
 		ti.conn,
 		testenv.NewEncryptionClient(t),
 		policy,
+		nil,
 		ti.redisCache,
 		mustURL(t, "http://localhost"),
 		remotesessions.WithIssuerMetadataRefresher(refresher),

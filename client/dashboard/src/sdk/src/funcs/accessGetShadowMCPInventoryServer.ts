@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getShadowMCPInventoryServer access
  *
  * @remarks
- * Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.
+ * Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.
  */
 export function accessGetShadowMCPInventoryServer(
   client: GramCore,

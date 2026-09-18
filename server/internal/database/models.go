@@ -93,6 +93,25 @@ type AiIntegrationSync struct {
 	ID                    uuid.UUID
 }
 
+type AiScanTarget struct {
+	OrganizationID  string
+	ID              string
+	DisplayName     pgtype.Text
+	Category        pgtype.Text
+	BundleIds       []string
+	Binaries        []string
+	ConfigDirs      []string
+	ProcessNames    []string
+	VersionPlistKey pgtype.Text
+	CimdVendorKeys  []string
+	OauthClientIds  []string
+	ClientInfoNames []string
+	Status          string
+	Rationale       pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
 type ApiKey struct {
 	ID                     uuid.UUID
 	OrganizationID         string
@@ -166,6 +185,7 @@ type AssistantMcpOauthClient struct {
 	ClientID              pgtype.Text
 	ClientSecretEncrypted pgtype.Text
 	ClientSecretExpiresAt pgtype.Timestamptz
+	ClientIDMetadataUri   pgtype.Text
 	RegistrationOwner     uuid.NullUUID
 	RegistrationStartedAt pgtype.Timestamptz
 	CreatedAt             pgtype.Timestamptz
@@ -657,28 +677,6 @@ type DeploymentsPackage struct {
 	VersionID    uuid.UUID
 }
 
-type DeviceAgentAiScanCatalog struct {
-	OrganizationID string
-	ListVersion    int32
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-}
-
-type DeviceAgentAiScanTarget struct {
-	OrganizationID  string
-	ID              string
-	DisplayName     string
-	Category        string
-	BundleIds       []string
-	Binaries        []string
-	ConfigDirs      []string
-	ProcessNames    []string
-	VersionPlistKey pgtype.Text
-	Enabled         bool
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-}
-
 type DeviceAgentConfiguration struct {
 	OrganizationID string
 	SchemaVersion  int32
@@ -856,18 +854,19 @@ type ExternalCredential struct {
 }
 
 type ExternalKey struct {
-	ID                     uuid.UUID
-	OrganizationID         pgtype.Text
-	ProjectID              uuid.NullUUID
-	ExternalCredentialID   uuid.UUID
-	Provider               string
-	Algorithm              string
-	Name                   string
-	CustomerGrantReference pgtype.Text
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
+	ID                           uuid.UUID
+	OrganizationID               pgtype.Text
+	ProjectID                    uuid.NullUUID
+	ExternalCredentialID         uuid.UUID
+	Provider                     string
+	Algorithm                    string
+	Name                         string
+	CustomerGrantReference       pgtype.Text
+	IdentityProviderConnectionID uuid.NullUUID
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+	DeletedAt                    pgtype.Timestamptz
+	Deleted                      bool
 }
 
 type ExternalMcpAttachment struct {
@@ -1124,6 +1123,19 @@ type HttpToolDefinition struct {
 	Deleted             bool
 }
 
+type IdentityProviderConnection struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Provider       string
+	Status         string
+	LastVerifiedAt pgtype.Timestamptz
+	LastError      pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type JsonWebKey struct {
 	ID                 uuid.UUID
 	OrganizationID     string
@@ -1144,15 +1156,16 @@ type JsonWebKey struct {
 }
 
 type JsonWebKeySet struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	ExternalKeyID  uuid.UUID
-	Name           string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                           uuid.UUID
+	OrganizationID               string
+	ProjectID                    uuid.NullUUID
+	ExternalKeyID                uuid.UUID
+	Name                         string
+	IdentityProviderConnectionID uuid.NullUUID
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+	DeletedAt                    pgtype.Timestamptz
+	Deleted                      bool
 }
 
 type KillswitchExpiryEvent struct {
@@ -1435,6 +1448,7 @@ type MetaMcpServer struct {
 	ProjectID           uuid.UUID
 	UserSessionIssuerID uuid.NullUUID
 	Name                string
+	Instructions        pgtype.Text
 	Visibility          string
 	NetworkAccessMode   pgtype.Text
 	CreatedAt           pgtype.Timestamptz
@@ -1542,6 +1556,29 @@ type OauthProxyServer struct {
 	Deleted   bool
 }
 
+type OktaIdentityProviderConnection struct {
+	IdentityProviderConnectionID        uuid.UUID
+	IdentityProviderConnectionsProvider string
+	OrganizationID                      string
+	AttachmentScope                     pgtype.Text
+	OrgUrl                              string
+	IssuerUrl                           string
+	IssuerUrlOverrideReason             pgtype.Text
+	OwnershipClaimed                    bool
+	RemoteSessionIssuerID               uuid.UUID
+	RemoteSessionClientID               uuid.UUID
+	DpopRequired                        bool
+	GrantedScopes                       []string
+	ObservedAdminRoles                  []string
+	ListingMode                         string
+	AgentID                             pgtype.Text
+	AgentAppID                          pgtype.Text
+	CreatedAt                           pgtype.Timestamptz
+	UpdatedAt                           pgtype.Timestamptz
+	DeletedAt                           pgtype.Timestamptz
+	Deleted                             bool
+}
+
 type OpenrouterApiKey struct {
 	OrganizationID string
 	KeyType        string
@@ -1646,6 +1683,14 @@ type OrganizationMetadatum struct {
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
+}
+
+type OrganizationOnboarding struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Preset         pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type OrganizationRole struct {
@@ -2107,6 +2152,23 @@ type PrincipalGrant struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type PrincipalRemoteSessionBinding struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	PrincipalID           uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	RemoteSessionID       uuid.UUID
+	IssuerAttachmentScope string
+	ClientAttachmentScope string
+	GrantGeneration       int64
+	AttachedBySubjectID   string
+	RevokedAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
 type Project struct {
 	ID                     uuid.UUID
 	Name                   string
@@ -2241,6 +2303,7 @@ type RemoteMcpServerHeader struct {
 
 type RemoteSession struct {
 	ID                     uuid.UUID
+	GrantGeneration        int64
 	SubjectUrn             urn.SessionSubject
 	UserSessionIssuerID    uuid.UUID
 	RemoteSessionClientID  uuid.UUID
@@ -2272,6 +2335,7 @@ type RemoteSessionClient struct {
 	ID                              uuid.UUID
 	ProjectID                       uuid.NullUUID
 	OrganizationID                  pgtype.Text
+	AttachmentScope                 pgtype.Text
 	RemoteSessionIssuerID           uuid.UUID
 	ClientID                        string
 	ClientSecretEncrypted           pgtype.Text
@@ -2280,6 +2344,7 @@ type RemoteSessionClient struct {
 	TokenEndpointAuthMethod         pgtype.Text
 	JsonWebKeySetID                 uuid.NullUUID
 	Scope                           []string
+	GrantTypes                      []string
 	Audience                        pgtype.Text
 	TokenEndpointAuthAudienceFormat pgtype.Text
 	ClientIDMetadataUri             pgtype.Text
@@ -2289,6 +2354,8 @@ type RemoteSessionClient struct {
 	ResourceDocumentation           pgtype.Text
 	ResourcePolicyUri               pgtype.Text
 	ResourceTosUri                  pgtype.Text
+	UpstreamRejectedAt              pgtype.Timestamptz
+	IdentityProviderConnectionID    uuid.NullUUID
 	CreatedAt                       pgtype.Timestamptz
 	UpdatedAt                       pgtype.Timestamptz
 	DeletedAt                       pgtype.Timestamptz
@@ -2301,10 +2368,29 @@ type RemoteSessionClientUserSessionIssuer struct {
 	CreatedAt             pgtype.Timestamptz
 }
 
+type RemoteSessionEmaBinding struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	Resource              string
+	RemoteSessionClientID uuid.NullUUID
+	Generation            int64
+	State                 pgtype.Text
+	GrantSource           pgtype.Text
+	RequestedScopes       []string
+	ClaimID               uuid.NullUUID
+	ClaimedAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
 type RemoteSessionIssuer struct {
 	ID                                         uuid.UUID
 	ProjectID                                  uuid.NullUUID
 	OrganizationID                             pgtype.Text
+	AttachmentScope                            pgtype.Text
 	Slug                                       string
 	Issuer                                     string
 	AuthorizationEndpoint                      pgtype.Text
@@ -2314,6 +2400,8 @@ type RemoteSessionIssuer struct {
 	JwksUri                                    pgtype.Text
 	Jwks                                       []byte
 	JwksFetchedAt                              pgtype.Timestamptz
+	JwksLastError                              pgtype.Text
+	JwksLastErrorAt                            pgtype.Timestamptz
 	JwksCacheExpiresAt                         pgtype.Timestamptz
 	JwksEtag                                   pgtype.Text
 	ServiceDocumentation                       pgtype.Text
@@ -2321,6 +2409,7 @@ type RemoteSessionIssuer struct {
 	OpTosUri                                   pgtype.Text
 	ScopesSupported                            []string
 	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
 	ResponseTypesSupported                     []string
 	TokenEndpointAuthMethodsSupported          []string
 	CodeChallengeMethodsSupported              []string
@@ -2397,9 +2486,6 @@ type RiskPolicy struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
-	MessageTypes         []string
-	ScopeInclude         pgtype.Text
-	ScopeExempt          pgtype.Text
 	Action               string
 	AudienceType         string
 	ShadowMcpDisposition pgtype.Text
@@ -2884,6 +2970,102 @@ type StripeWebhookReceipt struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+// Individual capabilities grouped by category; categories are not blanket support claims.
+type SupportMatrixCapability struct {
+	ID          uuid.UUID
+	Slug        string
+	Name        string
+	Category    string
+	Description string
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+}
+
+// Explicit method-platform-capability coverage. Missing rows are unknown; applicability must also be established before claiming support.
+type SupportMatrixCoverage struct {
+	ID               uuid.UUID
+	MethodPlatformID uuid.UUID
+	CapabilityID     uuid.UUID
+	// Application-validated: supported, partial, unimplemented, impossible, na, unknown. Partial coverage requires explanatory notes.
+	Status            string
+	Notes             string
+	NeedsVerification bool
+	SourceUrl         pgtype.Text
+	VerifiedAt        pgtype.Timestamptz
+	// NULL means unassessed; an empty array means unrestricted; otherwise lists eligible operating systems. Coverage restrictions supplement mapping restrictions.
+	OperatingSystems []string
+	// NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.
+	PlanTypes  []string
+	Conditions string
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+	DeletedAt  pgtype.Timestamptz
+}
+
+// Integration methods available for assessing support; plan_notes preserve method-level eligibility claims.
+type SupportMatrixIntegrationMethod struct {
+	ID          uuid.UUID
+	Slug        string
+	Name        string
+	Vendor      string
+	Description string
+	PlanNotes   string
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+}
+
+// Method-level reference claims. These do not establish support for any specific platform.
+type SupportMatrixMethodCapability struct {
+	ID                  uuid.UUID
+	IntegrationMethodID uuid.UUID
+	CapabilityID        uuid.UUID
+	// Application-validated: supported, partial, unimplemented, impossible, na, unknown. Partial coverage requires explanatory notes.
+	Status            string
+	Notes             string
+	NeedsVerification bool
+	SourceUrl         pgtype.Text
+	VerifiedAt        pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+}
+
+// Applicability of a method to a platform, assessed separately from its capability coverage. Missing rows are unknown.
+type SupportMatrixMethodPlatform struct {
+	ID                  uuid.UUID
+	IntegrationMethodID uuid.UUID
+	PlatformID          uuid.UUID
+	// Application-validated: unknown, applicable, na. Applicability alone never implies capability coverage.
+	Applicability string
+	// NULL means unassessed; an empty array means unrestricted; otherwise lists eligible operating systems. Coverage restrictions supplement mapping restrictions.
+	OperatingSystems []string
+	// NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.
+	PlanTypes  []string
+	Conditions string
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+	DeletedAt  pgtype.Timestamptz
+}
+
+// Global admin support catalog of upstream product surfaces, independent of customer installations.
+type SupportMatrixPlatform struct {
+	ID          uuid.UUID
+	Slug        string
+	Name        string
+	Vendor      string
+	Family      string
+	Surface     string
+	Description string
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+}
+
 // Durable record of a blocked tool call or prompt. One row per hook-time block decision, carrying the exact reason shown to the agent. Backs the durable /blocks/:id page and its thumbs feedback. The risk_results / risk_policies foreign keys are nullable enrichment links — the page renders from this row alone.
 type ToolCallBlock struct {
 	ID             uuid.UUID
@@ -3049,6 +3231,25 @@ type TriggerInstance struct {
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
+}
+
+type TrustedIssuerSession struct {
+	ID                             uuid.UUID
+	RemoteSessionClientID          uuid.NullUUID
+	OrganizationID                 pgtype.Text
+	ProjectID                      uuid.NullUUID
+	SubjectUrn                     string
+	IdentityAssertionEncrypted     pgtype.Text
+	IdentityAssertionExpiresAt     pgtype.Timestamptz
+	RefreshTokenEncrypted          pgtype.Text
+	RefreshExpiresAt               pgtype.Timestamptz
+	LastRefreshAttemptAt           pgtype.Timestamptz
+	OfflineAccessRefusedAt         pgtype.Timestamptz
+	OfflineAccessRequestConfigHash pgtype.Text
+	CreatedAt                      pgtype.Timestamptz
+	UpdatedAt                      pgtype.Timestamptz
+	DeletedAt                      pgtype.Timestamptz
+	Deleted                        bool
 }
 
 // Customer-hosted MCP server sources that connect to Gram through outbound tunnels.
@@ -3234,12 +3435,14 @@ type UserSessionIssuer struct {
 	ID                            uuid.UUID
 	ProjectID                     uuid.NullUUID
 	OrganizationID                pgtype.Text
+	AttachmentScope               pgtype.Text
 	Slug                          string
 	AuthnChallengeMode            string
 	SessionDuration               pgtype.Interval
 	Classification                string
 	ClientIDMetadataAdmissionMode pgtype.Text
 	TrustedRemoteSessionIssuerID  uuid.NullUUID
+	TrustedRemoteSessionClientID  uuid.NullUUID
 	CreatedAt                     pgtype.Timestamptz
 	UpdatedAt                     pgtype.Timestamptz
 	DeletedAt                     pgtype.Timestamptz
@@ -3256,6 +3459,18 @@ type UserSessionIssuerCimdClient struct {
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
 	Deleted             bool
+}
+
+type WorkloadAgentAssignment struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	AgentID          uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type WorkloadIdentityAdmission struct {

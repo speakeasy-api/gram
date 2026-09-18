@@ -13,7 +13,6 @@ export const FEATURE_FLAGS = {
   killswitches: "gram-killswitches",
   mcpResearch: "gram-mcp-research",
   newCostsPage: "gram-new-costs-page",
-  networkIngressRollout: "gram-network-ingress-rollout",
   paygSelfServeBilling: "gram-payg-self-serve-billing",
   promptPolicies: "gram-prompt-policies",
   rbac: "gram-rbac",

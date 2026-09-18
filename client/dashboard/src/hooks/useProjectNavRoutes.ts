@@ -13,7 +13,8 @@ export interface ProjectNavRoute {
    * Scopes that grant access — the user needs ANY one of them. Mirrors the
    * per-item `scope` props on `app-sidebar.tsx`'s `ScopeGatedNavItem`s so the
    * command palette gates the same pages the sidebar does. Keep these in sync
-   * with the sidebar when scopes change there.
+   * with the sidebar when scopes change there. An empty array means the page
+   * uses server-side ownership authorization and needs no navigation scope.
    */
   scope: Scope[];
   /** Resource selected for this route's scope check, when applicable. */
@@ -36,6 +37,8 @@ export interface ProjectNavRoute {
 export function useProjectNavRoutes(): ProjectNavRoute[] {
   const routes = useRoutes();
   const { id: projectId } = useProject();
+  const agentManagementFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
+  const userSessionsFlag = useFeatureFlag(FEATURE_FLAGS.userSessionsDashboard);
   const assistantsFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
   const deploymentsPageFlag = useFeatureFlag(FEATURE_FLAGS.deploymentsPage);
   const riskWatchdogFlag = useFeatureFlag(FEATURE_FLAGS.riskWatchdog);
@@ -59,6 +62,23 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     return [
       { route: routes.home, scope: read },
       { route: routes.chat, scope: read },
+      { route: routes.identities, scope: observe },
+      ...(agentManagementFlag.status === "enabled"
+        ? [{ route: routes.agents, scope: [] }]
+        : []),
+      ...(userSessionsFlag.status === "enabled"
+        ? [
+            {
+              route: routes.mcpSessions,
+              scope: read,
+              resourceId: projectId,
+            },
+          ]
+        : []),
+      {
+        route: routes.remoteIdentityProviders,
+        scope: ["org:read", "org:admin"],
+      },
       {
         route: routes.playground,
         scope: ["mcp:read", "mcp:write", "mcp:connect"],
@@ -77,14 +97,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
-      { route: routes.identities, scope: observe },
-      { route: routes.costs, scope: observe },
-      { route: routes.insights, scope: observe },
-      { route: routes.agentSessions, scope: observe },
-      ...(isOrgMemoryEnabled
-        ? [{ route: routes.orgMemory, scope: observe }]
-        : []),
-      { route: routes.logs, scope: observe },
       // Watchdog supersedes the Risk Overview page: with the flag on, it is
       // the Secure section's landing surface and the legacy overview nav item
       // hides (its route stays reachable by direct URL). Risk Events shows in
@@ -94,11 +106,20 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         : [{ route: routes.riskOverview, scope: read }]),
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
-      { route: routes.shadowMCP, scope: readWrite },
+      { route: routes.shadowAI, scope: readWrite },
+      { route: routes.costs, scope: observe },
+      { route: routes.insights, scope: observe },
+      { route: routes.agentSessions, scope: observe },
+      ...(isOrgMemoryEnabled
+        ? [{ route: routes.orgMemory, scope: observe }]
+        : []),
+      { route: routes.logs, scope: observe },
       { route: routes.settings, scope: ["project:write"] },
     ];
   }, [
     routes,
+    agentManagementFlag.status,
+    userSessionsFlag.status,
     projectId,
     isAssistantsEnabled,
     isDeploymentsPageEnabled,

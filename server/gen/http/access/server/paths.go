@@ -92,6 +92,11 @@ func ListEmployeeAIDetectionsAccessPath() string {
 	return "/rpc/access.listEmployeeAIDetections"
 }
 
+// SetAIToolDecisionAccessPath returns the URL path to the access service setAIToolDecision HTTP endpoint.
+func SetAIToolDecisionAccessPath() string {
+	return "/rpc/access.setAIToolDecision"
+}
+
 // ListResourceAudienceAccessPath returns the URL path to the access service listResourceAudience HTTP endpoint.
 func ListResourceAudienceAccessPath() string {
 	return "/rpc/access.listResourceAudience"
