@@ -1,6 +1,9 @@
 package analytics
 
 import (
+	"os"
+	"regexp"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -150,4 +153,44 @@ func TestToolCallPredicatesShareOneVocabulary(t *testing.T) {
 	for _, eventType := range toolCallEventTypes {
 		require.Contains(t, args, eventType)
 	}
+}
+
+// TestDatasetWindowIsBoundedByItsTableRetention: an event dataset reads
+// agent_events and a metric dataset agent_metrics, and each may ask for no
+// more than its table keeps.
+func TestDatasetWindowIsBoundedByItsTableRetention(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, MaxEventTimeRangeDays, Sessions.MaxTimeRangeDays())
+	require.Equal(t, MaxEventTimeRangeDays, ToolCalls.MaxTimeRangeDays())
+	require.Equal(t, int64(MaxEventTimeRangeDays)*nanosPerDay, Sessions.MaxTimeRangeNanos())
+
+	metric := &Dataset{Name: "spend", Kind: KindMetric, Grain: "measurement", Description: "", TimeExpr: "t", Fields: nil, Source: nil}
+	require.Equal(t, MaxMetricTimeRangeDays, metric.MaxTimeRangeDays())
+	require.Equal(t, MaxTimeRangeDays, metric.MaxTimeRangeDays(), "the metric limit is the ceiling")
+}
+
+// TestRetentionLimitsMatchTheSchema: the limits restate the tables' TTLs, and
+// the schema is the source of truth. If retention changes there, this fails
+// here rather than letting the catalog promise a window the table no longer
+// keeps.
+func TestRetentionLimitsMatchTheSchema(t *testing.T) {
+	t.Parallel()
+
+	schema, err := os.ReadFile("../../../clickhouse/schema.sql")
+	require.NoError(t, err, "the analytics package sits under server/, beside the schema")
+
+	ttl := func(table string) int {
+		t.Helper()
+		// The table's CREATE, then its TTL clause, before the next CREATE.
+		pattern := regexp.MustCompile(`(?s)CREATE TABLE IF NOT EXISTS ` + table + ` \(.*?TTL [^\n]*INTERVAL (\d+) DAY`)
+		match := pattern.FindSubmatch(schema)
+		require.NotNil(t, match, "no TTL found for %s", table)
+		days, err := strconv.Atoi(string(match[1]))
+		require.NoError(t, err)
+		return days
+	}
+
+	require.Equal(t, MaxEventTimeRangeDays, ttl("agent_events"), "agent_events TTL drifted from the catalog's event limit")
+	require.Equal(t, MaxMetricTimeRangeDays, ttl("agent_metrics"), "agent_metrics TTL drifted from the catalog's metric limit")
 }

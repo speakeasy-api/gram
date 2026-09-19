@@ -74,12 +74,27 @@ const (
 // Guardrails are enforced in the compiler, not the transport, so a direct Go
 // caller is bound by them too.
 const (
-	MaxDimensions     = 3
-	MaxFilterValues   = 100
-	MaxTimeRangeDays  = 730
-	DefaultLimit      = 100
-	MaxLimit          = 1000
+	MaxDimensions   = 3
+	MaxFilterValues = 100
+	DefaultLimit    = 100
+	MaxLimit        = 1000
+
+	// How long each kind's table keeps a row, from server/clickhouse/schema.sql:
+	// agent_events 90 days, agent_metrics 730 so billing can read historical
+	// cycles. A window reaching past a table's retention reads rows the TTL
+	// has already dropped and comes back silently incomplete, so a dataset
+	// caps its window at what its table still holds. These are the schema's
+	// numbers restated, and a test holds them to it.
+	MaxEventTimeRangeDays  = 90
+	MaxMetricTimeRangeDays = 730
+
+	// MaxTimeRangeDays is the ceiling over every dataset: the longest any
+	// window can be. A dataset's own limit is MaxTimeRangeDays(), which is
+	// what a compiler should enforce.
+	MaxTimeRangeDays  = MaxMetricTimeRangeDays
 	maxTimeRangeNanos = int64(MaxTimeRangeDays) * 24 * 60 * 60 * 1e9
+
+	nanosPerDay = int64(24 * 60 * 60 * 1e9)
 )
 
 // Field is one queryable thing on a dataset. Expr is the expression over the
@@ -113,6 +128,21 @@ type Dataset struct {
 	Fields   []Field
 	// Source builds the dataset's source query for one tenancy and window.
 	Source SourceQuery
+}
+
+// MaxTimeRangeDays is the longest window this dataset can answer honestly:
+// the retention of the table its kind reads.
+func (d *Dataset) MaxTimeRangeDays() int {
+	if d.Kind == KindMetric {
+		return MaxMetricTimeRangeDays
+	}
+	return MaxEventTimeRangeDays
+}
+
+// MaxTimeRangeNanos is MaxTimeRangeDays as a span of nanoseconds, the unit a
+// request's window is expressed in.
+func (d *Dataset) MaxTimeRangeNanos() int64 {
+	return int64(d.MaxTimeRangeDays()) * nanosPerDay
 }
 
 // Field finds a field by name.
