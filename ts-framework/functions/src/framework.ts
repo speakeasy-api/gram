@@ -554,7 +554,10 @@ export class Gram<
       validatedInput = request.input as Record<string, unknown>;
     } else {
       ctx.fail(
-        { error: vres.error.message, issues: vres.error.issues },
+        {
+          error: summarizeIssues(vres.error.issues),
+          issues: vres.error.issues,
+        },
         { status: 400 },
       );
     }
@@ -660,6 +663,42 @@ export class Gram<
       ...(resources.length > 0 ? { resources } : {}),
     };
   }
+}
+
+/**
+ * Renders validation issues as one line, each issue prefixed by the input path
+ * it concerns, e.g. `org_id: Invalid input: expected string, received
+ * undefined`.
+ *
+ * The failure body carries the structured `issues` array as well, so the
+ * message only has to be readable. `ZodError.message` is that same array
+ * re-serialized as pretty-printed JSON, which reports the failure twice and
+ * spends an MCP client's context on the unreadable copy.
+ */
+function summarizeIssues(issues: readonly z.core.$ZodIssue[]): string {
+  const lines = issues.map((issue) => {
+    const path = formatIssuePath(issue.path ?? []);
+    return path === "" ? issue.message : `${path}: ${issue.message}`;
+  });
+
+  return lines.join("; ") || "invalid input";
+}
+
+/**
+ * Renders an issue path — object keys and array indices — the way it would be
+ * written in JavaScript, e.g. `filters[0].name`.
+ */
+function formatIssuePath(path: readonly PropertyKey[]): string {
+  let out = "";
+  for (const segment of path) {
+    if (typeof segment === "number") {
+      out += `[${segment}]`;
+    } else {
+      out += out === "" ? String(segment) : `.${String(segment)}`;
+    }
+  }
+
+  return out;
 }
 
 /**
