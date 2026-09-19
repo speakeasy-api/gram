@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
 import { useOrganization } from "@/contexts/Auth";
+import { useOrgRoutes } from "@/routes";
+import { Link } from "react-router";
 import { capturePreservedStorageIfSafe } from "@/lib/logout-storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -49,6 +51,7 @@ export default function PlatformAdminOverview(): JSX.Element {
               <div className="space-y-8">
                 <OrgInfoSection />
                 <OrgOverrideSection />
+                <OinManifestSection />
                 {import.meta.env.DEV && <PlatformAdminImpersonationSection />}
               </div>
             </PlatformAdminGate>
@@ -104,6 +107,29 @@ export function OrgOverrideSection(): JSX.Element {
           Go to org
         </Button>
       </form>
+    </AdminSection>
+  );
+}
+
+function OinManifestSection(): JSX.Element {
+  const orgRoutes = useOrgRoutes();
+
+  return (
+    <AdminSection
+      title="OIN Cross App Access"
+      description="Export the platform catalog for Okta's Integration Network listing."
+    >
+      <AdminRow
+        label="XAA manifest"
+        description="Global ID-JAG issuers and their global clients, as JSON or Markdown for review in the OIN Wizard. Catalog readiness does not verify conformance. Never customer data."
+        action={
+          <Button asChild variant="secondary" size="sm">
+            <Link to={orgRoutes.platformAdminOinManifest.href()}>
+              <Button.Text>Open manifest</Button.Text>
+            </Link>
+          </Button>
+        }
+      />
     </AdminSection>
   );
 }

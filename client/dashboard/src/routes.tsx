@@ -112,6 +112,7 @@ import PlatformAdminOverview from "./pages/platform-admin/Overview";
 import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
 import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
 import PlatformAdminOpenRouterKeys from "./pages/platform-admin/OpenRouterKeys";
+import PlatformAdminOinManifest from "./pages/platform-admin/OinManifest";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
@@ -1452,6 +1453,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "platform-admin/openrouter-keys",
     icon: "key-round",
     component: PlatformAdminOpenRouterKeys,
+  },
+  platformAdminOinManifest: {
+    title: "OIN XAA Manifest",
+    url: "platform-admin/oin-manifest",
+    icon: "file-check",
+    component: PlatformAdminOinManifest,
   },
   deviceAgent: {
     title: "Device Agent",

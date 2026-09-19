@@ -103,6 +103,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oinmanifest"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
@@ -591,6 +592,16 @@ func serverFlags() []cli.Flag {
 		&cli.StringFlag{Name: "ssl-key-file", Usage: "The SSL key file path to use for the server", EnvVars: []string{"GRAM_SSL_KEY_FILE"}},
 		&cli.StringFlag{Name: "ssl-cert-file", Usage: "The SSL certificate file path to use for the server", EnvVars: []string{"GRAM_SSL_CERT_FILE"}},
 		&cli.StringFlag{Name: "github-evidence-token", Usage: "GitHub API token for MCP evidence repository lookups", EnvVars: []string{"GRAM_GITHUB_EVIDENCE_TOKEN"}},
+		&cli.StringFlag{
+			Name:    "oin-listing-name",
+			Usage:   "Listing name reported in the OIN Cross App Access manifest export (empty renders as unset)",
+			EnvVars: []string{"GRAM_OIN_LISTING_NAME"},
+		},
+		&cli.StringFlag{
+			Name:    "oin-listing-org-domain",
+			Usage:   "Organization domain reported in the OIN Cross App Access manifest export (empty renders as unset)",
+			EnvVars: []string{"GRAM_OIN_LISTING_ORG_DOMAIN"},
+		},
 		&cli.StringFlag{
 			Name:     "loops-api-key",
 			Usage:    "Loops API key for transactional emails (invite emails). Empty or 'unset' disables email sending.",
@@ -1539,6 +1550,11 @@ func newStartCommand() *cli.Command {
 			// this break-glass transport mounted but explicitly unavailable until
 			// that safe lifecycle composition exists.
 			killswitches.AttachPlatformService(mux, killswitches.NewPlatformService(logger, tracerProvider, db, sessionManager, authzEngine, nil))
+			oinmanifest.AttachPlatformService(mux, oinmanifest.NewPlatformService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, oinmanifest.Config{
+				ListingName: c.String("oin-listing-name"),
+				OrgDomain:   c.String("oin-listing-org-domain"),
+				ServerURL:   c.String("server-url"),
+			}))
 			killswitchService, err := killswitchapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
 			if err != nil {
 				return fmt.Errorf("build customer killswitch service: %w", err)

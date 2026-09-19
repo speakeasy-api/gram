@@ -2776,6 +2776,27 @@ func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionT
 	return err
 }
 
+const setGlobalRemoteSessionClientResourceIdentifierFixture = `-- name: SetGlobalRemoteSessionClientResourceIdentifierFixture :execrows
+UPDATE remote_session_clients
+SET resource_identifier = $1
+WHERE id = $2
+  AND project_id IS NULL
+  AND organization_id IS NULL
+`
+
+type SetGlobalRemoteSessionClientResourceIdentifierFixtureParams struct {
+	ResourceIdentifier pgtype.Text
+	ID                 uuid.UUID
+}
+
+func (q *Queries) SetGlobalRemoteSessionClientResourceIdentifierFixture(ctx context.Context, arg SetGlobalRemoteSessionClientResourceIdentifierFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setGlobalRemoteSessionClientResourceIdentifierFixture, arg.ResourceIdentifier, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setMCPServerNetworkAccessModeFixture = `-- name: SetMCPServerNetworkAccessModeFixture :execrows
 UPDATE mcp_servers
 SET network_access_mode = $1
@@ -3041,6 +3062,27 @@ type SetProjectSlugFixtureParams struct {
 func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugFixtureParams) error {
 	_, err := q.db.Exec(ctx, setProjectSlugFixture, arg.Slug, arg.ID)
 	return err
+}
+
+const setRemoteSessionIssuerGrantProfilesFixture = `-- name: SetRemoteSessionIssuerGrantProfilesFixture :execrows
+UPDATE remote_session_issuers
+SET authorization_grant_profiles_supported = $1::text[]
+WHERE id = $2
+`
+
+type SetRemoteSessionIssuerGrantProfilesFixtureParams struct {
+	GrantProfiles []string
+	ID            uuid.UUID
+}
+
+// Test-only fixture: no production query writes the advertised grant profiles
+// yet, so exports that key on the ID-JAG profile need it stamped directly.
+func (q *Queries) SetRemoteSessionIssuerGrantProfilesFixture(ctx context.Context, arg SetRemoteSessionIssuerGrantProfilesFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionIssuerGrantProfilesFixture, arg.GrantProfiles, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setRemoteSessionResourceFixture = `-- name: SetRemoteSessionResourceFixture :exec

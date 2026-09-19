@@ -367,6 +367,7 @@ trackedFiles:
   src/funcs/networkIngressGetIngress.ts: {}
   src/funcs/networkIngressRotateCredentials.ts: {}
   src/funcs/networkIngressUpdateIngress.ts: {}
+  src/funcs/oinManifestExport.ts: {}
   src/funcs/organizationAssetsUploadImage.ts: {}
   src/funcs/organizationRemoteSessionClientsAttachKeySet.ts: {}
   src/funcs/organizationRemoteSessionClientsCreate.ts: {}
@@ -1940,6 +1941,7 @@ trackedFiles:
   src/models/operations/evaluatepromptguardrail.ts: {}
   src/models/operations/evolvedeployment.ts: {}
   src/models/operations/exportmcpmetadata.ts: {}
+  src/models/operations/exportoinmanifest.ts: {}
   src/models/operations/fetchglobalremotesessionissuermetadata.ts: {}
   src/models/operations/fetchimagefromurl.ts: {}
   src/models/operations/fetchopenapiv3fromurl.ts: {}
@@ -3004,6 +3006,8 @@ trackedFiles:
   src/react-query/networkIngressDeleteIngress.ts: {}
   src/react-query/networkIngressGetDeleteImpact.core.ts: {}
   src/react-query/networkIngressGetDeleteImpact.ts: {}
+  src/react-query/oinManifestExport.core.ts: {}
+  src/react-query/oinManifestExport.ts: {}
   src/react-query/onboardingStatus.core.ts: {}
   src/react-query/onboardingStatus.ts: {}
   src/react-query/organization.core.ts: {}
@@ -3501,6 +3505,7 @@ trackedFiles:
   src/sdk/metamcp.ts: {}
   src/sdk/modelkeys.ts: {}
   src/sdk/networkingress.ts: {}
+  src/sdk/oinmanifest.ts: {}
   src/sdk/organizationassets.ts: {}
   src/sdk/organizationremotesessionclients.ts: {}
   src/sdk/organizationremotesessionissuers.ts: {}
@@ -5658,6 +5663,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  exportOinManifest:
+    speakeasy-default-export-oin-manifest:
+      parameters:
+        query:
+          format: "json"
+      responses:
+        "200":
+          application/json: "x-file: example.file"
+          '*/*': "x-file: example.file"
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   fetchGlobalRemoteSessionIssuerMetadata:
     speakeasy-default-fetch-global-remote-session-issuer-metadata:
       requestBody:

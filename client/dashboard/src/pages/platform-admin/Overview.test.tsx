@@ -28,6 +28,18 @@ vi.mock("@/contexts/Auth", async (importOriginal) => {
   };
 });
 
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({
+    platformAdminOinManifest: { href: () => "/platform-admin/oin-manifest" },
+  }),
+}));
+
+vi.mock("react-router", () => ({
+  Link: ({ children, to }: { children: ReactNode; to: string }) => (
+    <a href={to}>{children}</a>
+  ),
+}));
+
 vi.mock("@tanstack/react-query", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-query")>();
   return {
@@ -51,6 +63,11 @@ describe("platform admin overview", () => {
       screen.getByRole("switch", { name: "Toggle platform admin" }),
     ).toBeTruthy();
     expect(screen.queryByText("Activity")).toBeNull();
+    expect(screen.getByText(/review in the OIN Wizard/)).toBeTruthy();
+    expect(screen.queryByText(/questionnaire/)).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Open manifest" }).getAttribute("href"),
+    ).toBe("/platform-admin/oin-manifest");
   });
 });
 
