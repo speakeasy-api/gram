@@ -55,10 +55,16 @@ export function QueryBuilder({
   datasets,
   spec,
   onChange,
+  onRun,
+  changed,
 }: {
   datasets: AnalyticsDataset[];
   spec: ExploreSpec;
   onChange: (spec: ExploreSpec) => void;
+  /** Run the query the builder currently describes. */
+  onRun: () => void;
+  /** Whether the builder has moved on from the query the results answer. */
+  changed: boolean;
 }): JSX.Element {
   const dataset = findDataset(datasets, spec.dataset);
   const grouped = spec.chartType !== "number";
@@ -106,40 +112,13 @@ export function QueryBuilder({
             </SelectTrigger>
             <SelectContent>
               {datasets.map((candidate) => (
-                <SelectItem
-                  key={candidate.name}
-                  value={candidate.name}
-                  description={candidate.description}
-                >
+                <SelectItem key={candidate.name} value={candidate.name}>
                   {candidate.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           {dataset ? <DatasetSummary dataset={dataset} /> : null}
-        </div>
-      </ClauseRow>
-
-      <ClauseRow label="Visualize">
-        <div className="flex flex-col gap-2">
-          {spec.measures.map((measure, index) => (
-            <MeasureRow
-              key={index}
-              dataset={dataset}
-              measure={measure}
-              onChange={(next) => setMeasure(index, next)}
-              onRemove={
-                spec.measures.length > 1
-                  ? () => patch(withMeasures(removeAt(spec.measures, index)))
-                  : undefined
-              }
-              trailing={
-                index === spec.measures.length - 1 ? (
-                  <AddRowButton label="Add measure" onClick={addMeasure} />
-                ) : undefined
-              }
-            />
-          ))}
         </div>
       </ClauseRow>
 
@@ -172,6 +151,47 @@ export function QueryBuilder({
               >
                 Add filter
               </Button>
+            </div>
+          ) : null}
+        </div>
+      </ClauseRow>
+
+      <ClauseRow label="Visualize">
+        <div className="flex flex-col gap-2">
+          {spec.measures.map((measure, index) => (
+            <MeasureRow
+              key={index}
+              dataset={dataset}
+              measure={measure}
+              onChange={(next) => setMeasure(index, next)}
+              onRemove={() =>
+                patch(withMeasures(removeAt(spec.measures, index)))
+              }
+              trailing={
+                index === spec.measures.length - 1 ? (
+                  <AddRowButton
+                    label="Add another measure"
+                    onClick={addMeasure}
+                  />
+                ) : undefined
+              }
+            />
+          ))}
+          {spec.measures.length === 0 ? (
+            // Nothing measured is still a question: the rows themselves.
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="tertiary"
+                size="sm"
+                icon="plus"
+                onClick={addMeasure}
+              >
+                Add measure
+              </Button>
+              <span className="text-muted-foreground text-xs">
+                Nothing measured, so the results are rows at the dataset's
+                grain.
+              </span>
             </div>
           ) : null}
         </div>
@@ -252,6 +272,16 @@ export function QueryBuilder({
             className="w-32"
           />
         </BuilderField>
+        <div className="ml-auto flex items-center gap-3">
+          {changed ? (
+            <span className="text-muted-foreground text-xs">
+              Changed since the last run.
+            </span>
+          ) : null}
+          <Button variant="primary" size="sm" icon="play" onClick={onRun}>
+            Run query
+          </Button>
+        </div>
       </div>
       <p className="text-muted-foreground text-xs">
         Buckets are sized from the window. Order and limit shape the summary

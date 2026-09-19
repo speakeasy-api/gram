@@ -3,6 +3,7 @@ import type { AnalyticsField } from "@gram/client/models/components/analyticsfie
 import type { AnalyticsFilter } from "@gram/client/models/components/analyticsfilter.js";
 import type { AnalyticsMeasure } from "@gram/client/models/components/analyticsmeasure.js";
 import type { AnalyticsQueryPayload } from "@gram/client/models/components/analyticsquerypayload.js";
+import type { AnalyticsQueryResult } from "@gram/client/models/components/analyticsqueryresult.js";
 
 // The Explore state core. Everything the builder offers is read off the
 // catalog that `analytics.describe` returns: which datasets exist, which
@@ -14,6 +15,7 @@ export type WindowPreset = "1h" | "24h" | "7d" | "30d" | "90d";
 export type Grain = NonNullable<AnalyticsQueryPayload["grain"]>;
 export type MeasureOp = AnalyticsMeasure["op"];
 export type FilterOperator = AnalyticsFilter["operator"];
+export type ResultRow = AnalyticsQueryResult["rows"][number];
 
 // Mirrors of the server's guardrails (server/internal/telemetry/analytics/
 // catalog.go). The server is authoritative; these only keep the builder from
@@ -21,6 +23,11 @@ export type FilterOperator = AnalyticsFilter["operator"];
 export const MAX_DIMENSIONS = 3;
 export const DEFAULT_LIMIT = 100;
 export const MAX_LIMIT = 1000;
+
+// Result columns the server adds beside the requested ones: the bucket start
+// of a grouped, bucketed query and the event time of a row.
+export const TIME_BUCKET_COLUMN = "time_bucket";
+export const TIME_COLUMN = "time";
 
 export const CHART_TYPE_OPTIONS: { value: ChartType; label: string }[] = [
   { value: "line", label: "Line" },
@@ -37,6 +44,11 @@ export const WINDOW_OPTIONS: { value: WindowPreset; label: string }[] = [
   { value: "30d", label: "Last 30 days" },
   { value: "90d", label: "Last 90 days" },
 ];
+
+// Queries run as you build, and the dataset is scanned across the whole
+// window however selective the filters are, so the window opens short and
+// widening it is the moment someone chooses to pay for more.
+const DEFAULT_WINDOW: WindowPreset = "24h";
 
 const WINDOW_SECONDS: Record<WindowPreset, number> = {
   "1h": 3_600,
@@ -104,11 +116,6 @@ export function autoGrain(window: WindowPreset): Grain {
 /** Whether the chart type renders a bucketed timeseries. */
 function isTimeseries(chartType: ChartType): boolean {
   return chartType === "line" || chartType === "area" || chartType === "bar";
-}
-
-/** The grain a spec queries at: buckets for a timeseries, none otherwise. */
-function grainForSpec(spec: ExploreSpec): Grain {
-  return isTimeseries(spec.chartType) ? autoGrain(spec.window) : "none";
 }
 
 export function findDataset(
@@ -215,6 +222,15 @@ export function measureLabel(measure: MeasureDraft): string {
   return `${measure.op.toUpperCase()}(${measure.field})`;
 }
 
+/** The unit a measure's values carry: its field's, or none for a count. */
+export function measureUnit(
+  dataset: AnalyticsDataset | undefined,
+  measure: MeasureDraft,
+): string {
+  if (measure.op === "count") return "";
+  return fieldByName(dataset, measure.field)?.unit ?? "";
+}
+
 /** Drops measure rows still waiting on a field, and duplicates. */
 export function completeMeasures(drafts: MeasureDraft[]): MeasureDraft[] {
   const seen = new Set<string>();
@@ -293,7 +309,7 @@ export function specForDataset(
     dimensions: defaultDimensions(dataset),
     orderBy: "",
     limit: current?.limit ?? 0,
-    window: current?.window ?? "7d",
+    window: current?.window ?? DEFAULT_WINDOW,
     chartType: defaultChartForKind(dataset.kind),
   };
 }
@@ -311,28 +327,84 @@ export function parseLimit(raw: string): number {
   return Math.min(parsed, MAX_LIMIT);
 }
 
-/** Build the query the spec describes. */
-export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
+/**
+ * Whether the spec asks for rows at the dataset's grain rather than an
+ * aggregate: a dataset with nothing to measure means rows.
+ */
+export function isRowsMode(spec: ExploreSpec): boolean {
+  return completeMeasures(spec.measures).length === 0;
+}
+
+/** The dimensions a query groups or projects by; a number tile has none. */
+export function queryDimensions(spec: ExploreSpec): string[] {
+  if (spec.chartType === "number") return [];
+  return spec.dimensions.slice(0, MAX_DIMENSIONS);
+}
+
+/**
+ * The two shapes a spec is asked in. A timeseries chart needs bucketed rows;
+ * the summary table under it, and every other chart, needs the whole-window
+ * figures the caller's order and limit apply to.
+ */
+export type QueryShape = "chart" | "summary";
+
+/** Whether the spec draws a bucketed chart, and so needs the chart shape. */
+export function hasChartShape(spec: ExploreSpec): boolean {
+  return isTimeseries(spec.chartType) && !isRowsMode(spec);
+}
+
+/** Build the query the spec describes, in one of its shapes. */
+export function queryBodyFromSpec(
+  spec: ExploreSpec,
+  shape: QueryShape,
+): AnalyticsQueryPayload {
   const { from, to } = windowRange(spec.window);
   const measures = completeMeasures(spec.measures);
-  const aliases = measures.map(measureAlias);
-  const grouped = spec.chartType !== "number";
-  return {
+  const dimensions = queryDimensions(spec);
+  const filters = completeFilters(spec.filters);
+  const limit = spec.limit > 0 ? spec.limit : undefined;
+
+  if (measures.length === 0) {
+    // Rows at the dataset's grain, newest first; the dimensions are the
+    // projection rather than a grouping.
+    return {
+      dataset: spec.dataset,
+      from,
+      to,
+      grain: "none",
+      dimensions,
+      filters,
+      ungrouped: true,
+      limit,
+    };
+  }
+
+  const base = {
     dataset: spec.dataset,
     from,
     to,
-    grain: grainForSpec(spec),
-    dimensions: grouped ? spec.dimensions.slice(0, MAX_DIMENSIONS) : [],
+    dimensions,
     measures: measures.map((measure) => ({
       op: measure.op,
       field: measure.op === "count" ? undefined : measure.field,
       alias: measureAlias(measure),
     })),
-    filters: completeFilters(spec.filters),
+    filters,
+  };
+  if (shape === "chart") {
+    // Buckets multiply rows: a day of hourly buckets over ten users is 240
+    // of them, so the cap is the server's maximum rather than the summary's
+    // limit. Bucketed rows come back in time order, so no order is sent.
+    return { ...base, grain: autoGrain(spec.window), limit: MAX_LIMIT };
+  }
+  const aliases = measures.map(measureAlias);
+  return {
+    ...base,
+    grain: "none",
     orderBy: aliases.includes(spec.orderBy)
       ? [{ measure: spec.orderBy, direction: "desc" }]
       : undefined,
-    limit: spec.limit > 0 ? spec.limit : undefined,
+    limit,
   };
 }
 
@@ -372,4 +444,26 @@ export function formatMeasureValue(value: number, unit: string): string {
     default:
       return compactFormatter.format(value);
   }
+}
+
+/** A result cell as a number, or null when it is not one. */
+export function numericCell(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+/** A result cell as text: the value as the producer stated it, or a dash. */
+export function textCell(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "bigint") {
+    return String(value);
+  }
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return JSON.stringify(value);
 }
