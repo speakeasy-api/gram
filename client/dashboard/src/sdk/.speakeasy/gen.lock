@@ -6819,7 +6819,7 @@ examples:
     speakeasy-default-get-spend-breakdown:
       responses:
         "200":
-          application/json: {"billing_cycles": [], "currency": "USD", "pricing_basis": "current_payg_list_price", "products": [], "queried_at": "2024-04-24T14:37:51.474Z", "total_cost_usd": "<value>", "window": {"from": "2025-12-02T06:14:54.264Z", "to": "2026-08-22T04:10:12.660Z"}}
+          application/json: {"availability": "available", "billing_cycles": [], "currency": "USD", "pricing_basis": "current_payg_list_price", "products": [], "queried_at": "2024-04-24T14:37:51.474Z", "total_cost_usd": "<value>", "window": {"from": "2025-12-02T06:14:54.264Z", "to": "2026-08-22T04:10:12.660Z"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

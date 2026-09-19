@@ -22,10 +22,12 @@ type Service interface {
 	// of three calendar months. Duplicate deliveries count unless prevented by the
 	// producer.
 	GetMeterUsage(context.Context, *GetMeterUsagePayload) (res *MeterUsageResponse, err error)
-	// Estimate the organization's three metered PAYG products at current list
-	// prices over a maximum of three calendar months. This is not an actual bill:
-	// ordinary summaries count duplicate deliveries unless prevented by the
-	// producer and exclude adjustment readings.
+	// Report spend availability and estimate PAYG organizations' three metered
+	// products at current list prices over a maximum of three calendar months.
+	// Other plans return unsupported_plan, empty products, and a zero total
+	// without calculating estimates. This is not an actual bill: ordinary
+	// summaries count duplicate deliveries unless prevented by the producer and
+	// exclude adjustment readings.
 	GetSpendBreakdown(context.Context, *GetSpendBreakdownPayload) (res *SpendBreakdownResponse, err error)
 	// Get tokens under management for the active billing cycle alongside the
 	// contracted terms
@@ -348,16 +350,20 @@ type SetSpendCapPayload struct {
 // SpendBreakdownResponse is the result type of the usage service
 // getSpendBreakdown method.
 type SpendBreakdownResponse struct {
-	Window *MeterUsageWindow
+	// Whether spend estimates are available for the organization's plan
+	Availability string
+	Window       *MeterUsageWindow
 	// Trailing twelve billing-cycle date windows
 	BillingCycles []*MeterUsageWindow
 	Currency      string
 	PricingBasis  string
 	// Retrieval timestamp used to distinguish current and future buckets
 	QueriedAt string
-	// Exact estimated total at current PAYG list prices
+	// Exact estimated total at current PAYG list prices; zero when availability is
+	// unsupported_plan, meaning no estimate was calculated
 	TotalCostUsd string
-	// The three metered PAYG products in stable display order
+	// The three metered PAYG products in stable display order when available;
+	// empty when availability is unsupported_plan
 	Products []*SpendProduct
 }
 

@@ -19,8 +19,10 @@ import (
 )
 
 const (
-	millionRateQuantity = "1000000"
-	gibRateQuantity     = "1073741824"
+	millionRateQuantity              = "1000000"
+	gibRateQuantity                  = "1073741824"
+	spendAvailabilityAvailable       = "available"
+	spendAvailabilityUnsupportedPlan = "unsupported_plan"
 )
 
 type spendProductSpec struct {
@@ -55,8 +57,8 @@ var spendProductSpecs = [...]spendProductSpec{
 	},
 }
 
-// GetSpendBreakdown returns exact estimated spend at current PAYG list prices
-// for the active organization. It is not an invoice or actual-bill view.
+// GetSpendBreakdown reports availability of server-owned spend for the active
+// organization and returns exact current PAYG list-price estimates when available.
 func (s *Service) GetSpendBreakdown(ctx context.Context, payload *gen.GetSpendBreakdownPayload) (*gen.SpendBreakdownResponse, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
@@ -79,6 +81,17 @@ func (s *Service) GetSpendBreakdown(ctx context.Context, payload *gen.GetSpendBr
 		}
 		return nil, err
 	}
+	accountType, err := s.repo.GetBillingOrganizationAccountType(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization billing type for spend breakdown").LogError(ctx, s.logger)
+	}
+	if accountType != string(billing.TierPayg) {
+		response, err := buildSpendBreakdownResponse(from, to, queriedAt, cycles, spendAvailabilityUnsupportedPlan, nil)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build unsupported spend breakdown response").LogError(ctx, s.logger)
+		}
+		return response, nil
+	}
 
 	rows, err := chrepo.New(s.meterReadConn).GetSpend(ctx, chrepo.SpendParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -89,14 +102,38 @@ func (s *Service) GetSpendBreakdown(ctx context.Context, payload *gen.GetSpendBr
 		return nil, oops.E(oops.CodeUnexpected, err, "query meter spend quantities").LogError(ctx, s.logger)
 	}
 
-	response, err := buildSpendBreakdownResponse(from, to, queriedAt, cycles, rows)
+	response, err := buildSpendBreakdownResponse(from, to, queriedAt, cycles, spendAvailabilityAvailable, rows)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build spend breakdown response").LogError(ctx, s.logger)
 	}
 	return response, nil
 }
 
-func buildSpendBreakdownResponse(from, to, queriedAt time.Time, cycles []BillingCyclePeriod, rows []chrepo.SpendRow) (*gen.SpendBreakdownResponse, error) {
+func buildSpendBreakdownResponse(from, to, queriedAt time.Time, cycles []BillingCyclePeriod, availability string, rows []chrepo.SpendRow) (*gen.SpendBreakdownResponse, error) {
+	cycleViews := make([]*gen.MeterUsageWindow, 0, len(cycles))
+	for _, cycle := range cycles {
+		cycleViews = append(cycleViews, &gen.MeterUsageWindow{
+			From: cycle.Start.UTC().Format(time.RFC3339),
+			To:   cycle.End.UTC().Format(time.RFC3339),
+		})
+	}
+	response := &gen.SpendBreakdownResponse{
+		Availability: availability,
+		Window: &gen.MeterUsageWindow{
+			From: from.Format(time.RFC3339Nano),
+			To:   to.Format(time.RFC3339Nano),
+		},
+		BillingCycles: cycleViews,
+		Currency:      "USD",
+		PricingBasis:  "current_payg_list_price",
+		QueriedAt:     queriedAt.Format(time.RFC3339Nano),
+		TotalCostUsd:  "0",
+		Products:      []*gen.SpendProduct{},
+	}
+	if availability == spendAvailabilityUnsupportedPlan {
+		return response, nil
+	}
+
 	bucketCount := int(to.Sub(from) / (24 * time.Hour))
 	bucketIndexes := make(map[int64]int, bucketCount)
 	for day, index := from, 0; day.Before(to); day, index = day.AddDate(0, 0, 1), index+1 {
@@ -177,29 +214,13 @@ func buildSpendBreakdownResponse(from, to, queriedAt time.Time, cycles []Billing
 		totalCost.Add(totalCost, cost)
 	}
 
-	cycleViews := make([]*gen.MeterUsageWindow, 0, len(cycles))
-	for _, cycle := range cycles {
-		cycleViews = append(cycleViews, &gen.MeterUsageWindow{
-			From: cycle.Start.UTC().Format(time.RFC3339),
-			To:   cycle.End.UTC().Format(time.RFC3339),
-		})
-	}
 	totalCostUSD, err := exactDecimal(totalCost)
 	if err != nil {
 		return nil, err
 	}
-	return &gen.SpendBreakdownResponse{
-		Window: &gen.MeterUsageWindow{
-			From: from.Format(time.RFC3339Nano),
-			To:   to.Format(time.RFC3339Nano),
-		},
-		BillingCycles: cycleViews,
-		Currency:      "USD",
-		PricingBasis:  "current_payg_list_price",
-		QueriedAt:     queriedAt.Format(time.RFC3339Nano),
-		TotalCostUsd:  totalCostUSD,
-		Products:      products,
-	}, nil
+	response.TotalCostUsd = totalCostUSD
+	response.Products = products
+	return response, nil
 }
 
 func priceSpendQuantity(quantity *big.Int, spec spendProductSpec) (*big.Rat, error) {

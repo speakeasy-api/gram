@@ -128,6 +128,8 @@ export function SpendBreakdownSection(): JSX.Element {
       [],
     [data, selectedProducts],
   );
+
+  if (data?.availability === "unsupported_plan") return null;
   const selectedTotal = data
     ? sumSelectedCost(data.products, selectedProducts)
     : "0";

@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getSpendBreakdown usage
  *
  * @remarks
- * Estimate the organization's three metered PAYG products at current list prices over a maximum of three calendar months. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.
+ * Report spend availability and estimate PAYG organizations' three metered products at current list prices over a maximum of three calendar months. Other plans return unsupported_plan, empty products, and a zero total without calculating estimates. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.
  */
 export function usageGetSpendBreakdown(
   client: GramCore,

@@ -86,16 +86,20 @@ type GetMeterUsageResponseBody struct {
 // GetSpendBreakdownResponseBody is the type of the "usage" service
 // "getSpendBreakdown" endpoint HTTP response body.
 type GetSpendBreakdownResponseBody struct {
-	Window *MeterUsageWindowResponseBody `form:"window" json:"window" xml:"window"`
+	// Whether spend estimates are available for the organization's plan
+	Availability string                        `form:"availability" json:"availability" xml:"availability"`
+	Window       *MeterUsageWindowResponseBody `form:"window" json:"window" xml:"window"`
 	// Trailing twelve billing-cycle date windows
 	BillingCycles []*MeterUsageWindowResponseBody `form:"billing_cycles" json:"billing_cycles" xml:"billing_cycles"`
 	Currency      string                          `form:"currency" json:"currency" xml:"currency"`
 	PricingBasis  string                          `form:"pricing_basis" json:"pricing_basis" xml:"pricing_basis"`
 	// Retrieval timestamp used to distinguish current and future buckets
 	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
-	// Exact estimated total at current PAYG list prices
+	// Exact estimated total at current PAYG list prices; zero when availability is
+	// unsupported_plan, meaning no estimate was calculated
 	TotalCostUsd string `form:"total_cost_usd" json:"total_cost_usd" xml:"total_cost_usd"`
-	// The three metered PAYG products in stable display order
+	// The three metered PAYG products in stable display order when available;
+	// empty when availability is unsupported_plan
 	Products []*SpendProductResponseBody `form:"products" json:"products" xml:"products"`
 }
 
@@ -4001,6 +4005,7 @@ func NewGetMeterUsageResponseBody(res *usage.MeterUsageResponse) *GetMeterUsageR
 // result of the "getSpendBreakdown" endpoint of the "usage" service.
 func NewGetSpendBreakdownResponseBody(res *usage.SpendBreakdownResponse) *GetSpendBreakdownResponseBody {
 	body := &GetSpendBreakdownResponseBody{
+		Availability: res.Availability,
 		Currency:     res.Currency,
 		PricingBasis: res.PricingBasis,
 		QueriedAt:    res.QueriedAt,

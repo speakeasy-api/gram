@@ -262,17 +262,21 @@ var SpendProduct = Type("SpendProduct", func() {
 	Required("id", "label", "unit", "quantity", "rate_quantity", "rate_usd", "cost_usd", "buckets")
 })
 
-// SpendBreakdownResponse is an exact current-list-price estimate for the three
-// PAYG metered products. It is not an invoice or actual bill.
+// SpendBreakdownResponse reports whether server-owned spend is available and,
+// for PAYG organizations, an exact current-list-price estimate for the three
+// metered products. It is not an invoice or actual bill.
 var SpendBreakdownResponse = Type("SpendBreakdownResponse", func() {
+	Attribute("availability", String, "Whether spend estimates are available for the organization's plan", func() {
+		Enum("available", "unsupported_plan")
+	})
 	Attribute("window", MeterUsageWindow)
 	Attribute("billing_cycles", ArrayOf(MeterUsageWindow), "Trailing twelve billing-cycle date windows")
 	Attribute("currency", String, func() { Enum("USD") })
 	Attribute("pricing_basis", String, func() { Enum("current_payg_list_price") })
 	Attribute("queried_at", String, "Retrieval timestamp used to distinguish current and future buckets", func() { Format(FormatDateTime) })
-	Attribute("total_cost_usd", String, "Exact estimated total at current PAYG list prices")
-	Attribute("products", ArrayOf(SpendProduct), "The three metered PAYG products in stable display order")
-	Required("window", "billing_cycles", "currency", "pricing_basis", "queried_at", "total_cost_usd", "products")
+	Attribute("total_cost_usd", String, "Exact estimated total at current PAYG list prices; zero when availability is unsupported_plan, meaning no estimate was calculated")
+	Attribute("products", ArrayOf(SpendProduct), "The three metered PAYG products in stable display order when available; empty when availability is unsupported_plan")
+	Required("availability", "window", "billing_cycles", "currency", "pricing_basis", "queried_at", "total_cost_usd", "products")
 })
 
 var _ = Service("usage", func() {
@@ -336,7 +340,7 @@ var _ = Service("usage", func() {
 	})
 
 	Method("getSpendBreakdown", func() {
-		Description("Estimate the organization's three metered PAYG products at current list prices over a maximum of three calendar months. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.")
+		Description("Report spend availability and estimate PAYG organizations' three metered products at current list prices over a maximum of three calendar months. Other plans return unsupported_plan, empty products, and a zero total without calculating estimates. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.")
 
 		Payload(func() {
 			security.SessionPayload()

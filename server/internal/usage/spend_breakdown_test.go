@@ -5,12 +5,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
 func TestBuildSpendBreakdownPreservesExactLargeCostsAndPeriodSums(t *testing.T) {
@@ -18,13 +22,14 @@ func TestBuildSpendBreakdownPreservesExactLargeCostsAndPeriodSums(t *testing.T) 
 	from := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
 	to := from.AddDate(0, 0, 3)
 	queriedAt := from.Add(36 * time.Hour)
-	response, err := buildSpendBreakdownResponse(from, to, queriedAt, nil, []chrepo.SpendRow{
+	response, err := buildSpendBreakdownResponse(from, to, queriedAt, nil, spendAvailabilityAvailable, []chrepo.SpendRow{
 		{Day: from, ProductID: "agent_session_storage", Quantity: "9007199254740993"},
 		{Day: from, ProductID: "risk_content_scans", Quantity: "1000000"},
 		{Day: from.AddDate(0, 0, 1), ProductID: "risk_content_scans", Quantity: "1000000"},
 		{Day: from.AddDate(0, 0, 1), ProductID: "mcp_egress", Quantity: "1073741825"},
 	})
 	require.NoError(t, err)
+	require.Equal(t, spendAvailabilityAvailable, response.Availability)
 	require.Equal(t, "USD", response.Currency)
 	require.Equal(t, "current_payg_list_price", response.PricingBasis)
 	require.Equal(t, queriedAt.Format(time.RFC3339Nano), response.QueriedAt)
@@ -61,6 +66,91 @@ func TestGetSpendBreakdownRequiresOrganizationRead(t *testing.T) {
 
 	_, err := service.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{From: nil, To: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestGetSpendBreakdownReturnsUnsupportedPlanWithoutClickHouse(t *testing.T) {
+	t.Parallel()
+	organizationID := "org-spend-enterprise"
+	service, db, _, _ := newTUMTestService(t, organizationID)
+	setTestOrganizationAccountType(t, db, organizationID, billing.TierEnterprise)
+	_, err := repo.New(db).UpsertBillingMetadata(t.Context(), repo.UpsertBillingMetadataParams{
+		OrganizationID:         organizationID,
+		TumMonthlyTokenLimit:   pgtype.Int8{},
+		AlertEmail:             pgtype.Text{},
+		BillingCycleAnchorDay:  17,
+		TunneledMcpServerLimit: pgtype.Int4{},
+	})
+	require.NoError(t, err)
+	service.meterReadConn = nil
+	service.now = func() time.Time { return time.Date(2026, time.April, 20, 10, 0, 0, 0, time.UTC) }
+	from, to := "2026-04-17T00:00:00Z", "2026-04-20T00:00:00Z"
+	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID))
+
+	result, err := service.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{From: &from, To: &to})
+
+	require.NoError(t, err)
+	require.Equal(t, spendAvailabilityUnsupportedPlan, result.Availability)
+	require.Equal(t, from, result.Window.From)
+	require.Equal(t, to, result.Window.To)
+	require.Len(t, result.BillingCycles, 12)
+	require.Equal(t, "2026-04-17T00:00:00Z", result.BillingCycles[11].From)
+	require.Equal(t, "2026-05-17T00:00:00Z", result.BillingCycles[11].To)
+	require.Equal(t, "USD", result.Currency)
+	require.Equal(t, "current_payg_list_price", result.PricingBasis)
+	require.Equal(t, "2026-04-20T10:00:00Z", result.QueriedAt)
+	require.Equal(t, "0", result.TotalCostUsd)
+	require.NotNil(t, result.Products)
+	require.Empty(t, result.Products)
+}
+
+func TestGetSpendBreakdownValidatesRangeForUnsupportedPlan(t *testing.T) {
+	t.Parallel()
+	organizationID := "org-spend-invalid-range"
+	service, db, _, _ := newTUMTestService(t, organizationID)
+	setTestOrganizationAccountType(t, db, organizationID, billing.TierEnterprise)
+	service.meterReadConn = nil
+	service.now = func() time.Time { return time.Date(2026, time.April, 20, 10, 0, 0, 0, time.UTC) }
+	from := "not-a-date"
+	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID))
+
+	_, err := service.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{From: &from, To: nil})
+
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestGetSpendBreakdownPaygZeroUsageIsAvailable(t *testing.T) {
+	t.Parallel()
+	organizationID := "org-spend-payg"
+	service, db, clickhouse, _ := newTUMTestService(t, organizationID)
+	setTestOrganizationAccountType(t, db, organizationID, billing.TierPayg)
+	service.meterReadConn = clickhouse
+	service.now = func() time.Time { return time.Date(2026, time.April, 20, 10, 0, 0, 0, time.UTC) }
+	from, to := "2026-04-17T00:00:00Z", "2026-04-20T00:00:00Z"
+	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID))
+
+	result, err := service.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{From: &from, To: &to})
+
+	require.NoError(t, err)
+	require.Equal(t, spendAvailabilityAvailable, result.Availability)
+	require.Equal(t, "0", result.TotalCostUsd)
+	require.Len(t, result.Products, 3)
+	for _, product := range result.Products {
+		require.Equal(t, "0", product.Quantity)
+		require.Equal(t, "0", product.CostUsd)
+		require.Len(t, product.Buckets, 3)
+	}
+}
+
+func TestGetSpendBreakdownRequiresAuthoritativeOrganizationTier(t *testing.T) {
+	t.Parallel()
+	organizationID := "org-spend-missing-tier"
+	service := newTestService(t, &mockBillingRepo{}, organizationID, 0)
+	service.now = func() time.Time { return time.Date(2026, time.April, 20, 10, 0, 0, 0, time.UTC) }
+	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID))
+
+	_, err := service.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{From: nil, To: nil})
+
+	requireOopsCode(t, err, oops.CodeUnexpected)
 }
 
 func spendBucketQuantities(buckets []*gen.SpendBucket) []string {

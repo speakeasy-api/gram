@@ -86,16 +86,20 @@ type GetMeterUsageResponseBody struct {
 // GetSpendBreakdownResponseBody is the type of the "usage" service
 // "getSpendBreakdown" endpoint HTTP response body.
 type GetSpendBreakdownResponseBody struct {
-	Window *MeterUsageWindowResponseBody `form:"window,omitempty" json:"window,omitempty" xml:"window,omitempty"`
+	// Whether spend estimates are available for the organization's plan
+	Availability *string                       `form:"availability,omitempty" json:"availability,omitempty" xml:"availability,omitempty"`
+	Window       *MeterUsageWindowResponseBody `form:"window,omitempty" json:"window,omitempty" xml:"window,omitempty"`
 	// Trailing twelve billing-cycle date windows
 	BillingCycles []*MeterUsageWindowResponseBody `form:"billing_cycles,omitempty" json:"billing_cycles,omitempty" xml:"billing_cycles,omitempty"`
 	Currency      *string                         `form:"currency,omitempty" json:"currency,omitempty" xml:"currency,omitempty"`
 	PricingBasis  *string                         `form:"pricing_basis,omitempty" json:"pricing_basis,omitempty" xml:"pricing_basis,omitempty"`
 	// Retrieval timestamp used to distinguish current and future buckets
 	QueriedAt *string `form:"queried_at,omitempty" json:"queried_at,omitempty" xml:"queried_at,omitempty"`
-	// Exact estimated total at current PAYG list prices
+	// Exact estimated total at current PAYG list prices; zero when availability is
+	// unsupported_plan, meaning no estimate was calculated
 	TotalCostUsd *string `form:"total_cost_usd,omitempty" json:"total_cost_usd,omitempty" xml:"total_cost_usd,omitempty"`
-	// The three metered PAYG products in stable display order
+	// The three metered PAYG products in stable display order when available;
+	// empty when availability is unsupported_plan
 	Products []*SpendProductResponseBody `form:"products,omitempty" json:"products,omitempty" xml:"products,omitempty"`
 }
 
@@ -4318,6 +4322,7 @@ func NewGetMeterUsageGatewayError(body *GetMeterUsageGatewayErrorResponseBody) *
 // "getSpendBreakdown" endpoint result from a HTTP "OK" response.
 func NewGetSpendBreakdownSpendBreakdownResponseOK(body *GetSpendBreakdownResponseBody) *usage.SpendBreakdownResponse {
 	v := &usage.SpendBreakdownResponse{
+		Availability: *body.Availability,
 		Currency:     *body.Currency,
 		PricingBasis: *body.PricingBasis,
 		QueriedAt:    *body.QueriedAt,
@@ -7168,6 +7173,9 @@ func ValidateGetMeterUsageResponseBody(body *GetMeterUsageResponseBody) (err err
 // ValidateGetSpendBreakdownResponseBody runs the validations defined on
 // GetSpendBreakdownResponseBody
 func ValidateGetSpendBreakdownResponseBody(body *GetSpendBreakdownResponseBody) (err error) {
+	if body.Availability == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("availability", "body"))
+	}
 	if body.Window == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("window", "body"))
 	}
@@ -7188,6 +7196,11 @@ func ValidateGetSpendBreakdownResponseBody(body *GetSpendBreakdownResponseBody) 
 	}
 	if body.Products == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("products", "body"))
+	}
+	if body.Availability != nil {
+		if !(*body.Availability == "available" || *body.Availability == "unsupported_plan") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.availability", *body.Availability, []any{"available", "unsupported_plan"}))
+		}
 	}
 	if body.Window != nil {
 		if err2 := ValidateMeterUsageWindowResponseBody(body.Window); err2 != nil {

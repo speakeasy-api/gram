@@ -53,6 +53,7 @@ describe("metered spend precision", () => {
   it("rejects malformed response costs before arithmetic", () => {
     const day = new Date("2026-09-19T00:00:00Z");
     const data: SpendBreakdownData = {
+      availability: "available",
       currency: "USD",
       pricingBasis: "current_payg_list_price",
       queriedAt: day,
@@ -78,6 +79,7 @@ describe("metered spend precision", () => {
     (queriedAt) => {
       const day = (value: number) => new Date(Date.UTC(2026, 8, value));
       const data: SpendBreakdownData = {
+        availability: "available",
         currency: "USD",
         pricingBasis: "current_payg_list_price",
         queriedAt: new Date(queriedAt),

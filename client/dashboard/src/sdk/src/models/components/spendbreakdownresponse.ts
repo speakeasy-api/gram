@@ -14,6 +14,18 @@ import {
 } from "./meterusagewindow.js";
 import { SpendProduct, SpendProduct$inboundSchema } from "./spendproduct.js";
 
+/**
+ * Whether spend estimates are available for the organization's plan
+ */
+export const Availability = {
+  Available: "available",
+  UnsupportedPlan: "unsupported_plan",
+} as const;
+/**
+ * Whether spend estimates are available for the organization's plan
+ */
+export type Availability = ClosedEnum<typeof Availability>;
+
 export const Currency = {
   Usd: "USD",
 } as const;
@@ -26,13 +38,17 @@ export type PricingBasis = ClosedEnum<typeof PricingBasis>;
 
 export type SpendBreakdownResponse = {
   /**
+   * Whether spend estimates are available for the organization's plan
+   */
+  availability: Availability;
+  /**
    * Trailing twelve billing-cycle date windows
    */
   billingCycles: Array<MeterUsageWindow>;
   currency: Currency;
   pricingBasis: PricingBasis;
   /**
-   * The three metered PAYG products in stable display order
+   * The three metered PAYG products in stable display order when available; empty when availability is unsupported_plan
    */
   products: Array<SpendProduct>;
   /**
@@ -40,11 +56,15 @@ export type SpendBreakdownResponse = {
    */
   queriedAt: Date;
   /**
-   * Exact estimated total at current PAYG list prices
+   * Exact estimated total at current PAYG list prices; zero when availability is unsupported_plan, meaning no estimate was calculated
    */
   totalCostUsd: string;
   window: MeterUsageWindow;
 };
+
+/** @internal */
+export const Availability$inboundSchema: z.ZodMiniEnum<typeof Availability> = z
+  .enum(Availability);
 
 /** @internal */
 export const Currency$inboundSchema: z.ZodMiniEnum<typeof Currency> = z.enum(
@@ -61,6 +81,7 @@ export const SpendBreakdownResponse$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    availability: Availability$inboundSchema,
     billing_cycles: z.array(MeterUsageWindow$inboundSchema),
     currency: Currency$inboundSchema,
     pricing_basis: PricingBasis$inboundSchema,

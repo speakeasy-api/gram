@@ -69194,7 +69194,7 @@ paths:
                 name: getPeriodUsage
     /rpc/usage.getSpendBreakdown:
         get:
-            description: 'Estimate the organization''s three metered PAYG products at current list prices over a maximum of three calendar months. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.'
+            description: 'Report spend availability and estimate PAYG organizations'' three metered products at current list prices over a maximum of three calendar months. Other plans return unsupported_plan, empty products, and a zero total without calculating estimates. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.'
             operationId: getSpendBreakdown
             parameters:
                 - allowEmptyValue: true
@@ -96082,6 +96082,12 @@ components:
         SpendBreakdownResponse:
             type: object
             properties:
+                availability:
+                    type: string
+                    description: Whether spend estimates are available for the organization's plan
+                    enum:
+                        - available
+                        - unsupported_plan
                 billing_cycles:
                     type: array
                     items:
@@ -96099,17 +96105,18 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SpendProduct'
-                    description: The three metered PAYG products in stable display order
+                    description: The three metered PAYG products in stable display order when available; empty when availability is unsupported_plan
                 queried_at:
                     type: string
                     description: Retrieval timestamp used to distinguish current and future buckets
                     format: date-time
                 total_cost_usd:
                     type: string
-                    description: Exact estimated total at current PAYG list prices
+                    description: Exact estimated total at current PAYG list prices; zero when availability is unsupported_plan, meaning no estimate was calculated
                 window:
                     $ref: '#/components/schemas/MeterUsageWindow'
             required:
+                - availability
                 - window
                 - billing_cycles
                 - currency
