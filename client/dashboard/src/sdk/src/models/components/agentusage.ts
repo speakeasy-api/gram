@@ -15,30 +15,32 @@ import {
 /**
  * The agent usage payload discriminator.
  */
-export const Type = {
+export const AgentUsageType = {
   Claude: "claude",
 } as const;
 /**
  * The agent usage payload discriminator.
  */
-export type Type = ClosedEnum<typeof Type>;
+export type AgentUsageType = ClosedEnum<typeof AgentUsageType>;
 
 export type AgentUsage = {
   claude?: ClaudeAgentUsage | undefined;
   /**
    * The agent usage payload discriminator.
    */
-  type: Type;
+  type: AgentUsageType;
 };
 
 /** @internal */
-export const Type$inboundSchema: z.ZodMiniEnum<typeof Type> = z.enum(Type);
+export const AgentUsageType$inboundSchema: z.ZodMiniEnum<
+  typeof AgentUsageType
+> = z.enum(AgentUsageType);
 
 /** @internal */
 export const AgentUsage$inboundSchema: z.ZodMiniType<AgentUsage, unknown> = z
   .object({
     claude: z.optional(ClaudeAgentUsage$inboundSchema),
-    type: Type$inboundSchema,
+    type: AgentUsageType$inboundSchema,
   });
 
 export function agentUsageFromJSON(

@@ -1725,6 +1725,49 @@ func BuildGetMeterUsagePayload(adminGetMeterUsageOrganizationID string, adminGet
 	return v, nil
 }
 
+// BuildGetSpendBreakdownPayload builds the payload for the admin
+// getSpendBreakdown endpoint from CLI flags.
+func BuildGetSpendBreakdownPayload(adminGetSpendBreakdownOrganizationID string, adminGetSpendBreakdownFrom string, adminGetSpendBreakdownTo string, adminGetSpendBreakdownAdminSessionToken string) (*admin.GetSpendBreakdownPayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetSpendBreakdownOrganizationID
+	}
+	var from *string
+	{
+		if adminGetSpendBreakdownFrom != "" {
+			from = &adminGetSpendBreakdownFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if adminGetSpendBreakdownTo != "" {
+			to = &adminGetSpendBreakdownTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetSpendBreakdownAdminSessionToken != "" {
+			adminSessionToken = &adminGetSpendBreakdownAdminSessionToken
+		}
+	}
+	v := &admin.GetSpendBreakdownPayload{}
+	v.OrganizationID = organizationID
+	v.From = from
+	v.To = to
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetSupportMatrixPayload builds the payload for the admin
 // getSupportMatrix endpoint from CLI flags.
 func BuildGetSupportMatrixPayload(adminGetSupportMatrixAdminSessionToken string) (*admin.GetSupportMatrixPayload, error) {

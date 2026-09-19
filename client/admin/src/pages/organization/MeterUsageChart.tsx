@@ -6,6 +6,7 @@ import { scaleLinear } from "@tanstack/charts/scales/linear";
 import { tooltip } from "@tanstack/charts/tooltip";
 
 import {
+  METER_FAMILY_COLOR,
   formatMeterQuantity,
   meterAxisTicks,
   meterDateLabel,
@@ -32,11 +33,11 @@ export function MeterUsageChart({
     const mark = cumulative
       ? lineY(points, {
           ...options,
-          stroke: "var(--primary)",
+          stroke: METER_FAMILY_COLOR[data.family],
           strokeWidth: 2,
           points: true,
         })
-      : barY(points, { ...options, fill: "var(--primary)" });
+      : barY(points, { ...options, fill: METER_FAMILY_COLOR[data.family] });
     return defineChart({
       marks: [mark],
       margin: { left: 84, right: 16, top: 16, bottom: 40 },

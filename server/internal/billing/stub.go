@@ -194,8 +194,10 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"25 chat based credits / month",
 				"Slack community support",
 			},
-			AddOnBullets:          []string{},
-			TumPricePerMillionUsd: nil,
+			AddOnBullets:               []string{},
+			TumPricePerMillionUsd:      nil,
+			RiskScanPricePerMillionUsd: nil,
+			McpEgressPricePerGibUsd:    nil,
 		},
 		Pro: &gen.TierLimits{
 			BasePrice:                  500,
@@ -220,7 +222,9 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"$0.05 / month / additional 5000 tool calls",
 				"$11 per 10 additional chat based credits",
 			},
-			TumPricePerMillionUsd: nil,
+			TumPricePerMillionUsd:      nil,
+			RiskScanPricePerMillionUsd: nil,
+			McpEgressPricePerGibUsd:    nil,
 		},
 		Payg: NewPaygTierLimits(),
 		Enterprise: &gen.TierLimits{
@@ -242,8 +246,10 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"Tool design support",
 				"SLA-backed support",
 			},
-			AddOnBullets:          []string{},
-			TumPricePerMillionUsd: nil,
+			AddOnBullets:               []string{},
+			TumPricePerMillionUsd:      nil,
+			RiskScanPricePerMillionUsd: nil,
+			McpEgressPricePerGibUsd:    nil,
 		},
 	}, nil
 }

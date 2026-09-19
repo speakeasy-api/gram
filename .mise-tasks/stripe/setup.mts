@@ -2,10 +2,9 @@
 
 //MISE description="Provision and validate Stripe sandbox billing objects and initialize the local webhook secret"
 
-// Idempotent: the meter is keyed on its event name and the price on its
-// lookup key, so re-running against a sandbox that already has the objects
-// just re-saves the existing IDs. Safe to run any time; refuses live-mode
-// keys outright.
+// Idempotent: TUM is provisioned by meter event name and price lookup key;
+// MCP egress and risk scans prices are resolved from the sandbox catalog.
+// Re-running re-saves the existing IDs. Refuses live-mode keys outright.
 
 import { intro, isCancel, log, note, outro, password } from "@clack/prompts";
 import { $ } from "zx";
@@ -23,6 +22,8 @@ const PORTAL_CONFIGURATION_PURPOSE = "gram-payg";
 const PRODUCT_METADATA_SPEAKEASY_PRODUCT = "aicp";
 // $0.35 per 1M TUMs, linear per-unit, expressed in cents per TUM.
 const UNIT_AMOUNT_DECIMAL_CENTS = "0.000035";
+const MCP_EGRESS_PRICE_LOOKUP_KEY = "payg-mcp-egress";
+const RISK_SCANS_PRICE_LOOKUP_KEY = "payg-risk-scans";
 
 interface StripeError {
   error?: { message?: string; type?: string };
@@ -357,6 +358,35 @@ function assertMeterConfiguration(
   );
 }
 
+async function resolveMeteredPrice(key: string, lookupKey: string) {
+  const prices = await stripe<StripeList<StripePrice>>(key, "GET", "/prices", {
+    "lookup_keys[]": lookupKey,
+    active: "true",
+    limit: "1",
+  });
+  const price = prices.data?.[0];
+  if (!price) {
+    throw new Error(
+      `No active Stripe sandbox price with lookup key "${lookupKey}". Create the monthly metered price with the reviewed pricing and re-run stripe:setup.`,
+    );
+  }
+  assertConfiguration(
+    `Price "${lookupKey}" (${price.id})`,
+    [
+      ["active", price.active, true],
+      ["livemode", price.livemode, false],
+      ["currency", price.currency, "usd"],
+      ["recurring.interval", price.recurring?.interval, "month"],
+      ["recurring.interval_count", price.recurring?.interval_count, 1],
+      ["recurring.usage_type", price.recurring?.usage_type, "metered"],
+      ["recurring.meter configured", Boolean(price.recurring?.meter), true],
+    ],
+    "Correct the sandbox price configuration and re-run stripe:setup.",
+  );
+  log.info(`Resolved price "${lookupKey}": ${price.id}`);
+  return price;
+}
+
 export async function provisionCatalog(key: string) {
   if (!/^(sk|rk)_test_[A-Za-z0-9_]+$/.test(key)) {
     throw new Error("Only Stripe sandbox/test-mode keys are accepted.");
@@ -366,6 +396,15 @@ export async function provisionCatalog(key: string) {
     throw new Error("Refusing to run against a live-mode Stripe account.");
   }
   log.info("Connected to Stripe sandbox account.");
+
+  const mcpEgressPrice = await resolveMeteredPrice(
+    key,
+    MCP_EGRESS_PRICE_LOOKUP_KEY,
+  );
+  const riskScansPrice = await resolveMeteredPrice(
+    key,
+    RISK_SCANS_PRICE_LOOKUP_KEY,
+  );
 
   // Meter — event names are unique across active and inactive meters.
   let meter = await findMeter(key, "active");
@@ -529,7 +568,7 @@ export async function provisionCatalog(key: string) {
   }
   assertPortalConfiguration(portalConfiguration);
 
-  return { meter, price, portalConfiguration };
+  return { meter, price, mcpEgressPrice, riskScansPrice, portalConfiguration };
 }
 
 interface SetupDependencies {
@@ -548,10 +587,13 @@ export async function setupStripe(deps: SetupDependencies) {
   }
   // Authentication must succeed before provisioning catalog objects.
   const webhookSecret = await deps.webhookSecret(key);
-  const { meter, price, portalConfiguration } = await deps.provision(key);
+  const { meter, price, mcpEgressPrice, riskScansPrice, portalConfiguration } =
+    await deps.provision(key);
   await deps.persist({
     STRIPE_API_KEY: key,
     STRIPE_PRICE_ID_TUM: price.id,
+    STRIPE_PRICE_ID_MCP_EGRESS: mcpEgressPrice.id,
+    STRIPE_PRICE_ID_RISK_SCANS: riskScansPrice.id,
     STRIPE_METER_ID_TUM: meter.id,
     STRIPE_METER_EVENT_NAME: METER_EVENT_NAME,
     STRIPE_PORTAL_CONFIGURATION_ID: portalConfiguration.id,
