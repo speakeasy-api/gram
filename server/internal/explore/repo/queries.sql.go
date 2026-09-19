@@ -122,6 +122,42 @@ func (q *Queries) GetQuery(ctx context.Context, arg GetQueryParams) (Query, erro
 	return i, err
 }
 
+const getQueryForUpdate = `-- name: GetQueryForUpdate :one
+SELECT id, project_id, organization_id, created_by_user_id, name, dataset, spec, created_at, updated_at, deleted_at, deleted
+FROM queries
+WHERE project_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetQueryForUpdateParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+// Locks the row for the rest of the transaction, so a concurrent update or
+// delete waits and then sees the committed state: no lost update, no stale
+// audit snapshot, and a row deleted meanwhile reads as gone.
+func (q *Queries) GetQueryForUpdate(ctx context.Context, arg GetQueryForUpdateParams) (Query, error) {
+	row := q.db.QueryRow(ctx, getQueryForUpdate, arg.ProjectID, arg.ID)
+	var i Query
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.Dataset,
+		&i.Spec,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const listQueries = `-- name: ListQueries :many
 SELECT id, project_id, organization_id, created_by_user_id, name, dataset, spec, created_at, updated_at, deleted_at, deleted
 FROM queries

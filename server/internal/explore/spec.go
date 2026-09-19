@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
@@ -82,24 +83,44 @@ func validateSpec(catalog *analytics.Catalog, dataset string, raw []byte, now ti
 		Limit:        spec.Limit,
 		Ungrouped:    spec.Ungrouped,
 	}
-	for _, m := range spec.Measures {
+	// The compiler folds the case of these, but the query endpoint's schema
+	// does not: a saved "COUNT" would validate here and be refused on replay.
+	// Only the canonical lowercase form is saved.
+	for i, m := range spec.Measures {
+		if reason := canonical(fmt.Sprintf("measures[%d].op", i), m.Op); reason != "" {
+			return reason
+		}
 		req.Measures = append(req.Measures, analytics.Measure{Op: m.Op, Field: m.Field, Alias: m.Alias})
 	}
-	for _, f := range spec.Filters {
+	for i, f := range spec.Filters {
+		if reason := canonical(fmt.Sprintf("filters[%d].operator", i), f.Operator); reason != "" {
+			return reason
+		}
 		req.Filters = append(req.Filters, analytics.Filter{Field: f.Field, Operator: f.Operator, Values: f.Values})
 	}
-	for _, o := range spec.OrderBy {
+	for i, o := range spec.OrderBy {
+		if reason := canonical(fmt.Sprintf("order_by[%d].direction", i), o.Direction); reason != "" {
+			return reason
+		}
 		req.OrderBy = append(req.OrderBy, analytics.OrderBy{Measure: o.Measure, Direction: o.Direction})
 	}
 
 	// Tenancy is bound as arguments and never reaches the plan, so any
 	// placeholder validates the shape.
 	if _, err := analytics.Compile(catalog, "validate", "validate", req); err != nil {
-		var invalid *analytics.Error
-		if errors.As(err, &invalid) {
+		if invalid, ok := errors.AsType[*analytics.Error](err); ok {
 			return invalid.Error()
 		}
 		return err.Error()
+	}
+	return ""
+}
+
+// canonical returns why an enum value cannot be saved: it is not in the
+// lowercase form the query endpoint accepts.
+func canonical(position, value string) string {
+	if value != strings.ToLower(value) {
+		return fmt.Sprintf("unsatisfiable: %s %q must be lowercase", position, value)
 	}
 	return ""
 }

@@ -67,6 +67,17 @@ func TestCreateQuery(t *testing.T) {
 		require.ErrorContains(t, err, "department")
 	})
 
+	t.Run("it rejects an enum value the query endpoint would refuse on replay", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		spec := validSpec()
+		spec["measures"] = []any{map[string]any{"op": "COUNT"}}
+		_, err := ti.service.CreateQuery(ctx, createPayload("shouty", spec))
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "measures[0].op")
+		require.ErrorContains(t, err, "lowercase")
+	})
+
 	t.Run("it rejects an unknown dataset", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
@@ -187,6 +198,19 @@ func TestUpdateQuery(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
 		_, err := ti.service.UpdateQuery(ctx, &gen.UpdateQueryPayload{ID: uuid.NewString(), Name: "x", Dataset: "sessions", Spec: validSpec(), SessionToken: nil, ProjectSlugInput: nil})
+		requireOopsCode(t, err, oops.CodeNotFound)
+	})
+
+	t.Run("it reports a deleted query as not found", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		created, err := ti.service.CreateQuery(ctx, createPayload("gone", validSpec()))
+		require.NoError(t, err)
+		require.NoError(t, ti.service.DeleteQuery(ctx, &gen.DeleteQueryPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil}))
+		_, err = ti.service.UpdateQuery(ctx, &gen.UpdateQueryPayload{ID: created.ID, Name: "x", Dataset: "sessions", Spec: validSpec(), SessionToken: nil, ProjectSlugInput: nil})
+		requireOopsCode(t, err, oops.CodeNotFound)
+		// A second delete is not found, not a fault.
+		err = ti.service.DeleteQuery(ctx, &gen.DeleteQueryPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
 		requireOopsCode(t, err, oops.CodeNotFound)
 	})
 }

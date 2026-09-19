@@ -173,7 +173,7 @@ func (s *Service) UpdateQuery(ctx context.Context, payload *gen.UpdateQueryPaylo
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	queries := repo.New(dbtx)
 
-	before, err := queries.GetQuery(ctx, repo.GetQueryParams{ProjectID: *authCtx.ProjectID, ID: id})
+	before, err := queries.GetQueryForUpdate(ctx, repo.GetQueryForUpdateParams{ProjectID: *authCtx.ProjectID, ID: id})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "query not found")
@@ -189,6 +189,9 @@ func (s *Service) UpdateQuery(ctx context.Context, payload *gen.UpdateQueryPaylo
 		ID:        id,
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "query not found")
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update query").LogError(ctx, s.logger)
 	}
 
@@ -223,7 +226,7 @@ func (s *Service) DeleteQuery(ctx context.Context, payload *gen.DeleteQueryPaylo
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	queries := repo.New(dbtx)
 
-	existing, err := queries.GetQuery(ctx, repo.GetQueryParams{ProjectID: *authCtx.ProjectID, ID: id})
+	existing, err := queries.GetQueryForUpdate(ctx, repo.GetQueryForUpdateParams{ProjectID: *authCtx.ProjectID, ID: id})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "query not found")
@@ -238,6 +241,9 @@ func (s *Service) DeleteQuery(ctx context.Context, payload *gen.DeleteQueryPaylo
 
 	row, err := queries.DeleteQuery(ctx, repo.DeleteQueryParams{ProjectID: *authCtx.ProjectID, ID: id})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "query not found")
+		}
 		return oops.E(oops.CodeUnexpected, err, "delete query").LogError(ctx, s.logger)
 	}
 	if err := s.audit.LogQueryDelete(ctx, dbtx, audit.LogQueryDeleteEvent{QueryEventBase: s.auditBase(authCtx, row)}); err != nil {

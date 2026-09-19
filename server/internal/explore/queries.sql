@@ -12,6 +12,17 @@ WHERE project_id = @project_id
   AND id = @id
   AND deleted IS FALSE;
 
+-- name: GetQueryForUpdate :one
+-- Locks the row for the rest of the transaction, so a concurrent update or
+-- delete waits and then sees the committed state: no lost update, no stale
+-- audit snapshot, and a row deleted meanwhile reads as gone.
+SELECT *
+FROM queries
+WHERE project_id = @project_id
+  AND id = @id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: CreateQuery :one
 INSERT INTO queries (
   project_id, organization_id, created_by_user_id, name, dataset, spec
