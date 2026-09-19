@@ -733,6 +733,10 @@ func (w *toolCallResponseWriter) Write(p []byte) (int, error) {
 // parsed object instead of having to re-parse the stringified text block.
 // structured is nil for non-JSON bodies and for JSON that is not an object
 // (arrays/scalars), which the spec reserves the field for.
+//
+// A Gram Function that failed is the one body not passed through verbatim: its
+// JavaScript stack trace and duplicated validation dump are trimmed off first,
+// since neither is anything the tool's caller can act on.
 func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk json.RawMessage, structured json.RawMessage, err error) {
 	body := rw.body.Bytes()
 	if len(body) == 0 {
@@ -743,6 +747,11 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk j
 	mt, _, err := mime.ParseMediaType(ct)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse content type %q: %w", ct, err)
+	}
+
+	failed := rw.statusCode < 200 || rw.statusCode >= 300
+	if failed && toolKind == gateway.ToolKindFunction && contenttypes.IsJSON(mt) {
+		body = trimFunctionFailureBody(body)
 	}
 
 	switch {
