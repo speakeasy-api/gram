@@ -20,6 +20,20 @@ function fractionalDigits(value: string): number {
   return match[3]?.length ?? 0;
 }
 
+/** Reject malformed API costs before chart or total arithmetic can run. */
+export function validateSpendBreakdown(
+  data: SpendBreakdownData,
+): SpendBreakdownData {
+  fractionalDigits(data.totalCostUsd);
+  for (const product of data.products) {
+    fractionalDigits(product.costUsd);
+    for (const bucket of product.buckets) {
+      fractionalDigits(bucket.costUsd);
+    }
+  }
+  return data;
+}
+
 function decimalToScaledInteger(value: string, scale: number): bigint {
   const match = EXACT_DECIMAL.exec(value.trim());
   if (!match) throw new Error(`Invalid exact decimal: ${value}`);
@@ -72,7 +86,7 @@ export function adaptSpendChart(
     selectedProducts.has(product.id),
   );
   const observedBucketCount = data.products[0]?.buckets.findIndex(
-    (bucket) => bucket.from.getTime() >= queriedAtMs,
+    (bucket) => bucket.from.getTime() > queriedAtMs,
   );
   const bucketCount =
     observedBucketCount === -1 || observedBucketCount === undefined
@@ -129,6 +143,7 @@ export function sumSelectedCost(
 
 /** Round only presentation; aggregation retains the server's full precision. */
 export function formatSpendUsd(value: string): string {
+  if (!EXACT_DECIMAL.test(value.trim())) return "—";
   const scale = Math.max(2, fractionalDigits(value));
   const amount = decimalToScaledInteger(value, scale);
   const magnitude = amount < 0n ? -amount : amount;

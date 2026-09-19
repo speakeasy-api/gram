@@ -23,6 +23,7 @@ import {
   type SpendProduct,
   type SpendProductID,
   sumSelectedCost,
+  validateSpendBreakdown,
 } from "./spend-breakdown-adapter";
 import { meterPeriodDisplayRange, useMeterPeriod } from "./use-meter-period";
 
@@ -54,6 +55,8 @@ const PRODUCT_ID_LOOKUP: Record<SpendProductID, true> = {
   mcp_egress: true,
 };
 
+const NUMERIC_CELL = "block w-full text-right tabular-nums";
+
 const spendColumns: Column<SpendProduct>[] = [
   {
     key: "product",
@@ -66,7 +69,7 @@ const spendColumns: Column<SpendProduct>[] = [
     header: "Usage",
     width: "1fr",
     render: (product) => (
-      <span className="tabular-nums">{formatSpendUsage(product)}</span>
+      <span className={NUMERIC_CELL}>{formatSpendUsage(product)}</span>
     ),
   },
   {
@@ -74,7 +77,7 @@ const spendColumns: Column<SpendProduct>[] = [
     header: "Rate",
     width: "1fr",
     render: (product) => (
-      <span className="tabular-nums">{formatSpendRate(product)}</span>
+      <span className={NUMERIC_CELL}>{formatSpendRate(product)}</span>
     ),
   },
   {
@@ -82,7 +85,7 @@ const spendColumns: Column<SpendProduct>[] = [
     header: "Estimated cost",
     width: "1fr",
     render: (product) => (
-      <span className="tabular-nums">{formatSpendUsd(product.costUsd)}</span>
+      <span className={NUMERIC_CELL}>{formatSpendUsd(product.costUsd)}</span>
     ),
   },
 ];
@@ -98,7 +101,11 @@ export function SpendBreakdownSection(): JSX.Element {
   const query = useGetSpendBreakdown(
     { ...periodState.requestPeriod },
     undefined,
-    { throwOnError: false, placeholderData: keepPreviousData },
+    {
+      throwOnError: false,
+      placeholderData: keepPreviousData,
+      select: validateSpendBreakdown,
+    },
   );
   const data: SpendBreakdownData | undefined = query.data;
 

@@ -286,6 +286,22 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     must not increase API usage, while the incremental summary records all 873
     deliveries. Run the seed twice and repeat.
 
+19. **Billing spend by product** — in the demo organization, open Billing and
+    select a custom trailing 14-day window. Confirm non-zero estimated cost
+    for agent session storage, per-scanner risk scanning, and MCP egress only;
+    inference must not appear. Compare `usage.getSpendBreakdown` quantities
+    against `billing_meter_daily_summaries` ordinary-usage totals (including
+    physical duplicate deliveries). Apply current PAYG rates and verify exact
+    product costs sum to the response total; display rounds only at presentation.
+    Switch daily/weekly/monthly and cumulative modes, preserving the total.
+    Remove a product and confirm its stack, table row, and cost contribution
+    disappear together; clear the selection and confirm the selection prompt.
+    Restore all products, check the current in-progress bucket, and select an
+    empty historical range. Check desktop and mobile layouts and confirm Usage,
+    Rate, and Estimated cost values share their respective column's right edge.
+    Repeat after reseeding. Local rewritten-seed checks alone do not qualify
+    this shared-demo row for `[x]`.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
