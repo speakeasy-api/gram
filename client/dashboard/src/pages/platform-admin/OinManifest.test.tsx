@@ -189,8 +189,11 @@ describe("PlatformAdminOinManifest", () => {
         globals.clicks.push({ download: this.download, href: this.href });
       });
   });
-  afterEach(() => {
+  afterEach(async () => {
     cleanup();
+    // Drain downloadText's deferred revocations while URL mocks still exist,
+    // even when a test assertion fails before it can await those timers.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     globals.click?.mockRestore();
     restoreObjectURL();
   });
@@ -267,6 +270,13 @@ describe("PlatformAdminOinManifest", () => {
     const blobs = globals.createObjectURL.mock.calls.map((call) => call[0]);
     expect(await blobs[0]?.text()).toBe(JSON.stringify(manifest));
     expect(await blobs[1]?.text()).toBe(markdownBody);
+    await waitFor(() =>
+      expect(globals.revokeObjectURL).toHaveBeenCalledTimes(2),
+    );
+    expect(globals.revokeObjectURL.mock.calls).toEqual([
+      ["blob:manifest"],
+      ["blob:manifest"],
+    ]);
     // The export is not re-requested to download; the fetched body is reused.
     expect(mocks.exportCalls).toHaveLength(2);
   });
