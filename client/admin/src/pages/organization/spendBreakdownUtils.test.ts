@@ -56,6 +56,13 @@ describe("spend currency display", () => {
       "$9,007,199,254,740,993.00",
     );
   });
+
+  it("distinguishes sub-cent amounts from true zero without exposing extra decimals", () => {
+    expect(formatSpendUsd("0.004")).toBe("<$0.01");
+    expect(formatSpendUsd("-0.004")).toBe(">-$0.01");
+    expect(formatSpendUsd("0.005")).toBe("$0.01");
+    expect(formatSpendUsd("-0.000")).toBe("$0.00");
+  });
 });
 
 describe("spend chart arithmetic", () => {
@@ -82,5 +89,22 @@ describe("spend chart arithmetic", () => {
     expect(chart.points).toHaveLength(1);
     expect(chart.points[0]?.exactCostUsd).toBe("0.000000000000000002");
     expect(chart.points[0]?.scaledCost).toBe(2);
+    expect(chart.points[0]?.inProgress).toBe(true);
+
+    const cumulative = spendChartData(
+      data,
+      new Set<SpendProduct["id"]>(["agent_session_storage"]),
+      "daily",
+      true,
+    );
+    expect(
+      cumulative.points.map(({ exactCostUsd, inProgress }) => ({
+        exactCostUsd,
+        inProgress,
+      })),
+    ).toEqual([
+      { exactCostUsd: "0.000000000000000001", inProgress: false },
+      { exactCostUsd: "0.000000000000000002", inProgress: true },
+    ]);
   });
 });

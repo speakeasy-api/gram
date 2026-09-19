@@ -1,5 +1,5 @@
 import { useMemo, useState, type JSX } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { RefreshCw, RotateCcw } from "lucide-react";
 
@@ -59,9 +59,19 @@ export function SpendBreakdown({
       from: search.from ? new Date(`${search.from}T00:00:00Z`) : undefined,
       to: search.to ? new Date(exclusiveEnd(search.to)) : undefined,
     }),
+    placeholderData: keepPreviousData,
     select: validateSpendBreakdown,
   });
-  const data = query.data;
+  const [lastSuccessfulData, setLastSuccessfulData] =
+    useState<AdminSpendBreakdown>();
+  if (
+    query.data &&
+    !query.isPlaceholderData &&
+    query.data !== lastSuccessfulData
+  ) {
+    setLastSuccessfulData(query.data);
+  }
+  const data = query.data ?? lastSuccessfulData;
   const selectedProducts = useMemo(
     () => new Set(selectedProductIDs),
     [selectedProductIDs],

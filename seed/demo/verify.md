@@ -317,16 +317,34 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     per-scanner risk, and MCP egress estimates from the existing meter fixtures,
     even without a Stripe subscription. These are current PAYG list-price
     comparisons, not the organization's actual invoice or contracted charges.
+    Open both `/organizations/<ORG_ID>/billing` and
+    `/organizations/<ORG_SLUG>/billing` with the same explicit date range. Call
+    the spend API with each identifier too: the reports must match apart from
+    `queried_at`, and both routes must render the same product table.
     Check that API product costs sum exactly to the total, displayed USD amounts
-    round to two decimals, and ingress and inference are excluded. Changing the
+    round to two decimals (nonzero amounts rounding to zero show `<$0.01`), and
+    ingress and inference are excluded. Changing the
     product selection must update the chart, table, and selected total together.
     Storage is blue, risk scanning purple, and MCP amber in both the spend and
     usage graphs, including cumulative views and light/dark themes. Check
     billing-cycle selection, custom dates, an empty historical range,
-    refresh/error recovery, and desktop/mobile layouts.
+    refresh/error recovery, and desktop/mobile layouts. Delay and then fail a
+    new-range request: retain the previous chart, table, and total while loading
+    and after failure; retry must replace them with the requested range.
     Switch organizations and confirm no previous organization's values remain.
     An unauthenticated request must be rejected; the customer-facing enterprise
     spend endpoint must still return `unsupported_plan`.
+
+    Verification recorded 2026-09-19 on the local admin UI against the
+    shared-demo tenant, not the rewritten developer organization. Enterprise
+    tier and absence of a Stripe subscription were retained. Browser checks
+    covered selection, date ranges, grouping, cumulative mode, empty states,
+    retry, organization switching, mobile width, and both themes; API checks
+    covered exact arithmetic, dense buckets, invalid bounds, missing
+    organizations, and authentication. ID/slug API reports and rendered tables
+    matched; delayed and failed range changes retained the prior estimate and
+    recovered on retry.
+    [Visual evidence on PR #6602](https://github.com/speakeasy-api/gram/pull/6602#issuecomment-5742380327).
 
 ## On failure
 

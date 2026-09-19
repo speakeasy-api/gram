@@ -76,6 +76,9 @@ export function formatSpendUsd(value: string): string {
     BigInt(whole) * 100n +
     BigInt(fraction.padEnd(2, "0").slice(0, 2)) +
     ((fraction[2] ?? "0") >= "5" ? 1n : 0n);
+  if (cents === 0n && /[1-9]/.test(fraction)) {
+    return sign === "-" ? ">-$0.01" : "<$0.01";
+  }
   return formatExactUsd(`${sign}${scaledIntegerToDecimal(cents, 2)}`) ?? "—";
 }
 export function sumSpendCosts(values: readonly string[]): string {

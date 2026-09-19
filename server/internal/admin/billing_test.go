@@ -267,6 +267,9 @@ func TestGetSpendBreakdownReturnsEnterpriseSpendByCanonicalOrganizationWithoutSu
 	require.Equal(t, []string{"1000000", "1000000", "1073741824"}, []string{
 		result.Products[0].Quantity, result.Products[1].Quantity, result.Products[2].Quantity,
 	})
+	require.Equal(t, []string{"0.35", "0.99", "20"}, []string{
+		result.Products[0].CostUsd, result.Products[1].CostUsd, result.Products[2].CostUsd,
+	})
 	for _, product := range result.Products {
 		require.Len(t, product.Buckets, 2)
 	}

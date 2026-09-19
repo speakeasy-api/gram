@@ -7,4 +7,6 @@ Add an admin spend breakdown API and organization billing visualization for ever
 
 Display USD amounts rounded to two decimals while retaining exact arithmetic. Use consistent, theme-aware product colors across spend and usage graphs: blue for storage, purple for risk scanning, and amber for MCP.
 
+Preserve the last successful estimate while changing date ranges and if a new range fails to load. Distinguish nonzero amounts that round to zero with a sub-cent marker rather than displaying them as zero.
+
 Keep the customer spend endpoint restricted to PAYG organizations. Admin requests require the existing admin authentication and resolve the requested organization by ID or slug.
