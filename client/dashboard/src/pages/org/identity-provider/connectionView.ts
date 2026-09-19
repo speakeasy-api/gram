@@ -106,7 +106,7 @@ export function groupChecklist(
 export function activeChecklistGroup(connection: {
   status: OktaIdentityProviderConnectionStatus;
 }): ChecklistGroupId {
-  return isConnectionVerified(connection) ? "cross_app_access" : "connect";
+  return isConnectionChecked(connection) ? "cross_app_access" : "connect";
 }
 
 /** The Okta admin console for an org URL (`acme.okta.com` → `acme-admin.okta.com`). */

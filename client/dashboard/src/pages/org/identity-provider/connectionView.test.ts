@@ -140,9 +140,11 @@ describe("groupChecklist", () => {
     ]);
   });
 
-  it("expands Connect until a clean verification", () => {
+  it("expands Cross App Access after a completed verification", () => {
     expect(activeChecklistGroup({ status: "pending" })).toBe("connect");
-    expect(activeChecklistGroup({ status: "degraded" })).toBe("connect");
+    expect(activeChecklistGroup({ status: "degraded" })).toBe(
+      "cross_app_access",
+    );
     expect(activeChecklistGroup({ status: "verified" })).toBe(
       "cross_app_access",
     );

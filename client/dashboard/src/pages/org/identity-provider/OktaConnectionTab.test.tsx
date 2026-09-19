@@ -37,7 +37,8 @@ describe("initial Okta connection", () => {
       show(status ? ({ status } as OktaIdentityProviderConnection) : undefined);
       expect(screen.getByLabelText("Okta organization URL")).toBeTruthy();
       expect(screen.getAllByRole("textbox")).toHaveLength(1);
-      expect(screen.queryByText("How you add the app")).toBeNull();
+      expect(screen.queryByText("Connection")).toBeNull();
+      expect(screen.queryByText("Okta setup checklist")).toBeNull();
       expect(screen.queryByText("Okta catalog (OIN)")).toBeNull();
       expect(screen.queryByText("Add your Okta organization")).toBeNull();
       expect(screen.queryByText("Set up the Okta app")).toBeNull();

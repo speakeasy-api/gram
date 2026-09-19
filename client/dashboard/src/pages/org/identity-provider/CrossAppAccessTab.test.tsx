@@ -708,7 +708,9 @@ it("retains Undo across bulk confirmation of a distinct issuer ID sharing the re
   selectAndConfirm(1);
   await waitFor(() => expect(mocks.confirm).toHaveBeenCalledTimes(1));
   await waitFor(() =>
-    expect(screen.queryByRole("button", { name: "Confirm setup" })).toBeNull(),
+    expect(
+      screen.getByText(/1 server confirmed and moved out of Needs action/),
+    ).toBeTruthy(),
   );
   expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
 });

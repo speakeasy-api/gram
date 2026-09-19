@@ -17,6 +17,7 @@ func TestBuildRowIssuerID(t *testing.T) {
 		resource: "https://mcp.example.com",
 	}
 	unconfirmed := buildRow(&snapshot{}, r)
+	require.Equal(t, "https://mcp.example.com", unconfirmed.ResourceIndicator)
 	require.NotNil(t, unconfirmed.IssuerID)
 	require.Equal(t, r.server.IssuerID.String(), *unconfirmed.IssuerID)
 	require.Nil(t, unconfirmed.Audience)

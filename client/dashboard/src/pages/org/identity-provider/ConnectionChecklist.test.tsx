@@ -128,17 +128,23 @@ describe("ConnectionChecklist", () => {
     ).not.toContain("(done)");
   });
 
-  it("keeps Connect open on a degraded verification", () => {
+  it("exposes agent settings after a degraded verification", () => {
     renderChecklist(
       connectionWith("degraded", [
         item("grant_scopes", "connect", false),
         item("create_ai_agent", "cross_app_access"),
       ]),
     );
-    expect(screen.getByText("Step grant_scopes")).toBeTruthy();
     expect(
-      screen.queryByRole("region", { name: "Save Okta AI agent" }),
-    ).toBeNull();
+      screen
+        .getByRole("button", {
+          name: "Cross App Access setup, 0 of 1 complete",
+        })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(
+      screen.getByRole("region", { name: "Save Okta AI agent" }),
+    ).toBeTruthy();
   });
 });
 
