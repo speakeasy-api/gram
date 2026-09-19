@@ -138,6 +138,8 @@ func TestOktaChecklist_AdminInstructions(t *testing.T) {
 	require.Contains(t, agent.Details[1], "does not change how your people sign in to Speakeasy")
 	require.Contains(t, agent.Details[1], "permanent")
 	require.Contains(t, agent.Details[2], "Staged")
+	require.Contains(t, agent.Details[2], "set it to Active")
+	require.Contains(t, agent.Details[2], "Assignments")
 	require.Contains(t, agent.Details[3], "Leave the agent in Staged status")
 	require.Contains(t, agent.Details[3], "upcoming release")
 	require.NotContains(t, agent.Details[3], keyURL, "the management JWKS is never offered as the agent credential")
