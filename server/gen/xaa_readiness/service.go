@@ -171,6 +171,10 @@ type XaaServerReadiness struct {
 	NotApplicableReason *string
 	// Whether the administrator still has a step to do for this server.
 	Pending bool
+	// The upstream authorization server ID. Together with the resource indicator,
+	// identifies the shared readiness confirmation; independent of the confirmed
+	// identity assertion audience.
+	IssuerID *string
 	// The resource indicator to enter on the connection: the server's RFC 9728
 	// resource identifier when known, otherwise its URL.
 	ResourceIndicator string
