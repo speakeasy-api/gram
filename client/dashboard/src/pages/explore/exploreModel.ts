@@ -270,17 +270,27 @@ function defaultChartForKind(kind: AnalyticsDataset["kind"]): ChartType {
   }
 }
 
+/**
+ * The dimensions a dataset opens grouped by: the ones the catalog flags as
+ * default, in declaration order, within the builder's own cap.
+ */
+function defaultDimensions(dataset: AnalyticsDataset): string[] {
+  return dataset.fields
+    .filter((f) => f.default && f.role === "dimension")
+    .map((f) => f.name)
+    .slice(0, MAX_DIMENSIONS);
+}
+
 /** A fresh spec for a dataset, keeping the window and limit already chosen. */
 export function specForDataset(
   dataset: AnalyticsDataset,
   current?: Pick<ExploreSpec, "window" | "limit">,
 ): ExploreSpec {
-  const summary = fieldByName(dataset, dataset.summaryField ?? "");
   return {
     dataset: dataset.name,
     measures: [{ op: "count", field: "" }],
     filters: [],
-    dimensions: summary && summary.role === "dimension" ? [summary.name] : [],
+    dimensions: defaultDimensions(dataset),
     orderBy: "",
     limit: current?.limit ?? 0,
     window: current?.window ?? "7d",
