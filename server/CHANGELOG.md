@@ -1,5 +1,59 @@
 # server
 
+## 2.9.0
+
+### Minor Changes
+
+- 52ebc1b: Add an admin spend breakdown API and organization billing visualization for every account type, including organizations without a Stripe subscription. Reuse exact server-calculated storage, per-scanner risk, and MCP egress estimates at current PAYG list prices, with product selection, billing-cycle and custom date ranges, daily/weekly/monthly grouping, and cumulative views. These usage comparisons are not invoices or contracted charges.
+  
+  Display USD amounts rounded to two decimals while retaining exact arithmetic. Use consistent, theme-aware product colors across spend and usage graphs: blue for storage, purple for risk scanning, and amber for MCP.
+  
+  Preserve the last successful estimate while changing date ranges and if a new range fails to load. Distinguish nonzero amounts that round to zero with a sub-cent marker rather than displaying them as zero.
+  
+  Keep the customer spend endpoint restricted to PAYG organizations. Admin requests require the existing admin authentication and resolve the requested organization by ID or slug.
+- 8fa1872: Add a shared admin support matrix with CSV import, editable coverage, and integration recommendations that include remaining coverage gaps.
+- 7ea4e5b: Adds the identityProviderConnections management API for connecting an organization's Okta tenant. It is gated behind the okta-connections flag and unavailable until GRAM_IDENTITY_PROVIDER_SIGNING_CREDENTIAL_ID is set.
+- df903af: Reconciles each verified Okta connection's applications and assignments into a snapshot on a schedule, with syncApplications and listApplications on the identityProviderConnections API.
+- 57551be: Add `analytics.dimensionValues`: the values a dimension holds inside a window, most frequent first, resolved after the dataset collapses its observations. What Explore's filter pickers read.
+- c8c3c90: Add the `analytics` service: `analytics.query` runs a grouped or ungrouped query against a catalog dataset by field name, never by table or SQL, and `analytics.describe` serves the catalog the builder is generated from. Ships beside `telemetry.query`; nothing migrates.
+- b277670: Add the `explore` service: saved queries, Explore's one server-side object. Any member can save and update; a spec is validated against the catalog on save and again on read, so a catalog change fails visibly instead of returning wrong numbers. Deleting someone else's query needs project write access. Every change is audited.
+- 85ad1d0: Add a metered-product spend breakdown endpoint and stacked billing chart for agent session storage, per-scanner risk scanning, and MCP egress. Show exact server-calculated estimates at current PAYG list prices with daily, weekly, monthly, cumulative, product, and date-range controls. Inference, credits, discounts, taxes, and billing adjustments are excluded; these ordinary-usage estimates are not invoices.
+  
+  Restrict spend estimates to PAYG organizations using server-owned availability. Other plans return `unsupported_plan`, empty products, and a `"0"` total without querying usage; the dashboard hides the entire spend section while retaining the ordinary usage explorer.
+- 728a2bb: Label workload sessions on the MCP Sessions page. `userSessions.list` now returns a `workload` object for `workload:` subjects, with the workload issuer's name and URL, the external subject, the assigned agent and its state, and every admission (project or organization tier) currently letting the workload in. The dashboard marks these rows as workloads rather than people. The revoke dialog lists the controls that can stop a workload, from narrowest to widest, and shows which ones stop it from reconnecting. Revoking a workload session ends only that session: the workload can exchange a new token and reconnect.
+
+### Patch Changes
+
+- fb54e6b: Add the agent_events and agent_metrics ClickHouse tables. Nothing reads or writes them yet.
+- 383d272: Add the projection from normalized OTLP log records and spans into agent_events rows, and teach the OTLP dialects to classify what a record is in agent vocabulary. Nothing consumes it yet.
+- 68bd741: Add the streams consumers that write normalized OTLP log records and spans into the agent_events ClickHouse table.
+- 081e3cc: Adds internal provisioning for identity provider connection credentials: a per-connection KMS signing key published through the existing key set and remote session client path. Rows it creates are read-only through the organization APIs.
+- ea505e0: Adds the okta_applications, okta_application_assignments, and okta_application_reconcile_runs tables and the applications sync cadence columns on okta_identity_provider_connections.
+- 901a405: Adds the okta_resource_connections table recording, per identity provider connection and upstream resource, that the administrator created the agent-to-resource connection in the Okta console and the audience they configured.
+- 1858d1a: `analytics.describe` flags the fields a dataset opens on, so Explore starts each dataset on a sensible breakdown without per-dataset knowledge in the client.
+- 2f8b5ab: Add the semantic catalog for agent session data: the sessions and tool_calls datasets, their typed fields, guardrail constants, and the source queries that de-duplicate and collapse agent_events to each dataset's grain. Nothing serves it yet.
+- e9df905: Add an optional second step in Platform MCP setup for bringing existing remote MCP servers from Claude Code into Speakeasy management. The reviewed workflow verifies the agent's connection, requests informed discovery consent or a sanitized manual inventory, and prefers catalogue entries matched by endpoint or confirmed provider/name before using custom URLs. It confirms the destination and selected servers and reports each registration separately. Authentication stays in Speakeasy without migrating local credentials.
+- 45b8b2c: Anthropic inference hooks now distinguish archived transcript attempts from successfully evaluated history. Only accepted content can be skipped on later deliveries; denied or interrupted assistant/tool scans are retried, while corrected transcripts can recover. Concurrent deliveries use optimistic checkpoint updates without holding database connections during scans, and repeated transcripts longer than 512 messages no longer append duplicate archive rows. Unknown or ambiguous history is conservatively rescanned within the existing request deadline.
+  
+  The accepted checkpoint is a last-known-good optimization, separate from attempted messages archived for the UI. Incomplete scanner evaluations preserve existing fail-open behavior but never advance acceptance, so a later delivery retries uncertain assistant/tool content. Concurrent successful deliveries both allow: a compare-and-swap conflict leaves the winning marker untouched, while database, context, and deadline errors still propagate.
+- 54605e7: Tightens DPoP nonce challenge parsing to the DPoP scheme, canonicalizes the Okta org URL so it matches the proof, and reuses the verification token when its grant covers the default scopes.
+- c2977dc: Cascades okta_resource_connections from the snapshot app instance instead of a partial SET NULL that nulled the tenant columns and made revoke fail.
+- 72128df: Include all PAYG metered prices in Checkout, preserve resumable billing setup, and apply trial conversion only after confirmed completion. Handle delayed completion and subscription deletion without losing inference-key conversion or post-checkout cleanup, preserve existing Checkout sessions, and show setup actions only to eligible users.
+  
+  Remove the obsolete platform-admin TUM contract controls and contract price estimator from the billing page.
+  
+  Show the PAYG risk scanning rate of $0.99 per million tokens scanned and MCP gateway egress rate of $20 per GiB alongside token management pricing.
+  
+  Place Payment beside PAYG pricing on wider screens and stack them on smaller screens. Prioritize payment setup and recovery above usage, keep healthy subscriptions usage-first, and retain the Organization eyebrow at the top of the billing page.
+  
+  Use Agent session storage as the billing product name and Stored sessions for usage labels and charts. Rename the Meter usage section to Usage without changing token-based metering or rates.
+- ec48cc9: Add the queries table: Explore's saved questions, scoped to a project with a recorded creator. Nothing reads or writes it yet.
+- 5ad2b81: AI integration syncs now stop retrying when the provider rejects the request outright (HTTP 400/401/403/404/422), show the provider's reason on the integration, and pause the schedule after repeated rejections instead of retrying forever. Chat analysis and skill efficacy judging retry transient model failures without failing the background task, and expected API responses such as permission denied or not found are no longer reported as frontend errors.
+- 9059ae1: Allow staff to enable Tailscale private access for an organization from the admin feature controls without requiring a separate PostHog rollout flag.
+- 6150428: A tunneled MCP server that drops its connection mid-request now returns a JSON-RPC error that says the request may have already run, instead of an HTTP 502.
+- 728a2bb: Add a `workload` principal type and give workload sessions a real actor. A workload holds no grants of its own, so a grant written against a `workload:` principal is refused; authority reaches it through its assigned agent. A `workload:` session subject carries its workload principal on the request context and admits through that agent, so authorization evaluates the machine instead of refusing it. The workload never resolves through user principals, so it cannot pick up the organization-wide `user:all` grants. Workload sessions follow the agent authorization rollout, stop authorizing once their issuer is deleted, and their authorization challenges are listed with a `workload` principal type.
+- 728a2bb: An MCP request carrying a workload session token that has been revoked or has expired, or whose workload no longer has an active assigned agent, now gets a `401` with `WWW-Authenticate: Bearer ..., error="invalid_token"`, so the client drops the token and requests a new one instead of retrying with it. A tool denied by the assigned agent's policy still returns the usual permission error, and human sessions keep their existing challenge.
+
 ## 2.8.0
 
 ### Minor Changes
