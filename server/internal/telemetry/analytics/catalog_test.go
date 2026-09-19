@@ -106,12 +106,29 @@ func TestSourceQueriesDeduplicateBeforeAggregating(t *testing.T) {
 	t.Parallel()
 
 	scope := Scope{OrganizationID: "org", ProjectID: "proj", FromUnixNano: 1, ToUnixNano: 2}
+
+	// What each dataset binds after the scope: the whole list, so a dropped or
+	// reordered predicate fails here rather than passing unseen, and a new
+	// dataset has to declare its binds before it passes at all.
+	eventTypes := make([]any, 0, len(toolCallEventTypes))
+	for _, eventType := range toolCallEventTypes {
+		eventTypes = append(eventTypes, eventType)
+	}
+	trailing := map[string][]any{
+		Sessions.Name:  {""},                   // session_id != ''
+		ToolCalls.Name: append(eventTypes, ""), // event_type IN (...), event_id != ''
+	}
+
 	for _, ds := range Default.Datasets() {
 		query, args, err := ds.Source(scope).ToSql()
 		require.NoError(t, err, ds.Name)
 		require.Contains(t, query, "LIMIT 1 BY organization_id, project_id, record_id", ds.Name)
 		require.Contains(t, query, "GROUP BY organization_id, project_id", ds.Name)
-		require.Equal(t, []any{"org", "proj", int64(1), int64(2)}, args[:4], ds.Name)
+
+		tail, declared := trailing[ds.Name]
+		require.True(t, declared, "dataset %q declares no expected binds", ds.Name)
+		want := append([]any{"org", "proj", int64(1), int64(2)}, tail...)
+		require.Equal(t, want, args, ds.Name)
 	}
 }
 
