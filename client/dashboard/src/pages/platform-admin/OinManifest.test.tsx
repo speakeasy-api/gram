@@ -247,8 +247,9 @@ describe("PlatformAdminOinManifest", () => {
       "https://developer.okta.com/docs/guides/submit-oin-app/scrossapp/main/",
     );
     expect(
-      screen.queryByText(/Every registration is ready to submit/),
-    ).toBeNull();
+      screen.getByText("No catalog blockers found.").closest('[role="alert"]')
+        ?.textContent,
+    ).toBe("No catalog blockers found.");
     expect(screen.queryByLabelText("Blockers")).toBeNull();
   });
 

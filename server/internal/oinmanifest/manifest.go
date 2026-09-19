@@ -28,7 +28,8 @@ const (
 	grantTypeJWTBearer = "urn:ietf:params:oauth:grant-type:jwt-bearer" //nolint:gosec // URN identifier, not a credential.
 	grantProfileIDJAG  = "urn:ietf:params:oauth:grant-profile:id-jag"
 
-	subjectTokenTypeSAML2 = "urn:ietf:params:oauth:token-type:saml2" //nolint:gosec // URN identifier, not a credential.
+	subjectTokenTypeSAML2        = "urn:ietf:params:oauth:token-type:saml2"         //nolint:gosec // URN identifier, not a credential.
+	subjectTokenTypeRefreshToken = "urn:ietf:params:oauth:token-type:refresh_token" //nolint:gosec // URN identifier, not a credential.
 
 	registrationStatic = "static"
 	registrationCIMD   = "cimd"

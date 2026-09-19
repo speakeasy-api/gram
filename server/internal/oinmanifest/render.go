@@ -40,7 +40,7 @@ func RenderMarkdown(manifest Manifest) []byte {
 	writeRow(&b, "Role", app.Role)
 	writeRow(&b, "Redirect URI", app.RedirectURI)
 	writeRow(&b, "Bootstrap subject token type (SAML to refresh token)", app.SubjectTokenType)
-	writeRow(&b, "ID-JAG exchange subject token type", "urn:ietf:params:oauth:token-type:refresh_token")
+	writeRow(&b, "ID-JAG exchange subject token type", subjectTokenTypeRefreshToken)
 	writeRow(&b, "Sends resource parameter", fmt.Sprintf("%t", app.SendsResourceParameter))
 	b.WriteString("\n")
 

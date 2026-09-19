@@ -284,7 +284,7 @@ function ManifestView(): JSX.Element {
         </Alert>
       )}
 
-      <Alert variant="info">
+      <Alert variant="info" alignTop>
         <Text small>
           Conformance not verified: this catalog export does not establish OIN
           submission readiness. Submission requires a passing conformance log
