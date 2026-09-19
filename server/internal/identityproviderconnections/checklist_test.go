@@ -134,6 +134,8 @@ func TestOktaChecklist_AdminInstructions(t *testing.T) {
 	require.Contains(t, agent.Description, "resource connection per MCP server on the Cross App Access tab")
 	require.Len(t, agent.Details, 5)
 	require.Contains(t, agent.Details[0], "Directory > AI Agents")
+	require.Contains(t, agent.Details[0], "Name it Speakeasy Agent")
+	require.Contains(t, agent.Details[2], "Speakeasy Agent app marked Linked AI Agent")
 	require.Contains(t, agent.Details[1], "keep Create a new OIDC app linked to this AI agent selected")
 	require.Contains(t, agent.Details[1], "does not change how your people sign in to Speakeasy")
 	require.Contains(t, agent.Details[1], "permanent")

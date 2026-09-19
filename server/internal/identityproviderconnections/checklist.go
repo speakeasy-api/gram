@@ -170,9 +170,9 @@ func OktaChecklist(listingMode, jwksURL string, signal ChecklistSignal) []Checkl
 			Title:       "Register the Speakeasy AI agent",
 			Description: "Okta issues Cross App Access assertions only through a registered AI agent, and only for the users assigned to it. Register the agent once, then add a resource connection per MCP server on the Cross App Access tab.",
 			Details: []string{
-				"Go to Directory > AI Agents and select Register AI agent. Name it Speakeasy; the first step only asks for a name and description.",
+				"Go to Directory > AI Agents and select Register AI agent. Name it Speakeasy Agent, so the app Okta creates for it is easy to tell apart from the Speakeasy app above; the first step only asks for a name and description.",
 				"On User access and authentication, keep Create a new OIDC app linked to this AI agent selected. Okta uses this app only to decide which users the agent may act for; it does not change how your people sign in to Speakeasy. Do not pick Select an existing app: it lists your other apps, such as the MCP servers' own, and the link is permanent.",
-				"Okta creates the agent in Staged status and its linked app as Inactive. Open the linked app (under Applications, the Speakeasy app marked Linked AI Agent), set it to Active, and on its Assignments tab assign the users or groups who use MCP servers through Speakeasy.",
+				"Okta creates the agent in Staged status and its linked app as Inactive. Open the linked app (under Applications, the Speakeasy Agent app marked Linked AI Agent), set it to Active, and on its Assignments tab assign the users or groups who use MCP servers through Speakeasy.",
 				"Leave the agent in Staged status for now. Activating it needs a Public/private key credential under Client registration, and Speakeasy will provide the key URL (JWKS URI) for that credential in an upcoming release.",
 				"Record the agent ID below. It is the wlp... value in the agent page URL.",
 			},
