@@ -9418,6 +9418,7 @@ func marshalTelemetryToolUsageTraceSummaryToToolUsageTraceSummaryResponseBody(v 
 		EventSource:          v.EventSource,
 		HTTPStatusCode:       v.HTTPStatusCode,
 		HookStatus:           v.HookStatus,
+		ToolError:            v.ToolError,
 		BlockReason:          v.BlockReason,
 		AccountType:          v.AccountType,
 		ViaMetaMcpServerID:   v.ViaMetaMcpServerID,

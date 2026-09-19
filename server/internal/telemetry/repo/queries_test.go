@@ -170,14 +170,14 @@ func TestToolUsageOutcomePredicate(t *testing.T) {
 			wantSQL:  "(hook_status = 'blocked')",
 		},
 		{
-			name:     "error combines hook failure and http >= 400",
+			name:     "error combines hook failure, in-band tool error, and http >= 400",
 			statuses: []string{"error"},
-			wantSQL:  "((hook_status = 'failure' OR (hook_status IS NULL AND http_status_code >= 400)))",
+			wantSQL:  "((hook_status = 'failure' OR (hook_status IS NULL AND (tool_error = 1 OR http_status_code >= 400))))",
 		},
 		{
-			name:     "success combines hook success and 2xx/3xx http",
+			name:     "success requires no in-band tool error alongside hook success or 2xx/3xx http",
 			statuses: []string{"success"},
-			wantSQL:  "((hook_status = 'success' OR (hook_status IS NULL AND http_status_code >= 200 AND http_status_code < 400)))",
+			wantSQL:  "((hook_status = 'success' OR (hook_status IS NULL AND tool_error = 0 AND http_status_code >= 200 AND http_status_code < 400)))",
 		},
 		{
 			name:     "pending",
@@ -187,7 +187,7 @@ func TestToolUsageOutcomePredicate(t *testing.T) {
 		{
 			name:     "multiple outcomes are ORed",
 			statuses: []string{"error", "blocked"},
-			wantSQL:  "((hook_status = 'failure' OR (hook_status IS NULL AND http_status_code >= 400)) OR hook_status = 'blocked')",
+			wantSQL:  "((hook_status = 'failure' OR (hook_status IS NULL AND (tool_error = 1 OR http_status_code >= 400))) OR hook_status = 'blocked')",
 		},
 	}
 

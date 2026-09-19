@@ -1978,6 +1978,10 @@ function getStatusConfig(trace: ToolUsageTraceSummary): {
     }
   }
 
+  // A tool that ran and reported failure in its own result still answers 2xx,
+  // so the status code below would read it as a success.
+  if (trace.toolError) return failed;
+
   if (trace.httpStatusCode !== undefined) {
     if (trace.httpStatusCode >= 400) return failed;
     if (trace.httpStatusCode >= 200 && trace.httpStatusCode < 400) return ok;

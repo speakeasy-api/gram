@@ -206,7 +206,7 @@ func (tp *ToolProxy) Do(
 	case ToolKindPlatform:
 		return tp.doPlatform(ctx, logger.With(attr.SlogComponent("gateway-platform-caller")), w, requestBody, env, plan, attrs)
 	case ToolKindExternalMCP:
-		return tp.doExternalMCP(ctx, logger.With(attr.SlogComponent("gateway-externalmcp-caller")), w, requestBody, env, plan.Descriptor, plan.ExternalMCP)
+		return tp.doExternalMCP(ctx, logger.With(attr.SlogComponent("gateway-externalmcp-caller")), w, requestBody, env, plan.Descriptor, plan.ExternalMCP, attrs)
 	default:
 		return fmt.Errorf("tool type not supported: %s", plan.Kind)
 	}
@@ -895,6 +895,7 @@ func (tp *ToolProxy) doExternalMCP(
 	env toolconfig.ToolCallEnv,
 	descriptor *ToolDescriptor,
 	plan *ExternalMCPToolCallPlan,
+	attrs tm.HTTPLogAttributes,
 ) error {
 	span := trace.SpanFromContext(ctx)
 
@@ -974,6 +975,7 @@ func (tp *ToolProxy) doExternalMCP(
 	// otherwise visible to the end user and to no one operating the service.
 	if callResult.IsError {
 		upstreamReportedError = true
+		attrs.RecordToolCallError(tm.ToolCallErrorUpstreamResult)
 		logger.ErrorContext(ctx, "external MCP tool returned an error result",
 			attr.SlogToolName(toolName),
 			attr.SlogURL(plan.RemoteURL),

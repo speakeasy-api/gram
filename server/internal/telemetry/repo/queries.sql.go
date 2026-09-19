@@ -374,9 +374,9 @@ func toolUsageOutcomePredicate(statuses []string) squirrel.Sqlizer {
 		case "blocked":
 			or = append(or, squirrel.Expr("hook_status = 'blocked'"))
 		case "failure", "error":
-			or = append(or, squirrel.Expr("(hook_status = 'failure' OR (hook_status IS NULL AND http_status_code >= 400))"))
+			or = append(or, squirrel.Expr("(hook_status = 'failure' OR (hook_status IS NULL AND (tool_error = 1 OR http_status_code >= 400)))"))
 		case "success":
-			or = append(or, squirrel.Expr("(hook_status = 'success' OR (hook_status IS NULL AND http_status_code >= 200 AND http_status_code < 400))"))
+			or = append(or, squirrel.Expr("(hook_status = 'success' OR (hook_status IS NULL AND tool_error = 0 AND http_status_code >= 200 AND http_status_code < 400))"))
 		case "pending":
 			or = append(or, squirrel.Expr("hook_status = 'pending'"))
 		}
@@ -4134,12 +4134,16 @@ type ToolUsageTraceSummary struct {
 	EventSource       string  `ch:"event_source"`
 	HTTPStatusCode    *int32  `ch:"http_status_code"`
 	HookStatus        *string `ch:"hook_status"`
-	BlockReason       *string `ch:"block_reason"`
-	AccountType       *string `ch:"account_type"`
-	MetaMCPServerID   string  `ch:"meta_mcp_server_id"`
-	ClientKey         string  `ch:"client_key"`
-	ClientLabel       string  `ch:"client_label"`
-	ClientVersion     *string `ch:"client_version"`
+	// ToolError marks a trace whose tool ran and reported failure in its own
+	// result. The status code stays 2xx in that case, so it is the only signal
+	// separating it from a success.
+	ToolError       uint8   `ch:"tool_error"`
+	BlockReason     *string `ch:"block_reason"`
+	AccountType     *string `ch:"account_type"`
+	MetaMCPServerID string  `ch:"meta_mcp_server_id"`
+	ClientKey       string  `ch:"client_key"`
+	ClientLabel     string  `ch:"client_label"`
+	ClientVersion   *string `ch:"client_version"`
 }
 
 // GetToolUsageFilterOptionsParams defines the parameters for tool usage filter option queries.
@@ -4468,6 +4472,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		"event_source",
 		"http_status_code",
 		"hook_status",
+		"tool_error",
 		"block_reason",
 		"account_type",
 		"meta_mcp_server_id",
@@ -5601,6 +5606,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		// rank across the trace's summary rows (mirrors the raw-log path), rather
 		// than max()-ing each boolean independently.
 		"max(hook_status_rank) AS g_hook_status_rank",
+		"max(has_tool_error) AS g_has_tool_error",
 		"max(block_reason) AS g_block_reason",
 		"max(account_type) AS g_account_type",
 		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
@@ -5770,6 +5776,7 @@ SELECT
 	g_event_source AS event_source,
 	g_http_status_code AS http_status_code,
 	%s AS hook_status,
+	toUInt8(g_has_tool_error) AS tool_error,
 	nullIf(g_block_reason, '') AS block_reason,
 	nullIf(g_account_type, '') AS account_type,
 	g_meta_mcp_server_id AS meta_mcp_server_id,
@@ -5861,6 +5868,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		chAttr("gram.hook.source")+" AS hook_source",
 		chAttr("gen_ai.tool.call.result")+" AS tool_result",
 		chAttr("gram.hook.error")+" AS hook_error",
+		chAttr("gram.tool_call.error")+" AS tool_error_reason",
 		chAttr("gram.hook.block_reason")+" AS block_reason",
 		toolCallArguments+" AS tool_call_arguments",
 		chAttr("gram.mcp.match")+" AS mcp_match",
@@ -6075,6 +6083,7 @@ SELECT
 	toInt32OrNull(http_status_code_raw) AS http_status_code,
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 'blocked', hook_error != '', 'failure', tool_result != '', 'success', 'pending') AS Nullable(String)), CAST(NULL AS Nullable(String))) AS hook_status,
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 3, hook_error != '', 2, tool_result != '', 1, 0) AS Nullable(UInt8)), CAST(NULL AS Nullable(UInt8))) AS hook_status_rank,
+	toUInt8(tool_error_reason != '') AS tool_error,
 	nullIf(block_reason, '') AS block_reason,
 	account_type,
 	meta_mcp_server_id,
@@ -6141,6 +6150,7 @@ normalized_traces AS (
 			ifNull(max(hook_status_rank), toUInt8(255)) = 0, CAST('pending' AS Nullable(String)),
 			CAST(NULL AS Nullable(String))
 		) AS hook_status,
+		max(tool_error) AS tool_error,
 		nullIf(anyIf(ifNull(block_reason, ''), ifNull(hook_status_rank, toUInt8(0)) = 3 AND ifNull(block_reason, '') != ''), '') AS block_reason,
 		nullIf(any(account_type), '') AS account_type,
 		max(meta_mcp_server_id) AS meta_mcp_server_id,
@@ -6195,8 +6205,8 @@ func toolUsageRawNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []a
 	// The outcome columns the summary aggregates over, derived from the same
 	// hook status and HTTP status the listing classifies by.
 	blocked := "toUInt8(ifNull(hook_status, '') = 'blocked')"
-	failure := "toUInt8(ifNull(hook_status, '') = 'failure' OR (hook_status IS NULL AND ifNull(http_status_code, 0) >= 400))"
-	success := "toUInt8(ifNull(hook_status, '') = 'success' OR (hook_status IS NULL AND ifNull(http_status_code, 0) >= 200 AND ifNull(http_status_code, 0) < 400))"
+	failure := "toUInt8(ifNull(hook_status, '') = 'failure' OR (hook_status IS NULL AND (ifNull(tool_error, 0) = 1 OR ifNull(http_status_code, 0) >= 400)))"
+	success := "toUInt8(ifNull(hook_status, '') = 'success' OR (hook_status IS NULL AND ifNull(tool_error, 0) = 0 AND ifNull(http_status_code, 0) >= 200 AND ifNull(http_status_code, 0) < 400))"
 	pending := "toUInt8(ifNull(hook_status, '') = 'pending')"
 
 	projection := fmt.Sprintf(`
@@ -6276,6 +6286,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
 		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
+		"max(has_tool_error) AS g_has_tool_error",
 		"max(account_type) AS g_account_type",
 		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
 		"max(mcp_client_name) AS g_mcp_client_name",
@@ -6384,8 +6395,8 @@ SELECT
 	%s AS user_key,
 	%s AS user_label,
 	%s AS user_kind,
-	toUInt8(g_http_status_code >= 200 AND g_http_status_code < 400) AS success,
-	toUInt8(g_http_status_code >= 400) AS failure,
+	toUInt8(g_has_tool_error = 0 AND g_http_status_code >= 200 AND g_http_status_code < 400) AS success,
+	toUInt8(g_has_tool_error = 1 OR g_http_status_code >= 400) AS failure,
 	toUInt8(0) AS blocked,
 	toUInt8(0) AS pending,
 	'' AS hook_source,
