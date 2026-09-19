@@ -52,32 +52,41 @@ export function seriesFromRows(
   ].sort();
   const bucketIndex = new Map(buckets.map((bucket, index) => [bucket, index]));
 
+  // A series is keyed by its raw tuple and measure, not by its label: a
+  // dimension value that itself contains the label's separator would
+  // otherwise fold two tuples into one series.
   const order: string[] = [];
+  const labels = new Map<string, string>();
   const points = new Map<string, (number | null)[]>();
   const units = new Map<string, string>();
   for (const row of rows) {
+    const values = dimensions.map((dimension) => textCell(row[dimension]));
     const tuple = tupleLabel(row, dimensions);
     const at = bucketIndex.get(textCell(row[TIME_BUCKET_COLUMN]));
     for (const measure of measures) {
       const value = numericCell(row[measureAlias(measure)]);
       if (value === null || at === undefined) continue;
-      const label = seriesLabel(measure, measures.length, tuple, dimensions);
-      let series = points.get(label);
+      const key = JSON.stringify([measureAlias(measure), ...values]);
+      let series = points.get(key);
       if (!series) {
         series = buckets.map(() => null);
-        points.set(label, series);
-        units.set(label, measureUnit(dataset, measure));
-        order.push(label);
+        points.set(key, series);
+        labels.set(
+          key,
+          seriesLabel(measure, measures.length, tuple, dimensions),
+        );
+        units.set(key, measureUnit(dataset, measure));
+        order.push(key);
       }
       series[at] = value;
     }
   }
 
   const ranked = order
-    .map((label) => ({
-      label,
-      unit: units.get(label) ?? "",
-      points: points.get(label) ?? [],
+    .map((key) => ({
+      label: labels.get(key) ?? "",
+      unit: units.get(key) ?? "",
+      points: points.get(key) ?? [],
     }))
     .sort((a, b) => total(b.points) - total(a.points));
 

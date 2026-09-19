@@ -16,11 +16,18 @@ const dataset: AnalyticsDataset = {
   grain: "session",
   description: "",
   fields: [
-    { name: "user", type: "string", role: "dimension", operators: ["in"] },
+    {
+      name: "user",
+      type: "string",
+      role: "dimension",
+      default: true,
+      operators: ["in"],
+    },
     {
       name: "duration_seconds",
       type: "float64",
       role: "measure",
+      default: false,
       unit: "s",
       aggregations: ["sum"],
     },
@@ -28,6 +35,7 @@ const dataset: AnalyticsDataset = {
       name: "turn_count",
       type: "int64",
       role: "measure",
+      default: false,
       aggregations: ["sum"],
     },
   ],
@@ -54,6 +62,33 @@ describe("seriesFromRows", () => {
       { label: "bob", unit: "", points: [null, 2] },
     ]);
     expect(set.hidden).toBe(0);
+  });
+
+  it("keeps two tuples apart even when a value contains the label separator", () => {
+    const set = seriesFromRows(
+      [
+        {
+          time_bucket: "2026-09-14T10:00:00Z",
+          user: "a · b",
+          surface: "c",
+          count: 1,
+        },
+        {
+          time_bucket: "2026-09-14T10:00:00Z",
+          user: "a",
+          surface: "b · c",
+          count: 2,
+        },
+      ],
+      ["user", "surface"],
+      [{ op: "count", field: "" }],
+      dataset,
+    );
+    expect(set.series.map((series) => series.points)).toEqual([[2], [1]]);
+    expect(set.series.map((series) => series.label)).toEqual([
+      "a · b · c",
+      "a · b · c",
+    ]);
   });
 
   it("names series by measure when there are several, with the tuple appended when there is one", () => {
