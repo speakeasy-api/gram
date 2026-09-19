@@ -37,6 +37,13 @@ func TestDescribe(t *testing.T) {
 	require.Equal(t, "s", *byName["duration_seconds"].Unit)
 	require.Equal(t, []string{"sum", "avg", "p95"}, byName["duration_seconds"].Aggregations)
 	require.NotContains(t, byName, "project")
+	require.True(t, byName["user"].Default, "the catalog names the opening group-by, not the client")
+	require.False(t, byName["session"].Default)
+	require.False(t, byName["duration_seconds"].Default)
+
+	toolCalls := result.Datasets[1]
+	require.Equal(t, "tool_calls", toolCalls.Name)
+	require.Equal(t, []string{"tool_name"}, defaultFields(toolCalls), "one flagged dimension opens the tool calls view")
 
 	t.Run("it requires an authenticated project", func(t *testing.T) {
 		t.Parallel()
@@ -80,7 +87,7 @@ func TestQuery(t *testing.T) {
 				{Op: "sum", Field: str("tool_call_count"), Alias: str("tool_calls")},
 				{Op: "sum", Field: str("turn_count"), Alias: nil},
 			},
-			Filters: nil, OrderBy: []*gen.AnalyticsOrderBy{{Measure: "count", Direction: "desc"}}, Limit: nil, Ungrouped: false,
+			Filters: nil, OrderBy: []*gen.AnalyticsOrderBy{{Measure: "count", Direction: "desc"}}, Limit: 0, Ungrouped: false,
 		})
 		require.NoError(t, err)
 		require.Equal(t, "sessions", result.Dataset)
@@ -107,7 +114,7 @@ func TestQuery(t *testing.T) {
 			Dataset: "sessions", From: from, To: to, Grain: str("day"),
 			Dimensions: nil,
 			Measures:   []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
-			Filters:    nil, OrderBy: nil, Limit: nil, Ungrouped: false,
+			Filters:    nil, OrderBy: nil, Limit: 0, Ungrouped: false,
 		})
 		require.NoError(t, err)
 		require.Len(t, result.Rows, 2)
@@ -125,7 +132,7 @@ func TestQuery(t *testing.T) {
 			Dimensions: []string{"tool_call", "session"},
 			Measures:   nil,
 			Filters:    []*gen.AnalyticsFilter{{Field: "user", Operator: "in", Values: []string{"ann@example.com", "bob@example.com"}}},
-			OrderBy:    nil, Limit: nil, Ungrouped: true,
+			OrderBy:    nil, Limit: 0, Ungrouped: true,
 		})
 		require.NoError(t, err)
 		require.Len(t, result.Rows, 2)
@@ -143,7 +150,7 @@ func TestQuery(t *testing.T) {
 			Dataset: "sessions", From: from, To: to, Grain: nil,
 			Dimensions: []string{"department"},
 			Measures:   []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
-			Filters:    nil, OrderBy: nil, Limit: nil, Ungrouped: false,
+			Filters:    nil, OrderBy: nil, Limit: 0, Ungrouped: false,
 		})
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "unknown_field")
@@ -156,7 +163,7 @@ func TestQuery(t *testing.T) {
 			SessionToken: nil, ProjectSlugInput: nil,
 			Dataset: "sessions", From: "yesterday", To: to, Grain: nil,
 			Dimensions: nil, Measures: []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
-			Filters: nil, OrderBy: nil, Limit: nil, Ungrouped: false,
+			Filters: nil, OrderBy: nil, Limit: 0, Ungrouped: false,
 		})
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "invalid_time_range")
@@ -168,7 +175,7 @@ func TestQuery(t *testing.T) {
 			SessionToken: nil, ProjectSlugInput: nil,
 			Dataset: "sessions", From: "1500-01-01T00:00:00Z", To: to, Grain: nil,
 			Dimensions: nil, Measures: []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
-			Filters: nil, OrderBy: nil, Limit: nil, Ungrouped: false,
+			Filters: nil, OrderBy: nil, Limit: 0, Ungrouped: false,
 		})
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "invalid_time_range: from")
@@ -180,8 +187,20 @@ func TestQuery(t *testing.T) {
 			SessionToken: nil, ProjectSlugInput: nil,
 			Dataset: "sessions", From: from, To: to, Grain: nil,
 			Dimensions: nil, Measures: []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
-			Filters: nil, OrderBy: nil, Limit: nil, Ungrouped: false,
+			Filters: nil, OrderBy: nil, Limit: 0, Ungrouped: false,
 		})
 		requireOopsCode(t, err, oops.CodeUnauthorized)
 	})
+}
+
+// defaultFields lists the names describe flags as default, in declaration
+// order.
+func defaultFields(ds *gen.AnalyticsDataset) []string {
+	var names []string
+	for _, f := range ds.Fields {
+		if f.Default {
+			names = append(names, f.Name)
+		}
+	}
+	return names
 }

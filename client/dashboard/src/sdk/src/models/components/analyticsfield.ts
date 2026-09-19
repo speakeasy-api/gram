@@ -29,6 +29,10 @@ export type AnalyticsField = {
    * Ops a measure admits
    */
   aggregations?: Array<string> | undefined;
+  /**
+   * Part of the query the dataset opens on: a default dimension is in the opening group-by
+   */
+  default: boolean;
   name: string;
   /**
    * Filter operators a dimension admits
@@ -56,6 +60,7 @@ export const AnalyticsField$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   aggregations: z.optional(z.array(z.string())),
+  default: z.boolean(),
   name: z.string(),
   operators: z.optional(z.array(z.string())),
   role: AnalyticsFieldRole$inboundSchema,

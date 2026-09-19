@@ -100,9 +100,14 @@ const (
 // dataset's source query that yields it, which is usually just a column of
 // that query's output.
 type Field struct {
-	Name         string
-	Type         FieldType
-	Role         Role
+	Name string
+	Type FieldType
+	Role Role
+	// Default marks a field as part of the query a dataset opens on: a
+	// default dimension is in the opening group-by. Declared here rather
+	// than guessed by the client, so a new dataset opens sensibly with no
+	// client change. A dataset may flag several, or none.
+	Default      bool
 	Unit         string
 	Operators    []Operator
 	Aggregations []Aggregation
@@ -260,6 +265,13 @@ func (d *Dataset) validate() error {
 		case RoleDimension:
 			if len(f.Operators) == 0 || len(f.Aggregations) != 0 {
 				return fmt.Errorf("catalog: dataset %q dimension %q must declare operators and no aggregations", d.Name, f.Name)
+			}
+			// Filters and value pickers compare a dimension as a string; a
+			// numeric one would need casting in both the compiler and the
+			// values query, so dimensions are held to strings until one is
+			// needed.
+			if f.Type != TypeString {
+				return fmt.Errorf("catalog: dataset %q dimension %q must be a string", d.Name, f.Name)
 			}
 			for _, op := range f.Operators {
 				switch op {

@@ -70359,6 +70359,10 @@ components:
           items:
             type: string
           description: Ops a measure admits
+        default:
+          type: boolean
+          description: 'Part of the query the dataset opens on: a default dimension is in the opening group-by'
+          example: true
         name:
           type: string
           example: user
@@ -70387,6 +70391,7 @@ components:
         - name
         - type
         - role
+        - default
     AnalyticsFilter:
       type: object
       properties:
@@ -70483,6 +70488,7 @@ components:
         limit:
           type: integer
           description: Maximum rows. Defaults to 100, at most 1000.
+          default: 100
           format: int64
           minimum: 1
           maximum: 1000
@@ -75300,6 +75306,7 @@ components:
         limit:
           type: integer
           description: Maximum values. Defaults to 50, at most 200.
+          default: 50
           format: int64
           minimum: 1
           maximum: 200

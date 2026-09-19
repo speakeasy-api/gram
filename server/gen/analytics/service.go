@@ -88,6 +88,9 @@ type AnalyticsField struct {
 	Name string
 	Type string
 	Role string
+	// Part of the query the dataset opens on: a default dimension is in the
+	// opening group-by
+	Default bool
 	// Unit of a measure, when it has one
 	Unit *string
 	// Filter operators a dimension admits
@@ -154,7 +157,7 @@ type DimensionValuesPayload struct {
 	// End of the half-open window [from, to), ISO 8601
 	To string
 	// Maximum values. Defaults to 50, at most 200.
-	Limit            *int
+	Limit            int
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -181,7 +184,7 @@ type QueryPayload struct {
 	// newest first.
 	OrderBy []*AnalyticsOrderBy
 	// Maximum rows. Defaults to 100, at most 1000.
-	Limit *int
+	Limit int
 	// Return rows at the dataset's grain instead of aggregating.
 	Ungrouped bool
 }

@@ -639,6 +639,9 @@ type AnalyticsFieldResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	Type string `form:"type" json:"type" xml:"type"`
 	Role string `form:"role" json:"role" xml:"role"`
+	// Part of the query the dataset opens on: a default dimension is in the
+	// opening group-by
+	Default bool `form:"default" json:"default" xml:"default"`
 	// Unit of a measure, when it has one
 	Unit *string `form:"unit,omitempty" json:"unit,omitempty" xml:"unit,omitempty"`
 	// Filter operators a dimension admits
@@ -1176,7 +1179,9 @@ func NewQueryPayload(body *QueryRequestBody, sessionToken *string, projectSlugIn
 		From:    *body.From,
 		To:      *body.To,
 		Grain:   body.Grain,
-		Limit:   body.Limit,
+	}
+	if body.Limit != nil {
+		v.Limit = *body.Limit
 	}
 	if body.Ungrouped != nil {
 		v.Ungrouped = *body.Ungrouped
@@ -1217,6 +1222,9 @@ func NewQueryPayload(body *QueryRequestBody, sessionToken *string, projectSlugIn
 			v.OrderBy[i] = unmarshalAnalyticsOrderByRequestBodyToAnalyticsAnalyticsOrderBy(val)
 		}
 	}
+	if body.Limit == nil {
+		v.Limit = 100
+	}
 	if body.Ungrouped == nil {
 		v.Ungrouped = false
 	}
@@ -1243,7 +1251,12 @@ func NewDimensionValuesPayload(body *DimensionValuesRequestBody, sessionToken *s
 		Dimension: *body.Dimension,
 		From:      *body.From,
 		To:        *body.To,
-		Limit:     body.Limit,
+	}
+	if body.Limit != nil {
+		v.Limit = *body.Limit
+	}
+	if body.Limit == nil {
+		v.Limit = 50
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

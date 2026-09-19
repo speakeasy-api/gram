@@ -47,7 +47,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 			Description: "things",
 			TimeExpr:    "started_at",
 			Fields: []Field{
-				{Name: "thing", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id"},
+				{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id"},
 			},
 			Source: sessionsSource,
 		}
@@ -58,12 +58,13 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		mutate func(*Dataset)
 		want   string
 	}{
+		{name: "it rejects a numeric dimension", mutate: func(d *Dataset) { d.Fields[0].Type = TypeInt64 }, want: "must be a string"},
 		{name: "it rejects a dimension with aggregations", mutate: func(d *Dataset) { d.Fields[0].Aggregations = []Aggregation{AggregationSum} }, want: "must declare operators and no aggregations"},
 		{name: "it rejects a measure with operators", mutate: func(d *Dataset) {
-			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Unit: "", Operators: equalsIn, Aggregations: []Aggregation{AggregationSum}, Expr: "n"}
+			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: equalsIn, Aggregations: []Aggregation{AggregationSum}, Expr: "n"}
 		}, want: "must declare aggregations and no operators"},
 		{name: "it rejects a string measure", mutate: func(d *Dataset) {
-			d.Fields[0] = Field{Name: "n", Type: TypeString, Role: RoleMeasure, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationSum}, Expr: "n"}
+			d.Fields[0] = Field{Name: "n", Type: TypeString, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationSum}, Expr: "n"}
 		}, want: "cannot be a string"},
 		{name: "it rejects a duplicate field", mutate: func(d *Dataset) { d.Fields = append(d.Fields, d.Fields[0]) }, want: "twice"},
 		{name: "it rejects a field named like the time bucket", mutate: func(d *Dataset) { d.Fields[0].Name = timeBucketColumn }, want: "time bucket"},
@@ -79,7 +80,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		{name: "it rejects an unknown field type", mutate: func(d *Dataset) { d.Fields[0].Type = "uuid" }, want: "unknown type"},
 		{name: "it rejects an unknown operator", mutate: func(d *Dataset) { d.Fields[0].Operators = []Operator{"like"} }, want: "unknown operator"},
 		{name: "it rejects an unknown aggregation", mutate: func(d *Dataset) {
-			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Unit: "", Operators: nil, Aggregations: []Aggregation{"median"}, Expr: "n"}
+			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{"median"}, Expr: "n"}
 		}, want: "unknown aggregation"},
 	}
 	for _, tc := range cases {

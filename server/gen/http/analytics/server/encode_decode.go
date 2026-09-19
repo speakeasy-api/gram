@@ -760,10 +760,11 @@ func marshalAnalyticsAnalyticsDatasetToAnalyticsDatasetResponseBody(v *analytics
 // *analytics.AnalyticsField.
 func marshalAnalyticsAnalyticsFieldToAnalyticsFieldResponseBody(v *analytics.AnalyticsField) *AnalyticsFieldResponseBody {
 	res := &AnalyticsFieldResponseBody{
-		Name: v.Name,
-		Type: v.Type,
-		Role: v.Role,
-		Unit: v.Unit,
+		Name:    v.Name,
+		Type:    v.Type,
+		Role:    v.Role,
+		Default: v.Default,
+		Unit:    v.Unit,
 	}
 	if v.Operators != nil {
 		res.Operators = make([]string, len(v.Operators))

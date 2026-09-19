@@ -66,6 +66,7 @@ var QueryPayload = Type("AnalyticsQueryPayload", func() {
 	Attribute("filters", ArrayOf(Filter), "Filters, ANDed. At most 100 values per filter.")
 	Attribute("order_by", ArrayOf(OrderBy), "Sort for a grouped result, by measure alias. Ungrouped rows are always newest first.")
 	Attribute("limit", Int, "Maximum rows. Defaults to 100, at most 1000.", func() {
+		Default(100)
 		Minimum(1)
 		Maximum(1000)
 	})
@@ -88,10 +89,11 @@ var FieldType = Type("AnalyticsField", func() {
 	Attribute("name", String, func() { Example("user") })
 	Attribute("type", String, func() { Enum("string", "int64", "float64") })
 	Attribute("role", String, func() { Enum("dimension", "measure") })
+	Attribute("default", Boolean, "Part of the query the dataset opens on: a default dimension is in the opening group-by", func() { Example(true) })
 	Attribute("unit", String, "Unit of a measure, when it has one", func() { Example("s") })
 	Attribute("operators", ArrayOf(String), "Filter operators a dimension admits")
 	Attribute("aggregations", ArrayOf(String), "Ops a measure admits")
-	Required("name", "type", "role")
+	Required("name", "type", "role", "default")
 })
 
 var DatasetType = Type("AnalyticsDataset", func() {
@@ -186,6 +188,7 @@ var _ = Service("analytics", func() {
 				Format(FormatDateTime)
 			})
 			Attribute("limit", Int, "Maximum values. Defaults to 50, at most 200.", func() {
+				Default(50)
 				Minimum(1)
 				Maximum(200)
 			})
