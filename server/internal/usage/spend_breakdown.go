@@ -68,17 +68,8 @@ func (s *Service) GetSpendBreakdown(ctx context.Context, payload *gen.GetSpendBr
 		return nil, err
 	}
 
-	queriedAt := s.now().UTC()
-	meta, err := s.repo.GetBillingMetadata(ctx, authCtx.ActiveOrganizationID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeUnexpected, err, "get billing metadata for spend breakdown").LogError(ctx, s.logger)
-	}
-	cycles := BillingCycles(queriedAt, int(meta.BillingCycleAnchorDay), tumHistoryCycles)
-	from, to, err := resolveMeterUsageWindow(payload.From, payload.To, cycles[len(cycles)-1])
+	from, to, queriedAt, cycles, err := s.loadSpendBreakdownWindow(ctx, authCtx.ActiveOrganizationID, payload)
 	if err != nil {
-		if boundaryErr, ok := errors.AsType[*oops.ShareableError](err); ok {
-			return nil, boundaryErr.LogWarn(ctx, s.logger)
-		}
 		return nil, err
 	}
 	accountType, err := s.repo.GetBillingOrganizationAccountType(ctx, authCtx.ActiveOrganizationID)
@@ -93,8 +84,43 @@ func (s *Service) GetSpendBreakdown(ctx context.Context, payload *gen.GetSpendBr
 		return response, nil
 	}
 
+	return s.calculateSpendBreakdown(ctx, authCtx.ActiveOrganizationID, from, to, queriedAt, cycles)
+}
+
+// GetSpendBreakdownForOrganization performs an unrestricted spend read for an
+// already authorized, canonical organization ID. API handlers must authorize callers.
+func (s *Service) GetSpendBreakdownForOrganization(ctx context.Context, organizationID string, payload *gen.GetSpendBreakdownPayload) (*gen.SpendBreakdownResponse, error) {
+	if organizationID == "" {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	from, to, queriedAt, cycles, err := s.loadSpendBreakdownWindow(ctx, organizationID, payload)
+	if err != nil {
+		return nil, err
+	}
+	return s.calculateSpendBreakdown(ctx, organizationID, from, to, queriedAt, cycles)
+}
+
+func (s *Service) loadSpendBreakdownWindow(ctx context.Context, organizationID string, payload *gen.GetSpendBreakdownPayload) (time.Time, time.Time, time.Time, []BillingCyclePeriod, error) {
+	queriedAt := s.now().UTC()
+	meta, err := s.repo.GetBillingMetadata(ctx, organizationID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, time.Time{}, time.Time{}, nil, oops.E(oops.CodeUnexpected, err, "get billing metadata for spend breakdown").LogError(ctx, s.logger)
+	}
+	cycles := BillingCycles(queriedAt, int(meta.BillingCycleAnchorDay), tumHistoryCycles)
+	from, to, err := resolveMeterUsageWindow(payload.From, payload.To, cycles[len(cycles)-1])
+	if err != nil {
+		if boundaryErr, ok := errors.AsType[*oops.ShareableError](err); ok {
+			return time.Time{}, time.Time{}, time.Time{}, nil, boundaryErr.LogWarn(ctx, s.logger)
+		}
+		return time.Time{}, time.Time{}, time.Time{}, nil, err
+	}
+	return from, to, queriedAt, cycles, nil
+}
+
+func (s *Service) calculateSpendBreakdown(ctx context.Context, organizationID string, from, to, queriedAt time.Time, cycles []BillingCyclePeriod) (*gen.SpendBreakdownResponse, error) {
 	rows, err := chrepo.New(s.meterReadConn).GetSpend(ctx, chrepo.SpendParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
+		OrganizationID: organizationID,
 		From:           from,
 		To:             to,
 	})

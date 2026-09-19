@@ -2043,6 +2043,108 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.spendBreakdown:
+        get:
+            description: Returns exact current PAYG list-price estimates for an organization's three metered products over a maximum of three calendar months. Available for every organization regardless of account type or subscription state.
+            operationId: adminGetSpendBreakdown
+            parameters:
+                - allowEmptyValue: true
+                  description: Organization ID or canonical slug.
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    description: Organization ID or canonical slug.
+                    type: string
+                - allowEmptyValue: true
+                  description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+                  in: query
+                  name: from
+                  schema:
+                    description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+                  in: query
+                  name: to
+                  schema:
+                    description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+                    format: date-time
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminSpendBreakdownResponse'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getSpendBreakdown admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getSpendBreakdown
     /admin/organization.stripeCustomer:
         get:
             tags:
@@ -74214,6 +74316,44 @@ components:
                     type: string
             required:
                 - email
+        AdminSpendBreakdownResponse:
+            type: object
+            properties:
+                billing_cycles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MeterUsageWindow'
+                    description: Trailing twelve billing-cycle date windows
+                currency:
+                    type: string
+                    enum:
+                        - USD
+                pricing_basis:
+                    type: string
+                    enum:
+                        - current_payg_list_price
+                products:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SpendProduct'
+                    description: The three metered products in stable display order
+                queried_at:
+                    type: string
+                    description: Retrieval timestamp used to distinguish current and future buckets
+                    format: date-time
+                total_cost_usd:
+                    type: string
+                    description: Exact estimated total at current PAYG list prices
+                window:
+                    $ref: '#/components/schemas/MeterUsageWindow'
+            required:
+                - window
+                - billing_cycles
+                - currency
+                - pricing_basis
+                - queried_at
+                - total_cost_usd
+                - products
         AdminStripeCustomer:
             type: object
             properties:

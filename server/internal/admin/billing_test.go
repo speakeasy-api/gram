@@ -108,6 +108,35 @@ func (f *fakeBillingOperations) GetMeterUsageForOrganization(_ context.Context, 
 	}, nil
 }
 
+func (f *fakeBillingOperations) GetSpendBreakdownForOrganization(_ context.Context, organizationID string, payload *usagegen.GetSpendBreakdownPayload) (*usagegen.SpendBreakdownResponse, error) {
+	f.organizationID = organizationID
+	from, to := "2026-08-01T00:00:00Z", "2026-08-03T00:00:00Z"
+	if payload.From != nil {
+		from = *payload.From
+	}
+	if payload.To != nil {
+		to = *payload.To
+	}
+	return &usagegen.SpendBreakdownResponse{
+		Availability: "available",
+		Window:       &usagegen.MeterUsageWindow{From: from, To: to},
+		BillingCycles: []*usagegen.MeterUsageWindow{
+			{From: "2026-08-01T00:00:00Z", To: "2026-09-01T00:00:00Z"},
+		},
+		Currency:     "USD",
+		PricingBasis: "current_payg_list_price",
+		QueriedAt:    "2026-08-03T01:00:00Z",
+		TotalCostUsd: "0.00000035",
+		Products: []*usagegen.SpendProduct{
+			{
+				ID: "agent_session_storage", Label: "Agent session storage", Unit: "stokens", Quantity: "1",
+				RateQuantity: "1000000", RateUsd: "0.35", CostUsd: "0.00000035",
+				Buckets: []*usagegen.SpendBucket{{From: from, To: to, Quantity: "1", CostUsd: "0.00000035"}},
+			},
+		},
+	}, nil
+}
+
 func (f *fakeBillingOperations) GetStripeCustomer(_ context.Context, customerID string) (*stripeclient.CustomerDetails, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -201,6 +230,66 @@ func TestGetMeterUsageSelectsCanonicalOrganizationAndBoundedFamily(t *testing.T)
 	var wireResponse map[string]any
 	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&wireResponse))
 	require.NotContains(t, wireResponse, "breakdown")
+}
+
+func TestGetSpendBreakdownReturnsEnterpriseSpendByCanonicalOrganizationWithoutSubscription(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db, meterConn := newTestAdminMeterService(t)
+	organizationID := "org_admin_spend_" + uuid.NewString()
+	organizationSlug := "admin-spend-" + uuid.NewString()
+	otherOrganizationID := "org_admin_spend_other_" + uuid.NewString()
+	seedOrg(t, ctx, db, orgFixture{id: organizationID, name: "Admin Spend", slug: organizationSlug, accountType: "enterprise"})
+	seedOrg(t, ctx, db, orgFixture{id: otherOrganizationID, name: "Other Admin Spend", slug: "other-" + organizationSlug, accountType: "enterprise"})
+	fromTime := time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC)
+	toTime := fromTime.AddDate(0, 0, 2)
+	require.NoError(t, chrepo.New(meterConn).InsertReadings(ctx, []chrepo.ReadingRow{
+		adminMeterUsageReading(organizationID, metering.MeterAgentSessionStorage, 1_000_000, fromTime.Add(time.Hour), nil),
+		adminMeterUsageReading(organizationID, metering.MeterRiskGitleaks, 1_000_000, fromTime.Add(2*time.Hour), nil),
+		adminMeterUsageReading(organizationID, metering.MeterMCPBandwidthEgress, 1_073_741_824, fromTime.Add(3*time.Hour), nil),
+		adminMeterUsageReading(otherOrganizationID, metering.MeterAgentSessionStorage, 9_000_000, fromTime.Add(time.Hour), nil),
+	}))
+	from, to := fromTime.Format(time.RFC3339), toTime.Format(time.RFC3339)
+
+	result, err := svc.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{
+		OrganizationID: organizationSlug,
+		From:           &from,
+		To:             &to,
+	})
+	require.NoError(t, err)
+	require.Equal(t, &gen.MeterUsageWindow{From: from, To: to}, result.Window)
+	require.Equal(t, "USD", result.Currency)
+	require.Equal(t, "current_payg_list_price", result.PricingBasis)
+	require.Equal(t, "21.34", result.TotalCostUsd)
+	require.Len(t, result.Products, 3)
+	require.Equal(t, []string{"agent_session_storage", "risk_content_scans", "mcp_egress"}, []string{
+		result.Products[0].ID, result.Products[1].ID, result.Products[2].ID,
+	})
+	require.Equal(t, []string{"1000000", "1000000", "1073741824"}, []string{
+		result.Products[0].Quantity, result.Products[1].Quantity, result.Products[2].Quantity,
+	})
+	require.Equal(t, []string{"0.35", "0.99", "20"}, []string{
+		result.Products[0].CostUsd, result.Products[1].CostUsd, result.Products[2].CostUsd,
+	})
+	for _, product := range result.Products {
+		require.Len(t, product.Buckets, 2)
+	}
+}
+
+func TestGetSpendBreakdownRejectsMalformedBoundsAndUnknownOrganizations(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db, _ := newTestAdminMeterService(t)
+	seedOrg(t, ctx, db, orgFixture{id: "org_admin_spend_bounds", name: "Admin Spend Bounds", slug: "admin-spend-bounds"})
+	from, to := "not-a-date", "2026-04-03T00:00:00Z"
+
+	_, err := svc.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{
+		OrganizationID: "admin-spend-bounds",
+		From:           &from,
+		To:             &to,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	_, err = svc.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{OrganizationID: "org_admin_spend_missing"})
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 func adminMeterUsageReading(organizationID string, meterID metering.MeterID, value int64, occurredAt time.Time, attributes map[string]string) chrepo.ReadingRow {
