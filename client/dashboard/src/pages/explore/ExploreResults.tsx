@@ -31,20 +31,16 @@ export function ExploreResults({
   summary,
 }: {
   dataset: AnalyticsDataset | undefined;
-  /** The spec the queries answer, which trails the builder by the debounce. */
+  /** The spec the last run answered, which the builder may have moved past. */
   spec: ExploreSpec;
   chart: RunQuery;
   summary: RunQuery;
 }): JSX.Element {
   const drawsChart = hasChartShape(spec);
   const primary = drawsChart ? chart : summary;
-  // Refining an existing result keeps it on screen; only the first result
-  // for a query shape blanks the panel.
-  // A timeseries whose summary order or limit changed refetches the summary
-  // alone, so busy has to watch both requests or the panel would swap the
-  // table underneath without ever saying it was working.
+  // A timeseries draws two requests, so busy watches both or the panel would
+  // swap the table underneath without ever saying it was working.
   const busy = primary.isFetching || (drawsChart && summary.isFetching);
-  const refining = busy && primary.data !== undefined;
 
   return (
     <section
@@ -53,9 +49,8 @@ export function ExploreResults({
     >
       <div className="flex items-center justify-between gap-4">
         <span className="text-eyebrow">Results</span>
-        <span className="text-muted-foreground flex items-center gap-3 font-mono text-xs">
-          {refining ? <span>refining…</span> : null}
-          <span>{spec.dataset}</span>
+        <span className="text-muted-foreground font-mono text-xs">
+          {spec.dataset}
         </span>
       </div>
       <ResultsBody

@@ -15,6 +15,8 @@ const testState = vi.hoisted(() => ({
   calls: [] as Call[],
 }));
 
+// The SDK call rejects when its signal aborts, as fetch does underneath it,
+// so a superseded request is a rejection the hook has to keep off the screen.
 vi.mock("@gram/client/funcs/analyticsQuery.js", () => ({
   analyticsQuery: (
     _client: unknown,
@@ -22,7 +24,10 @@ vi.mock("@gram/client/funcs/analyticsQuery.js", () => ({
     _security: unknown,
     options: { fetchOptions?: { signal?: AbortSignal } } | undefined,
   ) =>
-    new Promise((resolve) => {
+    new Promise((resolve, reject) => {
+      options?.fetchOptions?.signal?.addEventListener("abort", () =>
+        reject(new Error("request aborted")),
+      );
       testState.calls.push({
         body: request.analyticsQueryPayload,
         signal: options?.fetchOptions?.signal,
@@ -70,7 +75,7 @@ describe("useRunQuery", () => {
     expect(testState.calls).toHaveLength(0);
   });
 
-  it("keeps the last result on screen while the next body loads", async () => {
+  it("loads a new body afresh rather than showing the old rows under it", async () => {
     const { result, rerender } = renderHook(
       ({ limit }) => useRunQuery(body(limit)),
       { wrapper, initialProps: { limit: 10 } },
@@ -88,10 +93,8 @@ describe("useRunQuery", () => {
     rerender({ limit: 20 });
     await waitFor(() => expect(testState.calls).toHaveLength(2));
     expect(testState.calls[1]?.body.limit).toBe(20);
-    expect(testState.calls[1]?.signal?.aborted).toBe(false);
-    // The first result stays up, flagged as a placeholder, until the next lands.
-    expect(result.current.data?.rows).toEqual([{ count: 1 }]);
-    expect(result.current.isPlaceholderData).toBe(true);
+    // The old rows belong to the old question, so the panel loads instead.
+    expect(result.current.data).toBeUndefined();
     expect(result.current.isFetching).toBe(true);
 
     act(() => {
@@ -100,17 +103,42 @@ describe("useRunQuery", () => {
     await waitFor(() =>
       expect(result.current.data?.rows).toEqual([{ count: 2 }]),
     );
-    expect(result.current.isPlaceholderData).toBe(false);
   });
 
-  it("aborts the request in flight when the body changes, rather than awaiting it", async () => {
-    const { rerender } = renderHook(({ limit }) => useRunQuery(body(limit)), {
-      wrapper,
-      initialProps: { limit: 10 },
-    });
+  it("aborts the request in flight when the body changes, and its rejection never surfaces", async () => {
+    const { result, rerender } = renderHook(
+      ({ limit }) => useRunQuery(body(limit)),
+      { wrapper, initialProps: { limit: 10 } },
+    );
     await waitFor(() => expect(testState.calls).toHaveLength(1));
     rerender({ limit: 20 });
     await waitFor(() => expect(testState.calls).toHaveLength(2));
     expect(testState.calls[0]?.signal?.aborted).toBe(true);
+
+    act(() => {
+      testState.calls[1]?.resolve([{ count: 2 }]);
+    });
+    await waitFor(() =>
+      expect(result.current.data?.rows).toEqual([{ count: 2 }]),
+    );
+    expect(result.current.error).toBeNull();
+    expect(result.current.isError).toBe(false);
+  });
+
+  it("asks again on refetch even though the body is unchanged", async () => {
+    const { result } = renderHook(() => useRunQuery(body(10)), { wrapper });
+    await waitFor(() => expect(testState.calls).toHaveLength(1));
+    act(() => {
+      testState.calls[0]?.resolve([{ count: 1 }]);
+    });
+    await waitFor(() =>
+      expect(result.current.data?.rows).toEqual([{ count: 1 }]),
+    );
+
+    act(() => {
+      void result.current.refetch();
+    });
+    await waitFor(() => expect(testState.calls).toHaveLength(2));
+    expect(testState.calls[1]?.body.limit).toBe(10);
   });
 });

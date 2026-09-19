@@ -2,4 +2,4 @@
 "dashboard": minor
 ---
 
-Explore runs queries as you build: results follow each edit after a short pause, a newer edit cancels the request still in flight, the last result stays on screen while the next loads, and the window opens on the last 24 hours. Timeseries charts draw with a summary table beneath them; tables and number tiles draw the whole-window figures.
+Explore runs a query when you press Run: a run scans the dataset across its whole window, so nothing runs as a side effect of editing. The window opens on the last 24 hours, filters sit above the measures in the builder, and the results panel names the query it answers. Timeseries charts draw with a summary table beneath them; tables and number tiles draw the whole-window figures.

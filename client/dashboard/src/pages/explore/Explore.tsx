@@ -4,7 +4,6 @@ import { WorkbenchPage } from "@/components/page-templates";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
@@ -20,10 +19,6 @@ import {
 import { ExploreResults } from "./ExploreResults";
 import { QueryBuilder } from "./QueryBuilder";
 import { useRunQuery } from "./useRunQuery";
-
-// A burst of edits is one query: the builder waits this long after the last
-// keystroke before asking.
-const QUERY_DEBOUNCE_MS = 300;
 
 // Explore: ask questions of this project's agent activity. The page is
 // strictly project-scoped — the active project is the only one queried — and
@@ -53,7 +48,7 @@ function ExploreHeader(): JSX.Element {
       </div>
       <p className="text-muted-foreground text-sm">
         Pick a dataset, choose what to measure, and break it down by the fields
-        this project reports. Results follow as you build.
+        this project reports.
       </p>
     </div>
   );
@@ -128,38 +123,45 @@ function ExploreWorkbench({
   onChange: (spec: ExploreSpec) => void;
 }): JSX.Element {
   // Until the user edits something, the builder opens on the catalog's first
-  // dataset. Memoized so the debounce below sees one value, not a new object
-  // every render.
+  // dataset. Memoized so a run can tell it apart from an edit by reference.
   const opening = useMemo(() => initialSpec(datasets), [datasets]);
   // A draft naming a dataset the catalog has since dropped is stale, so it
   // opens afresh rather than querying a dataset that is no longer there.
   const live = draft && findDataset(datasets, draft.dataset) ? draft : null;
   const spec = live ?? opening;
 
-  // Queries run as you build: every spec is structurally valid, so the only
-  // question is when. The settled spec trails the builder by the debounce,
-  // and each new one supersedes the request in flight.
-  const debounced = useDebouncedValue(spec, QUERY_DEBOUNCE_MS);
-  // A catalog that arrives after mount leaves the debounced value holding the
-  // mount-time null while spec is already usable, which would claim there are
-  // no datasets for the length of the delay. The spec itself covers that
-  // window; afterwards the debounce governs as before.
-  const settled = debounced ?? spec;
+  // Queries run when asked, never as a side effect of editing: a query scans
+  // the dataset across its whole window, so the builder waits for Run. The
+  // spec the last run answered is kept apart from the one being edited, so
+  // the results panel keeps describing the query that produced them.
+  const [submitted, setSubmitted] = useState<ExploreSpec | null>(null);
+  const ran =
+    submitted && findDataset(datasets, submitted.dataset) ? submitted : null;
   const chartBody = useMemo(
-    () =>
-      settled && hasChartShape(settled)
-        ? queryBodyFromSpec(settled, "chart")
-        : null,
-    [settled],
+    () => (ran && hasChartShape(ran) ? queryBodyFromSpec(ran, "chart") : null),
+    [ran],
   );
   const summaryBody = useMemo(
-    () => (settled ? queryBodyFromSpec(settled, "summary") : null),
-    [settled],
+    () => (ran ? queryBodyFromSpec(ran, "summary") : null),
+    [ran],
   );
   const chart = useRunQuery(chartBody);
   const summary = useRunQuery(summaryBody);
 
-  if (!spec || !settled) {
+  // Every edit replaces the spec object, so the same reference means nothing
+  // changed since the last run: Run then asks the same question again rather
+  // than serving the cached answer.
+  const unchanged = ran !== null && ran === spec;
+  const run = () => {
+    if (!unchanged) {
+      setSubmitted(spec);
+      return;
+    }
+    if (chartBody) void chart.refetch();
+    void summary.refetch();
+  };
+
+  if (!spec) {
     return (
       <InlineEmptyState
         icon="telescope"
@@ -170,14 +172,38 @@ function ExploreWorkbench({
   }
   return (
     <>
-      <QueryBuilder datasets={datasets} spec={spec} onChange={onChange} />
-      <ExploreResults
-        dataset={findDataset(datasets, settled.dataset)}
-        spec={settled}
-        chart={chart}
-        summary={summary}
+      <QueryBuilder
+        datasets={datasets}
+        spec={spec}
+        onChange={onChange}
+        onRun={run}
+        changed={ran !== null && !unchanged}
       />
+      {ran ? (
+        <ExploreResults
+          dataset={findDataset(datasets, ran.dataset)}
+          spec={ran}
+          chart={chart}
+          summary={summary}
+        />
+      ) : (
+        <ResultsPrompt />
+      )}
     </>
+  );
+}
+
+// The results panel before the first run: the same frame, waiting.
+function ResultsPrompt(): JSX.Element {
+  return (
+    <section className="border-border bg-card flex flex-col gap-4 border p-5">
+      <span className="text-eyebrow">Results</span>
+      <InlineEmptyState
+        icon="telescope"
+        heading="Nothing has run yet"
+        description="Compose a query above and press Run query."
+      />
+    </section>
   );
 }
 

@@ -48,10 +48,6 @@ vi.mock("./useRunQuery", () => ({
     };
   },
 }));
-// The debounce is timing, tested on its own; here the settled spec is the spec.
-vi.mock("@/hooks/useDebouncedValue", () => ({
-  useDebouncedValue: <T,>(value: T) => value,
-}));
 vi.mock("@/components/page-templates", () => ({
   WorkbenchPage: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
@@ -148,12 +144,18 @@ describe("Explore", () => {
     expect(screen.getByText("user")).toBeTruthy();
   });
 
-  it("runs both shapes of the opening query without a run button", () => {
+  it("runs nothing until asked, then both shapes of the query", () => {
     render(<Explore />);
 
+    expect(screen.getByText("Nothing has run yet")).toBeTruthy();
+    expect(testState.bodies.every((body) => body === null)).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Run query" }));
+    expect(screen.queryByText("Nothing has run yet")).toBeNull();
     // The opening spec is a line chart, so a bucketed chart query and a
     // whole-window summary query both run, over the short default window.
-    const [chart, summary] = testState.bodies;
+    const chart = testState.bodies.find((body) => body?.grain === "hour");
+    const summary = testState.bodies.find((body) => body?.grain === "none");
     expect(chart?.dataset).toBe("sessions");
     expect(chart?.grain).toBe("hour");
     expect(chart?.dimensions).toEqual(["user"]);
@@ -166,12 +168,31 @@ describe("Explore", () => {
 
   it("stops asking for a chart once the chart type is a table", () => {
     render(<Explore />);
+    fireEvent.click(screen.getByRole("button", { name: "Table" }));
     testState.bodies = [];
 
-    fireEvent.click(screen.getByRole("button", { name: "Table" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run query" }));
     const [chart, summary] = testState.bodies;
     expect(chart).toBeNull();
     expect(summary?.grain).toBe("none");
+  });
+
+  it("keeps the last run's results while the builder moves on", () => {
+    render(<Explore />);
+    fireEvent.click(screen.getByRole("button", { name: "Run query" }));
+    testState.bodies = [];
+
+    // An edit after a run changes nothing about what is queried until the
+    // next Run; the builder only says it has moved on.
+    expect(screen.queryByText("Changed since the last run.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Table" }));
+    expect(screen.getByText("Changed since the last run.")).toBeTruthy();
+    expect(
+      testState.bodies.every(
+        (body) => body?.grain === "hour" || body?.grain === "none",
+      ),
+    ).toBe(true);
+    expect(testState.bodies.some((body) => body?.grain === "hour")).toBe(true);
   });
 
   it("adds and removes filter rows", () => {
@@ -211,6 +232,7 @@ describe("Explore", () => {
     expect(screen.getByRole("button", { name: "Add measure" })).toBeTruthy();
 
     // With nothing measured the query asks for rows at the dataset's grain.
+    fireEvent.click(screen.getByRole("button", { name: "Run query" }));
     const last = testState.bodies.at(-1);
     expect(last?.ungrouped).toBe(true);
     expect(last?.measures).toBeUndefined();
