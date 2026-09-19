@@ -25,6 +25,17 @@ actions:
       KillswitchOverlapStatus: { type: string, enum: [active, scheduled] }
       KillswitchConflictName:
         { type: string, enum: [operation_conflict, version_conflict] }
+  # Same flattening, and this one collided: an inline enum on a property named
+  # operator generates as Operator and displaces the log filter's, renaming it
+  # to LogFilterOperator and breaking every caller of the original name.
+  - target: $.components.schemas
+    update:
+      AnalyticsFilterOperator: { type: string, enum: [equals, in] }
+  - target: $.components.schemas.AnalyticsFilter.properties.operator
+    remove: true
+  - target: $.components.schemas.AnalyticsFilter.properties
+    update:
+      operator: { $ref: "#/components/schemas/AnalyticsFilterOperator" }
   - target: $.paths["/rpc/killswitches.list"].get.parameters[?@.name=='capability_key'].schema
     remove: true
   - target: $.paths["/rpc/killswitches.list"].get.parameters[?@.name=='capability_key']

@@ -79,6 +79,8 @@ func TestNewStripeClientRealClientUsesCatalog(t *testing.T) {
 		"stripe-api-key":                 "sk_test_placeholder",
 		"stripe-webhook-secret":          "whsec_placeholder",
 		"stripe-price-id-tum":            "price_placeholder",
+		"stripe-price-id-mcp-egress":     "price_mcp_egress",
+		"stripe-price-id-risk-scans":     "price_risk_scans",
 		"stripe-portal-configuration-id": "bpc_placeholder",
 	})
 
@@ -92,6 +94,8 @@ func TestNewStripeClientRealClientUsesCatalog(t *testing.T) {
 	require.NotNil(t, client)
 	require.Equal(t, stripeclient.Catalog{
 		PriceIDTUM:            "price_placeholder",
+		PriceIDMCPEgress:      "price_mcp_egress",
+		PriceIDRiskScans:      "price_risk_scans",
 		PortalConfigurationID: "bpc_placeholder",
 	}, client.Catalog())
 }
@@ -411,6 +415,8 @@ func newStripeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	set.String("stripe-api-key", "", "")
 	set.String("stripe-webhook-secret", "", "")
 	set.String("stripe-price-id-tum", "", "")
+	set.String("stripe-price-id-mcp-egress", "", "")
+	set.String("stripe-price-id-risk-scans", "", "")
 	set.String("stripe-meter-event-name", "", "")
 	set.String("stripe-meter-event-name-mcp-bandwidth-ingress", "", "")
 	set.String("stripe-meter-event-name-mcp-bandwidth-egress", "", "")

@@ -16,14 +16,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -59,10 +56,16 @@ type preparedStripeCheckoutIntent struct {
 	customerID string
 }
 
+type stripeCheckoutLegacyReplay struct {
+	sessionID string
+	intent    stripeCheckoutIntent
+}
+
 // stripeOrganizationIdentity is stamped onto the Stripe Customer only; Checkout
 // requests replay byte-for-byte under their idempotency key.
 type stripeOrganizationIdentity struct {
 	name        string
+	slug        string
 	accountType string
 	email       string
 }
@@ -98,6 +101,7 @@ func (s *Service) stripeOrganizationIdentity(ctx context.Context, organizationID
 
 	return stripeOrganizationIdentity{
 		name:        organization.Name,
+		slug:        organization.Slug,
 		accountType: accountType,
 		email:       email,
 	}, nil
@@ -151,9 +155,6 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		return "", oops.E(oops.CodeUnexpected, err, "failed to check the trial lifecycle").LogError(ctx, s.logger)
 	}
 	proposedIntent := newStripeCheckoutIntentForTrial(authCtx.ActiveOrganizationID, now, productTrialEnd, expectedTrial)
-	if proposedIntent.trialEnd != nil && proposedIntent.trialEnd.Sub(now) < minimumStripeCheckoutTrialLead {
-		return "", oops.E(oops.CodeConflict, nil, "the active trial ends too soon to start self-serve billing").LogWarn(ctx, s.logger)
-	}
 
 	billingMetadata, err := repo.New(s.db).GetBillingMetadata(ctx, authCtx.ActiveOrganizationID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -162,14 +163,15 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 	if err == nil && billingMetadata.StripeSubscriptionID.Valid {
 		return "", oops.E(oops.CodeConflict, nil, "the organization already has a Stripe subscription").LogWarn(ctx, s.logger)
 	}
-	// A converted trial with an attached Checkout receipt is an exact replay of
-	// the already-committed business transaction, not a stale prepared intent.
-	if expectedTrial != nil && expectedTrial.convertedAt != nil && billingMetadata.StripeCheckoutSessionID.Valid {
-		storedIntent, storedErr := checkoutIntentFromMetadata(billingMetadata)
-		if storedErr != nil {
-			return "", oops.E(oops.CodeUnexpected, storedErr, "stored Stripe Checkout receipt is incomplete").LogError(ctx, s.logger)
-		}
-		proposedIntent = storedIntent
+
+	legacyReplay, err := legacyConvertedStripeCheckoutReplay(billingMetadata, expectedTrial, now)
+	if err != nil {
+		return "", oops.E(oops.CodeUnavailable, err, "failed to recover the previous Stripe Checkout intent").LogWarn(ctx, s.logger)
+	}
+	if legacyReplay != nil {
+		proposedIntent = legacyReplay.intent
+	} else if proposedIntent.trialEnd != nil && proposedIntent.trialEnd.Sub(now) < minimumStripeCheckoutTrialLead {
+		return "", oops.E(oops.CodeConflict, nil, "the active trial ends too soon to start self-serve billing").LogWarn(ctx, s.logger)
 	}
 
 	identity, identityErr := s.stripeOrganizationIdentity(ctx, authCtx.ActiveOrganizationID, billingMetadata)
@@ -220,6 +222,9 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 	if err != nil {
 		return "", err
 	}
+	if legacyReplay != nil && !preparedIntent.expiresAt.After(s.checkoutNow()) {
+		return "", oops.E(oops.CodeConflict, nil, "the previous Stripe Checkout session expired while it was being recovered").LogWarn(ctx, s.logger)
+	}
 
 	checkout, err := s.stripeClient.CreateCheckoutSession(ctx, stripeclient.CreateCheckoutSessionInput{
 		CustomerID:         preparedIntent.customerID,
@@ -245,12 +250,12 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	convertedTrial, err := s.convertEnterpriseTrialForCheckoutTx(ctx, dbtx, authCtx.ActiveOrganizationID, expectedTrial, checkoutIntentTrialFingerprint(preparedIntent.idempotencyKey), checkout.ID)
+	err = validateStripeCheckoutTrialTx(ctx, dbtx, authCtx.ActiveOrganizationID, expectedTrial, preparedIntent, legacyReplay, s.checkoutNow())
 	if err != nil {
 		if errors.Is(err, errStripeCheckoutTrialLifecycleChanged) || isStripeCheckoutCASConflict(err) {
 			return "", oops.E(oops.CodeConflict, err, "trial lifecycle changed while Stripe Checkout was being created").LogWarn(ctx, s.logger)
 		}
-		return "", oops.E(oops.CodeUnexpected, err, "failed to convert enterprise trial during Stripe Checkout").LogError(ctx, s.logger)
+		return "", oops.E(oops.CodeUnexpected, err, "failed to validate enterprise trial during Stripe Checkout").LogError(ctx, s.logger)
 	}
 
 	finalized, err := repo.New(dbtx).FinalizeStripeCheckoutIntent(ctx, repo.FinalizeStripeCheckoutIntentParams{
@@ -283,36 +288,6 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to finalize Stripe Checkout").LogError(ctx, s.logger)
-	}
-
-	if convertedTrial {
-		if s.productFeatures != nil {
-			for _, runtimeFeature := range productfeatures.TrialRuntimeFeatures {
-				s.productFeatures.UpdateFeatureCache(ctx, authCtx.ActiveOrganizationID, runtimeFeature, true)
-			}
-		}
-		if s.trial != nil {
-			if err := s.trial.TrialInactive(ctx, authCtx.ActiveOrganizationID); err != nil {
-				s.logger.WarnContext(ctx, "failed to stop enterprise trial notifications after Stripe Checkout conversion")
-			}
-		}
-		if provisioner, ok := s.openRouter.(checkoutTrialProvisioner); ok {
-			for _, keyType := range openrouter.AllKeyTypes {
-				if err := provisioner.ReconcileAPIKeyDisabled(ctx, authCtx.ActiveOrganizationID, keyType); err != nil {
-					s.logger.WarnContext(ctx, "failed to reconcile model provider key after Stripe Checkout conversion")
-				}
-			}
-		}
-		if updateErr := s.stripeClient.UpdateCustomer(ctx, stripeclient.UpdateCustomerInput{
-			CustomerID:       preparedIntent.customerID,
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			OrganizationSlug: authCtx.OrganizationSlug,
-			OrganizationName: identity.name,
-			Email:            identity.email,
-			AccountType:      string(billing.TierPayg),
-		}); updateErr != nil {
-			s.logger.WarnContext(ctx, "failed to refresh Stripe customer identity after checkout conversion", attr.SlogError(updateErr))
-		}
 	}
 
 	return checkout.URL, nil
@@ -493,6 +468,32 @@ func checkoutIntentFromFields(idempotencyKey pgtype.Text, billingCycleAnchor, st
 		billingCycleAnchor: billingCycleAnchor.Time.UTC(),
 		trialEnd:           trialEnd,
 		expiresAt:          expiresAt.Time.UTC(),
+	}, nil
+}
+
+func legacyConvertedStripeCheckoutReplay(metadata repo.BillingMetadatum, trial *stripeCheckoutTrialFingerprint, now time.Time) (*stripeCheckoutLegacyReplay, error) {
+	if trial == nil || trial.convertedAt == nil || trial.demotedAt != nil ||
+		metadata.StripeSubscriptionID.Valid ||
+		!metadata.StripeCustomerID.Valid || metadata.StripeCustomerID.String == "" ||
+		!metadata.StripeCheckoutSessionID.Valid || metadata.StripeCheckoutSessionID.String == "" ||
+		!metadata.StripeCheckoutExpiresAt.Valid || !metadata.StripeCheckoutExpiresAt.Time.After(now) {
+		return nil, nil
+	}
+
+	intent, err := checkoutIntentFromMetadata(metadata)
+	if err != nil {
+		return nil, err
+	}
+	if intent.trialEnd == nil ||
+		!intent.trialEnd.Equal(intent.billingCycleAnchor) ||
+		!intent.trialEnd.Equal(nextStripeBillingCycleAnchor(now, &trial.endsAt)) ||
+		checkoutIntentTrialFingerprint(intent.idempotencyKey) == stripeCheckoutTrialFingerprintDigest(trial) {
+		return nil, nil
+	}
+
+	return &stripeCheckoutLegacyReplay{
+		sessionID: metadata.StripeCheckoutSessionID.String,
+		intent:    intent,
 	}, nil
 }
 

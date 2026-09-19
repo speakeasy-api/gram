@@ -42,6 +42,8 @@ test("readiness needs no organization, CSV or database and distinguishes deliver
     STRIPE_API_KEY: "sk_test_synthetic",
     STRIPE_WEBHOOK_SECRET: "whsec_synthetic",
     STRIPE_PRICE_ID_TUM: "price_synthetic",
+    STRIPE_PRICE_ID_MCP_EGRESS: "price_mcp_egress",
+    STRIPE_PRICE_ID_RISK_SCANS: "price_risk_scans",
     STRIPE_METER_ID_TUM: "mtr_synthetic",
     STRIPE_PORTAL_CONFIGURATION_ID: "bpc_synthetic",
     STRIPE_METER_EVENT_NAME: "tum",

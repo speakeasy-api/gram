@@ -21,6 +21,7 @@ type Server struct {
 	Mounts                    []*MountPoint
 	GetPeriodUsage            http.Handler
 	GetMeterUsage             http.Handler
+	GetSpendBreakdown         http.Handler
 	GetTokensUnderManagement  http.Handler
 	SetBillingMetadata        http.Handler
 	GetBillingEmail           http.Handler
@@ -68,6 +69,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetPeriodUsage", "GET", "/rpc/usage.getPeriodUsage"},
 			{"GetMeterUsage", "GET", "/rpc/usage.getMeterUsage"},
+			{"GetSpendBreakdown", "GET", "/rpc/usage.getSpendBreakdown"},
 			{"GetTokensUnderManagement", "GET", "/rpc/usage.getTokensUnderManagement"},
 			{"SetBillingMetadata", "POST", "/rpc/usage.setBillingMetadata"},
 			{"GetBillingEmail", "GET", "/rpc/usage.getBillingEmail"},
@@ -87,6 +89,7 @@ func New(
 		},
 		GetPeriodUsage:            NewGetPeriodUsageHandler(e.GetPeriodUsage, mux, decoder, encoder, errhandler, formatter),
 		GetMeterUsage:             NewGetMeterUsageHandler(e.GetMeterUsage, mux, decoder, encoder, errhandler, formatter),
+		GetSpendBreakdown:         NewGetSpendBreakdownHandler(e.GetSpendBreakdown, mux, decoder, encoder, errhandler, formatter),
 		GetTokensUnderManagement:  NewGetTokensUnderManagementHandler(e.GetTokensUnderManagement, mux, decoder, encoder, errhandler, formatter),
 		SetBillingMetadata:        NewSetBillingMetadataHandler(e.SetBillingMetadata, mux, decoder, encoder, errhandler, formatter),
 		GetBillingEmail:           NewGetBillingEmailHandler(e.GetBillingEmail, mux, decoder, encoder, errhandler, formatter),
@@ -113,6 +116,7 @@ func (s *Server) Service() string { return "usage" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetPeriodUsage = m(s.GetPeriodUsage)
 	s.GetMeterUsage = m(s.GetMeterUsage)
+	s.GetSpendBreakdown = m(s.GetSpendBreakdown)
 	s.GetTokensUnderManagement = m(s.GetTokensUnderManagement)
 	s.SetBillingMetadata = m(s.SetBillingMetadata)
 	s.GetBillingEmail = m(s.GetBillingEmail)
@@ -138,6 +142,7 @@ func (s *Server) MethodNames() []string { return usage.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetPeriodUsageHandler(mux, h.GetPeriodUsage)
 	MountGetMeterUsageHandler(mux, h.GetMeterUsage)
+	MountGetSpendBreakdownHandler(mux, h.GetSpendBreakdown)
 	MountGetTokensUnderManagementHandler(mux, h.GetTokensUnderManagement)
 	MountSetBillingMetadataHandler(mux, h.SetBillingMetadata)
 	MountGetBillingEmailHandler(mux, h.GetBillingEmail)
@@ -244,6 +249,59 @@ func NewGetMeterUsageHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getMeterUsage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSpendBreakdownHandler configures the mux to serve the "usage"
+// service "getSpendBreakdown" endpoint.
+func MountGetSpendBreakdownHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/usage.getSpendBreakdown", f)
+}
+
+// NewGetSpendBreakdownHandler creates a HTTP handler which loads the HTTP
+// request and calls the "usage" service "getSpendBreakdown" endpoint.
+func NewGetSpendBreakdownHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSpendBreakdownRequest(mux, decoder)
+		encodeResponse = EncodeGetSpendBreakdownResponse(encoder)
+		encodeError    = EncodeGetSpendBreakdownError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSpendBreakdown")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
 		payload, err := decodeRequest(r)
 		if err != nil {
