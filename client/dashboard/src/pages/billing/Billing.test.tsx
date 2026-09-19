@@ -132,6 +132,9 @@ vi.mock("@gram/client/react-query/setBillingEmail.js", () => ({
 vi.mock("@/components/billing/meter-usage-section", () => ({
   MeterUsageSection: () => <div>meter usage</div>,
 }));
+vi.mock("@/components/billing/spend-breakdown-section", () => ({
+  SpendBreakdownSection: () => <div>spend by product</div>,
+}));
 
 // Banner behavior is covered in billing-banners.test.tsx. This page test owns
 // their placement and destructive-before-warning order.
@@ -182,6 +185,7 @@ const paymentSection = () =>
   screen.queryByRole("heading", { name: /^payment$/i });
 
 const meterUsageSection = () => screen.queryByText("meter usage");
+const spendBreakdownSection = () => screen.queryByText("spend by product");
 
 const polarUsageSection = () =>
   screen.queryByText(/summary of your organization's usage this period/i);
@@ -290,6 +294,11 @@ describe("Billing", () => {
     renderBilling();
 
     expect(screen.getByText("meter usage")).toBeTruthy();
+    expect(spendBreakdownSection()).not.toBeNull();
+    expect(
+      spendBreakdownSection()!.compareDocumentPosition(meterUsageSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(cta()).not.toBeNull();
     expect(screen.getByText("Pay as you go pricing")).toBeTruthy();
     expect(screen.getByText("$0.35 per million tokens")).toBeTruthy();
@@ -499,6 +508,7 @@ describe("Billing", () => {
       expect(polarUsageSection()).not.toBeNull();
       expect(mocks.periodUsage).toHaveBeenCalled();
       expect(meterUsageSection()).toBeNull();
+      expect(spendBreakdownSection()).toBeNull();
       expect(mocks.inferenceCaps).not.toHaveBeenCalled();
     },
   );
@@ -510,6 +520,11 @@ describe("Billing", () => {
 
     expect(polarUsageSection()).toBeNull();
     expect(meterUsageSection()).not.toBeNull();
+    expect(spendBreakdownSection()).not.toBeNull();
+    expect(
+      spendBreakdownSection()!.compareDocumentPosition(meterUsageSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("shows no checkout CTA once the trial has ended", () => {

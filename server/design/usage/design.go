@@ -238,6 +238,43 @@ var MeterUsageResponse = Type("MeterUsageResponse", func() {
 	Required("family", "window", "billing_cycles", "unit", "measurement_method", "total", "buckets", "breakdown", "queried_at")
 })
 
+// SpendBucket is one dense UTC day of estimated product spend.
+var SpendBucket = Type("SpendBucket", func() {
+	Attribute("from", String, "Inclusive bucket boundary", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Exclusive bucket boundary", func() { Format(FormatDateTime) })
+	Attribute("quantity", String, "Exact integer ordinary usage quantity as a decimal string")
+	Attribute("cost_usd", String, "Exact estimated cost at current PAYG list prices")
+	Required("from", "to", "quantity", "cost_usd")
+})
+
+// SpendProduct is one metered product priced at current PAYG list prices.
+var SpendProduct = Type("SpendProduct", func() {
+	Attribute("id", String, func() {
+		Enum("agent_session_storage", "risk_content_scans", "mcp_egress")
+	})
+	Attribute("label", String)
+	Attribute("unit", String, func() { Enum("stokens", "bytes") })
+	Attribute("quantity", String, "Exact integer ordinary usage quantity as a decimal string")
+	Attribute("rate_quantity", String, "Exact integer quantity to which rate_usd applies")
+	Attribute("rate_usd", String, "Exact current PAYG USD list price")
+	Attribute("cost_usd", String, "Exact estimated product cost at current PAYG list prices")
+	Attribute("buckets", ArrayOf(SpendBucket), "Dense UTC daily product buckets, including in-progress and future days")
+	Required("id", "label", "unit", "quantity", "rate_quantity", "rate_usd", "cost_usd", "buckets")
+})
+
+// SpendBreakdownResponse is an exact current-list-price estimate for the three
+// PAYG metered products. It is not an invoice or actual bill.
+var SpendBreakdownResponse = Type("SpendBreakdownResponse", func() {
+	Attribute("window", MeterUsageWindow)
+	Attribute("billing_cycles", ArrayOf(MeterUsageWindow), "Trailing twelve billing-cycle date windows")
+	Attribute("currency", String, func() { Enum("USD") })
+	Attribute("pricing_basis", String, func() { Enum("current_payg_list_price") })
+	Attribute("queried_at", String, "Retrieval timestamp used to distinguish current and future buckets", func() { Format(FormatDateTime) })
+	Attribute("total_cost_usd", String, "Exact estimated total at current PAYG list prices")
+	Attribute("products", ArrayOf(SpendProduct), "The three metered PAYG products in stable display order")
+	Required("window", "billing_cycles", "currency", "pricing_basis", "queried_at", "total_cost_usd", "products")
+})
+
 var _ = Service("usage", func() {
 	Description("Read usage for gram.")
 	Security(security.Session)
@@ -296,6 +333,34 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "getMeterUsage")
 		Meta("openapi:extension:x-speakeasy-name-override", "getMeterUsage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getMeterUsage"}`)
+	})
+
+	Method("getSpendBreakdown", func() {
+		Description("Estimate the organization's three metered PAYG products at current list prices over a maximum of three calendar months. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("from", String, "Inclusive UTC midnight reporting boundary. Must be paired with to.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.", func() {
+				Format(FormatDateTime)
+			})
+		})
+
+		Result(SpendBreakdownResponse)
+
+		HTTP(func() {
+			GET("/rpc/usage.getSpendBreakdown")
+			Param("from")
+			Param("to")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getSpendBreakdown")
+		Meta("openapi:extension:x-speakeasy-name-override", "getSpendBreakdown")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getSpendBreakdown"}`)
 	})
 
 	Method("getTokensUnderManagement", func() {
