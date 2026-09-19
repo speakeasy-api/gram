@@ -107,7 +107,7 @@ export function SpendBreakdownChart({
     <Chart
       definition={definition}
       height={320}
-      ariaLabel={`${cumulative ? "Cumulative" : granularity} estimated spend in USD by product. Use arrow keys to inspect exact values.`}
+      ariaLabel={`${cumulative ? "Cumulative" : granularity} estimated spend in USD by product. Use arrow keys to inspect values.`}
     />
   );
 }
