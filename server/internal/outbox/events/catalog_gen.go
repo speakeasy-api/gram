@@ -44,6 +44,7 @@ var All = []outbox.EventRegistration{
 	MetaMcpServerV1,
 	ModelProviderKeyV1,
 	NetworkIngressV1,
+	OktaResourceConnectionV1,
 	OpenRouterAPIKeyV1,
 	OrganizationBillingV1,
 	OrganizationDeviceAgentConfigurationV1,

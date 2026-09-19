@@ -72612,6 +72612,399 @@ paths:
             x-speakeasy-name-override: upsertGlobal
             x-speakeasy-react-hook:
                 name: UpsertGlobalVariation
+    /rpc/xaaReadiness.confirmConnections:
+        post:
+            description: Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one confirmation. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin and the okta-connections rollout.
+            operationId: confirmXaaConnections
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ConfirmXaaConnectionsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ConfirmXaaConnectionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: confirmConnections xaaReadiness
+            tags:
+                - xaaReadiness
+            x-speakeasy-name-override: confirmConnections
+            x-speakeasy-react-hook:
+                name: ConfirmXaaConnections
+    /rpc/xaaReadiness.exportChecklist:
+        get:
+            description: Download the checklist of pending servers as CSV or Markdown, with the values to enter for each. Requires org:admin.
+            operationId: exportXaaChecklist
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: format
+                  schema:
+                    default: csv
+                    enum:
+                        - csv
+                        - markdown
+                    type: string
+                - allowEmptyValue: true
+                  description: Include connected and not-applicable servers.
+                  in: query
+                  name: include_all
+                  schema:
+                    default: false
+                    description: Include connected and not-applicable servers.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        text/*:
+                            schema:
+                                format: binary
+                                type: string
+                    description: OK response.
+                    headers:
+                        Content-Disposition:
+                            schema:
+                                type: string
+                        Content-Type:
+                            description: text/csv or text/markdown, with charset.
+                            schema:
+                                description: text/csv or text/markdown, with charset.
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: exportChecklist xaaReadiness
+            tags:
+                - xaaReadiness
+            x-speakeasy-name-override: exportChecklist
+    /rpc/xaaReadiness.list:
+        get:
+            description: List readiness for every eligible MCP server. Requires org:admin and a live identity provider connection.
+            operationId: listXaaReadiness
+            parameters:
+                - allowEmptyValue: true
+                  description: Include connected and not-applicable servers.
+                  in: query
+                  name: include_all
+                  schema:
+                    default: false
+                    description: Include connected and not-applicable servers.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListXaaReadinessResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listReadiness xaaReadiness
+            tags:
+                - xaaReadiness
+            x-speakeasy-name-override: listReadiness
+            x-speakeasy-react-hook:
+                name: XaaReadiness
+    /rpc/xaaReadiness.resetConnection:
+        post:
+            description: Withdraw the confirmation for this server's upstream so it, and every server sharing that upstream, shows as pending again. Requires org:admin.
+            operationId: resetXaaConnection
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ResetXaaConnectionRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/XaaServerReadiness'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: resetConnection xaaReadiness
+            tags:
+                - xaaReadiness
+            x-speakeasy-name-override: resetConnection
+            x-speakeasy-react-hook:
+                name: ResetXaaConnection
 components:
     schemas:
         AIDetection:
@@ -76552,6 +76945,28 @@ components:
                     type: string
                     description: Reason for the decision, shown to the user
             description: Result for Codex hook events
+        ConfirmXaaConnectionsRequestBody:
+            type: object
+            properties:
+                connections:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/XaaConnectionConfirmation'
+                    description: Servers to confirm with their configured values.
+                    minItems: 1
+                    maxItems: 200
+            required:
+                - connections
+        ConfirmXaaConnectionsResult:
+            type: object
+            properties:
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/XaaServerReadiness'
+                    description: The confirmed servers with their new state.
+            required:
+                - servers
         CreateAgentForm:
             type: object
             properties:
@@ -86128,6 +86543,42 @@ components:
             required:
                 - package
                 - versions
+        ListXaaReadinessResult:
+            type: object
+            properties:
+                agent_recorded:
+                    type: boolean
+                    description: Whether the connection has an AI agent recorded; every server needs one first.
+                connection_id:
+                    type: string
+                    description: The organization's identity provider connection.
+                    format: uuid
+                deep_link:
+                    type: string
+                    description: Link to the add-resource-connection form of the AI agent in the identity provider console. Omitted until an agent is recorded or when the org uses a custom domain.
+                pending_count:
+                    type: integer
+                    description: Servers that still need a step.
+                    format: int64
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/XaaServerReadiness'
+                    description: Pending servers first, then by name. By default only servers with a step left; include_all adds connected and not-applicable ones.
+                total_count:
+                    type: integer
+                    description: Eligible servers before filtering.
+                    format: int64
+                undiscovered_count:
+                    type: integer
+                    description: Servers left out because their authorization server metadata has not been fetched yet.
+                    format: int64
+            required:
+                - servers
+                - pending_count
+                - total_count
+                - undiscovered_count
+                - agent_recorded
         LiteLLMInstance:
             type: object
             properties:
@@ -91143,6 +91594,15 @@ components:
                     description: How many citations the search returned.
                     format: int64
             description: A web search the agent ran. A search runs a billed completion, so its token spend lives here.
+        ResetXaaConnectionRequestBody:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    description: Server to reset.
+                    format: uuid
+            required:
+                - mcp_server_id
         ResolveChallengeForm:
             type: object
             properties:
@@ -102274,6 +102734,108 @@ components:
             required:
                 - scores_available
                 - buckets
+        XaaConnectionConfirmation:
+            type: object
+            properties:
+                audience:
+                    type: string
+                    description: The issuer URL entered on the resource app's Cross App Access settings; the identity assertion audience. Must be an https URL without query or fragment.
+                    format: uri
+                    pattern: ^https://[^?#]+$
+                    maxLength: 512
+                mcp_server_id:
+                    type: string
+                    description: Server whose upstream was connected.
+                    format: uuid
+                okta_application_id:
+                    type: string
+                    description: The identity provider app instance picked for this upstream, from the applications snapshot.
+                    maxLength: 64
+            description: One server the administrator connected in the identity provider console, with the values they configured there.
+            required:
+                - mcp_server_id
+                - audience
+        XaaServerReadiness:
+            type: object
+            properties:
+                audience:
+                    type: string
+                    description: The resource app's Cross App Access issuer URL as configured in the identity provider; the audience of the identity assertion. Present once confirmed.
+                client_binding:
+                    type: string
+                    description: 'bound: an explicit identity chaining binding selects the client; single: the one client attached to the authorization server; ambiguous: more than one candidate and no single binding; missing: no client registered yet.'
+                    enum:
+                        - bound
+                        - single
+                        - ambiguous
+                        - missing
+                client_id:
+                    type: string
+                    description: Speakeasy's client ID at the server's authorization server. Omitted when no client is bound yet.
+                confirmed_at:
+                    type: string
+                    description: When the administrator confirmed the connection for this server's upstream.
+                    format: date-time
+                deep_link:
+                    type: string
+                    description: Link to the add-resource-connection form of the AI agent in the identity provider console. Omitted until an agent is recorded or when the org uses a custom domain.
+                mcp_server_id:
+                    type: string
+                    description: MCP server ID.
+                    format: uuid
+                not_applicable_reason:
+                    type: string
+                    description: 'no_idjag: the server''s authorization server metadata does not advertise the identity assertion grant.'
+                    enum:
+                        - no_idjag
+                okta_application_id:
+                    type: string
+                    description: The identity provider app instance the administrator picked for this upstream, when recorded.
+                okta_application_label:
+                    type: string
+                    description: Label of that app instance in the latest applications snapshot; omitted when the instance is no longer there.
+                pending:
+                    type: boolean
+                    description: Whether the administrator still has a step to do for this server.
+                project_id:
+                    type: string
+                    description: Project the server belongs to.
+                    format: uuid
+                project_slug:
+                    type: string
+                resource_indicator:
+                    type: string
+                    description: 'The resource indicator to enter on the connection: the server''s RFC 9728 resource identifier when known, otherwise its URL.'
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: Scopes Speakeasy requests at the resource.
+                server_name:
+                    type: string
+                    description: Server display name; admin-editable, never a key.
+                server_slug:
+                    type: string
+                state:
+                    type: string
+                    description: 'Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server''s upstream; connected: the administrator confirmed it. Whether the exchange works is not known here.'
+                    enum:
+                        - not_applicable
+                        - needs_agent
+                        - needs_connection
+                        - connected
+            description: Cross App Access readiness of one MCP server against the organization's identity provider connection, with the exact values the administrator enters in the identity provider console. Servers that share an upstream resource share one confirmation.
+            required:
+                - mcp_server_id
+                - project_id
+                - project_slug
+                - server_name
+                - server_slug
+                - state
+                - pending
+                - resource_indicator
+                - scopes
+                - client_binding
     securitySchemes:
         admin_auth_header_Authorization:
             type: apiKey
@@ -102471,6 +103033,8 @@ tags:
       description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
     - name: userSessions
       description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
+    - name: xaaReadiness
+      description: 'Cross App Access readiness per MCP server: what the organization administrator still has to do in the identity provider console, what they confirmed, and what the exchange path observed. Advisory only; the exchange path never consults it.'
     - name: variations
       description: Manage variations of tools.
     - name: external
