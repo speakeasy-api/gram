@@ -43,6 +43,7 @@ const (
 	subjectTypeMetaMcpServer               subjectType = "meta_mcp_server"
 	subjectTypeModelProviderKey            subjectType = "model_provider_key"
 	subjectTypeNetworkIngress              subjectType = "network_ingress"
+	subjectTypeOktaResourceConnection      subjectType = "okta_resource_connection"
 	subjectTypeOpenRouterAPIKey            subjectType = "openrouter_api_key"
 	subjectTypeOtelDestination             subjectType = "otel_destination"
 	subjectTypeOrganizationInvite          subjectType = "organization_invitation"
