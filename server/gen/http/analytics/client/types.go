@@ -657,9 +657,12 @@ type AnalyticsDatasetResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 	// What one row represents, as a noun
-	Grain       *string                       `form:"grain,omitempty" json:"grain,omitempty" xml:"grain,omitempty"`
-	Description *string                       `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	Fields      []*AnalyticsFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
+	Grain       *string `form:"grain,omitempty" json:"grain,omitempty" xml:"grain,omitempty"`
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The field a row list shows as its headline beside time, when the dataset
+	// nominates one
+	SummaryField *string                       `form:"summary_field,omitempty" json:"summary_field,omitempty" xml:"summary_field,omitempty"`
+	Fields       []*AnalyticsFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
 }
 
 // AnalyticsFieldResponseBody is used to define fields on response body types.
