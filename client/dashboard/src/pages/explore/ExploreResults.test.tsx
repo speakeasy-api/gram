@@ -21,13 +21,19 @@ const dataset: AnalyticsDataset = {
   kind: "event",
   grain: "session",
   description: "One row per agent session.",
-  summaryField: "user",
   fields: [
-    { name: "user", type: "string", role: "dimension", operators: ["in"] },
+    {
+      name: "user",
+      type: "string",
+      role: "dimension",
+      default: true,
+      operators: ["in"],
+    },
     {
       name: "duration_seconds",
       type: "float64",
       role: "measure",
+      default: false,
       unit: "s",
       aggregations: ["sum"],
     },
@@ -41,7 +47,6 @@ function query(overrides: Record<string, unknown> = {}): RunQuery {
     isError: false,
     isPending: true,
     isFetching: false,
-    isPlaceholderData: false,
     ...overrides,
   } as unknown as RunQuery;
 }
@@ -66,7 +71,7 @@ describe("ExploreResults", () => {
     cleanup();
   });
 
-  it("blanks the panel only for a first result", () => {
+  it("says it is busy and blanks the panel while a run loads", () => {
     const { container } = render(
       <ExploreResults
         dataset={dataset}
@@ -76,23 +81,19 @@ describe("ExploreResults", () => {
       />,
     );
     expect(container.querySelector('section[aria-busy="true"]')).toBeTruthy();
-    expect(screen.queryByText("refining…")).toBeNull();
     expect(screen.queryByText("No rows to show")).toBeNull();
   });
 
-  it("keeps the last table up and says it is refining while the next result loads", () => {
+  it("names the dataset the results answer for", () => {
     render(
       <ExploreResults
         dataset={dataset}
         spec={spec({ chartType: "table" })}
         chart={query()}
-        summary={loaded([{ user: "ann", count: 1250 }], {
-          isFetching: true,
-          isPlaceholderData: true,
-        })}
+        summary={loaded([{ user: "ann", count: 1250 }])}
       />,
     );
-    expect(screen.getByText("refining…")).toBeTruthy();
+    expect(screen.getByText("sessions")).toBeTruthy();
     expect(screen.getByText("ann")).toBeTruthy();
     expect(screen.getByText("1.3K")).toBeTruthy();
   });
