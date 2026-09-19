@@ -24124,6 +24124,380 @@ paths:
             x-speakeasy-name-override: updateBySlug
             x-speakeasy-react-hook:
                 name: UpdateEnvironment
+    /rpc/explore.createQuery:
+        post:
+            description: Save a query. Any member of the project can. The spec is validated against the catalog before it is stored.
+            operationId: createExploreQuery
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateQueryRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ExploreQuery'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createQuery explore
+            tags:
+                - explore
+            x-speakeasy-name-override: createQuery
+            x-speakeasy-react-hook:
+                name: CreateExploreQuery
+    /rpc/explore.deleteQuery:
+        delete:
+            description: Delete a saved query. Its creator can; deleting someone else's needs project write access.
+            operationId: deleteExploreQuery
+            parameters:
+                - allowEmptyValue: true
+                  description: The query to delete
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The query to delete
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: deleteQuery explore
+            tags:
+                - explore
+            x-speakeasy-name-override: deleteQuery
+            x-speakeasy-react-hook:
+                name: DeleteExploreQuery
+    /rpc/explore.listQueries:
+        get:
+            description: List the project's saved queries, most recently updated first. Each is validated against the catalog on read, so a query a catalog change broke says so.
+            operationId: listExploreQueries
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ExploreListQueriesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listQueries explore
+            tags:
+                - explore
+            x-speakeasy-name-override: listQueries
+            x-speakeasy-react-hook:
+                name: ExploreQueries
+                type: query
+    /rpc/explore.updateQuery:
+        post:
+            description: Replace a saved query's name, dataset and spec. Any member of the project can.
+            operationId: updateExploreQuery
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateQueryRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ExploreQuery'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updateQuery explore
+            tags:
+                - explore
+            x-speakeasy-name-override: updateQuery
+            x-speakeasy-react-hook:
+                name: UpdateExploreQuery
     /rpc/external.receiveWorkOSWebhook:
         post:
             description: Receive and enqueue a WorkOS webhook event.
@@ -78436,6 +78810,26 @@ components:
                     $ref: '#/components/schemas/PromptTemplate'
             required:
                 - template
+        CreateQueryRequestBody:
+            type: object
+            properties:
+                dataset:
+                    type: string
+                    description: Catalog dataset the query asks
+                    minLength: 1
+                name:
+                    type: string
+                    description: Display name, at most 200 characters
+                    minLength: 1
+                    maxLength: 200
+                spec:
+                    type: object
+                    description: Builder state. Validated against the catalog on save.
+                    additionalProperties: true
+            required:
+                - name
+                - dataset
+                - spec
         CreateRemoteSessionClientForm:
             type: object
             properties:
@@ -80765,6 +81159,60 @@ components:
                     example: dev@acme.corp
             required:
                 - email
+        ExploreListQueriesResult:
+            type: object
+            properties:
+                queries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreQuery'
+                    description: Queries in the project, most recently updated first
+            required:
+                - queries
+        ExploreQuery:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                created_by_user_id:
+                    type: string
+                    description: Who saved it, when known
+                dataset:
+                    type: string
+                    description: The catalog dataset the query asks
+                    example: sessions
+                id:
+                    type: string
+                    format: uuid
+                invalid_reason:
+                    type: string
+                    description: Present when the saved spec no longer compiles against the catalog, naming what is wrong, so a catalog change fails visibly rather than returning wrong numbers.
+                name:
+                    type: string
+                    description: 'Display name. Not unique: two people saving the same name is normal.'
+                organization_id:
+                    type: string
+                project_id:
+                    type: string
+                    format: uuid
+                spec:
+                    type: object
+                    description: 'Builder state: chart type, window, dimensions, measures, filters, grain, sort and limit. The client interprets it; the server validates the parts the catalog knows.'
+                    additionalProperties: true
+                updated_at:
+                    type: string
+                    format: date-time
+            description: A named, saved question against a catalog dataset, kept with the builder state it was built with. Belongs to a project and is visible to everyone in the organization.
+            required:
+                - id
+                - project_id
+                - organization_id
+                - name
+                - dataset
+                - spec
+                - created_at
+                - updated_at
         ExportMcpMetadataRequestBody:
             type: object
             properties:
@@ -101147,6 +101595,31 @@ components:
                     $ref: '#/components/schemas/PromptTemplate'
             required:
                 - template
+        UpdateQueryRequestBody:
+            type: object
+            properties:
+                dataset:
+                    type: string
+                    description: Catalog dataset the query asks
+                    minLength: 1
+                id:
+                    type: string
+                    description: The query to update
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name, at most 200 characters
+                    minLength: 1
+                    maxLength: 200
+                spec:
+                    type: object
+                    description: Builder state. Validated against the catalog on save.
+                    additionalProperties: true
+            required:
+                - id
+                - name
+                - dataset
+                - spec
         UpdateRemoteSessionClientForm:
             type: object
             properties:
@@ -103271,6 +103744,8 @@ tags:
       description: Manage custom domains for gram.
     - name: environments
       description: Managing toolset environments.
+    - name: explore
+      description: 'Queries: the saved questions Explore keeps. Explore''s only server-side surface; everything it shows comes from the analytics service.'
     - name: externalCredentials
       description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
     - name: externalKeys
