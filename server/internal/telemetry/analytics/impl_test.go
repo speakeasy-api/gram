@@ -39,8 +39,11 @@ func TestDescribe(t *testing.T) {
 	require.NotContains(t, byName, "project")
 	require.NotNil(t, sessions.SummaryField)
 	require.Equal(t, "user", *sessions.SummaryField)
-	require.NotNil(t, result.Datasets[1].SummaryField)
-	require.Equal(t, "tool_name", *result.Datasets[1].SummaryField, "the catalog names the headline, not the client")
+
+	toolCalls := result.Datasets[1]
+	require.Equal(t, "tool_calls", toolCalls.Name)
+	require.NotNil(t, toolCalls.SummaryField)
+	require.Equal(t, "tool_name", *toolCalls.SummaryField, "the catalog names the headline, not the client")
 
 	t.Run("it requires an authenticated project", func(t *testing.T) {
 		t.Parallel()
