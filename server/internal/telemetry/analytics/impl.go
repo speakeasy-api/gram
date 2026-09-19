@@ -192,6 +192,7 @@ func describeDatasets(catalog *Catalog) []*gen.AnalyticsDataset {
 				Name:         f.Name,
 				Type:         string(f.Type),
 				Role:         string(f.Role),
+				Default:      f.Default,
 				Unit:         nil,
 				Operators:    nil,
 				Aggregations: nil,
@@ -208,19 +209,13 @@ func describeDatasets(catalog *Catalog) []*gen.AnalyticsDataset {
 			}
 			fields = append(fields, field)
 		}
-		dataset := &gen.AnalyticsDataset{
-			Name:         ds.Name,
-			Kind:         string(ds.Kind),
-			Grain:        ds.Grain,
-			Description:  ds.Description,
-			SummaryField: nil,
-			Fields:       fields,
-		}
-		if ds.SummaryField != "" {
-			summary := ds.SummaryField
-			dataset.SummaryField = &summary
-		}
-		out = append(out, dataset)
+		out = append(out, &gen.AnalyticsDataset{
+			Name:        ds.Name,
+			Kind:        string(ds.Kind),
+			Grain:       ds.Grain,
+			Description: ds.Description,
+			Fields:      fields,
+		})
 	}
 	return out
 }

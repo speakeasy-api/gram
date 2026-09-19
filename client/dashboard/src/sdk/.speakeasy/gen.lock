@@ -3678,7 +3678,7 @@ examples:
     speakeasy-default-analytics-describe:
       responses:
         "200":
-          application/json: {"datasets": [{"description": "unfurl geez drat helpless anenst because boohoo uh-huh", "fields": [{"name": "user", "role": "dimension", "type": "float64", "unit": "s"}], "grain": "session", "kind": "event", "name": "sessions"}]}
+          application/json: {"datasets": [{"description": "unfurl geez drat helpless anenst because boohoo uh-huh", "fields": [{"default": true, "name": "user", "role": "dimension", "type": "float64", "unit": "s"}], "grain": "session", "kind": "event", "name": "sessions"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

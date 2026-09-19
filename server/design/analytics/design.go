@@ -88,10 +88,11 @@ var FieldType = Type("AnalyticsField", func() {
 	Attribute("name", String, func() { Example("user") })
 	Attribute("type", String, func() { Enum("string", "int64", "float64") })
 	Attribute("role", String, func() { Enum("dimension", "measure") })
+	Attribute("default", Boolean, "Part of the query the dataset opens on: a default dimension is in the opening group-by", func() { Example(true) })
 	Attribute("unit", String, "Unit of a measure, when it has one", func() { Example("s") })
 	Attribute("operators", ArrayOf(String), "Filter operators a dimension admits")
 	Attribute("aggregations", ArrayOf(String), "Ops a measure admits")
-	Required("name", "type", "role")
+	Required("name", "type", "role", "default")
 })
 
 var DatasetType = Type("AnalyticsDataset", func() {
@@ -100,7 +101,6 @@ var DatasetType = Type("AnalyticsDataset", func() {
 	Attribute("kind", String, func() { Enum("event", "metric") })
 	Attribute("grain", String, "What one row represents, as a noun", func() { Example("session") })
 	Attribute("description", String)
-	Attribute("summary_field", String, "The field a row list shows as its headline beside time, when the dataset nominates one", func() { Example("tool_name") })
 	Attribute("fields", ArrayOf(FieldType))
 	Required("name", "kind", "grain", "description", "fields")
 })

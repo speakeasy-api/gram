@@ -657,12 +657,9 @@ type AnalyticsDatasetResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 	// What one row represents, as a noun
-	Grain       *string `form:"grain,omitempty" json:"grain,omitempty" xml:"grain,omitempty"`
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The field a row list shows as its headline beside time, when the dataset
-	// nominates one
-	SummaryField *string                       `form:"summary_field,omitempty" json:"summary_field,omitempty" xml:"summary_field,omitempty"`
-	Fields       []*AnalyticsFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
+	Grain       *string                       `form:"grain,omitempty" json:"grain,omitempty" xml:"grain,omitempty"`
+	Description *string                       `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	Fields      []*AnalyticsFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
 }
 
 // AnalyticsFieldResponseBody is used to define fields on response body types.
@@ -670,6 +667,9 @@ type AnalyticsFieldResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
 	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
+	// Part of the query the dataset opens on: a default dimension is in the
+	// opening group-by
+	Default *bool `form:"default,omitempty" json:"default,omitempty" xml:"default,omitempty"`
 	// Unit of a measure, when it has one
 	Unit *string `form:"unit,omitempty" json:"unit,omitempty" xml:"unit,omitempty"`
 	// Filter operators a dimension admits
@@ -2106,6 +2106,9 @@ func ValidateAnalyticsFieldResponseBody(body *AnalyticsFieldResponseBody) (err e
 	}
 	if body.Role == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("role", "body"))
+	}
+	if body.Default == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("default", "body"))
 	}
 	if body.Type != nil {
 		if !(*body.Type == "string" || *body.Type == "int64" || *body.Type == "float64") {

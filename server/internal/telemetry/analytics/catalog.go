@@ -100,9 +100,14 @@ const (
 // dataset's source query that yields it, which is usually just a column of
 // that query's output.
 type Field struct {
-	Name         string
-	Type         FieldType
-	Role         Role
+	Name string
+	Type FieldType
+	Role Role
+	// Default marks a field as part of the query a dataset opens on: a
+	// default dimension is in the opening group-by. Declared here rather
+	// than guessed by the client, so a new dataset opens sensibly with no
+	// client change. A dataset may flag several, or none.
+	Default      bool
 	Unit         string
 	Operators    []Operator
 	Aggregations []Aggregation
@@ -124,12 +129,7 @@ type Dataset struct {
 	// TimeExpr is the column of the source query's output that carries the
 	// row's event time, used for bucketing and for ordering row lists.
 	TimeExpr string
-	// SummaryField names the dimension a row list shows as its headline
-	// beside time. Declared here rather than guessed by the client, so a new
-	// dataset ships with no client change. Empty when the dataset has no
-	// natural headline.
-	SummaryField string
-	Fields       []Field
+	Fields   []Field
 	// Source builds the dataset's source query for one tenancy and window.
 	Source SourceQuery
 }
@@ -241,12 +241,6 @@ func (d *Dataset) validate() error {
 	}
 	if len(d.Fields) == 0 {
 		return fmt.Errorf("catalog: dataset %q declares no fields", d.Name)
-	}
-	if d.SummaryField != "" {
-		summary, ok := d.Field(d.SummaryField)
-		if !ok || summary.Role != RoleDimension {
-			return fmt.Errorf("catalog: dataset %q summary field %q is not a declared dimension", d.Name, d.SummaryField)
-		}
 	}
 	names := make(map[string]struct{}, len(d.Fields))
 	for _, f := range d.Fields {

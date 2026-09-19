@@ -37,13 +37,13 @@ func TestDescribe(t *testing.T) {
 	require.Equal(t, "s", *byName["duration_seconds"].Unit)
 	require.Equal(t, []string{"sum", "avg", "p95"}, byName["duration_seconds"].Aggregations)
 	require.NotContains(t, byName, "project")
-	require.NotNil(t, sessions.SummaryField)
-	require.Equal(t, "user", *sessions.SummaryField)
+	require.True(t, byName["user"].Default, "the catalog names the opening group-by, not the client")
+	require.False(t, byName["session"].Default)
+	require.False(t, byName["duration_seconds"].Default)
 
 	toolCalls := result.Datasets[1]
 	require.Equal(t, "tool_calls", toolCalls.Name)
-	require.NotNil(t, toolCalls.SummaryField)
-	require.Equal(t, "tool_name", *toolCalls.SummaryField, "the catalog names the headline, not the client")
+	require.Equal(t, []string{"tool_name"}, defaultFields(toolCalls), "one flagged dimension opens the tool calls view")
 
 	t.Run("it requires an authenticated project", func(t *testing.T) {
 		t.Parallel()
@@ -191,4 +191,16 @@ func TestQuery(t *testing.T) {
 		})
 		requireOopsCode(t, err, oops.CodeUnauthorized)
 	})
+}
+
+// defaultFields lists the names describe flags as default, in declaration
+// order.
+func defaultFields(ds *gen.AnalyticsDataset) []string {
+	var names []string
+	for _, f := range ds.Fields {
+		if f.Default {
+			names = append(names, f.Name)
+		}
+	}
+	return names
 }

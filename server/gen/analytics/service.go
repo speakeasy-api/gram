@@ -59,10 +59,7 @@ type AnalyticsDataset struct {
 	// What one row represents, as a noun
 	Grain       string
 	Description string
-	// The field a row list shows as its headline beside time, when the dataset
-	// nominates one
-	SummaryField *string
-	Fields       []*AnalyticsField
+	Fields      []*AnalyticsField
 }
 
 // AnalyticsDescribeResult is the result type of the analytics service describe
@@ -91,6 +88,9 @@ type AnalyticsField struct {
 	Name string
 	Type string
 	Role string
+	// Part of the query the dataset opens on: a default dimension is in the
+	// opening group-by
+	Default bool
 	// Unit of a measure, when it has one
 	Unit *string
 	// Filter operators a dimension admits

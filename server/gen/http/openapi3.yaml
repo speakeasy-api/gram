@@ -74632,10 +74632,6 @@ components:
                 name:
                     type: string
                     example: sessions
-                summary_field:
-                    type: string
-                    description: The field a row list shows as its headline beside time, when the dataset nominates one
-                    example: tool_name
             description: A dataset and the fields it exposes. The builder is generated from this.
             required:
                 - name
@@ -74689,6 +74685,10 @@ components:
                     items:
                         type: string
                     description: Ops a measure admits
+                default:
+                    type: boolean
+                    description: 'Part of the query the dataset opens on: a default dimension is in the opening group-by'
+                    example: true
                 name:
                     type: string
                     example: user
@@ -74717,6 +74717,7 @@ components:
                 - name
                 - type
                 - role
+                - default
         AnalyticsFilter:
             type: object
             properties:

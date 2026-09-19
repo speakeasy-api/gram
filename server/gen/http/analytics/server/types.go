@@ -629,12 +629,9 @@ type AnalyticsDatasetResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	Kind string `form:"kind" json:"kind" xml:"kind"`
 	// What one row represents, as a noun
-	Grain       string `form:"grain" json:"grain" xml:"grain"`
-	Description string `form:"description" json:"description" xml:"description"`
-	// The field a row list shows as its headline beside time, when the dataset
-	// nominates one
-	SummaryField *string                       `form:"summary_field,omitempty" json:"summary_field,omitempty" xml:"summary_field,omitempty"`
-	Fields       []*AnalyticsFieldResponseBody `form:"fields" json:"fields" xml:"fields"`
+	Grain       string                        `form:"grain" json:"grain" xml:"grain"`
+	Description string                        `form:"description" json:"description" xml:"description"`
+	Fields      []*AnalyticsFieldResponseBody `form:"fields" json:"fields" xml:"fields"`
 }
 
 // AnalyticsFieldResponseBody is used to define fields on response body types.
@@ -642,6 +639,9 @@ type AnalyticsFieldResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	Type string `form:"type" json:"type" xml:"type"`
 	Role string `form:"role" json:"role" xml:"role"`
+	// Part of the query the dataset opens on: a default dimension is in the
+	// opening group-by
+	Default bool `form:"default" json:"default" xml:"default"`
 	// Unit of a measure, when it has one
 	Unit *string `form:"unit,omitempty" json:"unit,omitempty" xml:"unit,omitempty"`
 	// Filter operators a dimension admits

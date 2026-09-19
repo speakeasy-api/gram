@@ -3,7 +3,6 @@
  */
 
 import * as z from "zod/v4-mini";
-import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
@@ -31,10 +30,6 @@ export type AnalyticsDataset = {
   grain: string;
   kind: AnalyticsDatasetKind;
   name: string;
-  /**
-   * The field a row list shows as its headline beside time, when the dataset nominates one
-   */
-  summaryField?: string | undefined;
 };
 
 /** @internal */
@@ -46,21 +41,13 @@ export const AnalyticsDatasetKind$inboundSchema: z.ZodMiniEnum<
 export const AnalyticsDataset$inboundSchema: z.ZodMiniType<
   AnalyticsDataset,
   unknown
-> = z.pipe(
-  z.object({
-    description: z.string(),
-    fields: z.array(AnalyticsField$inboundSchema),
-    grain: z.string(),
-    kind: AnalyticsDatasetKind$inboundSchema,
-    name: z.string(),
-    summary_field: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      "summary_field": "summaryField",
-    });
-  }),
-);
+> = z.object({
+  description: z.string(),
+  fields: z.array(AnalyticsField$inboundSchema),
+  grain: z.string(),
+  kind: AnalyticsDatasetKind$inboundSchema,
+  name: z.string(),
+});
 
 export function analyticsDatasetFromJSON(
   jsonString: string,
