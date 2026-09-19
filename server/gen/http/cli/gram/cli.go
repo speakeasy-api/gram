@@ -183,7 +183,7 @@ func UsageCommands() []string {
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
-		"usage (get-period-usage|get-meter-usage|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
+		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
 		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-support-matrix|update-support-matrix)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
@@ -3769,6 +3769,11 @@ func ParseEndpoint(
 		usageGetMeterUsageBreakdownFlag    = usageGetMeterUsageFlags.String("breakdown", "", "")
 		usageGetMeterUsageSessionTokenFlag = usageGetMeterUsageFlags.String("session-token", "", "")
 
+		usageGetSpendBreakdownFlags            = flag.NewFlagSet("get-spend-breakdown", flag.ExitOnError)
+		usageGetSpendBreakdownFromFlag         = usageGetSpendBreakdownFlags.String("from", "", "")
+		usageGetSpendBreakdownToFlag           = usageGetSpendBreakdownFlags.String("to", "", "")
+		usageGetSpendBreakdownSessionTokenFlag = usageGetSpendBreakdownFlags.String("session-token", "", "")
+
 		usageGetTokensUnderManagementFlags            = flag.NewFlagSet("get-tokens-under-management", flag.ExitOnError)
 		usageGetTokensUnderManagementSessionTokenFlag = usageGetTokensUnderManagementFlags.String("session-token", "", "")
 
@@ -5063,6 +5068,7 @@ func ParseEndpoint(
 	usageFlags.Usage = usageUsage
 	usageGetPeriodUsageFlags.Usage = usageGetPeriodUsageUsage
 	usageGetMeterUsageFlags.Usage = usageGetMeterUsageUsage
+	usageGetSpendBreakdownFlags.Usage = usageGetSpendBreakdownUsage
 	usageGetTokensUnderManagementFlags.Usage = usageGetTokensUnderManagementUsage
 	usageSetBillingMetadataFlags.Usage = usageSetBillingMetadataUsage
 	usageGetBillingEmailFlags.Usage = usageGetBillingEmailUsage
@@ -7600,6 +7606,9 @@ func ParseEndpoint(
 
 			case "get-meter-usage":
 				epf = usageGetMeterUsageFlags
+
+			case "get-spend-breakdown":
+				epf = usageGetSpendBreakdownFlags
 
 			case "get-tokens-under-management":
 				epf = usageGetTokensUnderManagementFlags
@@ -10214,6 +10223,9 @@ func ParseEndpoint(
 			case "get-meter-usage":
 				endpoint = c.GetMeterUsage()
 				data, err = usagec.BuildGetMeterUsagePayload(*usageGetMeterUsageFamilyFlag, *usageGetMeterUsageFromFlag, *usageGetMeterUsageToFlag, *usageGetMeterUsageBreakdownFlag, *usageGetMeterUsageSessionTokenFlag)
+			case "get-spend-breakdown":
+				endpoint = c.GetSpendBreakdown()
+				data, err = usagec.BuildGetSpendBreakdownPayload(*usageGetSpendBreakdownFromFlag, *usageGetSpendBreakdownToFlag, *usageGetSpendBreakdownSessionTokenFlag)
 			case "get-tokens-under-management":
 				endpoint = c.GetTokensUnderManagement()
 				data, err = usagec.BuildGetTokensUnderManagementPayload(*usageGetTokensUnderManagementSessionTokenFlag)
@@ -26379,6 +26391,7 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-period-usage: Get the usage for an organization for a given period`)
 	fmt.Fprintln(os.Stderr, `    get-meter-usage: Get incrementally aggregated ordinary meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer.`)
+	fmt.Fprintln(os.Stderr, `    get-spend-breakdown: Report spend availability and estimate PAYG organizations' three metered products at current list prices over a maximum of three calendar months. Other plans return unsupported_plan, empty products, and a zero total without calculating estimates. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.`)
 	fmt.Fprintln(os.Stderr, `    get-tokens-under-management: Get tokens under management for the active billing cycle alongside the contracted terms`)
 	fmt.Fprintln(os.Stderr, `    set-billing-metadata: Set an organization's billing contract terms. Restricted to platform admins.`)
 	fmt.Fprintln(os.Stderr, `    get-billing-email: Get the billing notification email for a PAYG organization`)
@@ -26441,6 +26454,28 @@ func usageGetMeterUsageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage get-meter-usage --family \"mcp_bandwidth\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --breakdown \"abc123\" --session-token \"abc123\"")
+}
+
+func usageGetSpendBreakdownUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage get-spend-breakdown", os.Args[0])
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Report spend availability and estimate PAYG organizations' three metered products at current list prices over a maximum of three calendar months. Other plans return unsupported_plan, empty products, and a zero total without calculating estimates. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage get-spend-breakdown --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --session-token \"abc123\"")
 }
 
 func usageGetTokensUnderManagementUsage() {

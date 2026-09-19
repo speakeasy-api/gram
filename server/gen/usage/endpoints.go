@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	GetPeriodUsage            goa.Endpoint
 	GetMeterUsage             goa.Endpoint
+	GetSpendBreakdown         goa.Endpoint
 	GetTokensUnderManagement  goa.Endpoint
 	SetBillingMetadata        goa.Endpoint
 	GetBillingEmail           goa.Endpoint
@@ -43,6 +44,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		GetPeriodUsage:            NewGetPeriodUsageEndpoint(s, a.APIKeyAuth),
 		GetMeterUsage:             NewGetMeterUsageEndpoint(s, a.APIKeyAuth),
+		GetSpendBreakdown:         NewGetSpendBreakdownEndpoint(s, a.APIKeyAuth),
 		GetTokensUnderManagement:  NewGetTokensUnderManagementEndpoint(s, a.APIKeyAuth),
 		SetBillingMetadata:        NewSetBillingMetadataEndpoint(s, a.APIKeyAuth),
 		GetBillingEmail:           NewGetBillingEmailEndpoint(s, a.APIKeyAuth),
@@ -66,6 +68,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetPeriodUsage = m(e.GetPeriodUsage)
 	e.GetMeterUsage = m(e.GetMeterUsage)
+	e.GetSpendBreakdown = m(e.GetSpendBreakdown)
 	e.GetTokensUnderManagement = m(e.GetTokensUnderManagement)
 	e.SetBillingMetadata = m(e.SetBillingMetadata)
 	e.GetBillingEmail = m(e.GetBillingEmail)
@@ -127,6 +130,29 @@ func NewGetMeterUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return s.GetMeterUsage(ctx, p)
+	}
+}
+
+// NewGetSpendBreakdownEndpoint returns an endpoint function that calls the
+// method "getSpendBreakdown" of service "usage".
+func NewGetSpendBreakdownEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSpendBreakdownPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSpendBreakdown(ctx, p)
 	}
 }
 

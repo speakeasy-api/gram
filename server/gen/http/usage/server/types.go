@@ -83,6 +83,26 @@ type GetMeterUsageResponseBody struct {
 	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
 }
 
+// GetSpendBreakdownResponseBody is the type of the "usage" service
+// "getSpendBreakdown" endpoint HTTP response body.
+type GetSpendBreakdownResponseBody struct {
+	// Whether spend estimates are available for the organization's plan
+	Availability string                        `form:"availability" json:"availability" xml:"availability"`
+	Window       *MeterUsageWindowResponseBody `form:"window" json:"window" xml:"window"`
+	// Trailing twelve billing-cycle date windows
+	BillingCycles []*MeterUsageWindowResponseBody `form:"billing_cycles" json:"billing_cycles" xml:"billing_cycles"`
+	Currency      string                          `form:"currency" json:"currency" xml:"currency"`
+	PricingBasis  string                          `form:"pricing_basis" json:"pricing_basis" xml:"pricing_basis"`
+	// Retrieval timestamp used to distinguish current and future buckets
+	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
+	// Exact estimated total at current PAYG list prices; zero when availability is
+	// unsupported_plan, meaning no estimate was calculated
+	TotalCostUsd string `form:"total_cost_usd" json:"total_cost_usd" xml:"total_cost_usd"`
+	// The three metered PAYG products in stable display order when available;
+	// empty when availability is unsupported_plan
+	Products []*SpendProductResponseBody `form:"products" json:"products" xml:"products"`
+}
+
 // GetTokensUnderManagementResponseBody is the type of the "usage" service
 // "getTokensUnderManagement" endpoint HTTP response body.
 type GetTokensUnderManagementResponseBody struct {
@@ -616,6 +636,189 @@ type GetMeterUsageUnexpectedResponseBody struct {
 // GetMeterUsageGatewayErrorResponseBody is the type of the "usage" service
 // "getMeterUsage" endpoint HTTP response body for the "gateway_error" error.
 type GetMeterUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownUnauthorizedResponseBody is the type of the "usage" service
+// "getSpendBreakdown" endpoint HTTP response body for the "unauthorized" error.
+type GetSpendBreakdownUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownForbiddenResponseBody is the type of the "usage" service
+// "getSpendBreakdown" endpoint HTTP response body for the "forbidden" error.
+type GetSpendBreakdownForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownBadRequestResponseBody is the type of the "usage" service
+// "getSpendBreakdown" endpoint HTTP response body for the "bad_request" error.
+type GetSpendBreakdownBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownNotFoundResponseBody is the type of the "usage" service
+// "getSpendBreakdown" endpoint HTTP response body for the "not_found" error.
+type GetSpendBreakdownNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownConflictResponseBody is the type of the "usage" service
+// "getSpendBreakdown" endpoint HTTP response body for the "conflict" error.
+type GetSpendBreakdownConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownUnsupportedMediaResponseBody is the type of the "usage"
+// service "getSpendBreakdown" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetSpendBreakdownUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownInvalidResponseBody is the type of the "usage" service
+// "getSpendBreakdown" endpoint HTTP response body for the "invalid" error.
+type GetSpendBreakdownInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownInvariantViolationResponseBody is the type of the "usage"
+// service "getSpendBreakdown" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetSpendBreakdownInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownUnexpectedResponseBody is the type of the "usage" service
+// "getSpendBreakdown" endpoint HTTP response body for the "unexpected" error.
+type GetSpendBreakdownUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownGatewayErrorResponseBody is the type of the "usage" service
+// "getSpendBreakdown" endpoint HTTP response body for the "gateway_error"
+// error.
+type GetSpendBreakdownGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3649,6 +3852,35 @@ type MeterUsageSeriesResponseBody struct {
 	Values []string `form:"values" json:"values" xml:"values"`
 }
 
+// SpendProductResponseBody is used to define fields on response body types.
+type SpendProductResponseBody struct {
+	ID    string `form:"id" json:"id" xml:"id"`
+	Label string `form:"label" json:"label" xml:"label"`
+	Unit  string `form:"unit" json:"unit" xml:"unit"`
+	// Exact integer ordinary usage quantity as a decimal string
+	Quantity string `form:"quantity" json:"quantity" xml:"quantity"`
+	// Exact integer quantity to which rate_usd applies
+	RateQuantity string `form:"rate_quantity" json:"rate_quantity" xml:"rate_quantity"`
+	// Exact current PAYG USD list price
+	RateUsd string `form:"rate_usd" json:"rate_usd" xml:"rate_usd"`
+	// Exact estimated product cost at current PAYG list prices
+	CostUsd string `form:"cost_usd" json:"cost_usd" xml:"cost_usd"`
+	// Dense UTC daily product buckets, including in-progress and future days
+	Buckets []*SpendBucketResponseBody `form:"buckets" json:"buckets" xml:"buckets"`
+}
+
+// SpendBucketResponseBody is used to define fields on response body types.
+type SpendBucketResponseBody struct {
+	// Inclusive bucket boundary
+	From string `form:"from" json:"from" xml:"from"`
+	// Exclusive bucket boundary
+	To string `form:"to" json:"to" xml:"to"`
+	// Exact integer ordinary usage quantity as a decimal string
+	Quantity string `form:"quantity" json:"quantity" xml:"quantity"`
+	// Exact estimated cost at current PAYG list prices
+	CostUsd string `form:"cost_usd" json:"cost_usd" xml:"cost_usd"`
+}
+
 // TUMPeriodResponseBody is used to define fields on response body types.
 type TUMPeriodResponseBody struct {
 	// Start of the billing cycle
@@ -3765,6 +3997,46 @@ func NewGetMeterUsageResponseBody(res *usage.MeterUsageResponse) *GetMeterUsageR
 	}
 	if res.Breakdown != nil {
 		body.Breakdown = marshalUsageMeterUsageBreakdownToMeterUsageBreakdownResponseBody(res.Breakdown)
+	}
+	return body
+}
+
+// NewGetSpendBreakdownResponseBody builds the HTTP response body from the
+// result of the "getSpendBreakdown" endpoint of the "usage" service.
+func NewGetSpendBreakdownResponseBody(res *usage.SpendBreakdownResponse) *GetSpendBreakdownResponseBody {
+	body := &GetSpendBreakdownResponseBody{
+		Availability: res.Availability,
+		Currency:     res.Currency,
+		PricingBasis: res.PricingBasis,
+		QueriedAt:    res.QueriedAt,
+		TotalCostUsd: res.TotalCostUsd,
+	}
+	if res.Window != nil {
+		body.Window = marshalUsageMeterUsageWindowToMeterUsageWindowResponseBody(res.Window)
+	}
+	if res.BillingCycles != nil {
+		body.BillingCycles = make([]*MeterUsageWindowResponseBody, len(res.BillingCycles))
+		for i, val := range res.BillingCycles {
+			if val == nil {
+				body.BillingCycles[i] = nil
+				continue
+			}
+			body.BillingCycles[i] = marshalUsageMeterUsageWindowToMeterUsageWindowResponseBody(val)
+		}
+	} else {
+		body.BillingCycles = []*MeterUsageWindowResponseBody{}
+	}
+	if res.Products != nil {
+		body.Products = make([]*SpendProductResponseBody, len(res.Products))
+		for i, val := range res.Products {
+			if val == nil {
+				body.Products[i] = nil
+				continue
+			}
+			body.Products[i] = marshalUsageSpendProductToSpendProductResponseBody(val)
+		}
+	} else {
+		body.Products = []*SpendProductResponseBody{}
 	}
 	return body
 }
@@ -4221,6 +4493,148 @@ func NewGetMeterUsageUnexpectedResponseBody(res *goa.ServiceError) *GetMeterUsag
 // the result of the "getMeterUsage" endpoint of the "usage" service.
 func NewGetMeterUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetMeterUsageGatewayErrorResponseBody {
 	body := &GetMeterUsageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getSpendBreakdown" endpoint of the "usage" service.
+func NewGetSpendBreakdownUnauthorizedResponseBody(res *goa.ServiceError) *GetSpendBreakdownUnauthorizedResponseBody {
+	body := &GetSpendBreakdownUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownForbiddenResponseBody builds the HTTP response body from
+// the result of the "getSpendBreakdown" endpoint of the "usage" service.
+func NewGetSpendBreakdownForbiddenResponseBody(res *goa.ServiceError) *GetSpendBreakdownForbiddenResponseBody {
+	body := &GetSpendBreakdownForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownBadRequestResponseBody builds the HTTP response body
+// from the result of the "getSpendBreakdown" endpoint of the "usage" service.
+func NewGetSpendBreakdownBadRequestResponseBody(res *goa.ServiceError) *GetSpendBreakdownBadRequestResponseBody {
+	body := &GetSpendBreakdownBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownNotFoundResponseBody builds the HTTP response body from
+// the result of the "getSpendBreakdown" endpoint of the "usage" service.
+func NewGetSpendBreakdownNotFoundResponseBody(res *goa.ServiceError) *GetSpendBreakdownNotFoundResponseBody {
+	body := &GetSpendBreakdownNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownConflictResponseBody builds the HTTP response body from
+// the result of the "getSpendBreakdown" endpoint of the "usage" service.
+func NewGetSpendBreakdownConflictResponseBody(res *goa.ServiceError) *GetSpendBreakdownConflictResponseBody {
+	body := &GetSpendBreakdownConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getSpendBreakdown" endpoint of the "usage"
+// service.
+func NewGetSpendBreakdownUnsupportedMediaResponseBody(res *goa.ServiceError) *GetSpendBreakdownUnsupportedMediaResponseBody {
+	body := &GetSpendBreakdownUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownInvalidResponseBody builds the HTTP response body from
+// the result of the "getSpendBreakdown" endpoint of the "usage" service.
+func NewGetSpendBreakdownInvalidResponseBody(res *goa.ServiceError) *GetSpendBreakdownInvalidResponseBody {
+	body := &GetSpendBreakdownInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getSpendBreakdown" endpoint of the "usage"
+// service.
+func NewGetSpendBreakdownInvariantViolationResponseBody(res *goa.ServiceError) *GetSpendBreakdownInvariantViolationResponseBody {
+	body := &GetSpendBreakdownInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getSpendBreakdown" endpoint of the "usage" service.
+func NewGetSpendBreakdownUnexpectedResponseBody(res *goa.ServiceError) *GetSpendBreakdownUnexpectedResponseBody {
+	body := &GetSpendBreakdownUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getSpendBreakdown" endpoint of the "usage" service.
+func NewGetSpendBreakdownGatewayErrorResponseBody(res *goa.ServiceError) *GetSpendBreakdownGatewayErrorResponseBody {
+	body := &GetSpendBreakdownGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6584,6 +6998,17 @@ func NewGetMeterUsagePayload(family string, from *string, to *string, breakdown 
 	v.From = from
 	v.To = to
 	v.Breakdown = breakdown
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetSpendBreakdownPayload builds a usage service getSpendBreakdown
+// endpoint payload.
+func NewGetSpendBreakdownPayload(from *string, to *string, sessionToken *string) *usage.GetSpendBreakdownPayload {
+	v := &usage.GetSpendBreakdownPayload{}
+	v.From = from
+	v.To = to
 	v.SessionToken = sessionToken
 
 	return v

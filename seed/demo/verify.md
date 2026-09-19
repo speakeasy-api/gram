@@ -286,6 +286,30 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     must not increase API usage, while the incremental summary records all 873
     deliveries. Run the seed twice and repeat.
 
+20. **Billing spend availability** — in the enterprise demo organization, open
+    Billing. The spend heading, controls, chart, and product table must be absent,
+    while the ordinary usage explorer stays visible. `usage.getSpendBreakdown`
+    must return `availability: "unsupported_plan"`, `products: []`, and
+    `total_cost_usd: "0"` with reporting-window metadata.
+    For the available visualization, use a PAYG organization in the local stack
+    only; restore any temporary local tier change afterward. Never change the
+    shared demo tier to exercise this path. Select a custom trailing 14-day
+    window and confirm `availability: "available"` with non-zero estimated costs
+    for storage, per-scanner risk, and MCP egress only; inference must not appear.
+    Compare quantities against `billing_meter_daily_summaries` ordinary-usage
+    totals (including physical duplicate deliveries). Apply current PAYG rates
+    and verify exact product costs sum to the response total; display rounds only
+    at presentation. A PAYG period with no usage remains `available`, with three
+    zero-filled product series and a visible zero-spend visualization.
+    Switch daily/weekly/monthly and cumulative modes, preserving the total.
+    Remove a product and confirm its stack, table row, and cost contribution
+    disappear together; clear the selection and confirm the selection prompt.
+    Restore all products, check the current in-progress bucket, and select an
+    empty historical range. Check desktop and mobile layouts and confirm Usage,
+    Rate, and Estimated cost values share their respective column's right edge.
+    Repeat after reseeding. Local rewritten-seed checks alone do not qualify
+    this shared-demo row for `[x]`.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns

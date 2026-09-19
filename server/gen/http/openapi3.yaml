@@ -69473,6 +69473,103 @@ paths:
             x-speakeasy-name-override: getPeriodUsage
             x-speakeasy-react-hook:
                 name: getPeriodUsage
+    /rpc/usage.getSpendBreakdown:
+        get:
+            description: 'Report spend availability and estimate PAYG organizations'' three metered products at current list prices over a maximum of three calendar months. Other plans return unsupported_plan, empty products, and a zero total without calculating estimates. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.'
+            operationId: getSpendBreakdown
+            parameters:
+                - allowEmptyValue: true
+                  description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+                  in: query
+                  name: from
+                  schema:
+                    description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+                  in: query
+                  name: to
+                  schema:
+                    description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SpendBreakdownResponse'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getSpendBreakdown usage
+            tags:
+                - usage
+            x-speakeasy-name-override: getSpendBreakdown
+            x-speakeasy-react-hook:
+                name: getSpendBreakdown
     /rpc/usage.getStripeSubscription:
         get:
             description: Get the live lifecycle state of the organization's Stripe PAYG subscription
@@ -96550,6 +96647,73 @@ components:
                 - source_kind
                 - source_slug
                 - environment_id
+        SpendBreakdownResponse:
+            type: object
+            properties:
+                availability:
+                    type: string
+                    description: Whether spend estimates are available for the organization's plan
+                    enum:
+                        - available
+                        - unsupported_plan
+                billing_cycles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MeterUsageWindow'
+                    description: Trailing twelve billing-cycle date windows
+                currency:
+                    type: string
+                    enum:
+                        - USD
+                pricing_basis:
+                    type: string
+                    enum:
+                        - current_payg_list_price
+                products:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SpendProduct'
+                    description: The three metered PAYG products in stable display order when available; empty when availability is unsupported_plan
+                queried_at:
+                    type: string
+                    description: Retrieval timestamp used to distinguish current and future buckets
+                    format: date-time
+                total_cost_usd:
+                    type: string
+                    description: Exact estimated total at current PAYG list prices; zero when availability is unsupported_plan, meaning no estimate was calculated
+                window:
+                    $ref: '#/components/schemas/MeterUsageWindow'
+            required:
+                - availability
+                - window
+                - billing_cycles
+                - currency
+                - pricing_basis
+                - queried_at
+                - total_cost_usd
+                - products
+        SpendBucket:
+            type: object
+            properties:
+                cost_usd:
+                    type: string
+                    description: Exact estimated cost at current PAYG list prices
+                from:
+                    type: string
+                    description: Inclusive bucket boundary
+                    format: date-time
+                quantity:
+                    type: string
+                    description: Exact integer ordinary usage quantity as a decimal string
+                to:
+                    type: string
+                    description: Exclusive bucket boundary
+                    format: date-time
+            required:
+                - from
+                - to
+                - quantity
+                - cost_usd
         SpendCap:
             type: object
             properties:
@@ -96568,6 +96732,48 @@ components:
             required:
                 - key_type
                 - monthly_credits
+        SpendProduct:
+            type: object
+            properties:
+                buckets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SpendBucket'
+                    description: Dense UTC daily product buckets, including in-progress and future days
+                cost_usd:
+                    type: string
+                    description: Exact estimated product cost at current PAYG list prices
+                id:
+                    type: string
+                    enum:
+                        - agent_session_storage
+                        - risk_content_scans
+                        - mcp_egress
+                label:
+                    type: string
+                quantity:
+                    type: string
+                    description: Exact integer ordinary usage quantity as a decimal string
+                rate_quantity:
+                    type: string
+                    description: Exact integer quantity to which rate_usd applies
+                rate_usd:
+                    type: string
+                    description: Exact current PAYG USD list price
+                unit:
+                    type: string
+                    enum:
+                        - stokens
+                        - bytes
+            required:
+                - id
+                - label
+                - unit
+                - quantity
+                - rate_quantity
+                - rate_usd
+                - cost_usd
+                - buckets
         SpendRule:
             type: object
             properties:

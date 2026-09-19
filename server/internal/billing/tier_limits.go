@@ -5,16 +5,20 @@ import gen "github.com/speakeasy-api/gram/server/gen/usage"
 const (
 	// TUMUnitPriceUSD is the exact Stripe meter price for one managed token.
 	TUMUnitPriceUSD = "0.00000035"
-	// TUMPricePerMillionUSD is the same price in the customer-facing unit.
+	// TUMPricePerMillionUSD is the current PAYG list price per million managed tokens.
 	TUMPricePerMillionUSD = "0.35"
+	// RiskScanPricePerMillionUSD is the current PAYG list price per million tokens processed by each scanner.
+	RiskScanPricePerMillionUSD = "0.99"
+	// MCPEgressPricePerGiBUSD is the current PAYG list price per GiB of MCP gateway egress.
+	MCPEgressPricePerGiBUSD = "20"
 )
 
 // NewPaygTierLimits returns the usage-tier contract shared by every billing
 // provider. Each call returns independently mutable slices.
 func NewPaygTierLimits() *gen.TierLimits {
 	price := TUMPricePerMillionUSD
-	riskScanPrice := "0.99"
-	mcpEgressPrice := "20"
+	riskScanPrice := RiskScanPricePerMillionUSD
+	mcpEgressPrice := MCPEgressPricePerGiBUSD
 	return &gen.TierLimits{
 		BasePrice:                  0,
 		IncludedToolCalls:          0,

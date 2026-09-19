@@ -34,6 +34,7 @@ import { PaygPlanSection } from "@/components/billing/payg-plan-section";
 import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { MeterUsageSection } from "@/components/billing/meter-usage-section";
+import { SpendBreakdownSection } from "@/components/billing/spend-breakdown-section";
 import { usePaygCheckoutAccess } from "@/components/billing/payg-checkout-access";
 import { paygPlanState } from "@/components/billing/payg-plan-state";
 import { useStripeSubscription } from "@/components/billing/use-stripe-subscription";
@@ -112,6 +113,7 @@ function BillingUsage({ productTier }: { productTier: ProductTier }) {
   if (productTier === "enterprise" || productTier === "payg") {
     return (
       <>
+        <SpendBreakdownSection />
         <MeterUsageSection />
         {/* Enterprise inference caps render only during an active trial. */}
         <InferenceCapsSection />
