@@ -18,9 +18,10 @@ import (
 
 // Server lists the analytics service endpoint HTTP handlers.
 type Server struct {
-	Mounts   []*MountPoint
-	Query    http.Handler
-	Describe http.Handler
+	Mounts          []*MountPoint
+	Query           http.Handler
+	Describe        http.Handler
+	DimensionValues http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -52,9 +53,11 @@ func New(
 		Mounts: []*MountPoint{
 			{"Query", "POST", "/rpc/analytics.query"},
 			{"Describe", "GET", "/rpc/analytics.describe"},
+			{"DimensionValues", "POST", "/rpc/analytics.dimensionValues"},
 		},
-		Query:    NewQueryHandler(e.Query, mux, decoder, encoder, errhandler, formatter),
-		Describe: NewDescribeHandler(e.Describe, mux, decoder, encoder, errhandler, formatter),
+		Query:           NewQueryHandler(e.Query, mux, decoder, encoder, errhandler, formatter),
+		Describe:        NewDescribeHandler(e.Describe, mux, decoder, encoder, errhandler, formatter),
+		DimensionValues: NewDimensionValuesHandler(e.DimensionValues, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -65,6 +68,7 @@ func (s *Server) Service() string { return "analytics" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Query = m(s.Query)
 	s.Describe = m(s.Describe)
+	s.DimensionValues = m(s.DimensionValues)
 }
 
 // MethodNames returns the methods served.
@@ -74,6 +78,7 @@ func (s *Server) MethodNames() []string { return analytics.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountQueryHandler(mux, h.Query)
 	MountDescribeHandler(mux, h.Describe)
+	MountDimensionValuesHandler(mux, h.DimensionValues)
 }
 
 // Mount configures the mux to serve the analytics endpoints.
@@ -164,6 +169,59 @@ func NewDescribeHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "describe")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "analytics")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDimensionValuesHandler configures the mux to serve the "analytics"
+// service "dimensionValues" endpoint.
+func MountDimensionValuesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/analytics.dimensionValues", f)
+}
+
+// NewDimensionValuesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "analytics" service "dimensionValues" endpoint.
+func NewDimensionValuesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDimensionValuesRequest(mux, decoder)
+		encodeResponse = EncodeDimensionValuesResponse(encoder)
+		encodeError    = EncodeDimensionValuesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "dimensionValues")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "analytics")
 		payload, err := decodeRequest(r)
 		if err != nil {
