@@ -161,8 +161,8 @@ func OktaChecklist(listingMode, jwksURL string, signal ChecklistSignal) []Checkl
 		// (Profile, then User access and authentication) and creates the agent
 		// STAGED; client registration, user assignment and resource connections
 		// are sections on the agent page afterwards. Okta's generated client ID
-		// for the agent is the agent ID itself, and the agent activates from its
-		// credential, not from the Actions menu. The agent key is separate from
+		// for the agent is the agent ID itself, and the agent turns ACTIVE when its
+		// linked app is activated, with no credential. The agent key is separate from
 		// the management service app key; its JWKS URI ships with AIM-62.
 		ChecklistItem{
 			Key:         "create_ai_agent",
@@ -173,7 +173,7 @@ func OktaChecklist(listingMode, jwksURL string, signal ChecklistSignal) []Checkl
 				"Go to Directory > AI Agents and select Register AI agent. Name it Speakeasy Agent, so the app Okta creates for it is easy to tell apart from the Speakeasy app above; the first step only asks for a name and description.",
 				"On User access and authentication, keep Create a new OIDC app linked to this AI agent selected. Okta uses this app only to decide which users the agent may act for; it does not change how your people sign in to Speakeasy. Do not pick Select an existing app: it lists your other apps, such as the MCP servers' own, and the link is permanent.",
 				"Okta creates the agent in Staged status and its linked app as Inactive. Open the linked app (under Applications, the Speakeasy Agent app marked Linked AI Agent), set it to Active, and on its Assignments tab assign the users or groups who use MCP servers through Speakeasy.",
-				"Leave the agent in Staged status for now. Activating it needs a Public/private key credential under Client registration, and Speakeasy will provide the key URL (JWKS URI) for that credential in an upcoming release.",
+				"Activating the linked app also moves the agent from Staged to Active. Skip Client registration for now: the agent only needs that credential when it requests access on a user's behalf, and Speakeasy will provide the key URL (JWKS URI) for it in an upcoming release.",
 				"Record the agent ID below. It is the wlp... value in the agent page URL.",
 			},
 			Completed: nil,
