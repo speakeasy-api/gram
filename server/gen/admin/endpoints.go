@@ -67,6 +67,7 @@ type Endpoints struct {
 	StartTrial                            goa.Endpoint
 	ChangeTrialEndDate                    goa.Endpoint
 	GetMeterUsage                         goa.Endpoint
+	GetSpendBreakdown                     goa.Endpoint
 	GetSupportMatrix                      goa.Endpoint
 	UpdateSupportMatrix                   goa.Endpoint
 }
@@ -144,6 +145,7 @@ func NewEndpoints(s Service) *Endpoints {
 		StartTrial:                            NewStartTrialEndpoint(s, a.APIKeyAuth),
 		ChangeTrialEndDate:                    NewChangeTrialEndDateEndpoint(s, a.APIKeyAuth),
 		GetMeterUsage:                         NewGetMeterUsageEndpoint(s, a.APIKeyAuth),
+		GetSpendBreakdown:                     NewGetSpendBreakdownEndpoint(s, a.APIKeyAuth),
 		GetSupportMatrix:                      NewGetSupportMatrixEndpoint(s, a.APIKeyAuth),
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
 	}
@@ -201,6 +203,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.StartTrial = m(e.StartTrial)
 	e.ChangeTrialEndDate = m(e.ChangeTrialEndDate)
 	e.GetMeterUsage = m(e.GetMeterUsage)
+	e.GetSpendBreakdown = m(e.GetSpendBreakdown)
 	e.GetSupportMatrix = m(e.GetSupportMatrix)
 	e.UpdateSupportMatrix = m(e.UpdateSupportMatrix)
 }
@@ -1313,6 +1316,29 @@ func NewGetMeterUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return s.GetMeterUsage(ctx, p)
+	}
+}
+
+// NewGetSpendBreakdownEndpoint returns an endpoint function that calls the
+// method "getSpendBreakdown" of service "admin".
+func NewGetSpendBreakdownEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSpendBreakdownPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSpendBreakdown(ctx, p)
 	}
 }
 

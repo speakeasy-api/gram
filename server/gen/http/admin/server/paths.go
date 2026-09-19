@@ -257,6 +257,11 @@ func GetMeterUsageAdminPath() string {
 	return "/admin/organizations.getMeterUsage"
 }
 
+// GetSpendBreakdownAdminPath returns the URL path to the admin service getSpendBreakdown HTTP endpoint.
+func GetSpendBreakdownAdminPath() string {
+	return "/admin/organization.spendBreakdown"
+}
+
 // GetSupportMatrixAdminPath returns the URL path to the admin service getSupportMatrix HTTP endpoint.
 func GetSupportMatrixAdminPath() string {
 	return "/admin/supportMatrix.get"

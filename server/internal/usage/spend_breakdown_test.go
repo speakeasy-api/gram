@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -103,6 +104,42 @@ func TestGetSpendBreakdownReturnsUnsupportedPlanWithoutClickHouse(t *testing.T) 
 	require.Empty(t, result.Products)
 }
 
+func TestGetSpendBreakdownForOrganizationReadsEnterpriseSpendWhilePublicEndpointRemainsUnsupported(t *testing.T) {
+	t.Parallel()
+	organizationID := uuid.NewString()
+	otherOrganizationID := uuid.NewString()
+	service, db, clickhouse, _ := newTUMTestService(t, organizationID)
+	setTestOrganizationAccountType(t, db, organizationID, billing.TierEnterprise)
+	service.meterReadConn = clickhouse
+	service.now = func() time.Time { return time.Date(2026, time.April, 20, 10, 0, 0, 0, time.UTC) }
+	fromTime := time.Date(2026, time.April, 17, 0, 0, 0, 0, time.UTC)
+	toTime := fromTime.AddDate(0, 0, 2)
+	require.NoError(t, chrepo.New(clickhouse).InsertReadings(t.Context(), []chrepo.ReadingRow{
+		spendReading(organizationID, metering.MeterAgentSessionStorage, 1_000_000, fromTime.Add(time.Hour)),
+		spendReading(organizationID, metering.MeterRiskGitleaks, 1_000_000, fromTime.Add(2*time.Hour)),
+		spendReading(organizationID, metering.MeterMCPBandwidthEgress, 1_073_741_824, fromTime.Add(3*time.Hour)),
+		spendReading(otherOrganizationID, metering.MeterAgentSessionStorage, 9_000_000, fromTime.Add(time.Hour)),
+	}))
+	from, to := fromTime.Format(time.RFC3339), toTime.Format(time.RFC3339)
+	payload := &gen.GetSpendBreakdownPayload{From: &from, To: &to}
+
+	trusted, err := service.GetSpendBreakdownForOrganization(t.Context(), organizationID, payload)
+	require.NoError(t, err)
+	require.Equal(t, spendAvailabilityAvailable, trusted.Availability)
+	require.Equal(t, "21.34", trusted.TotalCostUsd)
+	require.Len(t, trusted.Products, 3)
+	require.Equal(t, []string{"1000000", "1000000", "1073741824"}, []string{
+		trusted.Products[0].Quantity, trusted.Products[1].Quantity, trusted.Products[2].Quantity,
+	})
+
+	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID))
+	public, err := service.GetSpendBreakdown(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, spendAvailabilityUnsupportedPlan, public.Availability)
+	require.Equal(t, "0", public.TotalCostUsd)
+	require.Empty(t, public.Products)
+}
+
 func TestGetSpendBreakdownValidatesRangeForUnsupportedPlan(t *testing.T) {
 	t.Parallel()
 	organizationID := "org-spend-invalid-range"
@@ -167,4 +204,28 @@ func spendBucketCosts(buckets []*gen.SpendBucket) []string {
 		result = append(result, bucket.CostUsd)
 	}
 	return result
+}
+
+func spendReading(organizationID string, meterID metering.MeterID, value int64, occurredAt time.Time) chrepo.ReadingRow {
+	unit := metering.UnitSTokens
+	measurementMethod := metering.MeasurementTiktokenO200kBase
+	if meterID == metering.MeterMCPBandwidthIngress || meterID == metering.MeterMCPBandwidthEgress {
+		unit = metering.UnitBytes
+		measurementMethod = metering.MeasurementHTTPBodyBytes
+	}
+	return chrepo.ReadingRow{
+		ID:                uuid.New(),
+		OrganizationID:    organizationID,
+		ProjectID:         uuid.New(),
+		MeterID:           string(meterID),
+		OperationID:       "spend-breakdown-test:" + uuid.NewString(),
+		Unit:              string(unit),
+		MeasurementMethod: string(measurementMethod),
+		Value:             value,
+		OccurredAt:        occurredAt,
+		ProducedAt:        occurredAt,
+		InsertedAt:        occurredAt,
+		CorrectsReadingID: nil,
+		Attributes:        map[string]string{},
+	}
 }

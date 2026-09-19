@@ -310,6 +310,24 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Repeat after reseeding. Local rewritten-seed checks alone do not qualify
     this shared-demo row for `[x]`.
 
+21. **Admin billing spend by product** — sign in to the admin dashboard and open
+    the enterprise demo organization's **Billing** page without impersonation or
+    changing its account type. Select a trailing 14-day window. The spend section
+    and `/admin/organization.spendBreakdown` must report non-zero storage,
+    per-scanner risk, and MCP egress estimates from the existing meter fixtures,
+    even without a Stripe subscription. These are current PAYG list-price
+    comparisons, not the organization's actual invoice or contracted charges.
+    Check that API product costs sum exactly to the total, displayed USD amounts
+    round to two decimals, and ingress and inference are excluded. Changing the
+    product selection must update the chart, table, and selected total together.
+    Storage is blue, risk scanning purple, and MCP amber in both the spend and
+    usage graphs, including cumulative views and light/dark themes. Check
+    billing-cycle selection, custom dates, an empty historical range,
+    refresh/error recovery, and desktop/mobile layouts.
+    Switch organizations and confirm no previous organization's values remain.
+    An unauthenticated request must be rejected; the customer-facing enterprise
+    spend endpoint must still return `unsupported_plan`.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
