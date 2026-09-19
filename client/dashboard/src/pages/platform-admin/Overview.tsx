@@ -121,7 +121,7 @@ function OinManifestSection(): JSX.Element {
     >
       <AdminRow
         label="XAA manifest"
-        description="Global ID-JAG issuers and their global clients, as JSON for the questionnaire or Markdown for review. Never customer data."
+        description="Global ID-JAG issuers and their global clients, as JSON or Markdown for review in the OIN Wizard. Catalog readiness does not verify conformance. Never customer data."
         action={
           <Button asChild variant="secondary" size="sm">
             <Link to={orgRoutes.platformAdminOinManifest.href()}>

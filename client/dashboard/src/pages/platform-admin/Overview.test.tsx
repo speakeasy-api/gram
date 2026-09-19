@@ -63,6 +63,8 @@ describe("platform admin overview", () => {
       screen.getByRole("switch", { name: "Toggle platform admin" }),
     ).toBeTruthy();
     expect(screen.queryByText("Activity")).toBeNull();
+    expect(screen.getByText(/review in the OIN Wizard/)).toBeTruthy();
+    expect(screen.queryByText(/questionnaire/)).toBeNull();
     expect(
       screen.getByRole("link", { name: "Open manifest" }).getAttribute("href"),
     ).toBe("/platform-admin/oin-manifest");

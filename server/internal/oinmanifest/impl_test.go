@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"regexp"
@@ -307,7 +308,9 @@ func TestExportJSONAndMarkdownFromTheGlobalCatalog(t *testing.T) {
 	fixture := newServiceFixture(t, true)
 	fetched := fixtureNow.Add(-time.Hour)
 	ready := insertIssuer(t, fixture.conn, issuerFixture{issuer: "https://mcp.example.test", name: "Example MCP", grants: idjagGrants, profiles: idjagProfiles, fetchedAt: fetched})
-	insertClient(t, fixture.conn, ready, "", "global-client", "")
+	clientID := insertClient(t, fixture.conn, ready, "", "global-client", "")
+	_, err := fixture.conn.Exec(t.Context(), "UPDATE remote_session_clients SET resource_identifier = $1 WHERE id = $2", "https://mcp.example.test/mcp", clientID)
+	require.NoError(t, err)
 	insertIssuer(t, fixture.conn, issuerFixture{issuer: "https://orphan.example.test", name: "Orphan", grants: idjagGrants, profiles: idjagProfiles, fetchedAt: fetched})
 	insertIssuer(t, fixture.conn, issuerFixture{issuer: "https://plain.example.test", name: "Plain OAuth", grants: []string{"authorization_code"}, fetchedAt: fetched})
 
@@ -322,10 +325,10 @@ func TestExportJSONAndMarkdownFromTheGlobalCatalog(t *testing.T) {
 	require.Len(t, manifest.ResourceRegistrations, 2)
 	require.Equal(t, "https://mcp.example.test", manifest.ResourceRegistrations[0].ResourceASIssuer)
 	require.Equal(t, "global-client", *manifest.ResourceRegistrations[0].ClientID)
-	require.Equal(t, []string{blockerAudience}, manifest.ResourceRegistrations[0].Blockers)
+	require.Empty(t, manifest.ResourceRegistrations[0].Blockers)
 	require.Equal(t, "https://orphan.example.test", manifest.ResourceRegistrations[1].ResourceASIssuer)
 	require.Contains(t, manifest.ResourceRegistrations[1].Blockers, blockerNoClient)
-	require.Equal(t, Summary{Registrations: 2, Ready: 0, Blocked: 2}, manifest.Summary)
+	require.Equal(t, Summary{Registrations: 2, Ready: 1, Blocked: 1}, manifest.Summary)
 
 	result, markdown, err := export(t, ctx, fixture.service, FormatMarkdown)
 	require.NoError(t, err)
@@ -351,8 +354,8 @@ func TestExportJSONAndMarkdownFromTheGlobalCatalog(t *testing.T) {
 	require.Equal(t, "json", auditLines[0][string(attr.OINManifestFormatKey)])
 	require.Equal(t, "markdown", auditLines[1][string(attr.OINManifestFormatKey)])
 	require.InDelta(t, 2, auditLines[0][string(attr.OINManifestRegistrationCountKey)], 0)
-	require.InDelta(t, 0, auditLines[0][string(attr.OINManifestReadyCountKey)], 0)
-	require.InDelta(t, 2, auditLines[0][string(attr.OINManifestBlockedCountKey)], 0)
+	require.InDelta(t, 1, auditLines[0][string(attr.OINManifestReadyCountKey)], 0)
+	require.InDelta(t, 1, auditLines[0][string(attr.OINManifestBlockedCountKey)], 0)
 
 	require.Equal(t, int64(1), counterValue(t, ctx, fixture.reader, meterExport, map[attribute.Key]string{attr.OINManifestFormatKey: FormatJSON}))
 	require.Equal(t, int64(1), counterValue(t, ctx, fixture.reader, meterExport, map[attribute.Key]string{attr.OINManifestFormatKey: FormatMarkdown}))
@@ -378,7 +381,7 @@ func TestExportIgnoresTenantRowsForTheSameIssuer(t *testing.T) {
 	require.Len(t, manifest.ResourceRegistrations, 1)
 	require.Equal(t, "Global", manifest.ResourceRegistrations[0].ResourceName)
 	require.Equal(t, "global-client", *manifest.ResourceRegistrations[0].ClientID)
-	require.Equal(t, []string{blockerAudience}, manifest.ResourceRegistrations[0].Blockers)
+	require.Equal(t, []string{blockerNoResource}, manifest.ResourceRegistrations[0].Blockers)
 	require.NotContains(t, string(body), "tenant-client")
 	require.NotContains(t, string(body), orgID)
 }
@@ -485,4 +488,34 @@ func counterValue(t *testing.T, ctx context.Context, reader *sdkmetric.ManualRea
 		}
 	}
 	return total
+}
+
+func TestExportRegistrationLimit(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, 100, MaxRegistrations)
+	fixture := newServiceFixture(t, true)
+	ctx := validatedCustomerContext(t, "", "actor_user", "actor@example.com")
+	for i := range 100 {
+		insertIssuer(t, fixture.conn, issuerFixture{issuer: fmt.Sprintf("https://as-%d.example.test", i), grants: idjagGrants, profiles: idjagProfiles, fetchedAt: fixtureNow})
+	}
+	for _, format := range []string{FormatJSON, FormatMarkdown} {
+		_, body, err := export(t, ctx, fixture.service, format)
+		require.NoError(t, err)
+		require.NotEmpty(t, body)
+		if format == FormatJSON {
+			var manifest Manifest
+			require.NoError(t, json.Unmarshal(body, &manifest))
+			require.Equal(t, 100, manifest.Summary.Registrations)
+		}
+	}
+	insertIssuer(t, fixture.conn, issuerFixture{issuer: "https://overflow.example.test", grants: idjagGrants, profiles: idjagProfiles, fetchedAt: fixtureNow})
+	for _, format := range []string{FormatJSON, FormatMarkdown} {
+		result, body, err := fixture.service.Export(ctx, &gen.ExportPayload{Format: format})
+		require.ErrorContains(t, err, "manifest exceeds 100 registrations")
+		require.Nil(t, result)
+		require.Nil(t, body)
+		var shareable *oops.ShareableError
+		require.ErrorAs(t, err, &shareable)
+		require.Equal(t, oops.CodeFailedPrecondition, shareable.Code)
+	}
 }

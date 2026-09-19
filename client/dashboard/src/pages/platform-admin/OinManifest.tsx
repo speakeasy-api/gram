@@ -129,9 +129,9 @@ export default function PlatformAdminOinManifest(): JSX.Element {
             OIN Cross App Access manifest
           </Page.Section.Title>
           <Page.Section.Description>
-            The Speakeasy platform catalog, shaped the way Okta&apos;s
-            Integration Network questionnaire wants it. Nothing here is customer
-            data: only global issuers and global clients are exported.
+            The Speakeasy platform catalog for review in Okta&apos;s OIN Wizard.
+            Nothing here is customer data: only global issuers and global
+            clients are exported.
           </Page.Section.Description>
           <Page.Section.Body>
             <StrictPlatformAdminGate>
@@ -240,16 +240,16 @@ function ManifestView(): JSX.Element {
           description="Global issuers advertising the ID-JAG profile."
         />
         <MetricCard
-          label="Ready"
+          label="Catalog ready"
           value={manifest.summary.ready}
           tone={manifest.summary.ready > 0 ? "success" : "neutral"}
-          description="Pairs with no blockers left."
+          description="Pairs with no catalog blockers."
         />
         <MetricCard
           label="Not ready"
           value={manifest.summary.blocked}
           tone={manifest.summary.blocked > 0 ? "warning" : "neutral"}
-          description="Pairs Okta would reject as submitted."
+          description="Pairs with unresolved catalog blockers."
         />
       </MetricCard.Group>
 
@@ -280,9 +280,26 @@ function ManifestView(): JSX.Element {
         </Alert>
       ) : (
         <Alert variant="success">
-          <Text small>Every registration is ready to submit.</Text>
+          <Text small>No catalog blockers found.</Text>
         </Alert>
       )}
+
+      <Alert variant="info">
+        <Text small>
+          Conformance not verified: this catalog export does not establish OIN
+          submission readiness. Submission requires a passing conformance log
+          generated within the previous 48 hours. Complete the checks in the{" "}
+          <a
+            href="https://developer.okta.com/docs/guides/submit-oin-app/scrossapp/main/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            OIN Wizard
+          </a>
+          .
+        </Text>
+      </Alert>
 
       <AdminSection
         title="Requesting app"
@@ -408,7 +425,7 @@ function RegistrationsTable({
       render: (row) =>
         row.blockers.length === 0 ? (
           <Badge variant="success" className="shrink-0">
-            <Badge.Text>Ready</Badge.Text>
+            <Badge.Text>Catalog ready</Badge.Text>
           </Badge>
         ) : (
           <Badge variant="warning" background className="shrink-0">

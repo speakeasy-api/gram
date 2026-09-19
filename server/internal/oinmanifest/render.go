@@ -29,7 +29,7 @@ func RenderMarkdown(manifest Manifest) []byte {
 	var b strings.Builder
 	b.WriteString("# Speakeasy OIN Cross App Access manifest\n\n")
 	fmt.Fprintf(&b, "Generated at %s (manifest version %d).\n\n", manifest.GeneratedAt.UTC().Format(time.RFC3339), manifest.ManifestVersion)
-	b.WriteString("Nothing here is customer data: this is the Speakeasy platform catalog as Okta's questionnaire wants it.\n\n")
+	b.WriteString("Nothing here is customer data: this is the Speakeasy platform catalog for the Okta OIN Wizard.\n\n")
 
 	b.WriteString("## Requesting app\n\n")
 	b.WriteString("| Field | Value |\n|---|---|\n")
@@ -39,7 +39,8 @@ func RenderMarkdown(manifest Manifest) []byte {
 	writeRow(&b, "SSO mode", app.SSOMode)
 	writeRow(&b, "Role", app.Role)
 	writeRow(&b, "Redirect URI", app.RedirectURI)
-	writeRow(&b, "Subject token type", app.SubjectTokenType)
+	writeRow(&b, "Bootstrap subject token type (SAML to refresh token)", app.SubjectTokenType)
+	writeRow(&b, "ID-JAG exchange subject token type", "urn:ietf:params:oauth:token-type:refresh_token")
 	writeRow(&b, "Sends resource parameter", fmt.Sprintf("%t", app.SendsResourceParameter))
 	b.WriteString("\n")
 
@@ -61,6 +62,7 @@ func RenderMarkdown(manifest Manifest) []byte {
 		}
 	}
 
+	b.WriteString("Readiness describes catalog completeness only, not protocol conformance or OIN approval.\n\n")
 	b.WriteString("### Ready\n\n")
 	if len(ready) == 0 {
 		b.WriteString("No registration is ready.\n\n")

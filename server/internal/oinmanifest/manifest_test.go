@@ -38,12 +38,13 @@ func issuerRow(id uuid.UUID, issuer, name string) repo.ListGlobalIDJAGIssuersRow
 func withClient(row repo.ListGlobalIDJAGIssuersRow, clientID string, scopes []string) repo.ListGlobalIDJAGIssuersRow {
 	row.ClientRowID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	row.ClientID = pgtype.Text{String: clientID, Valid: true}
+	row.ResourceIdentifier = pgtype.Text{String: row.Issuer + "/mcp", Valid: true}
 	row.ClientScope = scopes
 	row.TokenEndpointAuthMethod = pgtype.Text{String: "none", Valid: true}
 	return row
 }
 
-func TestBuildPairWithClientOnlyCarriesTheAudienceBlocker(t *testing.T) {
+func TestBuildPairWithValidResourceIsCatalogReady(t *testing.T) {
 	t.Parallel()
 
 	row := withClient(issuerRow(uuid.New(), "https://as.example.test", "Example"), "client-1", []string{"read"})
@@ -52,7 +53,7 @@ func TestBuildPairWithClientOnlyCarriesTheAudienceBlocker(t *testing.T) {
 
 	require.Equal(t, ManifestVersion, manifest.ManifestVersion)
 	require.Equal(t, "Speakeasy", manifest.RequestingApp.Name)
-	require.Equal(t, "https://gram.example.test/oauth/callback", manifest.RequestingApp.RedirectURI)
+	require.Equal(t, "https://gram.example.test/mcp/remote_login_callback", manifest.RequestingApp.RedirectURI)
 	require.Equal(t, TrustRequirements, manifest.TrustRequirements)
 	require.Len(t, manifest.ResourceRegistrations, 1)
 	registration := manifest.ResourceRegistrations[0]
@@ -62,13 +63,14 @@ func TestBuildPairWithClientOnlyCarriesTheAudienceBlocker(t *testing.T) {
 	require.Equal(t, registrationStatic, registration.Registration)
 	require.Equal(t, []string{"read"}, registration.Scopes)
 	require.Equal(t, scopesSourceClient, registration.ScopesSource)
-	require.Nil(t, registration.XAAAudience)
-	require.Equal(t, []string{blockerAudience}, registration.Blockers)
+	require.Equal(t, row.Issuer, *registration.XAAAudience)
+	require.Empty(t, registration.Blockers)
+	require.True(t, registration.Ready())
 	require.Equal(t, evidenceUnavailable, registration.Evidence.Status)
 	require.Equal(t, "https://as.example.test", *registration.ResourceAppExpectations.XAAIssuerURL)
 	require.Equal(t, []string{"https://as.example.test/mcp"}, registration.ResourceAppExpectations.ResourceIdentifiers)
 	require.Equal(t, []string{"read"}, registration.ResourceAppExpectations.Scopes)
-	require.Equal(t, Summary{Registrations: 1, Ready: 0, Blocked: 1}, manifest.Summary)
+	require.Equal(t, Summary{Registrations: 1, Ready: 1, Blocked: 0}, manifest.Summary)
 }
 
 func TestBuildMissingClientIsBlocked(t *testing.T) {
@@ -78,6 +80,9 @@ func TestBuildMissingClientIsBlocked(t *testing.T) {
 
 	registration := manifest.ResourceRegistrations[0]
 	require.Equal(t, "https://as.example.test", registration.ResourceName)
+	require.Empty(t, registration.ResourceIdentifier)
+	require.Empty(t, registration.ResourceAppExpectations.ResourceIdentifiers)
+	require.Contains(t, registration.Blockers, blockerNoResource)
 	require.Nil(t, registration.ClientID)
 	require.Equal(t, registrationNone, registration.Registration)
 	require.Equal(t, []string{"read", "write"}, registration.Scopes)
@@ -183,9 +188,7 @@ func TestRenderMarkdownEscapesAndOrdersDeterministically(t *testing.T) {
 	ready := withClient(issuerRow(uuid.New(), "https://b.example.test", "Pipe | name\nsecond line"), "client-b", []string{"read"})
 	blocked := issuerRow(uuid.New(), "https://a.example.test", "# heading")
 	manifest := Build([]repo.ListGlobalIDJAGIssuersRow{ready, blocked}, fixtureConfig, fixtureNow)
-	// Clear the audience blocker on one pair so the "Ready" table has a row.
-	manifest.ResourceRegistrations[1].Blockers = nil
-	manifest.Summary = Summary{Registrations: 2, Ready: 1, Blocked: 1}
+	require.Equal(t, Summary{Registrations: 2, Ready: 1, Blocked: 1}, manifest.Summary)
 
 	markdown := string(RenderMarkdown(manifest))
 
@@ -196,7 +199,7 @@ func TestRenderMarkdownEscapesAndOrdersDeterministically(t *testing.T) {
 	require.Contains(t, markdown, "### Not ready")
 	require.Less(t, strings.Index(markdown, "### Ready"), strings.Index(markdown, "### Not ready"))
 	require.Contains(t, markdown, "| Listing name | Speakeasy |")
-	require.Contains(t, markdown, "no global client registered; audience unknown")
+	require.Contains(t, markdown, "no global client registered; resource identifier missing")
 	require.Equal(t, markdown, string(RenderMarkdown(manifest)))
 }
 
@@ -204,13 +207,16 @@ func TestRenderMarkdownOmitsNotReadyWhenEverythingIsReady(t *testing.T) {
 	t.Parallel()
 
 	manifest := Build([]repo.ListGlobalIDJAGIssuersRow{withClient(issuerRow(uuid.New(), "https://a.example.test", "A"), "client-a", []string{"read"})}, fixtureConfig, fixtureNow)
-	manifest.ResourceRegistrations[0].Blockers = nil
-	manifest.Summary = Summary{Registrations: 1, Ready: 1, Blocked: 0}
+	require.Equal(t, Summary{Registrations: 1, Ready: 1, Blocked: 0}, manifest.Summary)
 
 	markdown := string(RenderMarkdown(manifest))
 
 	require.NotContains(t, markdown, "### Not ready")
-	require.Contains(t, markdown, "| A | https://a.example.test | https://a.example.test | unknown | client-a | read | static | none |")
+	require.Contains(t, markdown, "catalog completeness only, not protocol conformance")
+	require.Contains(t, markdown, "Bootstrap subject token type (SAML to refresh token)")
+	require.Contains(t, markdown, "urn:ietf:params:oauth:token-type:refresh_token")
+	require.Contains(t, markdown, "every registration reports `unavailable`")
+	require.Contains(t, markdown, "| A | https://a.example.test | https://a.example.test/mcp | https://a.example.test | client-a | read | static | none |")
 }
 
 func TestEscapeCell(t *testing.T) {
@@ -247,4 +253,19 @@ func TestRenderJSONMatchesGolden(t *testing.T) {
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal(body, &decoded))
 	require.InDelta(t, ManifestVersion, decoded["manifest_version"], 0)
+}
+
+func TestBuildMissingResourceIdentifierStaysUnknown(t *testing.T) {
+	t.Parallel()
+	for _, value := range []pgtype.Text{{}, {String: "", Valid: true}} {
+		row := withClient(issuerRow(uuid.New(), "https://as.example.test", "Example"), "client", []string{"read"})
+		row.ResourceIdentifier = value
+		manifest := Build([]repo.ListGlobalIDJAGIssuersRow{row}, fixtureConfig, fixtureNow)
+		registration := manifest.ResourceRegistrations[0]
+		require.Empty(t, registration.ResourceIdentifier)
+		require.Equal(t, []string{}, registration.ResourceAppExpectations.ResourceIdentifiers)
+		require.Equal(t, row.Issuer, *registration.XAAAudience)
+		require.Equal(t, []string{blockerNoResource}, registration.Blockers)
+		require.False(t, registration.Ready())
+	}
 }

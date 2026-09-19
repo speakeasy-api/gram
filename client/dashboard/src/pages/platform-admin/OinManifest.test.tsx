@@ -27,7 +27,7 @@ const manifest = {
       resource_name: "Ready Resource",
       resource_as_issuer: "https://ready.example.test",
       resource_identifier: "https://ready.example.test/mcp",
-      xaa_audience: "https://auth.ready.example.test",
+      xaa_audience: "https://ready.example.test",
       client_id: "ready-client",
       registration: "static",
       scopes: ["read"],
@@ -36,12 +36,12 @@ const manifest = {
     {
       resource_name: "Orphan Resource",
       resource_as_issuer: "https://orphan.example.test",
-      resource_identifier: "https://orphan.example.test",
-      xaa_audience: null,
+      resource_identifier: "",
+      xaa_audience: "https://orphan.example.test",
       client_id: null,
       registration: "none",
       scopes: ["read"],
-      blockers: ["no global client registered", "audience unknown"],
+      blockers: ["no global client registered", "resource identifier missing"],
     },
   ],
   summary: { registrations: 2, ready: 1, blocked: 1 },
@@ -53,6 +53,7 @@ const markdownBody =
 const mocks = vi.hoisted(() => ({
   exportCalls: [] as Array<{ format: string }>,
   fail: false,
+  readyOnly: false,
 }));
 
 vi.mock("@/contexts/Auth", () => ({ useIsPlatformAdmin: () => true }));
@@ -103,7 +104,18 @@ vi.mock("@/contexts/Sdk", () => ({
         mocks.exportCalls.push({ format });
         if (mocks.fail) throw new Error("export failed");
         const body =
-          format === "markdown" ? markdownBody : JSON.stringify(manifest);
+          format === "markdown"
+            ? markdownBody
+            : JSON.stringify(
+                mocks.readyOnly
+                  ? {
+                      ...manifest,
+                      resource_registrations:
+                        manifest.resource_registrations.slice(0, 1),
+                      summary: { registrations: 1, ready: 1, blocked: 0 },
+                    }
+                  : manifest,
+              );
         // Only the JSON reply exposes its filename here, so the Markdown
         // download has to fall back to the generation date; both must end
         // up dated.
@@ -163,6 +175,7 @@ describe("PlatformAdminOinManifest", () => {
   beforeEach(() => {
     mocks.exportCalls = [];
     mocks.fail = false;
+    mocks.readyOnly = false;
     globals.clicks = [];
     globals.createObjectURL.mockClear();
     globals.revokeObjectURL.mockClear();
@@ -191,18 +204,20 @@ describe("PlatformAdminOinManifest", () => {
     const blockers = within(screen.getByLabelText("Blockers"));
     expect(blockers.getAllByRole("listitem")).toHaveLength(1);
     expect(
-      blockers.getByText(/no global client registered; audience unknown/),
+      blockers.getByText(
+        /no global client registered; resource identifier missing/,
+      ),
     ).toBeTruthy();
     expect(blockers.getByText("Orphan Resource")).toBeTruthy();
 
     const ready = within(screen.getByTestId("https://ready.example.test"));
-    expect(ready.getByText("Ready")).toBeTruthy();
+    expect(ready.getByText("Catalog ready")).toBeTruthy();
     expect(ready.getByText("ready-client")).toBeTruthy();
-    expect(ready.getByText("https://auth.ready.example.test")).toBeTruthy();
+    expect(ready.getAllByText("https://ready.example.test")).toHaveLength(2);
     const orphan = within(screen.getByTestId("https://orphan.example.test"));
     expect(orphan.getByText("Not ready")).toBeTruthy();
     expect(orphan.getAllByText("none")).toHaveLength(2);
-    expect(orphan.getByText("unknown")).toBeTruthy();
+    expect(orphan.getAllByText("https://orphan.example.test")).toHaveLength(2);
 
     expect(screen.getByTestId("markdown").textContent).toBe(markdownBody);
     expect(screen.getAllByText("unset")).toHaveLength(2);
@@ -210,6 +225,28 @@ describe("PlatformAdminOinManifest", () => {
       { format: "json" },
       { format: "markdown" },
     ]);
+  });
+
+  it("does not imply submission readiness when there are no catalog blockers", async () => {
+    mocks.readyOnly = true;
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText("No catalog blockers found.")).toBeTruthy(),
+    );
+    expect(screen.getAllByText("Catalog ready")).toHaveLength(2);
+    expect(screen.getByText(/Conformance not verified/).textContent).toContain(
+      "passing conformance log generated within the previous 48 hours",
+    );
+    expect(
+      screen.getByRole("link", { name: "OIN Wizard" }).getAttribute("href"),
+    ).toBe(
+      "https://developer.okta.com/docs/guides/submit-oin-app/scrossapp/main/",
+    );
+    expect(
+      screen.queryByText(/Every registration is ready to submit/),
+    ).toBeNull();
+    expect(screen.queryByLabelText("Blockers")).toBeNull();
   });
 
   it("downloads the fetched bodies under the server's filenames", async () => {

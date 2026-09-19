@@ -1,8 +1,8 @@
 // Package oinmanifest exports the Okta Integration Network (OIN) Cross App
 // Access manifest: the platform-global remote session catalog (global ID-JAG
-// issuers and their global clients) shaped the way Okta's listing
-// questionnaire asks for it. It reads catalog rows only; tenant issuers,
-// tenant clients, organization ids, and project ids never enter the output.
+// issuers and their global clients) shaped for the Okta OIN Wizard. It reads
+// catalog rows only; tenant issuers, tenant clients, organization ids, and
+// project ids never enter the output.
 package oinmanifest
 
 import (
@@ -21,9 +21,9 @@ const (
 	// ManifestVersion is bumped when the JSON shape changes incompatibly.
 	ManifestVersion = 1
 
-	// MaxRegistrations bounds the export; the catalog is expected to stay far
-	// below it, so exceeding it signals a bug rather than a big catalog.
-	MaxRegistrations = 500
+	// MaxRegistrations is the current Okta OIN Wizard registration limit.
+	// https://developer.okta.com/docs/guides/submit-oin-app/scrossapp/main/
+	MaxRegistrations = 100
 
 	grantTypeJWTBearer = "urn:ietf:params:oauth:grant-type:jwt-bearer" //nolint:gosec // URN identifier, not a credential.
 	grantProfileIDJAG  = "urn:ietf:params:oauth:grant-profile:id-jag"
@@ -43,7 +43,7 @@ const (
 	blockerNoClient      = "no global client registered"
 	blockerRejected      = "client rejected upstream (invalid_client)"
 	blockerNoScopes      = "no scopes recorded"
-	blockerAudience      = "audience unknown"
+	blockerNoResource    = "resource identifier missing"
 	blockerNoMetadata    = "issuer metadata never fetched"
 	blockerStaleMetadata = "issuer metadata older than 30 days"
 )
@@ -70,11 +70,14 @@ type Manifest struct {
 
 // RequestingApp describes Speakeasy in the OIN requesting-app role.
 type RequestingApp struct {
-	Name                   string `json:"name"`
-	OrgDomain              string `json:"org_domain"`
-	SSOMode                string `json:"sso_mode"`
-	Role                   string `json:"role"`
-	RedirectURI            string `json:"redirect_uri"`
+	Name        string `json:"name"`
+	OrgDomain   string `json:"org_domain"`
+	SSOMode     string `json:"sso_mode"`
+	Role        string `json:"role"`
+	RedirectURI string `json:"redirect_uri"`
+	// SubjectTokenType describes the SAML bootstrap-to-refresh stage, not ID-JAG
+	// issuance. The ID-JAG exchange uses urn:ietf:params:oauth:token-type:refresh_token
+	// (https://www.rfc-editor.org/rfc/rfc8693.html#section-3).
 	SubjectTokenType       string `json:"subject_token_type"`
 	SendsResourceParameter bool   `json:"sends_resource_parameter"`
 }
@@ -105,10 +108,9 @@ type Advertises struct {
 	GrantProfiles []string `json:"grant_profiles"`
 }
 
-// ResourceAppExpectations is the resource-app half of the OIN questionnaire
-// for this pairing, so Okta's reviewers see both sides at once. The issuer URL
-// is the resource AS Speakeasy redeems at; the ID-JAG audience stays separate
-// in XAAAudience until the catalog can hold it.
+// ResourceAppExpectations is the resource-app half of the OIN Wizard.
+// The resource AS issuer is also the required ID-JAG audience, not the resource
+// identifier: https://www.ietf.org/archive/id/draft-ietf-oauth-identity-assertion-authz-grant-04.html#section-4.4.1
 type ResourceAppExpectations struct {
 	XAAIssuerURL        *string  `json:"xaa_issuer_url"`
 	ResourceIdentifiers []string `json:"resource_identifiers"`
@@ -128,15 +130,16 @@ type Summary struct {
 	Blocked       int `json:"blocked"`
 }
 
-// Ready reports whether the registration has no blockers.
+// Ready reports catalog completeness, not protocol conformance.
 func (r Registration) Ready() bool {
 	return len(r.Blockers) == 0
 }
 
 // TrustRequirements is what Speakeasy asks of every resource authorization
-// server in the listing.
+// server in the listing. ID-JAG audience validation is specified in
+// https://www.ietf.org/archive/id/draft-ietf-oauth-identity-assertion-authz-grant-04.html#section-4.4.1
 var TrustRequirements = []string{
-	"Resource authorization servers must key trust on ID-JAG iss (the tenant issuer) plus sub, with aud equal to the resource.",
+	"Resource authorization servers must key trust on ID-JAG iss (the tenant issuer) plus sub, with aud equal to the resource authorization server issuer identifier (not the resource identifier).",
 	"client_id is platform-global and must never identify a tenant.",
 	"Speakeasy sends resource on every exchange, so invalid_target is meaningful.",
 }
@@ -186,7 +189,7 @@ func Build(rows []repo.ListGlobalIDJAGIssuersRow, cfg Config, now time.Time) Man
 			OrgDomain:              orUnset(cfg.OrgDomain),
 			SSOMode:                "saml",
 			Role:                   "requesting_app",
-			RedirectURI:            strings.TrimRight(cfg.ServerURL, "/") + "/oauth/callback",
+			RedirectURI:            strings.TrimRight(cfg.ServerURL, "/") + "/mcp/remote_login_callback",
 			SubjectTokenType:       subjectTokenTypeSAML2,
 			SendsResourceParameter: true,
 		},
@@ -225,8 +228,8 @@ func buildRegistration(group issuerGroup, now time.Time) Registration {
 	registration := Registration{
 		ResourceName:            orDefault(issuer.IssuerName.String, ""),
 		ResourceASIssuer:        issuer.Issuer,
-		ResourceIdentifier:      issuer.Issuer,
-		XAAAudience:             nil,
+		ResourceIdentifier:      "",
+		XAAAudience:             new(issuer.Issuer),
 		ClientID:                nil,
 		Registration:            registrationNone,
 		TokenEndpointAuthMethod: nil,
@@ -286,9 +289,11 @@ func buildRegistration(group issuerGroup, now time.Time) Registration {
 		blockers = append(blockers, blockerNoScopes)
 	}
 
-	// No column on the catalog holds the ID-JAG audience yet, so every pair
-	// says so explicitly rather than guessing from the issuer URL.
-	blockers = append(blockers, blockerAudience)
+	// A resource identifier cannot be inferred from the AS issuer.
+	// https://www.rfc-editor.org/rfc/rfc8707.html#section-2
+	if registration.ResourceIdentifier == "" {
+		blockers = append(blockers, blockerNoResource)
+	}
 
 	switch {
 	case !issuer.MetadataFetchedAt.Valid:
@@ -309,8 +314,11 @@ func buildRegistration(group issuerGroup, now time.Time) Registration {
 	}
 	registration.ResourceAppExpectations = ResourceAppExpectations{
 		XAAIssuerURL:        new(registration.ResourceASIssuer),
-		ResourceIdentifiers: []string{registration.ResourceIdentifier},
+		ResourceIdentifiers: []string{},
 		Scopes:              copyStrings(registration.Scopes),
+	}
+	if registration.ResourceIdentifier != "" {
+		registration.ResourceAppExpectations.ResourceIdentifiers = []string{registration.ResourceIdentifier}
 	}
 	registration.Blockers = blockers
 	return registration
