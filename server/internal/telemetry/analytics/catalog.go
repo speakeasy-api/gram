@@ -194,6 +194,11 @@ func (d *Dataset) validate() error {
 	if d.Kind != KindEvent && d.Kind != KindMetric {
 		return fmt.Errorf("catalog: dataset %q has unknown kind %q", d.Name, d.Kind)
 	}
+	// The builder shows the grain beside the description unconditionally and
+	// describe requires it, so a dataset must say what one row is.
+	if d.Grain == "" {
+		return fmt.Errorf("catalog: dataset %q has no grain", d.Name)
+	}
 	if d.TimeExpr == "" {
 		return fmt.Errorf("catalog: dataset %q has no time expression", d.Name)
 	}
