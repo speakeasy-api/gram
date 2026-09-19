@@ -63,7 +63,7 @@ func TestQuery(t *testing.T) {
 		row("r3", "s1", "t1", "tc1", "tool_call_result", "ann@example.com", base.Add(2*time.Second)),
 		row("r4", "s1", "t2", "r4", "api_request", "ann@example.com", base.Add(3*time.Second)),
 		row("r5", "s2", "t1", "r5", "api_request", "bob@example.com", base.Add(24*time.Hour)),
-		row("r6", "s3", "t1", "tc2", "tool_call", "bob@example.com", base.Add(25*time.Hour)),
+		row("r6", "s3", "t1", "tc2", "tool_call", "bob@example.com", base.Add(25*time.Hour+250*time.Millisecond)),
 	}))
 
 	from, to := base.Add(-time.Hour).Format(time.RFC3339), base.Add(48*time.Hour).Format(time.RFC3339)
@@ -131,7 +131,7 @@ func TestQuery(t *testing.T) {
 		require.Len(t, result.Rows, 2)
 		require.Equal(t, "tc2", result.Rows[0]["tool_call"])
 		require.Equal(t, "s3", result.Rows[0]["session"])
-		require.Equal(t, base.Add(25*time.Hour).Format(time.RFC3339), result.Rows[0]["time"])
+		require.Equal(t, base.Add(25*time.Hour+250*time.Millisecond).Format(time.RFC3339Nano), result.Rows[0]["time"], "the event time keeps its sub-second precision")
 		require.Equal(t, "tc1", result.Rows[1]["tool_call"])
 		require.Len(t, result.Rows[1], 3, "row keys are the time plus the projected dimensions")
 	})
@@ -160,6 +160,18 @@ func TestQuery(t *testing.T) {
 		})
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "invalid_time_range")
+	})
+
+	t.Run("it rejects a bound that nanoseconds cannot represent", func(t *testing.T) {
+		t.Parallel()
+		_, err := ti.service.Query(ctx, &gen.QueryPayload{
+			SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "sessions", From: "1500-01-01T00:00:00Z", To: to, Grain: nil,
+			Dimensions: nil, Measures: []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
+			Filters: nil, OrderBy: nil, Limit: nil, Ungrouped: false,
+		})
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "invalid_time_range: from")
 	})
 
 	t.Run("it requires an authenticated project", func(t *testing.T) {

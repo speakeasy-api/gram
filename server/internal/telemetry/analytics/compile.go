@@ -137,8 +137,9 @@ func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*
 	if req.ToUnixNano <= req.FromUnixNano {
 		return nil, newError(ErrInvalidTimeRange, name, "to", "", "to must be after from")
 	}
-	if req.ToUnixNano-req.FromUnixNano > maxTimeRangeNanos {
-		return nil, newError(ErrInvalidTimeRange, name, "to", "", fmt.Sprintf("time range exceeds %d days", MaxTimeRangeDays))
+	// The span is bounded by what the dataset's table retains.
+	if spanExceeds(req.FromUnixNano, req.ToUnixNano, ds.MaxTimeRangeNanos()) {
+		return nil, newError(ErrInvalidTimeRange, name, "to", "", fmt.Sprintf("time range exceeds %d days", ds.MaxTimeRangeDays()))
 	}
 
 	grain := req.Grain
@@ -223,7 +224,7 @@ func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*
 		if len(req.OrderBy) != 0 {
 			return nil, newError(ErrUnsatisfiable, name, "order_by", "", "ungrouped rows are always newest first")
 		}
-		builder = builder.Column(fmt.Sprintf("fromUnixTimestamp64Nano(%s) AS %s", ds.TimeExpr, timeColumn))
+		builder = builder.Column(fmt.Sprintf("fromUnixTimestamp64Nano(%s, 'UTC') AS %s", ds.TimeExpr, timeColumn))
 		plan.Columns = append(plan.Columns, Column{Name: timeColumn, Kind: ColumnTime})
 		for _, field := range dimensions {
 			builder = builder.Column(fmt.Sprintf("%s AS %s", field.Expr, field.Name))
@@ -376,9 +377,23 @@ func checkAlias(ds *Dataset, alias, position string) error {
 	return nil
 }
 
-// bucketExpr floors the event time to the grain. Week starts on Monday.
+// spanExceeds reports whether the window from..to is longer than limit. to
+// is after from, but their difference can be wider than int64 holds (from
+// far before the epoch, to far after it) and would wrap negative, so the
+// comparison is arranged to stay in range: with a negative from, from+limit
+// fits; with a non-negative one, to-from fits.
+func spanExceeds(from, to, limit int64) bool {
+	if from < 0 {
+		return to > from+limit
+	}
+	return to-from > limit
+}
+
+// bucketExpr floors the event time to the grain in UTC, whatever zone the
+// ClickHouse server runs in, so buckets line up with the UTC bounds of the
+// request. Week starts on Monday.
 func bucketExpr(grain TimeGrain, timeExpr string) string {
-	ts := fmt.Sprintf("fromUnixTimestamp64Nano(%s)", timeExpr)
+	ts := fmt.Sprintf("fromUnixTimestamp64Nano(%s, 'UTC')", timeExpr)
 	switch grain {
 	case TimeGrainHour:
 		return fmt.Sprintf("toStartOfHour(%s)", ts)

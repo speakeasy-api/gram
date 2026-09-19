@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -112,6 +113,18 @@ func (s *Service) Describe(ctx context.Context, _ *gen.DescribePayload) (*gen.An
 	return &gen.AnalyticsDescribeResult{Datasets: describeDatasets(s.catalog)}, nil
 }
 
+// The int64 nanosecond range covers the years 1678 to 2262. UnixNano is
+// undefined outside it, so a bound past it would reach the compiler as some
+// other window; representable is checked before the conversion.
+var (
+	minUnixNanoTime = time.Unix(0, math.MinInt64)
+	maxUnixNanoTime = time.Unix(0, math.MaxInt64)
+)
+
+func representable(t time.Time) bool {
+	return !t.Before(minUnixNanoTime) && !t.After(maxUnixNanoTime)
+}
+
 func requestFromPayload(payload *gen.QueryPayload) (Request, error) {
 	var zero Request
 
@@ -122,6 +135,12 @@ func requestFromPayload(payload *gen.QueryPayload) (Request, error) {
 	to, err := time.Parse(time.RFC3339Nano, payload.To)
 	if err != nil {
 		return zero, oops.E(oops.CodeBadRequest, err, "invalid_time_range: to is not an RFC 3339 time")
+	}
+	if !representable(from) {
+		return zero, oops.E(oops.CodeBadRequest, nil, "invalid_time_range: from is outside the years 1678 to 2262")
+	}
+	if !representable(to) {
+		return zero, oops.E(oops.CodeBadRequest, nil, "invalid_time_range: to is outside the years 1678 to 2262")
 	}
 
 	req := Request{

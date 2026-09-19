@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -52,7 +53,7 @@ func TestCompileGrouped(t *testing.T) {
 		{Name: "p95_duration_seconds", Kind: ColumnMeasure},
 	}, plan.Columns)
 
-	require.Contains(t, plan.SQL, "toStartOfDay(fromUnixTimestamp64Nano(started_at)) AS time_bucket")
+	require.Contains(t, plan.SQL, "toStartOfDay(fromUnixTimestamp64Nano(started_at, 'UTC')) AS time_bucket")
 	require.Contains(t, plan.SQL, "user_email AS user")
 	require.Contains(t, plan.SQL, "count() AS count")
 	require.Contains(t, plan.SQL, "sum(tool_call_count) AS tool_calls")
@@ -86,7 +87,7 @@ func TestCompileUngrouped(t *testing.T) {
 		{Name: "tool_name", Kind: ColumnDimension},
 		{Name: "status", Kind: ColumnDimension},
 	}, plan.Columns)
-	require.Contains(t, plan.SQL, "fromUnixTimestamp64Nano(started_at) AS time")
+	require.Contains(t, plan.SQL, "fromUnixTimestamp64Nano(started_at, 'UTC') AS time")
 	require.Contains(t, plan.SQL, "WHERE status = ?")
 	require.Contains(t, plan.SQL, "ORDER BY started_at DESC LIMIT 25", "rows are newest first, always")
 	require.NotContains(t, plan.SQL, "GROUP BY time")
@@ -126,7 +127,8 @@ func TestCompileRejects(t *testing.T) {
 		{name: "unknown grain", req: Request{Dataset: "sessions", Measures: count, Grain: "minute"}, code: ErrUnsupportedGrain, field: "grain"},
 		{name: "limit above the maximum", req: Request{Dataset: "sessions", Measures: count, Limit: MaxLimit + 1}, code: ErrLimitExceeded, field: "limit"},
 		{name: "to before from", req: Request{Dataset: "sessions", Measures: count, FromUnixNano: testTo, ToUnixNano: testFrom}, code: ErrInvalidTimeRange, field: "to"},
-		{name: "range beyond the maximum", req: Request{Dataset: "sessions", Measures: count, FromUnixNano: 1, ToUnixNano: 1 + maxTimeRangeNanos + 1}, code: ErrInvalidTimeRange, field: "to"},
+		{name: "range beyond the dataset's retention", req: Request{Dataset: "sessions", Measures: count, FromUnixNano: testFrom, ToUnixNano: testFrom + Sessions.MaxTimeRangeNanos() + 1}, code: ErrInvalidTimeRange, field: "to"},
+		{name: "range whose signed span wraps", req: Request{Dataset: "sessions", Measures: count, FromUnixNano: math.MinInt64, ToUnixNano: math.MaxInt64}, code: ErrInvalidTimeRange, field: "to"},
 	}
 	for _, tc := range cases {
 		t.Run("it rejects "+tc.name, func(t *testing.T) {
@@ -139,4 +141,18 @@ func TestCompileRejects(t *testing.T) {
 			require.Contains(t, err.Error(), string(tc.code))
 		})
 	}
+}
+
+// TestCompileAcceptsAWindowUpToTheDatasetRetention: the bound is the
+// dataset's own, and it is inclusive.
+func TestCompileAcceptsAWindowUpToTheDatasetRetention(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileTest(t, Request{
+		Dataset:      "sessions",
+		Measures:     []Measure{{Op: "count", Field: "", Alias: ""}},
+		FromUnixNano: testFrom,
+		ToUnixNano:   testFrom + Sessions.MaxTimeRangeNanos(),
+	})
+	require.NoError(t, err)
 }

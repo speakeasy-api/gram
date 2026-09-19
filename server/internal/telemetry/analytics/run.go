@@ -54,17 +54,18 @@ func (p *Plan) Run(ctx context.Context, conn Querier) ([]Row, error) {
 }
 
 // resultValue renders a scanned value for the wire. Times become RFC 3339
-// in UTC; unsigned counts become int64 so JSON clients see one integer
-// kind; everything else passes through.
+// in UTC at their full precision, so an event time keeps its nanoseconds;
+// unsigned counts become int64 so JSON clients see one integer kind;
+// everything else passes through.
 func resultValue(value any) any {
 	switch v := value.(type) {
 	case time.Time:
-		return v.UTC().Format(time.RFC3339)
+		return v.UTC().Format(time.RFC3339Nano)
 	case *time.Time:
 		if v == nil {
 			return nil
 		}
-		return v.UTC().Format(time.RFC3339)
+		return v.UTC().Format(time.RFC3339Nano)
 	case uint64:
 		if v > uint64(1<<63-1) {
 			return v
