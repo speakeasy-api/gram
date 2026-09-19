@@ -55,7 +55,7 @@ function PaygRates({ payg }: { payg: TierLimits }): JSX.Element {
   return (
     <Stack gap={4}>
       <MeteredRate
-        label="Tokens under management"
+        label="Agent session storage"
         price={payg.tumPricePerMillionUsd}
         unit="per million tokens"
       />

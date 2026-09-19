@@ -10,3 +10,5 @@ Remove the obsolete platform-admin TUM contract controls and contract price esti
 Show the PAYG risk scanning rate of $0.99 per million tokens scanned and MCP gateway egress rate of $20 per GiB alongside token management pricing.
 
 Place Payment beside PAYG pricing on wider screens and stack them on smaller screens. Prioritize payment setup and recovery above usage, keep healthy subscriptions usage-first, and retain the Organization eyebrow at the top of the billing page.
+
+Use Agent session storage as the billing product name and Stored sessions for usage labels and charts. Rename the Meter usage section to Usage without changing token-based metering or rates.
