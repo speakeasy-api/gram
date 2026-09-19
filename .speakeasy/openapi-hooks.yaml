@@ -759,6 +759,8 @@ tags:
     description: Human-only management of first-class agent principals.
   - name: aiIntegrations
     description: Manage organization-level AI provider integrations.
+  - name: analytics
+    description: Query agent session data by dataset and field, never by table or SQL. The catalog describe serves is the contract.
   - name: assets
     description: Manages assets used by Gram projects.
   - name: organizationAssets

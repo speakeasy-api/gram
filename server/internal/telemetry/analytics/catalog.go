@@ -90,9 +90,8 @@ const (
 
 	// MaxTimeRangeDays is the ceiling over every dataset: the longest any
 	// window can be. A dataset's own limit is MaxTimeRangeDays(), which is
-	// what a compiler should enforce.
-	MaxTimeRangeDays  = MaxMetricTimeRangeDays
-	maxTimeRangeNanos = int64(MaxTimeRangeDays) * 24 * 60 * 60 * 1e9
+	// what the compiler enforces.
+	MaxTimeRangeDays = MaxMetricTimeRangeDays
 
 	nanosPerDay = int64(24 * 60 * 60 * 1e9)
 )
