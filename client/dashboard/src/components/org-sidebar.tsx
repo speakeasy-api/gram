@@ -112,6 +112,7 @@ export function OrgSidebar({
     orgRoutes.platformAdminRbac,
     orgRoutes.platformAdminOnboarding,
     orgRoutes.platformAdminOpenRouterKeys,
+    orgRoutes.platformAdminOinManifest,
   ].some((r) => r.active);
 
   const groupActivations: Array<[string, boolean]> = [
@@ -145,6 +146,7 @@ export function OrgSidebar({
     orgRoutes.platformAdminRbac,
     orgRoutes.platformAdminOnboarding,
     orgRoutes.platformAdminOpenRouterKeys,
+    orgRoutes.platformAdminOinManifest,
   ];
   const activeRoute = allOrgNavRoutes.find((r) => r.active);
   const activeItem = activeRoute?.title;
@@ -282,6 +284,10 @@ export function OrgSidebar({
                         {
                           item: orgRoutes.platformAdminOpenRouterKeys,
                           label: "OpenRouter Keys",
+                        },
+                        {
+                          item: orgRoutes.platformAdminOinManifest,
+                          label: "OIN Manifest",
                         },
                       ]
                     : []),

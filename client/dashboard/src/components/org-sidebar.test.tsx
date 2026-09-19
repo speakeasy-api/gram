@@ -158,5 +158,8 @@ it.each([false, true])(
       expect(
         screen.getByRole("link", { name: "platformAdminOpenRouterKeys" }),
       ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "platformAdminOinManifest" }))[
+      isPlatformAdmin ? "toBeTruthy" : "toBeNull"
+    ]();
   },
 );

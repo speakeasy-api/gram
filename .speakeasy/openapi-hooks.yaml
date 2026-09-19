@@ -843,6 +843,8 @@ tags:
     description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: platformKillswitches
     description: Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Gram session.
+  - name: oinManifest
+    description: Platform-admin export of the OIN Cross App Access manifest built from the global remote session catalog. Requires a current users.admin entitlement on an ordinary Gram session.
   - name: adminOpenRouterKeys
     description: Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: platformMcp

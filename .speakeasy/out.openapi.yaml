@@ -32515,6 +32515,111 @@ paths:
       x-speakeasy-name-override: updateIngress
       x-speakeasy-react-hook:
         name: UpdateNetworkIngress
+  /rpc/oinManifest.export:
+    get:
+      description: Export the OIN Cross App Access manifest as JSON (for the listing questionnaire) or Markdown (for review). Requires platform admin.
+      operationId: exportOinManifest
+      parameters:
+        - allowEmptyValue: true
+          description: Output format.
+          in: query
+          name: format
+          schema:
+            default: json
+            description: Output format.
+            enum:
+              - json
+              - markdown
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                format: binary
+                type: string
+          description: OK response.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+            Content-Type:
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: export oinManifest
+      tags:
+        - oinManifest
+      x-speakeasy-name-override: export
   /rpc/organizationAssets.uploadImage:
     post:
       description: Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.
@@ -96525,6 +96630,8 @@ tags:
     description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: platformKillswitches
     description: Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Gram session.
+  - name: oinManifest
+    description: Platform-admin export of the OIN Cross App Access manifest built from the global remote session catalog. Requires a current users.admin entitlement on an ordinary Gram session.
   - name: adminOpenRouterKeys
     description: Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: platformMcp

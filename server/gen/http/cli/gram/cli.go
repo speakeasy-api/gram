@@ -61,6 +61,7 @@ import (
 	metamcpc "github.com/speakeasy-api/gram/server/gen/http/meta_mcp/client"
 	modelkeysc "github.com/speakeasy-api/gram/server/gen/http/model_keys/client"
 	networkingressc "github.com/speakeasy-api/gram/server/gen/http/network_ingress/client"
+	oinmanifestc "github.com/speakeasy-api/gram/server/gen/http/oin_manifest/client"
 	organizationassetsc "github.com/speakeasy-api/gram/server/gen/http/organization_assets/client"
 	organizationremotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/client"
 	organizationremotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/client"
@@ -155,6 +156,7 @@ func UsageCommands() []string {
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"platform-killswitches (list-definitions|activate-prescription|change-prescription|deactivate-prescription|get-prescription|list-prescriptions)",
+		"oin-manifest export",
 		"admin-open-router-keys (list-keys|get-key-usage|disable-key|enable-key)",
 		"platform-mcp (get-onboarding|start-onboarding|record-dashboard-cta-event|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
@@ -2047,6 +2049,12 @@ func ParseEndpoint(
 		platformKillswitchesListPrescriptionsLimitFlag          = platformKillswitchesListPrescriptionsFlags.String("limit", "", "")
 		platformKillswitchesListPrescriptionsAfterIDFlag        = platformKillswitchesListPrescriptionsFlags.String("after-id", "", "")
 		platformKillswitchesListPrescriptionsSessionTokenFlag   = platformKillswitchesListPrescriptionsFlags.String("session-token", "", "")
+
+		oinManifestFlags = flag.NewFlagSet("oin-manifest", flag.ContinueOnError)
+
+		oinManifestExportFlags            = flag.NewFlagSet("export", flag.ExitOnError)
+		oinManifestExportFormatFlag       = oinManifestExportFlags.String("format", "json", "")
+		oinManifestExportSessionTokenFlag = oinManifestExportFlags.String("session-token", "", "")
 
 		adminOpenRouterKeysFlags = flag.NewFlagSet("admin-open-router-keys", flag.ContinueOnError)
 
@@ -4698,6 +4706,9 @@ func ParseEndpoint(
 	platformKillswitchesGetPrescriptionFlags.Usage = platformKillswitchesGetPrescriptionUsage
 	platformKillswitchesListPrescriptionsFlags.Usage = platformKillswitchesListPrescriptionsUsage
 
+	oinManifestFlags.Usage = oinManifestUsage
+	oinManifestExportFlags.Usage = oinManifestExportUsage
+
 	adminOpenRouterKeysFlags.Usage = adminOpenRouterKeysUsage
 	adminOpenRouterKeysListKeysFlags.Usage = adminOpenRouterKeysListKeysUsage
 	adminOpenRouterKeysGetKeyUsageFlags.Usage = adminOpenRouterKeysGetKeyUsageUsage
@@ -5274,6 +5285,8 @@ func ParseEndpoint(
 			svcf = adminExternalCredentialsFlags
 		case "platform-killswitches":
 			svcf = platformKillswitchesFlags
+		case "oin-manifest":
+			svcf = oinManifestFlags
 		case "admin-open-router-keys":
 			svcf = adminOpenRouterKeysFlags
 		case "platform-mcp":
@@ -6587,6 +6600,13 @@ func ParseEndpoint(
 
 			case "list-prescriptions":
 				epf = platformKillswitchesListPrescriptionsFlags
+
+			}
+
+		case "oin-manifest":
+			switch epn {
+			case "export":
+				epf = oinManifestExportFlags
 
 			}
 
@@ -9188,6 +9208,13 @@ func ParseEndpoint(
 			case "list-prescriptions":
 				endpoint = c.ListPrescriptions()
 				data, err = platformkillswitchesc.BuildListPrescriptionsPayload(*platformKillswitchesListPrescriptionsOrganizationIDFlag, *platformKillswitchesListPrescriptionsLimitFlag, *platformKillswitchesListPrescriptionsAfterIDFlag, *platformKillswitchesListPrescriptionsSessionTokenFlag)
+			}
+		case "oin-manifest":
+			c := oinmanifestc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "export":
+				endpoint = c.Export()
+				data, err = oinmanifestc.BuildExportPayload(*oinManifestExportFormatFlag, *oinManifestExportSessionTokenFlag)
 			}
 		case "admin-open-router-keys":
 			c := adminopenrouterkeysc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -18949,6 +18976,37 @@ func platformKillswitchesListPrescriptionsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-killswitches list-prescriptions --organization-id \"abc123\" --limit 2 --after-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+// oinManifestUsage displays the usage of the oin-manifest command and its
+// subcommands.
+func oinManifestUsage() {
+	fmt.Fprintln(os.Stderr, `Platform-admin export of the OIN Cross App Access manifest built from the global remote session catalog. Requires a current users.admin entitlement on an ordinary Gram session.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] oin-manifest COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    export: Export the OIN Cross App Access manifest as JSON (for the listing questionnaire) or Markdown (for review). Requires platform admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s oin-manifest COMMAND --help\n", os.Args[0])
+}
+func oinManifestExportUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] oin-manifest export", os.Args[0])
+	fmt.Fprint(os.Stderr, " -format STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Export the OIN Cross App Access manifest as JSON (for the listing questionnaire) or Markdown (for review). Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -format STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "oin-manifest export --format \"markdown\" --session-token \"abc123\"")
 }
 
 // adminOpenRouterKeysUsage displays the usage of the admin-open-router-keys

@@ -531,6 +531,10 @@ const (
 	AuditActionKey                    = attribute.Key("gram.audit.action")
 	AuditSubjectKey                   = attribute.Key("gram.audit.subject")
 	AuditSubjectIDKey                 = attribute.Key("gram.audit.subject_id")
+	OINManifestFormatKey              = attribute.Key("gram.oin_manifest.format")
+	OINManifestRegistrationCountKey   = attribute.Key("gram.oin_manifest.registration_count")
+	OINManifestReadyCountKey          = attribute.Key("gram.oin_manifest.ready_count")
+	OINManifestBlockedCountKey        = attribute.Key("gram.oin_manifest.blocked_count")
 	UserSessionIssuerIDKey            = attribute.Key("gram.user_session_issuer.id")
 	UserSessionClientIDKey            = attribute.Key("gram.user_session_client.id")
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
@@ -2143,6 +2147,17 @@ func SlogAuditSubject(v string) slog.Attr      { return slog.String(string(Audit
 
 func AuditSubjectID(v string) attribute.KeyValue { return AuditSubjectIDKey.String(v) }
 func SlogAuditSubjectID(v string) slog.Attr      { return slog.String(string(AuditSubjectIDKey), v) }
+
+func OINManifestFormat(v string) attribute.KeyValue { return OINManifestFormatKey.String(v) }
+func SlogOINManifestFormat(v string) slog.Attr      { return slog.String(string(OINManifestFormatKey), v) }
+
+func SlogOINManifestRegistrationCount(v int) slog.Attr {
+	return slog.Int(string(OINManifestRegistrationCountKey), v)
+}
+func SlogOINManifestReadyCount(v int) slog.Attr { return slog.Int(string(OINManifestReadyCountKey), v) }
+func SlogOINManifestBlockedCount(v int) slog.Attr {
+	return slog.Int(string(OINManifestBlockedCountKey), v)
+}
 
 func UserSessionIssuerID(v string) attribute.KeyValue { return UserSessionIssuerIDKey.String(v) }
 func SlogUserSessionIssuerID(v string) slog.Attr {

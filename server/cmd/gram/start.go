@@ -103,6 +103,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oinmanifest"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
@@ -343,6 +344,16 @@ func mcpRuntimeFlags() []cli.Flag {
 			Usage:    "The URL of the site",
 			EnvVars:  []string{"GRAM_SITE_URL"},
 			Required: true,
+		},
+		&cli.StringFlag{
+			Name:    "oin-listing-name",
+			Usage:   "Listing name reported in the OIN Cross App Access manifest export (empty renders as unset)",
+			EnvVars: []string{"GRAM_OIN_LISTING_NAME"},
+		},
+		&cli.StringFlag{
+			Name:    "oin-listing-org-domain",
+			Usage:   "Organization domain reported in the OIN Cross App Access manifest export (empty renders as unset)",
+			EnvVars: []string{"GRAM_OIN_LISTING_ORG_DOMAIN"},
 		},
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -1537,6 +1548,11 @@ func newStartCommand() *cli.Command {
 			// this break-glass transport mounted but explicitly unavailable until
 			// that safe lifecycle composition exists.
 			killswitches.AttachPlatformService(mux, killswitches.NewPlatformService(logger, tracerProvider, db, sessionManager, authzEngine, nil))
+			oinmanifest.AttachPlatformService(mux, oinmanifest.NewPlatformService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, oinmanifest.Config{
+				ListingName: c.String("oin-listing-name"),
+				OrgDomain:   c.String("oin-listing-org-domain"),
+				ServerURL:   c.String("server-url"),
+			}))
 			killswitchService, err := killswitchapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
 			if err != nil {
 				return fmt.Errorf("build customer killswitch service: %w", err)

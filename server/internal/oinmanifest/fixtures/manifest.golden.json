@@ -1,0 +1,106 @@
+{
+  "manifest_version": 1,
+  "generated_at": "2026-09-18T23:10:00Z",
+  "requesting_app": {
+    "name": "Speakeasy",
+    "org_domain": "example.com",
+    "sso_mode": "saml",
+    "role": "requesting_app",
+    "redirect_uri": "https://gram.example.test/oauth/callback",
+    "subject_token_type": "urn:ietf:params:oauth:token-type:saml2",
+    "sends_resource_parameter": true
+  },
+  "trust_requirements": [
+    "Resource authorization servers must key trust on ID-JAG iss (the tenant issuer) plus sub, with aud equal to the resource.",
+    "client_id is platform-global and must never identify a tenant.",
+    "Speakeasy sends resource on every exchange, so invalid_target is meaningful."
+  ],
+  "resource_registrations": [
+    {
+      "resource_name": "Example",
+      "resource_as_issuer": "https://as.example.test",
+      "resource_identifier": "https://as.example.test/mcp",
+      "xaa_audience": null,
+      "client_id": "client-1",
+      "registration": "static",
+      "token_endpoint_auth_method": "none",
+      "scopes": [
+        "read"
+      ],
+      "scopes_source": "client",
+      "cimd_supported": false,
+      "advertises": {
+        "grant_types": [
+          "authorization_code",
+          "urn:ietf:params:oauth:grant-type:jwt-bearer"
+        ],
+        "grant_profiles": [
+          "urn:ietf:params:oauth:grant-profile:id-jag"
+        ]
+      },
+      "metadata_fetched_at": "2026-09-17T23:10:00Z",
+      "resource_app_expectations": {
+        "xaa_issuer_url": null,
+        "resource_identifiers": [
+          "https://as.example.test/mcp"
+        ],
+        "scopes": [
+          "read"
+        ]
+      },
+      "blockers": [
+        "audience unknown"
+      ],
+      "evidence": {
+        "status": "unavailable"
+      }
+    },
+    {
+      "resource_name": "https://empty.example.test",
+      "resource_as_issuer": "https://empty.example.test",
+      "resource_identifier": "https://empty.example.test",
+      "xaa_audience": null,
+      "client_id": null,
+      "registration": "none",
+      "token_endpoint_auth_method": null,
+      "scopes": [
+        "read",
+        "write"
+      ],
+      "scopes_source": "issuer_metadata",
+      "cimd_supported": false,
+      "advertises": {
+        "grant_types": [
+          "authorization_code",
+          "urn:ietf:params:oauth:grant-type:jwt-bearer"
+        ],
+        "grant_profiles": [
+          "urn:ietf:params:oauth:grant-profile:id-jag"
+        ]
+      },
+      "metadata_fetched_at": "2026-09-17T23:10:00Z",
+      "resource_app_expectations": {
+        "xaa_issuer_url": null,
+        "resource_identifiers": [
+          "https://empty.example.test"
+        ],
+        "scopes": [
+          "read",
+          "write"
+        ]
+      },
+      "blockers": [
+        "no global client registered",
+        "audience unknown"
+      ],
+      "evidence": {
+        "status": "unavailable"
+      }
+    }
+  ],
+  "summary": {
+    "registrations": 2,
+    "ready": 0,
+    "blocked": 2
+  }
+}

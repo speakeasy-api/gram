@@ -1088,3 +1088,10 @@ SELECT
    WHERE at.project_id = @project_id AND at.assistant_id = @assistant_id) AS toolsets,
   (SELECT count(*) FROM assistant_mcp_servers ams
    WHERE ams.project_id = @project_id AND ams.assistant_id = @assistant_id) AS mcp_servers;
+
+-- name: SetRemoteSessionIssuerGrantProfilesFixture :exec
+-- Test-only fixture: no production query writes the advertised grant profiles
+-- yet, so exports that key on the ID-JAG profile need it stamped directly.
+UPDATE remote_session_issuers
+SET authorization_grant_profiles_supported = @grant_profiles::text[]
+WHERE id = @id;
