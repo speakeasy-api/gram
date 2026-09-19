@@ -3,22 +3,13 @@ import { useRef, useState } from "react";
 import type { QueryParamPlatform } from "@gram/client/models/operations/downloadpluginpackage.js";
 import { Gram } from "@gram/client";
 import { toast } from "sonner";
+import {
+  downloadBlob,
+  filenameFromContentDisposition,
+  headerValue,
+} from "@/lib/download";
 
 export type PluginPackagePlatform = QueryParamPlatform;
-
-// The SDK returns headers as a plain Record<string, string[]>, not a Fetch
-// Headers instance, so lookups must be done case-insensitively by hand — the
-// server's casing isn't guaranteed to match the lowercase key we'd otherwise
-// index with directly.
-function getHeader(
-  headers: Record<string, string[]>,
-  name: string,
-): string | undefined {
-  const key = Object.keys(headers).find(
-    (k) => k.toLowerCase() === name.toLowerCase(),
-  );
-  return key ? headers[key]?.[0] : undefined;
-}
 
 export async function downloadResponse(
   response: Response,
@@ -26,22 +17,13 @@ export async function downloadResponse(
 ): Promise<void> {
   if (!response.ok)
     throw new Error(`download failed with status ${response.status}`);
-  await downloadBlob(
+  downloadBlob(
     await response.blob(),
-    response.headers
-      .get("Content-Disposition")
-      ?.match(/filename="(.+?)"/)?.[1] ?? fallbackFilename,
+    filenameFromContentDisposition(
+      response.headers.get("Content-Disposition"),
+      fallbackFilename,
+    ),
   );
-}
-
-async function downloadBlob(blob: Blob, filename: string): Promise<void> {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  // Allow the browser to start consuming the object URL before releasing it.
-  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export async function downloadPluginPackage(
@@ -53,12 +35,12 @@ export async function downloadPluginPackage(
     pluginId,
     platform,
   });
-  await downloadBlob(
+  downloadBlob(
     await new Response(result).blob(),
-    // Non-greedy so a header with additional quoted params (e.g.
-    // `filename="x.zip"; creation-date="..."`) doesn't overcapture.
-    getHeader(headers, "Content-Disposition")?.match(/filename="(.+?)"/)?.[1] ??
+    filenameFromContentDisposition(
+      headerValue(headers, "Content-Disposition"),
       "plugin.zip",
+    ),
   );
 }
 

@@ -761,6 +761,7 @@ func buildRow(snap *snapshot, r row) *srv.XaaServerReadiness {
 		NotApplicableReason:  conv.PtrEmpty(r.reason),
 		Pending:              r.state.Pending(),
 		ResourceIndicator:    r.resource,
+		IssuerID:             conv.PtrEmpty(r.server.IssuerID.String()),
 		ClientID:             conv.PtrEmpty(r.clientID),
 		ClientBinding:        r.binding,
 		Scopes:               scopesOr(nil, r.scopes),

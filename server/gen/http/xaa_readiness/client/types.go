@@ -81,6 +81,10 @@ type ResetConnectionResponseBody struct {
 	NotApplicableReason *string `form:"not_applicable_reason,omitempty" json:"not_applicable_reason,omitempty" xml:"not_applicable_reason,omitempty"`
 	// Whether the administrator still has a step to do for this server.
 	Pending *bool `form:"pending,omitempty" json:"pending,omitempty" xml:"pending,omitempty"`
+	// The upstream authorization server ID. Together with the resource indicator,
+	// identifies the shared readiness confirmation; independent of the confirmed
+	// identity assertion audience.
+	IssuerID *string `form:"issuer_id,omitempty" json:"issuer_id,omitempty" xml:"issuer_id,omitempty"`
 	// The resource indicator to enter on the connection: the server's RFC 9728
 	// resource identifier when known, otherwise its URL.
 	ResourceIndicator *string `form:"resource_indicator,omitempty" json:"resource_indicator,omitempty" xml:"resource_indicator,omitempty"`
@@ -962,6 +966,10 @@ type XaaServerReadinessResponseBody struct {
 	NotApplicableReason *string `form:"not_applicable_reason,omitempty" json:"not_applicable_reason,omitempty" xml:"not_applicable_reason,omitempty"`
 	// Whether the administrator still has a step to do for this server.
 	Pending *bool `form:"pending,omitempty" json:"pending,omitempty" xml:"pending,omitempty"`
+	// The upstream authorization server ID. Together with the resource indicator,
+	// identifies the shared readiness confirmation; independent of the confirmed
+	// identity assertion audience.
+	IssuerID *string `form:"issuer_id,omitempty" json:"issuer_id,omitempty" xml:"issuer_id,omitempty"`
 	// The resource indicator to enter on the connection: the server's RFC 9728
 	// resource identifier when known, otherwise its URL.
 	ResourceIndicator *string `form:"resource_indicator,omitempty" json:"resource_indicator,omitempty" xml:"resource_indicator,omitempty"`
@@ -1413,6 +1421,7 @@ func NewResetConnectionXaaServerReadinessOK(body *ResetConnectionResponseBody) *
 		State:                *body.State,
 		NotApplicableReason:  body.NotApplicableReason,
 		Pending:              *body.Pending,
+		IssuerID:             body.IssuerID,
 		ResourceIndicator:    *body.ResourceIndicator,
 		ClientID:             body.ClientID,
 		ClientBinding:        *body.ClientBinding,
@@ -1865,6 +1874,9 @@ func ValidateResetConnectionResponseBody(body *ResetConnectionResponseBody) (err
 		if !(*body.NotApplicableReason == "no_idjag") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.not_applicable_reason", *body.NotApplicableReason, []any{"no_idjag"}))
 		}
+	}
+	if body.IssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.issuer_id", *body.IssuerID, goa.FormatUUID))
 	}
 	if body.ClientBinding != nil {
 		if !(*body.ClientBinding == "bound" || *body.ClientBinding == "single" || *body.ClientBinding == "ambiguous" || *body.ClientBinding == "missing") {
@@ -2981,6 +2993,9 @@ func ValidateXaaServerReadinessResponseBody(body *XaaServerReadinessResponseBody
 		if !(*body.NotApplicableReason == "no_idjag") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.not_applicable_reason", *body.NotApplicableReason, []any{"no_idjag"}))
 		}
+	}
+	if body.IssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.issuer_id", *body.IssuerID, goa.FormatUUID))
 	}
 	if body.ClientBinding != nil {
 		if !(*body.ClientBinding == "bound" || *body.ClientBinding == "single" || *body.ClientBinding == "ambiguous" || *body.ClientBinding == "missing") {

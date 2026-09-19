@@ -1,10 +1,16 @@
-import { SettingsPage } from "@/components/page-templates";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
+import { Navigate, useLocation } from "react-router";
+
+import { TabbedPage, type PageTab } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useRBAC } from "@/hooks/useRBAC";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useOrgRoutes } from "@/routes";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
@@ -13,6 +19,16 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FolderSync, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
+
+import { EnterpriseManagedAuth } from "./identity-provider/EnterpriseManagedAuth";
+import {
+  IDENTITY_TABS,
+  identityTabHref,
+  legacyOktaTab,
+  enterpriseManagedAuthHref,
+  legacyIdentityProviderSearch,
+  type IdentityPageTab,
+} from "./identity-provider/identityProviderQueries";
 
 const UPSELL_COPY = "Contact our team to setup SSO and Directory Sync";
 
@@ -286,10 +302,68 @@ function IdentitySection({
 }
 
 export default function OrgIdentity(): JSX.Element {
-  return <OrgIdentityInner />;
+  const location = useLocation();
+  const [rawTab] = useQueryState("tab");
+  const [legacySub] = useQueryState("okta");
+  const [requestedTab] = useQueryState(
+    "tab",
+    parseAsStringLiteral(IDENTITY_TABS).withDefault("sso"),
+  );
+  // EMA keeps the gates the old provider tabs had: rollout flag and org:admin.
+  const providerFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
+  const { hasScope } = useRBAC();
+  const showEnterpriseManagedAuth =
+    providerFlag.status === "enabled" && hasScope("org:admin");
+
+  // Preserve both generations of identity links, including filters and fragments.
+  const legacyTab =
+    rawTab === "okta"
+      ? legacyOktaTab(legacySub)
+      : rawTab === "provider" ||
+          rawTab === "applications" ||
+          rawTab === "cross-app-access"
+        ? rawTab
+        : null;
+  if (legacyTab) {
+    return (
+      <Navigate
+        to={`${legacyIdentityProviderSearch(new URLSearchParams(location.search), legacyTab)}${location.hash}`}
+        replace
+      />
+    );
+  }
+
+  const activeTab: IdentityPageTab =
+    requestedTab !== "sso" && !showEnterpriseManagedAuth ? "sso" : requestedTab;
+
+  const tabs: PageTab[] = [
+    { value: "sso", label: "Single sign-on", href: identityTabHref("sso") },
+    ...(showEnterpriseManagedAuth
+      ? [
+          {
+            value: "enterprise-managed-auth",
+            label: "Enterprise Managed Auth",
+            href: enterpriseManagedAuthHref(),
+            stage: "preview" as const,
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <TabbedPage
+      scope={["org:read", "org:admin"]}
+      title="IDP and SSO"
+      description="Manage employee sign-in, directory sync, and agent access through your identity providers."
+      activeTab={activeTab}
+      tabs={tabs}
+    >
+      {activeTab === "sso" ? <SingleSignOnTab /> : <EnterpriseManagedAuth />}
+    </TabbedPage>
+  );
 }
 
-function OrgIdentityInner() {
+function SingleSignOnTab(): JSX.Element {
   const organization = useOrganization();
   const { data: features } = useProductFeatures({
     organizationId: organization.id,
@@ -301,66 +375,60 @@ function OrgIdentityInner() {
   const scimActive = organization.scimEnabled === true;
 
   return (
-    <SettingsPage scope={["org:read", "org:admin"]} title="Identity">
-      <div className="flex flex-col gap-6">
-        <IdentitySection
-          sectionId="sso"
-          heading="Single Sign-On"
-          description="Set up Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
-          providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
-          providerTitle="SSO"
-          providerSubtitle={
-            ssoActive
-              ? "Your identity provider is connected."
-              : "Choose an identity provider to get started."
-          }
-          learnMoreText="Learn more about SSO"
-          learnMoreHref="https://www.speakeasy.com/docs"
-          active={ssoActive}
-          configureButton={
-            <SSOConfigureControl
-              featureEnabled={ssoFeatureEnabled}
-              active={ssoActive}
-            />
-          }
-        />
+    <div className="flex max-w-4xl flex-col gap-8">
+      <IdentitySection
+        sectionId="sso"
+        heading="Single Sign-On"
+        description="Set up Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
+        providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
+        providerTitle="SSO"
+        providerSubtitle={
+          ssoActive
+            ? "Your identity provider is connected."
+            : "Choose an identity provider to get started."
+        }
+        learnMoreText="Learn more about SSO"
+        learnMoreHref="https://www.speakeasy.com/docs"
+        active={ssoActive}
+        configureButton={
+          <SSOConfigureControl
+            featureEnabled={ssoFeatureEnabled}
+            active={ssoActive}
+          />
+        }
+      />
 
-        <IdentitySection
-          sectionId="directory_sync"
-          heading="Directory Sync"
-          description={
-            <>
-              Sync members and roles directly from your identity provider:
-              <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
-                <li>
-                  Members are provisioned automatically from your directory
-                </li>
-                <li>Roles are assigned from your IDP group mappings</li>
-                <li>Members can&apos;t be invited manually</li>
-                <li>Roles can&apos;t be assigned to members manually</li>
-              </ul>
-            </>
-          }
-          providerIcon={
-            <FolderSync className="text-muted-foreground h-5 w-5" />
-          }
-          providerTitle="SCIM"
-          providerSubtitle={
-            scimActive
-              ? "Your directory provider is connected."
-              : "Choose an identity provider to get started."
-          }
-          learnMoreText="Learn more about SCIM Directory Sync"
-          learnMoreHref="https://www.speakeasy.com/docs"
-          active={scimActive}
-          configureButton={
-            <DirectorySyncConfigureControl
-              featureEnabled={scimFeatureEnabled}
-              active={scimActive}
-            />
-          }
-        />
-      </div>
-    </SettingsPage>
+      <IdentitySection
+        sectionId="directory_sync"
+        heading="Directory Sync"
+        description={
+          <>
+            Sync members and roles directly from your identity provider:
+            <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+              <li>Members are provisioned automatically from your directory</li>
+              <li>Roles are assigned from your IDP group mappings</li>
+              <li>Members can&apos;t be invited manually</li>
+              <li>Roles can&apos;t be assigned to members manually</li>
+            </ul>
+          </>
+        }
+        providerIcon={<FolderSync className="text-muted-foreground h-5 w-5" />}
+        providerTitle="SCIM"
+        providerSubtitle={
+          scimActive
+            ? "Your directory provider is connected."
+            : "Choose an identity provider to get started."
+        }
+        learnMoreText="Learn more about SCIM Directory Sync"
+        learnMoreHref="https://www.speakeasy.com/docs"
+        active={scimActive}
+        configureButton={
+          <DirectorySyncConfigureControl
+            featureEnabled={scimFeatureEnabled}
+            active={scimActive}
+          />
+        }
+      />
+    </div>
   );
 }

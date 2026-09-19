@@ -75,6 +75,10 @@ export type XaaServerReadiness = {
    */
   deepLink?: string | undefined;
   /**
+   * The upstream authorization server ID. Together with the resource indicator, identifies the shared readiness confirmation; independent of the confirmed identity assertion audience.
+   */
+  issuerId?: string | undefined;
+  /**
    * MCP server ID.
    */
   mcpServerId: string;
@@ -145,6 +149,7 @@ export const XaaServerReadiness$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     deep_link: z.optional(z.string()),
+    issuer_id: z.optional(z.string()),
     mcp_server_id: z.string(),
     not_applicable_reason: z.optional(NotApplicableReason$inboundSchema),
     okta_application_id: z.optional(z.string()),
@@ -164,6 +169,7 @@ export const XaaServerReadiness$inboundSchema: z.ZodMiniType<
       "client_id": "clientId",
       "confirmed_at": "confirmedAt",
       "deep_link": "deepLink",
+      "issuer_id": "issuerId",
       "mcp_server_id": "mcpServerId",
       "not_applicable_reason": "notApplicableReason",
       "okta_application_id": "oktaApplicationId",

@@ -2263,10 +2263,18 @@ type IdentityProviderConnectionActiveKeyResponseBody struct {
 type IdentityProviderConnectionChecklistItemResponseBody struct {
 	// Stable step identifier.
 	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// Which phase the step belongs to: connect (the service app the connection
+	// authenticates with) or cross_app_access (the AI agent).
+	Group *string `form:"group,omitempty" json:"group,omitempty" xml:"group,omitempty"`
 	// Short step title.
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// What to do in the console, including any value copied from this connection.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Sub-steps, in order. Empty when the description says it all.
+	Details []string `form:"details,omitempty" json:"details,omitempty" xml:"details,omitempty"`
+	// Whether the last verification observed this step done. Omitted for steps the
+	// server cannot observe; the administrator tracks those.
+	Completed *bool `form:"completed,omitempty" json:"completed,omitempty" xml:"completed,omitempty"`
 }
 
 // IdentityProviderConnectionApplicationsSyncResponseBody is used to define
@@ -7342,11 +7350,22 @@ func ValidateIdentityProviderConnectionChecklistItemResponseBody(body *IdentityP
 	if body.Key == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
 	}
+	if body.Group == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group", "body"))
+	}
 	if body.Title == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Details == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("details", "body"))
+	}
+	if body.Group != nil {
+		if !(*body.Group == "connect" || *body.Group == "cross_app_access") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.group", *body.Group, []any{"connect", "cross_app_access"}))
+		}
 	}
 	return
 }

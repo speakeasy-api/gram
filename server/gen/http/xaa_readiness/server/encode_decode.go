@@ -943,6 +943,7 @@ func marshalXaareadinessXaaServerReadinessToXaaServerReadinessResponseBody(v *xa
 		State:                v.State,
 		NotApplicableReason:  v.NotApplicableReason,
 		Pending:              v.Pending,
+		IssuerID:             v.IssuerID,
 		ResourceIndicator:    v.ResourceIndicator,
 		ClientID:             v.ClientID,
 		ClientBinding:        v.ClientBinding,
