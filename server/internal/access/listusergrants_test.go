@@ -35,6 +35,8 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeAgentWrite),
 	string(authz.ScopeAgentAuthorize),
 	string(authz.ScopeAgentTransfer),
+	string(authz.ScopeOrgDeviceAgentSync),
+	string(authz.ScopeOrgHooksIngest),
 }
 
 // TestDemoGrantsMatchEnforcedScopes holds the set ListGrants reports to the
