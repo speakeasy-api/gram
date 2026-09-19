@@ -5615,6 +5615,7 @@ examples:
       responses:
         "200":
           application/json: "x-file: example.file"
+          '*/*': "x-file: example.file"
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

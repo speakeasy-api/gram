@@ -110,7 +110,7 @@ async function $do(
   });
 
   const headers = new Headers(compactMap({
-    Accept: "application/json",
+    Accept: "*/*",
     "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -187,7 +187,7 @@ async function $do(
     | SDKValidationError
   >(
     M.stream(200, ExportOinManifestResponse$inboundSchema, {
-      ctype: "application/json",
+      ctype: "*/*",
       hdrs: true,
       key: "Result",
     }),

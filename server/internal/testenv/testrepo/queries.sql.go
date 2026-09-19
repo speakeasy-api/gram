@@ -3043,7 +3043,7 @@ func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugF
 	return err
 }
 
-const setRemoteSessionIssuerGrantProfilesFixture = `-- name: SetRemoteSessionIssuerGrantProfilesFixture :exec
+const setRemoteSessionIssuerGrantProfilesFixture = `-- name: SetRemoteSessionIssuerGrantProfilesFixture :execrows
 UPDATE remote_session_issuers
 SET authorization_grant_profiles_supported = $1::text[]
 WHERE id = $2
@@ -3056,9 +3056,12 @@ type SetRemoteSessionIssuerGrantProfilesFixtureParams struct {
 
 // Test-only fixture: no production query writes the advertised grant profiles
 // yet, so exports that key on the ID-JAG profile need it stamped directly.
-func (q *Queries) SetRemoteSessionIssuerGrantProfilesFixture(ctx context.Context, arg SetRemoteSessionIssuerGrantProfilesFixtureParams) error {
-	_, err := q.db.Exec(ctx, setRemoteSessionIssuerGrantProfilesFixture, arg.GrantProfiles, arg.ID)
-	return err
+func (q *Queries) SetRemoteSessionIssuerGrantProfilesFixture(ctx context.Context, arg SetRemoteSessionIssuerGrantProfilesFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionIssuerGrantProfilesFixture, arg.GrantProfiles, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setRemoteSessionResourceFixture = `-- name: SetRemoteSessionResourceFixture :exec

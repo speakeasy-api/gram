@@ -41,7 +41,9 @@ var _ = Service("oinManifest", func() {
 			Param("format")
 			security.SessionHeader()
 			Response(StatusOK, func() {
-				ContentType("application/json")
+				// JSON or Markdown depending on format; the handler sets the
+				// real Content-Type header per response.
+				ContentType("*/*")
 				Header("content_type:Content-Type")
 				Header("content_disposition:Content-Disposition")
 			})

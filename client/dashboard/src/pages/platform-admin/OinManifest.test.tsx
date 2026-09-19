@@ -51,18 +51,11 @@ const markdownBody =
   "# Speakeasy OIN Cross App Access manifest\n\nPreview body.\n";
 
 const mocks = vi.hoisted(() => ({
-  exportCalls: [] as Array<{ format: string; session?: string; url: string }>,
+  exportCalls: [] as Array<{ format: string }>,
   fail: false,
 }));
 
-vi.mock("@/contexts/Auth", () => ({
-  useIsPlatformAdmin: () => true,
-  useSession: () => ({ session: "session-token" }),
-}));
-vi.mock("@/lib/utils", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/utils")>()),
-  getServerURL: () => "https://server.test",
-}));
+vi.mock("@/contexts/Auth", () => ({ useIsPlatformAdmin: () => true }));
 vi.mock("@/components/page-layout", () => {
   const Wrapper = ({ children }: { children: ReactNode }) => <>{children}</>;
   return {
@@ -102,28 +95,31 @@ vi.mock("react-markdown", () => ({
   ),
 }));
 vi.mock("remark-gfm", () => ({ default: () => undefined }));
-const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-  const format = /format=(\w+)/.exec(url)?.[1] ?? "json";
-  const headers = init?.headers as Record<string, string> | undefined;
-  mocks.exportCalls.push({ format, session: headers?.["gram-session"], url });
-  if (mocks.fail) {
-    return new Response("nope", { status: 500 });
-  }
-  const body = format === "markdown" ? markdownBody : JSON.stringify(manifest);
-  const extension = format === "markdown" ? "md" : "json";
-  // Only the JSON reply exposes its filename here, so the Markdown download
-  // has to fall back to the generation date; both must end up dated.
-  return new Response(body, {
-    status: 200,
-    headers:
-      format === "json"
-        ? {
-            "Content-Disposition": `attachment; filename="speakeasy-oin-xaa-manifest-2026-09-18.${extension}"`,
-          }
-        : {},
-  });
-});
-vi.stubGlobal("fetch", fetchMock);
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({
+    oinManifest: {
+      export: async (request: { format?: string }) => {
+        const format = request.format ?? "json";
+        mocks.exportCalls.push({ format });
+        if (mocks.fail) throw new Error("export failed");
+        const body =
+          format === "markdown" ? markdownBody : JSON.stringify(manifest);
+        // Only the JSON reply exposes its filename here, so the Markdown
+        // download has to fall back to the generation date; both must end
+        // up dated.
+        const headers: Record<string, string[]> =
+          format === "json"
+            ? {
+                "content-disposition": [
+                  'attachment; filename="speakeasy-oin-xaa-manifest-2026-09-18.json"',
+                ],
+              }
+            : {};
+        return { headers, result: new Blob([body]).stream() };
+      },
+    },
+  }),
+}));
 
 import PlatformAdminOinManifest from "./OinManifest";
 
@@ -139,11 +135,51 @@ function renderPage(): QueryClient {
   return queryClient;
 }
 
+// jsdom has no object URLs and no navigation on anchor clicks; both are
+// stubbed per test and restored afterwards so a failed assertion cannot leak
+// them into the next test.
+const globals = {
+  createObjectURL: vi.fn((_blob: Blob) => "blob:manifest"),
+  revokeObjectURL: vi.fn(),
+  clicks: [] as Array<{ download: string; href: string }>,
+  click: undefined as { mockRestore: () => void } | undefined,
+};
+const objectURLMethods = ["createObjectURL", "revokeObjectURL"] as const;
+const originalObjectURL = Object.fromEntries(
+  objectURLMethods.map((name) => [
+    name,
+    Object.getOwnPropertyDescriptor(URL, name),
+  ]),
+);
+function restoreObjectURL(): void {
+  for (const name of objectURLMethods) {
+    const descriptor = originalObjectURL[name];
+    if (descriptor) Object.defineProperty(URL, name, descriptor);
+    else delete (URL as unknown as Record<string, unknown>)[name];
+  }
+}
+
 describe("PlatformAdminOinManifest", () => {
-  afterEach(cleanup);
   beforeEach(() => {
     mocks.exportCalls = [];
     mocks.fail = false;
+    globals.clicks = [];
+    globals.createObjectURL.mockClear();
+    globals.revokeObjectURL.mockClear();
+    Object.assign(URL, {
+      createObjectURL: globals.createObjectURL,
+      revokeObjectURL: globals.revokeObjectURL,
+    });
+    globals.click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        globals.clicks.push({ download: this.download, href: this.href });
+      });
+  });
+  afterEach(() => {
+    cleanup();
+    globals.click?.mockRestore();
+    restoreObjectURL();
   });
 
   it("shows a loading state, then blockers, the registrations and the preview", async () => {
@@ -171,31 +207,12 @@ describe("PlatformAdminOinManifest", () => {
     expect(screen.getByTestId("markdown").textContent).toBe(markdownBody);
     expect(screen.getAllByText("unset")).toHaveLength(2);
     expect(mocks.exportCalls).toEqual([
-      {
-        format: "json",
-        session: "session-token",
-        url: "https://server.test/rpc/oinManifest.export?format=json",
-      },
-      {
-        format: "markdown",
-        session: "session-token",
-        url: "https://server.test/rpc/oinManifest.export?format=markdown",
-      },
+      { format: "json" },
+      { format: "markdown" },
     ]);
   });
 
   it("downloads the fetched bodies under the server's filenames", async () => {
-    const createObjectURL = vi.fn((_blob: Blob) => "blob:manifest");
-    const revokeObjectURL = vi.fn();
-    // jsdom has no object URLs; attach them without replacing the URL class.
-    Object.assign(URL, { createObjectURL, revokeObjectURL });
-    const clicks: Array<{ download: string; href: string }> = [];
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(function (this: HTMLAnchorElement) {
-        clicks.push({ download: this.download, href: this.href });
-      });
-
     renderPage();
     await waitFor(() =>
       expect(
@@ -206,17 +223,15 @@ describe("PlatformAdminOinManifest", () => {
     fireEvent.click(screen.getByRole("button", { name: "Download JSON" }));
     fireEvent.click(screen.getByRole("button", { name: "Download Markdown" }));
 
-    expect(clicks.map((c) => c.download)).toEqual([
+    expect(globals.clicks.map((c) => c.download)).toEqual([
       "speakeasy-oin-xaa-manifest-2026-09-18.json",
       "speakeasy-oin-xaa-manifest-2026-09-18.md",
     ]);
-    const blobs = createObjectURL.mock.calls.map((call) => call[0]);
+    const blobs = globals.createObjectURL.mock.calls.map((call) => call[0]);
     expect(await blobs[0]?.text()).toBe(JSON.stringify(manifest));
     expect(await blobs[1]?.text()).toBe(markdownBody);
     // The export is not re-requested to download; the fetched body is reused.
     expect(mocks.exportCalls).toHaveLength(2);
-
-    click.mockRestore();
   });
 
   it("reports an export failure instead of crashing", async () => {
@@ -225,9 +240,7 @@ describe("PlatformAdminOinManifest", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText(
-          "Failed to export the manifest: export failed with status 500",
-        ),
+        screen.getByText("Failed to export the manifest: export failed"),
       ).toBeTruthy(),
     );
   });

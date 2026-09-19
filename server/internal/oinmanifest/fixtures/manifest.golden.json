@@ -40,7 +40,7 @@
       },
       "metadata_fetched_at": "2026-09-17T23:10:00Z",
       "resource_app_expectations": {
-        "xaa_issuer_url": null,
+        "xaa_issuer_url": "https://as.example.test",
         "resource_identifiers": [
           "https://as.example.test/mcp"
         ],
@@ -80,7 +80,7 @@
       },
       "metadata_fetched_at": "2026-09-17T23:10:00Z",
       "resource_app_expectations": {
-        "xaa_issuer_url": null,
+        "xaa_issuer_url": "https://empty.example.test",
         "resource_identifiers": [
           "https://empty.example.test"
         ],

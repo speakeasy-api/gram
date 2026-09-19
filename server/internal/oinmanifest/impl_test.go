@@ -102,10 +102,12 @@ func insertIssuer(t *testing.T, conn *pgxpool.Pool, fixture issuerFixture) uuid.
 	})
 	require.NoError(t, err)
 	if len(fixture.profiles) > 0 {
-		require.NoError(t, testrepo.New(conn).SetRemoteSessionIssuerGrantProfilesFixture(t.Context(), testrepo.SetRemoteSessionIssuerGrantProfilesFixtureParams{
+		stamped, err := testrepo.New(conn).SetRemoteSessionIssuerGrantProfilesFixture(t.Context(), testrepo.SetRemoteSessionIssuerGrantProfilesFixtureParams{
 			GrantProfiles: fixture.profiles,
 			ID:            row.ID,
-		}))
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), stamped)
 	}
 	return row.ID
 }

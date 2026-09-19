@@ -106,7 +106,9 @@ type Advertises struct {
 }
 
 // ResourceAppExpectations is the resource-app half of the OIN questionnaire
-// for this pairing, so Okta's reviewers see both sides at once.
+// for this pairing, so Okta's reviewers see both sides at once. The issuer URL
+// is the resource AS Speakeasy redeems at; the ID-JAG audience stays separate
+// in XAAAudience until the catalog can hold it.
 type ResourceAppExpectations struct {
 	XAAIssuerURL        *string  `json:"xaa_issuer_url"`
 	ResourceIdentifiers []string `json:"resource_identifiers"`
@@ -306,7 +308,7 @@ func buildRegistration(group issuerGroup, now time.Time) Registration {
 		registration.ResourceName = registration.ResourceASIssuer
 	}
 	registration.ResourceAppExpectations = ResourceAppExpectations{
-		XAAIssuerURL:        registration.XAAAudience,
+		XAAIssuerURL:        new(registration.ResourceASIssuer),
 		ResourceIdentifiers: []string{registration.ResourceIdentifier},
 		Scopes:              copyStrings(registration.Scopes),
 	}

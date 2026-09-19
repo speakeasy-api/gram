@@ -65,6 +65,7 @@ func TestBuildPairWithClientOnlyCarriesTheAudienceBlocker(t *testing.T) {
 	require.Nil(t, registration.XAAAudience)
 	require.Equal(t, []string{blockerAudience}, registration.Blockers)
 	require.Equal(t, evidenceUnavailable, registration.Evidence.Status)
+	require.Equal(t, "https://as.example.test", *registration.ResourceAppExpectations.XAAIssuerURL)
 	require.Equal(t, []string{"https://as.example.test/mcp"}, registration.ResourceAppExpectations.ResourceIdentifiers)
 	require.Equal(t, []string{"read"}, registration.ResourceAppExpectations.Scopes)
 	require.Equal(t, Summary{Registrations: 1, Ready: 0, Blocked: 1}, manifest.Summary)
@@ -216,6 +217,9 @@ func TestEscapeCell(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, `a \| b`, escapeCell("a | b"))
+	require.Equal(t, `a \\\| b`, escapeCell(`a \| b`))
+	require.Equal(t, "&lt;img src=x onerror=1&gt; &amp; co", escapeCell("<img src=x onerror=1> & co"))
+	require.Equal(t, "&gt; quote", escapeCell("> quote"))
 	require.Equal(t, "line one line two", escapeCell("line one\nline two"))
 	require.Equal(t, `\- item`, escapeCell("- item"))
 	require.Equal(t, "plain", escapeCell("plain\x00"))

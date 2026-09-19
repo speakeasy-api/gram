@@ -130,10 +130,12 @@ func ptrOr(value *string, fallback string) string {
 	return *value
 }
 
-// escapeCell neutralises a value for a Markdown table cell: pipes and
-// newlines would break the table, control characters are dropped, and a
-// leading Markdown structural character is prefixed with a backslash so the
-// cell cannot open a heading, list, quote, or code fence.
+// escapeCell neutralises a value for a Markdown table cell: backslashes are
+// escaped first so a stored `\|` cannot unescape the pipe that follows, pipes
+// and newlines would break the table, raw HTML is entity-escaped so a viewer
+// never renders upstream markup, control characters are dropped, and a leading
+// Markdown structural character is prefixed with a backslash so the cell
+// cannot open a heading, list, quote, or code fence.
 func escapeCell(value string) string {
 	var out strings.Builder
 	out.Grow(len(value))
@@ -141,8 +143,16 @@ func escapeCell(value string) string {
 		switch {
 		case r == '\n' || r == '\r' || r == '\t':
 			out.WriteByte(' ')
+		case r == '\\':
+			out.WriteString(`\\`)
 		case r == '|':
 			out.WriteString(`\|`)
+		case r == '&':
+			out.WriteString("&amp;")
+		case r == '<':
+			out.WriteString("&lt;")
+		case r == '>':
+			out.WriteString("&gt;")
 		case unicode.IsControl(r):
 			continue
 		default:
@@ -153,7 +163,7 @@ func escapeCell(value string) string {
 	if escaped == "" {
 		return ""
 	}
-	if strings.ContainsRune("#-*+>`~=", rune(escaped[0])) {
+	if strings.ContainsRune("#-*+`~=", rune(escaped[0])) {
 		escaped = `\` + escaped
 	}
 	return escaped

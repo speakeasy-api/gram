@@ -346,16 +346,6 @@ func mcpRuntimeFlags() []cli.Flag {
 			Required: true,
 		},
 		&cli.StringFlag{
-			Name:    "oin-listing-name",
-			Usage:   "Listing name reported in the OIN Cross App Access manifest export (empty renders as unset)",
-			EnvVars: []string{"GRAM_OIN_LISTING_NAME"},
-		},
-		&cli.StringFlag{
-			Name:    "oin-listing-org-domain",
-			Usage:   "Organization domain reported in the OIN Cross App Access manifest export (empty renders as unset)",
-			EnvVars: []string{"GRAM_OIN_LISTING_ORG_DOMAIN"},
-		},
-		&cli.StringFlag{
 			Name:     "database-url",
 			Usage:    "Database URL",
 			EnvVars:  []string{"GRAM_DATABASE_URL"},
@@ -601,6 +591,16 @@ func serverFlags() []cli.Flag {
 		&cli.StringFlag{Name: "ssl-key-file", Usage: "The SSL key file path to use for the server", EnvVars: []string{"GRAM_SSL_KEY_FILE"}},
 		&cli.StringFlag{Name: "ssl-cert-file", Usage: "The SSL certificate file path to use for the server", EnvVars: []string{"GRAM_SSL_CERT_FILE"}},
 		&cli.StringFlag{Name: "github-evidence-token", Usage: "GitHub API token for MCP evidence repository lookups", EnvVars: []string{"GRAM_GITHUB_EVIDENCE_TOKEN"}},
+		&cli.StringFlag{
+			Name:    "oin-listing-name",
+			Usage:   "Listing name reported in the OIN Cross App Access manifest export (empty renders as unset)",
+			EnvVars: []string{"GRAM_OIN_LISTING_NAME"},
+		},
+		&cli.StringFlag{
+			Name:    "oin-listing-org-domain",
+			Usage:   "Organization domain reported in the OIN Cross App Access manifest export (empty renders as unset)",
+			EnvVars: []string{"GRAM_OIN_LISTING_ORG_DOMAIN"},
+		},
 		&cli.StringFlag{
 			Name:     "loops-api-key",
 			Usage:    "Loops API key for transactional emails (invite emails). Empty or 'unset' disables email sending.",

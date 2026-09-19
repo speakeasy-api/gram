@@ -6,8 +6,9 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
-import { useSession } from "@/contexts/Auth";
-import { getServerURL } from "@/lib/utils";
+import { useSdkClient } from "@/contexts/Sdk";
+import { filenameFromDisposition } from "./contentDisposition";
+import type { Gram } from "@gram/client";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -19,7 +20,7 @@ import { StrictPlatformAdminGate } from "./StrictPlatformAdminGate";
 // Mirrors the server's oinmanifest.Manifest JSON shape (manifest_version 1).
 // Only the fields the page reads are typed; the download hands over the raw
 // body untouched so the file matches a curl of the same RPC byte for byte.
-export type OinManifest = {
+type OinManifest = {
   manifest_version: number;
   generated_at: string;
   requesting_app: {
@@ -65,36 +66,39 @@ const CONTENT_TYPES: Record<ExportFormat, string> = {
   markdown: "text/markdown;charset=utf-8",
 };
 
-// A raw fetch rather than the generated SDK call: the SDK matcher pins the
-// response to the JSON content type the design declares, while the Markdown
-// format answers text/markdown. The body is kept untouched so the download is
-// byte-identical to a curl of the same RPC.
+// The SDK hands headers back as a plain Record keyed with the server's own
+// casing, so the lookup is case-insensitive by hand. The body is kept
+// untouched so the download is byte-identical to a curl of the same RPC.
+function headerValue(
+  headers: Record<string, string[]>,
+  name: string,
+): string | null {
+  const key = Object.keys(headers).find(
+    (k) => k.toLowerCase() === name.toLowerCase(),
+  );
+  return key ? (headers[key]?.[0] ?? null) : null;
+}
+
 async function fetchManifestExport(
-  session: string,
+  client: Gram,
   format: ExportFormat,
 ): Promise<ManifestExport> {
-  const response = await fetch(
-    `${getServerURL()}/rpc/oinManifest.export?format=${format}`,
-    { headers: { "gram-session": session } },
-  );
-  if (!response.ok) {
-    throw new Error(`export failed with status ${response.status}`);
-  }
+  const { headers, result } = await client.oinManifest.export({ format });
   return {
-    body: await response.text(),
-    filename: response.headers
-      .get("Content-Disposition")
-      ?.match(/filename="(.+?)"/)?.[1],
+    body: await new Response(result).text(),
+    filename: filenameFromDisposition(
+      headerValue(headers, "Content-Disposition"),
+    ),
   };
 }
 
 function useManifestExport(
   format: ExportFormat,
 ): UseQueryResult<ManifestExport, Error> {
-  const { session } = useSession();
+  const client = useSdkClient();
   return useQuery({
     queryKey: ["platform-admin", "oin-manifest", format],
-    queryFn: () => fetchManifestExport(session, format),
+    queryFn: () => fetchManifestExport(client, format),
     // The export is a platform-admin action that leaves an audit line per
     // call; refetching on focus would spam it for no new information.
     refetchOnWindowFocus: false,
