@@ -25,7 +25,7 @@ export type AnalyticsDataset = {
   description: string;
   fields: Array<AnalyticsField>;
   /**
-   * What one row represents
+   * What one row represents, as a noun
    */
   grain: string;
   kind: AnalyticsDatasetKind;

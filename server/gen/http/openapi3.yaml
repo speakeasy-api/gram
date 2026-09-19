@@ -74526,8 +74526,8 @@ components:
                         $ref: '#/components/schemas/AnalyticsField'
                 grain:
                     type: string
-                    description: What one row represents
-                    example: One row per agent session.
+                    description: What one row represents, as a noun
+                    example: session
                 kind:
                     type: string
                     enum:

@@ -421,7 +421,7 @@ type DescribeGatewayErrorResponseBody struct {
 type AnalyticsDatasetResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	Kind string `form:"kind" json:"kind" xml:"kind"`
-	// What one row represents
+	// What one row represents, as a noun
 	Grain       string                        `form:"grain" json:"grain" xml:"grain"`
 	Description string                        `form:"description" json:"description" xml:"description"`
 	Fields      []*AnalyticsFieldResponseBody `form:"fields" json:"fields" xml:"fields"`

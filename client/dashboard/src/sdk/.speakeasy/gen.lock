@@ -3671,7 +3671,7 @@ examples:
     speakeasy-default-analytics-describe:
       responses:
         "200":
-          application/json: {"datasets": [{"description": "unfurl geez drat helpless anenst because boohoo uh-huh", "fields": [{"name": "user", "role": "dimension", "type": "float64", "unit": "s"}], "grain": "One row per agent session.", "kind": "event", "name": "sessions"}]}
+          application/json: {"datasets": [{"description": "unfurl geez drat helpless anenst because boohoo uh-huh", "fields": [{"name": "user", "role": "dimension", "type": "float64", "unit": "s"}], "grain": "session", "kind": "event", "name": "sessions"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -3679,7 +3679,7 @@ examples:
   analyticsQuery:
     speakeasy-default-analytics-query:
       requestBody:
-        application/json: {"dataset": "sessions", "filters": [{"field": "surface", "values": ["<value 1>", "<value 2>"], "operator": "in"}], "from": "2026-09-01T00:00:00Z", "measures": [{"alias": "tool_calls", "field": "tool_call_count", "op": "sum"}], "order_by": [{"direction": "desc", "measure": "tool_calls"}], "to": "2026-09-08T00:00:00Z", "ungrouped": false}
+        application/json: {"dataset": "sessions", "filters": [{"field": "surface", "values": ["<value 1>", "<value 2>", "<value 3>"], "operator": "in"}], "from": "2026-09-01T00:00:00Z", "measures": [{"alias": "tool_calls", "field": "tool_call_count", "op": "sum"}], "order_by": [{"direction": "desc", "measure": "tool_calls"}], "to": "2026-09-08T00:00:00Z", "ungrouped": false}
       responses:
         "200":
           application/json: {"dataset": "<value>", "plan": "<value>", "rows": [{"key": "<value>", "key1": "<value>", "key2": "<value>"}, {"key": "<value>", "key1": "<value>", "key2": "<value>"}]}
@@ -6307,13 +6307,14 @@ examples:
       parameters:
         query:
           family: "mcp_bandwidth"
+          reading_kind: "usage"
       responses:
         "200":
-          application/json: {"billing_cycles": [{"from": "2024-10-14T00:52:41.567Z", "to": "2025-01-31T16:10:28.190Z"}], "breakdown": {"dimension": "mcp_server", "series": []}, "buckets": [{"from": "2026-05-17T05:41:42.504Z", "to": "2026-01-24T07:40:53.020Z", "total": "<value>"}], "family": "agent_session_storage", "measurement_method": "<value>", "queried_at": "2024-11-20T01:39:03.119Z", "total": "<value>", "unit": "bytes", "window": {"from": "2025-10-30T00:03:34.752Z", "to": "2024-09-15T11:34:59.195Z"}}
+          application/json: {"billing_cycles": [{"from": "2024-10-14T00:52:41.567Z", "to": "2025-01-31T16:10:28.190Z"}], "breakdown": {"dimension": "policy", "series": []}, "buckets": [{"from": "2026-05-17T05:41:42.504Z", "to": "2026-01-24T07:40:53.020Z", "total": "<value>"}], "family": "agent_session_storage", "measurement_method": "<value>", "queried_at": "2024-11-20T01:39:03.119Z", "total": "<value>", "unit": "bytes", "window": {"from": "2024-09-15T11:34:59.195Z", "to": "2024-05-25T19:55:29.985Z"}}
         "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getNetworkIngress:
     speakeasy-default-get-network-ingress:
       responses:
@@ -6782,7 +6783,7 @@ examples:
           server_slug: "<value>"
       responses:
         "200":
-          application/json: {"access": "allowed", "allowed_policy_ids": ["<value 1>", "<value 2>"], "blocked_policy_ids": ["<value 1>", "<value 2>", "<value 3>"], "canonical_server_url": "https://other-charlatan.com/", "first_seen": "2025-09-26T22:52:04.530Z", "last_seen": "2025-02-17T16:24:42.959Z", "observed_use_count": 376759, "request_count": 602872, "server_slug": "<value>", "top_users": ["<value 1>", "<value 2>", "<value 3>"], "url_host": "<value>", "user_count": 500085}
+          application/json: {"access": "allowed", "allowed_policy_ids": ["<value 1>", "<value 2>"], "blocked_policy_ids": ["<value 1>", "<value 2>", "<value 3>"], "canonical_server_url": "https://other-charlatan.com/", "first_seen": "2025-09-26T22:52:04.530Z", "last_seen": "2025-02-17T16:24:42.959Z", "observed_use_count": 376759, "request_count": 602872, "server_slug": "<value>", "top_users": ["<value 1>", "<value 2>", "<value 3>"], "url_host": "<value>", "user_count": 938464}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -7487,7 +7488,7 @@ examples:
     speakeasy-default-list-AI-detections:
       responses:
         "200":
-          application/json: {"detections": [{"category": "local_model", "device_count": 819801, "display_name": "Vincenzo_Goldner", "first_seen": "2026-07-26T16:06:54.315Z", "last_seen": "2026-11-06T14:12:23.988Z", "signals": [], "target_id": "<id>", "user_count": 392569, "versions": ["<value 1>", "<value 2>"]}]}
+          application/json: {"detections": [{"access": {"decision": "approved", "enforceable": false, "state": "unreviewed"}, "category": "local_model", "device_count": 819801, "display_name": "Vincenzo_Goldner", "first_seen": "2026-07-26T16:06:54.315Z", "last_seen": "2026-11-06T14:12:23.988Z", "signals": [], "target_id": "<id>", "user_count": 392569, "versions": ["<value 1>", "<value 2>"]}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -7572,11 +7573,11 @@ examples:
     speakeasy-default-list-ai-scan-targets:
       responses:
         "200":
-          application/json: {"etag": "<value>", "list_version": 52473, "targets": [{"category": "harness", "customized": true, "display_name": "Antwon_Metz", "gateway_client": {"cimd_vendor_keys": ["<value 1>"], "client_info_names": ["<value 1>", "<value 2>"], "oauth_client_ids": ["<value 1>", "<value 2>"]}, "id": "<id>", "origin": "default", "signatures": {"binaries": ["<value 1>"], "bundle_ids": ["<value 1>"], "config_dirs": ["<value 1>", "<value 2>"], "process_names": ["<value 1>"]}}]}
+          application/json: {"etag": "<value>", "list_version": 52473, "targets": [{"category": "harness", "customized": true, "display_name": "Antwon_Metz", "gateway_client": {"cimd_vendor_keys": ["<value 1>", "<value 2>"], "client_info_names": ["<value 1>", "<value 2>"], "oauth_client_ids": []}, "id": "<id>", "origin": "default", "signatures": {"binaries": ["<value 1>"], "bundle_ids": ["<value 1>", "<value 2>"], "config_dirs": ["<value 1>"], "process_names": ["<value 1>"]}}]}
         "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listAllowedOrigins:
     speakeasy-default-list-allowed-origins:
       responses:
@@ -7887,7 +7888,7 @@ examples:
     speakeasy-default-list-device-agent-ai-scan-targets:
       responses:
         "200":
-          application/json: {"etag": "<value>", "list_version": 289198, "targets": [{"category": "harness", "customized": true, "display_name": "Darren_Wisoky78", "enabled": false, "id": "<id>", "origin": "default", "signatures": {"binaries": ["<value 1>", "<value 2>"], "bundle_ids": ["<value 1>"], "config_dirs": ["<value 1>", "<value 2>"], "process_names": ["<value 1>", "<value 2>"]}}]}
+          application/json: {"etag": "<value>", "list_version": 289198, "targets": [{"category": "harness", "customized": true, "display_name": "Darren_Wisoky78", "enabled": false, "gateway_client": {"cimd_vendor_keys": ["<value 1>"], "client_info_names": ["<value 1>", "<value 2>"], "oauth_client_ids": ["<value 1>"]}, "id": "<id>", "origin": "default", "signatures": {"binaries": ["<value 1>", "<value 2>"], "bundle_ids": ["<value 1>"], "config_dirs": ["<value 1>", "<value 2>"], "process_names": ["<value 1>", "<value 2>"]}}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -10281,6 +10282,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  setAIToolDisposition:
+    speakeasy-default-set-AI-tool-disposition:
+      requestBody:
+        application/json: {"disposition": "approved", "target_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"access": {"disposition": "unreviewed", "enforceable": false, "state": "unreviewed"}, "target_id": "<id>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   setBillingEmail:
     speakeasy-default-set-billing-email:
       requestBody:
@@ -11525,11 +11537,11 @@ examples:
         application/json: {"category": "assistant", "display_name": "Madaline_Nienow", "id": "<id>", "signatures": {"binaries": ["<value 1>"], "bundle_ids": [], "config_dirs": [], "process_names": ["<value 1>", "<value 2>"]}}
       responses:
         "200":
-          application/json: {"list_version": 201443, "target": {"category": "local_model", "customized": true, "display_name": "Emil61", "gateway_client": {"cimd_vendor_keys": ["<value 1>", "<value 2>", "<value 3>"], "client_info_names": [], "oauth_client_ids": []}, "id": "<id>", "origin": "default", "signatures": {"binaries": ["<value 1>"], "bundle_ids": [], "config_dirs": [], "process_names": ["<value 1>", "<value 2>"]}}}
+          application/json: {"list_version": 201443, "target": {"category": "local_model", "customized": true, "display_name": "Emil61", "gateway_client": {"cimd_vendor_keys": [], "client_info_names": [], "oauth_client_ids": []}, "id": "<id>", "origin": "organization", "signatures": {"binaries": ["<value 1>"], "bundle_ids": [], "config_dirs": [], "process_names": ["<value 1>", "<value 2>"]}}}
         "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   upsertAllowedOrigin:
     speakeasy-default-upsert-allowed-origin:
       requestBody:
@@ -11580,7 +11592,7 @@ examples:
         application/json: {"category": "harness", "display_name": "Michael94", "enabled": true, "id": "<id>", "signatures": {"binaries": ["<value 1>"], "bundle_ids": ["<value 1>"], "config_dirs": [], "process_names": ["<value 1>", "<value 2>", "<value 3>"]}}
       responses:
         "200":
-          application/json: {"list_version": 796872, "target": {"category": "local_model", "customized": false, "display_name": "Meaghan31", "enabled": false, "id": "<id>", "origin": "default", "signatures": {"binaries": ["<value 1>"], "bundle_ids": ["<value 1>"], "config_dirs": [], "process_names": ["<value 1>", "<value 2>", "<value 3>"]}}}
+          application/json: {"list_version": 796872, "target": {"category": "local_model", "customized": false, "display_name": "Meaghan31", "enabled": false, "gateway_client": {"cimd_vendor_keys": ["<value 1>"], "client_info_names": ["<value 1>", "<value 2>"], "oauth_client_ids": ["<value 1>", "<value 2>"]}, "id": "<id>", "origin": "default", "signatures": {"binaries": ["<value 1>"], "bundle_ids": ["<value 1>"], "config_dirs": [], "process_names": ["<value 1>", "<value 2>", "<value 3>"]}}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

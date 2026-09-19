@@ -52,7 +52,7 @@ var MethodNames = [2]string{"query", "describe"}
 type AnalyticsDataset struct {
 	Name string
 	Kind string
-	// What one row represents
+	// What one row represents, as a noun
 	Grain       string
 	Description string
 	Fields      []*AnalyticsField

@@ -98,7 +98,7 @@ var DatasetType = Type("AnalyticsDataset", func() {
 	Description("A dataset and the fields it exposes. The builder is generated from this.")
 	Attribute("name", String, func() { Example("sessions") })
 	Attribute("kind", String, func() { Enum("event", "metric") })
-	Attribute("grain", String, "What one row represents", func() { Example("One row per agent session.") })
+	Attribute("grain", String, "What one row represents, as a noun", func() { Example("session") })
 	Attribute("description", String)
 	Attribute("fields", ArrayOf(FieldType))
 	Required("name", "kind", "grain", "description", "fields")

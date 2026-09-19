@@ -449,7 +449,7 @@ type AnalyticsOrderByRequestBody struct {
 type AnalyticsDatasetResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
-	// What one row represents
+	// What one row represents, as a noun
 	Grain       *string                       `form:"grain,omitempty" json:"grain,omitempty" xml:"grain,omitempty"`
 	Description *string                       `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	Fields      []*AnalyticsFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
