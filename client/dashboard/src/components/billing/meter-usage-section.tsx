@@ -248,7 +248,7 @@ export function MeterUsageSection(): JSX.Element {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Meter usage</Page.Section.Title>
+      <Page.Section.Title area="">Usage</Page.Section.Title>
       <Page.Section.Description>
         Explore storage, bandwidth, and risk-scanning volume by UTC day. Today's
         totals update as readings arrive. These usage totals are not invoice

@@ -644,6 +644,8 @@ func newStripeClient(
 
 	catalog := stripeclient.Catalog{
 		PriceIDTUM:            c.String("stripe-price-id-tum"),
+		PriceIDMCPEgress:      c.String("stripe-price-id-mcp-egress"),
+		PriceIDRiskScans:      c.String("stripe-price-id-risk-scans"),
 		PortalConfigurationID: c.String("stripe-portal-configuration-id"),
 	}
 	if err := catalog.Validate(); err != nil {

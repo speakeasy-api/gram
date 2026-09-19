@@ -400,6 +400,10 @@ type TierLimits struct {
 	AddOnBullets []string
 	// Exact USD list price per million tokens under management (optional)
 	TumPricePerMillionUsd *string
+	// Exact USD list price per million tokens scanned for risk (optional)
+	RiskScanPricePerMillionUsd *string
+	// Exact USD list price per GiB of MCP gateway egress (optional)
+	McpEgressPricePerGibUsd *string
 }
 
 // TokensUnderManagement is the result type of the usage service

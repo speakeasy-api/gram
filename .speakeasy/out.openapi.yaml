@@ -91947,6 +91947,9 @@ components:
           type: integer
           description: The number of tool calls included in the tier
           format: int64
+        mcp_egress_price_per_gib_usd:
+          type: string
+          description: Exact USD list price per GiB of MCP gateway egress (optional)
         price_per_additional_server:
           type: number
           description: The price per additional server
@@ -91955,6 +91958,9 @@ components:
           type: number
           description: The price per additional tool call
           format: double
+        risk_scan_price_per_million_usd:
+          type: string
+          description: Exact USD list price per million tokens scanned for risk (optional)
         tum_price_per_million_usd:
           type: string
           description: Exact USD list price per million tokens under management (optional)

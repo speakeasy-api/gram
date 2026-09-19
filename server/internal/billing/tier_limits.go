@@ -13,6 +13,8 @@ const (
 // provider. Each call returns independently mutable slices.
 func NewPaygTierLimits() *gen.TierLimits {
 	price := TUMPricePerMillionUSD
+	riskScanPrice := "0.99"
+	mcpEgressPrice := "20"
 	return &gen.TierLimits{
 		BasePrice:                  0,
 		IncludedToolCalls:          0,
@@ -33,7 +35,9 @@ func NewPaygTierLimits() *gen.TierLimits {
 			"Other inference billed at provider cost",
 			"Platform-initiated inference billed at provider cost",
 		},
-		AddOnBullets:          []string{},
-		TumPricePerMillionUsd: &price,
+		AddOnBullets:               []string{},
+		TumPricePerMillionUsd:      &price,
+		RiskScanPricePerMillionUsd: &riskScanPrice,
+		McpEgressPricePerGibUsd:    &mcpEgressPrice,
 	}
 }
