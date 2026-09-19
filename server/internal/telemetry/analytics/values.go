@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -48,8 +49,8 @@ func CompileValues(catalog *Catalog, organizationID, projectID string, req Value
 	if req.ToUnixNano <= req.FromUnixNano {
 		return nil, newError(ErrInvalidTimeRange, ds.Name, "to", "", "to must be after from")
 	}
-	if req.ToUnixNano-req.FromUnixNano > maxTimeRangeNanos {
-		return nil, newError(ErrInvalidTimeRange, ds.Name, "to", "", fmt.Sprintf("time range exceeds %d days", MaxTimeRangeDays))
+	if spanExceeds(req.FromUnixNano, req.ToUnixNano, ds.MaxTimeRangeNanos()) {
+		return nil, newError(ErrInvalidTimeRange, ds.Name, "to", "", fmt.Sprintf("time range exceeds %d days", ds.MaxTimeRangeDays()))
 	}
 	limit := req.Limit
 	if limit == 0 {
@@ -116,6 +117,12 @@ func (s *Service) DimensionValues(ctx context.Context, payload *gen.DimensionVal
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid_time_range: to is not an RFC 3339 time")
 	}
+	if !representable(from) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid_time_range: from is outside the years 1678 to 2262")
+	}
+	if !representable(to) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid_time_range: to is outside the years 1678 to 2262")
+	}
 	req := ValuesRequest{
 		Dataset:      payload.Dataset,
 		Dimension:    payload.Dimension,
@@ -129,7 +136,10 @@ func (s *Service) DimensionValues(ctx context.Context, payload *gen.DimensionVal
 
 	plan, err := CompileValues(s.catalog, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), req)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
+		if invalid, ok := errors.AsType[*Error](err); ok {
+			return nil, oops.E(oops.CodeBadRequest, err, "%s", invalid.Error())
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to compile dimension values query").LogError(ctx, s.logger)
 	}
 	values, err := plan.RunValues(ctx, s.ch)
 	if err != nil {

@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -30,6 +31,8 @@ func TestCompileValues(t *testing.T) {
 		{name: "measure is not a dimension", req: ValuesRequest{Dataset: "sessions", Dimension: "turn_count", FromUnixNano: testFrom, ToUnixNano: testTo}, code: ErrUnknownField},
 		{name: "limit above the maximum", req: ValuesRequest{Dataset: "sessions", Dimension: "user", FromUnixNano: testFrom, ToUnixNano: testTo, Limit: MaxValuesLimit + 1}, code: ErrLimitExceeded},
 		{name: "empty window", req: ValuesRequest{Dataset: "sessions", Dimension: "user", FromUnixNano: testTo, ToUnixNano: testFrom}, code: ErrInvalidTimeRange},
+		{name: "window beyond the dataset's retention", req: ValuesRequest{Dataset: "sessions", Dimension: "user", FromUnixNano: testFrom, ToUnixNano: testFrom + Sessions.MaxTimeRangeNanos() + 1}, code: ErrInvalidTimeRange},
+		{name: "window whose signed span wraps", req: ValuesRequest{Dataset: "sessions", Dimension: "user", FromUnixNano: math.MinInt64, ToUnixNano: math.MaxInt64}, code: ErrInvalidTimeRange},
 	}
 	for _, tc := range cases {
 		t.Run("it rejects "+tc.name, func(t *testing.T) {
