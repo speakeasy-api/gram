@@ -128,10 +128,7 @@ func (s *Service) DimensionValues(ctx context.Context, payload *gen.DimensionVal
 		Dimension:    payload.Dimension,
 		FromUnixNano: from.UnixNano(),
 		ToUnixNano:   to.UnixNano(),
-		Limit:        0,
-	}
-	if payload.Limit != nil {
-		req.Limit = *payload.Limit
+		Limit:        payload.Limit,
 	}
 
 	plan, err := CompileValues(s.catalog, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), req)

@@ -266,6 +266,13 @@ func (d *Dataset) validate() error {
 			if len(f.Operators) == 0 || len(f.Aggregations) != 0 {
 				return fmt.Errorf("catalog: dataset %q dimension %q must declare operators and no aggregations", d.Name, f.Name)
 			}
+			// Filters and value pickers compare a dimension as a string; a
+			// numeric one would need casting in both the compiler and the
+			// values query, so dimensions are held to strings until one is
+			// needed.
+			if f.Type != TypeString {
+				return fmt.Errorf("catalog: dataset %q dimension %q must be a string", d.Name, f.Name)
+			}
 			for _, op := range f.Operators {
 				switch op {
 				case OperatorEquals, OperatorIn:

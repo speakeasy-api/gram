@@ -3686,7 +3686,7 @@ examples:
   analyticsDimensionValues:
     speakeasy-default-analytics-dimension-values:
       requestBody:
-        application/json: {"dataset": "sessions", "dimension": "model", "from": "2026-12-07T17:23:32.803Z", "to": "2024-05-29T19:45:53.200Z"}
+        application/json: {"dataset": "sessions", "dimension": "model", "from": "2026-12-07T17:23:32.803Z", "limit": 50, "to": "2024-05-29T19:45:53.200Z"}
       responses:
         "200":
           application/json: {"dataset": "<value>", "dimension": "<value>", "values": [{"count": 831783, "value": "<value>"}]}
@@ -3697,7 +3697,7 @@ examples:
   analyticsQuery:
     speakeasy-default-analytics-query:
       requestBody:
-        application/json: {"dataset": "sessions", "filters": [{"field": "surface", "values": ["<value 1>", "<value 2>", "<value 3>"], "operator": "in"}], "from": "2026-09-01T00:00:00Z", "measures": [{"alias": "tool_calls", "field": "tool_call_count", "op": "sum"}], "order_by": [{"direction": "desc", "measure": "tool_calls"}], "to": "2026-09-08T00:00:00Z", "ungrouped": false}
+        application/json: {"dataset": "sessions", "filters": [{"field": "surface", "values": ["<value 1>", "<value 2>", "<value 3>"], "operator": "in"}], "from": "2026-09-01T00:00:00Z", "limit": 100, "measures": [{"alias": "tool_calls", "field": "tool_call_count", "op": "sum"}], "order_by": [{"direction": "desc", "measure": "tool_calls"}], "to": "2026-09-08T00:00:00Z", "ungrouped": false}
       responses:
         "200":
           application/json: {"dataset": "<value>", "plan": "<value>", "rows": [{"key": "<value>", "key1": "<value>", "key2": "<value>"}, {"key": "<value>", "key1": "<value>", "key2": "<value>"}]}

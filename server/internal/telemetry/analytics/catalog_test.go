@@ -58,6 +58,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		mutate func(*Dataset)
 		want   string
 	}{
+		{name: "it rejects a numeric dimension", mutate: func(d *Dataset) { d.Fields[0].Type = TypeInt64 }, want: "must be a string"},
 		{name: "it rejects a dimension with aggregations", mutate: func(d *Dataset) { d.Fields[0].Aggregations = []Aggregation{AggregationSum} }, want: "must declare operators and no aggregations"},
 		{name: "it rejects a measure with operators", mutate: func(d *Dataset) {
 			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: equalsIn, Aggregations: []Aggregation{AggregationSum}, Expr: "n"}

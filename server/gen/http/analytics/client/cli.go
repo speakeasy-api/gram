@@ -53,15 +53,11 @@ func BuildQueryPayload(analyticsQueryBody string, analyticsQuerySessionToken str
 				}
 			}
 		}
-		if body.Limit != nil {
-			if *body.Limit < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))
-			}
+		if body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1, true))
 		}
-		if body.Limit != nil {
-			if *body.Limit > 1000 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1000, false))
-			}
+		if body.Limit > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1000, false))
 		}
 		if err != nil {
 			return nil, err
@@ -124,6 +120,12 @@ func BuildQueryPayload(analyticsQueryBody string, analyticsQuerySessionToken str
 		}
 	}
 	{
+		var zero int
+		if v.Limit == zero {
+			v.Limit = 100
+		}
+	}
+	{
 		var zero bool
 		if v.Ungrouped == zero {
 			v.Ungrouped = false
@@ -169,15 +171,11 @@ func BuildDimensionValuesPayload(analyticsDimensionValuesBody string, analyticsD
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
-		if body.Limit != nil {
-			if *body.Limit < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))
-			}
+		if body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1, true))
 		}
-		if body.Limit != nil {
-			if *body.Limit > 200 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 200, false))
-			}
+		if body.Limit > 200 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 200, false))
 		}
 		if err != nil {
 			return nil, err
@@ -201,6 +199,12 @@ func BuildDimensionValuesPayload(analyticsDimensionValuesBody string, analyticsD
 		From:      body.From,
 		To:        body.To,
 		Limit:     body.Limit,
+	}
+	{
+		var zero int
+		if v.Limit == zero {
+			v.Limit = 50
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

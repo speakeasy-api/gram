@@ -33,7 +33,7 @@ type QueryRequestBody struct {
 	// newest first.
 	OrderBy []*AnalyticsOrderByRequestBody `form:"order_by,omitempty" json:"order_by,omitempty" xml:"order_by,omitempty"`
 	// Maximum rows. Defaults to 100, at most 1000.
-	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+	Limit int `form:"limit" json:"limit" xml:"limit"`
 	// Return rows at the dataset's grain instead of aggregating.
 	Ungrouped bool `form:"ungrouped" json:"ungrouped" xml:"ungrouped"`
 }
@@ -50,7 +50,7 @@ type DimensionValuesRequestBody struct {
 	// End of the half-open window [from, to), ISO 8601
 	To string `form:"to" json:"to" xml:"to"`
 	// Maximum values. Defaults to 50, at most 200.
-	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+	Limit int `form:"limit" json:"limit" xml:"limit"`
 }
 
 // QueryResponseBody is the type of the "analytics" service "query" endpoint
@@ -735,6 +735,12 @@ func NewQueryRequestBody(p *analytics.QueryPayload) *QueryRequestBody {
 		}
 	}
 	{
+		var zero int
+		if body.Limit == zero {
+			body.Limit = 100
+		}
+	}
+	{
 		var zero bool
 		if body.Ungrouped == zero {
 			body.Ungrouped = false
@@ -752,6 +758,12 @@ func NewDimensionValuesRequestBody(p *analytics.DimensionValuesPayload) *Dimensi
 		From:      p.From,
 		To:        p.To,
 		Limit:     p.Limit,
+	}
+	{
+		var zero int
+		if body.Limit == zero {
+			body.Limit = 50
+		}
 	}
 	return body
 }

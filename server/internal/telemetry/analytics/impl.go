@@ -152,14 +152,11 @@ func requestFromPayload(payload *gen.QueryPayload) (Request, error) {
 		Measures:     make([]Measure, 0, len(payload.Measures)),
 		Filters:      make([]Filter, 0, len(payload.Filters)),
 		OrderBy:      make([]OrderBy, 0, len(payload.OrderBy)),
-		Limit:        0,
+		Limit:        payload.Limit,
 		Ungrouped:    payload.Ungrouped,
 	}
 	if payload.Grain != nil {
 		req.Grain = TimeGrain(*payload.Grain)
-	}
-	if payload.Limit != nil {
-		req.Limit = *payload.Limit
 	}
 	for _, m := range payload.Measures {
 		if m == nil {

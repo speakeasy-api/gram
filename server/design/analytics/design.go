@@ -66,6 +66,7 @@ var QueryPayload = Type("AnalyticsQueryPayload", func() {
 	Attribute("filters", ArrayOf(Filter), "Filters, ANDed. At most 100 values per filter.")
 	Attribute("order_by", ArrayOf(OrderBy), "Sort for a grouped result, by measure alias. Ungrouped rows are always newest first.")
 	Attribute("limit", Int, "Maximum rows. Defaults to 100, at most 1000.", func() {
+		Default(100)
 		Minimum(1)
 		Maximum(1000)
 	})
@@ -187,6 +188,7 @@ var _ = Service("analytics", func() {
 				Format(FormatDateTime)
 			})
 			Attribute("limit", Int, "Maximum values. Defaults to 50, at most 200.", func() {
+				Default(50)
 				Minimum(1)
 				Maximum(200)
 			})

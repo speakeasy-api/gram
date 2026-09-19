@@ -1179,7 +1179,9 @@ func NewQueryPayload(body *QueryRequestBody, sessionToken *string, projectSlugIn
 		From:    *body.From,
 		To:      *body.To,
 		Grain:   body.Grain,
-		Limit:   body.Limit,
+	}
+	if body.Limit != nil {
+		v.Limit = *body.Limit
 	}
 	if body.Ungrouped != nil {
 		v.Ungrouped = *body.Ungrouped
@@ -1220,6 +1222,9 @@ func NewQueryPayload(body *QueryRequestBody, sessionToken *string, projectSlugIn
 			v.OrderBy[i] = unmarshalAnalyticsOrderByRequestBodyToAnalyticsAnalyticsOrderBy(val)
 		}
 	}
+	if body.Limit == nil {
+		v.Limit = 100
+	}
 	if body.Ungrouped == nil {
 		v.Ungrouped = false
 	}
@@ -1246,7 +1251,12 @@ func NewDimensionValuesPayload(body *DimensionValuesRequestBody, sessionToken *s
 		Dimension: *body.Dimension,
 		From:      *body.From,
 		To:        *body.To,
-		Limit:     body.Limit,
+	}
+	if body.Limit != nil {
+		v.Limit = *body.Limit
+	}
+	if body.Limit == nil {
+		v.Limit = 50
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

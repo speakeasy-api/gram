@@ -30,6 +30,7 @@ func TestCompileValues(t *testing.T) {
 		{name: "unknown dataset", req: ValuesRequest{Dataset: "x", Dimension: "user", FromUnixNano: testFrom, ToUnixNano: testTo}, code: ErrUnknownDataset},
 		{name: "measure is not a dimension", req: ValuesRequest{Dataset: "sessions", Dimension: "turn_count", FromUnixNano: testFrom, ToUnixNano: testTo}, code: ErrUnknownField},
 		{name: "limit above the maximum", req: ValuesRequest{Dataset: "sessions", Dimension: "user", FromUnixNano: testFrom, ToUnixNano: testTo, Limit: MaxValuesLimit + 1}, code: ErrLimitExceeded},
+		{name: "negative limit", req: ValuesRequest{Dataset: "sessions", Dimension: "user", FromUnixNano: testFrom, ToUnixNano: testTo, Limit: -1}, code: ErrLimitExceeded},
 		{name: "empty window", req: ValuesRequest{Dataset: "sessions", Dimension: "user", FromUnixNano: testTo, ToUnixNano: testFrom}, code: ErrInvalidTimeRange},
 		{name: "window beyond the dataset's retention", req: ValuesRequest{Dataset: "sessions", Dimension: "user", FromUnixNano: testFrom, ToUnixNano: testFrom + Sessions.MaxTimeRangeNanos() + 1}, code: ErrInvalidTimeRange},
 		{name: "window whose signed span wraps", req: ValuesRequest{Dataset: "sessions", Dimension: "user", FromUnixNano: math.MinInt64, ToUnixNano: math.MaxInt64}, code: ErrInvalidTimeRange},
@@ -68,7 +69,7 @@ func TestDimensionValues(t *testing.T) {
 	from, to := base.Add(-time.Hour).Format(time.RFC3339), base.Add(time.Hour).Format(time.RFC3339)
 
 	result, err := ti.service.DimensionValues(ctx, &gen.DimensionValuesPayload{
-		Dataset: "sessions", Dimension: "model", From: from, To: to, Limit: nil, SessionToken: nil, ProjectSlugInput: nil,
+		Dataset: "sessions", Dimension: "model", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "sessions", result.Dataset)
@@ -82,7 +83,7 @@ func TestDimensionValues(t *testing.T) {
 	t.Run("it names an unknown dimension", func(t *testing.T) {
 		t.Parallel()
 		_, err := ti.service.DimensionValues(ctx, &gen.DimensionValuesPayload{
-			Dataset: "sessions", Dimension: "department", From: from, To: to, Limit: nil, SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "sessions", Dimension: "department", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
 		})
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "unknown_field")
@@ -91,7 +92,7 @@ func TestDimensionValues(t *testing.T) {
 	t.Run("it requires an authenticated project", func(t *testing.T) {
 		t.Parallel()
 		_, err := ti.service.DimensionValues(t.Context(), &gen.DimensionValuesPayload{
-			Dataset: "sessions", Dimension: "model", From: from, To: to, Limit: nil, SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "sessions", Dimension: "model", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
 		})
 		requireOopsCode(t, err, oops.CodeUnauthorized)
 	})

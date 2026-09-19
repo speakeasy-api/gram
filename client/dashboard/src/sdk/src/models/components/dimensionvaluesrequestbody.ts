@@ -32,7 +32,7 @@ export type DimensionValuesRequestBody$Outbound = {
   dataset: string;
   dimension: string;
   from: string;
-  limit?: number | undefined;
+  limit: number;
   to: string;
 };
 
@@ -44,7 +44,7 @@ export const DimensionValuesRequestBody$outboundSchema: z.ZodMiniType<
   dataset: z.string(),
   dimension: z.string(),
   from: z.pipe(z.date(), z.transform(v => v.toISOString())),
-  limit: z.optional(z.int()),
+  limit: z._default(z.int(), 50),
   to: z.pipe(z.date(), z.transform(v => v.toISOString())),
 });
 

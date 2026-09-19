@@ -92,7 +92,7 @@ export type AnalyticsQueryPayload$Outbound = {
   filters?: Array<AnalyticsFilter$Outbound> | undefined;
   from: string;
   grain?: string | undefined;
-  limit?: number | undefined;
+  limit: number;
   measures?: Array<AnalyticsMeasure$Outbound> | undefined;
   order_by?: Array<AnalyticsOrderBy$Outbound> | undefined;
   to: string;
@@ -110,7 +110,7 @@ export const AnalyticsQueryPayload$outboundSchema: z.ZodMiniType<
     filters: z.optional(z.array(AnalyticsFilter$outboundSchema)),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     grain: z.optional(Grain$outboundSchema),
-    limit: z.optional(z.int()),
+    limit: z._default(z.int(), 100),
     measures: z.optional(z.array(AnalyticsMeasure$outboundSchema)),
     orderBy: z.optional(z.array(AnalyticsOrderBy$outboundSchema)),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
