@@ -7,8 +7,9 @@ import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { CONTROL_HEIGHT } from "@/components/ui/Toolbar";
-import { useGetSpendBreakdown } from "@gram/client/react-query/getSpendBreakdown.js";
-import { keepPreviousData } from "@tanstack/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { buildGetSpendBreakdownQuery } from "@gram/client/react-query/getSpendBreakdown.js";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BillingCyclePicker } from "./billing-cycle-picker";
@@ -90,7 +91,8 @@ const spendColumns: Column<SpendProduct>[] = [
   },
 ];
 
-export function SpendBreakdownSection(): JSX.Element {
+export function SpendBreakdownSection(): JSX.Element | null {
+  const client = useGramContext();
   const [selectedProductIds, setSelectedProductIds] =
     useState<SpendProductID[]>(ALL_PRODUCT_IDS);
   const [knownCycles, setKnownCycles] = useState<{ from: Date; to: Date }[]>(
@@ -98,15 +100,15 @@ export function SpendBreakdownSection(): JSX.Element {
   );
   const periodState = useMeterPeriod(knownCycles);
   const period = periodState.period;
-  const query = useGetSpendBreakdown(
-    { ...periodState.requestPeriod },
-    undefined,
-    {
-      throwOnError: false,
-      placeholderData: keepPreviousData,
-      select: validateSpendBreakdown,
-    },
-  );
+  const query = useQuery({
+    ...buildGetSpendBreakdownQuery(
+      client,
+      periodState.requestPeriod ?? undefined,
+    ),
+    throwOnError: false,
+    placeholderData: keepPreviousData,
+    select: validateSpendBreakdown,
+  });
   const data: SpendBreakdownData | undefined = query.data;
 
   useEffect(() => {
