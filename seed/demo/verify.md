@@ -286,7 +286,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     must not increase API usage, while the incremental summary records all 873
     deliveries. Run the seed twice and repeat.
 
-19. **Billing spend availability** — in the enterprise demo organization, open
+20. **Billing spend availability** — in the enterprise demo organization, open
     Billing. The spend heading, controls, chart, and product table must be absent,
     while the ordinary usage explorer stays visible. `usage.getSpendBreakdown`
     must return `availability: "unsupported_plan"`, `products: []`, and
