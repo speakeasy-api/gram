@@ -110,10 +110,10 @@ func TestGetSpendBreakdownValidatesRangeForUnsupportedPlan(t *testing.T) {
 	setTestOrganizationAccountType(t, db, organizationID, billing.TierEnterprise)
 	service.meterReadConn = nil
 	service.now = func() time.Time { return time.Date(2026, time.April, 20, 10, 0, 0, 0, time.UTC) }
-	from := "not-a-date"
+	from, to := "not-a-date", "2026-04-20T00:00:00Z"
 	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID))
 
-	_, err := service.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{From: &from, To: nil})
+	_, err := service.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{From: &from, To: &to})
 
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
