@@ -309,8 +309,12 @@ func TestExportJSONAndMarkdownFromTheGlobalCatalog(t *testing.T) {
 	fetched := fixtureNow.Add(-time.Hour)
 	ready := insertIssuer(t, fixture.conn, issuerFixture{issuer: "https://mcp.example.test", name: "Example MCP", grants: idjagGrants, profiles: idjagProfiles, fetchedAt: fetched})
 	clientID := insertClient(t, fixture.conn, ready, "", "global-client", "")
-	_, err := fixture.conn.Exec(t.Context(), "UPDATE remote_session_clients SET resource_identifier = $1 WHERE id = $2", "https://mcp.example.test/mcp", clientID)
+	updated, err := testrepo.New(fixture.conn).SetGlobalRemoteSessionClientResourceIdentifierFixture(t.Context(), testrepo.SetGlobalRemoteSessionClientResourceIdentifierFixtureParams{
+		ResourceIdentifier: pgtype.Text{String: "https://mcp.example.test/mcp", Valid: true},
+		ID:                 clientID,
+	})
 	require.NoError(t, err)
+	require.Equal(t, int64(1), updated)
 	insertIssuer(t, fixture.conn, issuerFixture{issuer: "https://orphan.example.test", name: "Orphan", grants: idjagGrants, profiles: idjagProfiles, fetchedAt: fetched})
 	insertIssuer(t, fixture.conn, issuerFixture{issuer: "https://plain.example.test", name: "Plain OAuth", grants: []string{"authorization_code"}, fetchedAt: fetched})
 

@@ -193,7 +193,9 @@ describe("PlatformAdminOinManifest", () => {
     cleanup();
     // Drain downloadText's deferred revocations while URL mocks still exist,
     // even when a test assertion fails before it can await those timers.
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
     globals.click?.mockRestore();
     restoreObjectURL();
   });
