@@ -45,6 +45,7 @@ func TestGeneratedAdminRoutes_ExposeExactMigratedMounts(t *testing.T) {
 		"SetStripeCustomer":                     "POST /admin/organization.setStripeCustomer",
 		"OpenOrganizationInDashboard":           "POST /admin/organization.open-dashboard",
 		"GetMeterUsage":                         "GET /admin/organizations.getMeterUsage",
+		"GetSpendBreakdown":                     "GET /admin/organization.spendBreakdown",
 	}
 	got := map[string]string{}
 	for _, mount := range server.Mounts {
@@ -107,6 +108,7 @@ func TestGeneratedAdminRoutes_AuthenticateBeforeDecode(t *testing.T) {
 		"set Stripe customer": httptest.NewRequest(http.MethodPost, "/admin/organization.setStripeCustomer", bytes.NewBufferString(`{`)),
 		"get Stripe customer": httptest.NewRequest(http.MethodGet, "/admin/organization.stripeCustomer", nil),
 		"meter usage":         httptest.NewRequest(http.MethodGet, "/admin/organizations.getMeterUsage", nil),
+		"spend breakdown":     httptest.NewRequest(http.MethodGet, "/admin/organization.spendBreakdown", nil),
 		"analysis trigger":    httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisTrigger", bytes.NewBufferString(`{`)),
 		"open dashboard":      httptest.NewRequest(http.MethodPost, "/admin/organization.open-dashboard", nil),
 	} {

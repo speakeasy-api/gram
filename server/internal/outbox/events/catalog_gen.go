@@ -60,6 +60,7 @@ var All = []outbox.EventRegistration{
 	PlatformMcpRegistrationV1,
 	PluginV1,
 	ProjectV1,
+	QueryV1,
 	RemoteMcpServerHeaderV1,
 	RemoteMcpServerV1,
 	RemoteSessionClientV1,

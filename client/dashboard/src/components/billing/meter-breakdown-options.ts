@@ -47,7 +47,7 @@ const PROJECT: MeterBreakdownOption = {
 
 export const METER_FAMILIES: Record<MeterFamily, MeterFamilyDefinition> = {
   agent_session_storage: {
-    label: "Tokens under management",
+    label: "Stored sessions",
     description:
       "Stored-message workload measured in tokens, not provider input or output tokens.",
     defaultBreakdown: "total",

@@ -759,6 +759,8 @@ tags:
     description: Human-only management of first-class agent principals.
   - name: aiIntegrations
     description: Manage organization-level AI provider integrations.
+  - name: analytics
+    description: Query agent session data by dataset and field, never by table or SQL. The catalog describe serves is the contract.
   - name: assets
     description: Manages assets used by Gram projects.
   - name: organizationAssets
@@ -789,6 +791,8 @@ tags:
     description: Manage custom domains for gram.
   - name: environments
     description: Managing toolset environments.
+  - name: explore
+    description: 'Queries: the saved questions Explore keeps. Explore''s only server-side surface; everything it shows comes from the analytics service.'
   - name: externalCredentials
     description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
   - name: externalKeys

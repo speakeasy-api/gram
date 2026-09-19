@@ -322,11 +322,15 @@ GRAM_RISK_FINGERPRINT_PEPPER_KEYRING = '{"current": "v1", "keys": {"v1": "bmvSy6
 ## Stripe configuration ##
 ##########################
 ## PAYG self-serve billing. Run `mise run stripe:setup` to provision and
-## validate the sandbox TUM meter, product, and metered price. The task writes
-## the catalog values into mise.local.toml. Requires a Stripe sandbox API key.
+## validate the sandbox TUM meter, product, and metered price, and resolve
+## existing monthly metered prices by lookup keys payg-mcp-egress and
+## payg-risk-scans. The task writes catalog values into mise.local.toml.
+## Requires a Stripe sandbox API key.
 STRIPE_API_KEY = { default = "unset" }
 STRIPE_WEBHOOK_SECRET = { default = "unset" }
 STRIPE_PRICE_ID_TUM = { default = "" }
+STRIPE_PRICE_ID_MCP_EGRESS = { default = "" }
+STRIPE_PRICE_ID_RISK_SCANS = { default = "" }
 STRIPE_METER_ID_TUM = { default = "" }
 STRIPE_METER_EVENT_NAME = { default = "tum" }
 STRIPE_PORTAL_CONFIGURATION_ID = { default = "" }

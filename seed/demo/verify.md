@@ -286,6 +286,66 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     must not increase API usage, while the incremental summary records all 873
     deliveries. Run the seed twice and repeat.
 
+20. **Billing spend availability** — in the enterprise demo organization, open
+    Billing. The spend heading, controls, chart, and product table must be absent,
+    while the ordinary usage explorer stays visible. `usage.getSpendBreakdown`
+    must return `availability: "unsupported_plan"`, `products: []`, and
+    `total_cost_usd: "0"` with reporting-window metadata.
+    For the available visualization, use a PAYG organization in the local stack
+    only; restore any temporary local tier change afterward. Never change the
+    shared demo tier to exercise this path. Select a custom trailing 14-day
+    window and confirm `availability: "available"` with non-zero estimated costs
+    for storage, per-scanner risk, and MCP egress only; inference must not appear.
+    Compare quantities against `billing_meter_daily_summaries` ordinary-usage
+    totals (including physical duplicate deliveries). Apply current PAYG rates
+    and verify exact product costs sum to the response total; display rounds only
+    at presentation. A PAYG period with no usage remains `available`, with three
+    zero-filled product series and a visible zero-spend visualization.
+    Switch daily/weekly/monthly and cumulative modes, preserving the total.
+    Remove a product and confirm its stack, table row, and cost contribution
+    disappear together; clear the selection and confirm the selection prompt.
+    Restore all products, check the current in-progress bucket, and select an
+    empty historical range. Check desktop and mobile layouts and confirm Usage,
+    Rate, and Estimated cost values share their respective column's right edge.
+    Repeat after reseeding. Local rewritten-seed checks alone do not qualify
+    this shared-demo row for `[x]`.
+
+21. **Admin billing spend by product** — sign in to the admin dashboard and open
+    the enterprise demo organization's **Billing** page without impersonation or
+    changing its account type. Select a trailing 14-day window. The spend section
+    and `/admin/organization.spendBreakdown` must report non-zero storage,
+    per-scanner risk, and MCP egress estimates from the existing meter fixtures,
+    even without a Stripe subscription. These are current PAYG list-price
+    comparisons, not the organization's actual invoice or contracted charges.
+    Open both `/organizations/<ORG_ID>/billing` and
+    `/organizations/<ORG_SLUG>/billing` with the same explicit date range. Call
+    the spend API with each identifier too: the reports must match apart from
+    `queried_at`, and both routes must render the same product table.
+    Check that API product costs sum exactly to the total, displayed USD amounts
+    round to two decimals (nonzero amounts rounding to zero show `<$0.01`), and
+    ingress and inference are excluded. Changing the
+    product selection must update the chart, table, and selected total together.
+    Storage is blue, risk scanning purple, and MCP amber in both the spend and
+    usage graphs, including cumulative views and light/dark themes. Check
+    billing-cycle selection, custom dates, an empty historical range,
+    refresh/error recovery, and desktop/mobile layouts. Delay and then fail a
+    new-range request: retain the previous chart, table, and total while loading
+    and after failure; retry must replace them with the requested range.
+    Switch organizations and confirm no previous organization's values remain.
+    An unauthenticated request must be rejected; the customer-facing enterprise
+    spend endpoint must still return `unsupported_plan`.
+
+    Verification recorded 2026-09-19 on the local admin UI against the
+    shared-demo tenant, not the rewritten developer organization. Enterprise
+    tier and absence of a Stripe subscription were retained. Browser checks
+    covered selection, date ranges, grouping, cumulative mode, empty states,
+    retry, organization switching, mobile width, and both themes; API checks
+    covered exact arithmetic, dense buckets, invalid bounds, missing
+    organizations, and authentication. ID/slug API reports and rendered tables
+    matched; delayed and failed range changes retained the prior estimate and
+    recovered on retry.
+    [Visual evidence on PR #6602](https://github.com/speakeasy-api/gram/pull/6602#issuecomment-5742380327).
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns

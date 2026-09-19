@@ -1847,6 +1847,8 @@ FROM (
 
 -- Meter usage is independent of telemetry-derived invoice estimates. Every
 -- meter has 96 immutable facts across 12 days, with enough facets for a remainder.
+-- Product-specific volumes keep all three estimated-spend series visible at
+-- PAYG list prices without changing the number or identity of the readings.
 INSERT INTO billing_meter_readings_by_time
   (id, organization_id, project_id, meter_id, operation_id, unit,
    measurement_method, value, occurred_at, produced_at, corrects_reading_id, attributes)
@@ -1860,7 +1862,7 @@ SELECT
   if(meter_index IN (2, 3), 'bytes', 'stokens'),
   if(meter_index IN (2, 3), 'http_body_bytes', 'tiktoken_o200k_base'),
   toInt64((1000 + cityHash64('meter-volume', number) % 9000)
-    * if(meter_index IN (2, 3), 64, 1)),
+    * multiIf(meter_index IN (2, 3), 2048, meter_index = 1, 100, 10)),
   least(toDateTime64(toStartOfDay(now('UTC')), 9, 'UTC') - toIntervalDay(intDiv(sample, 8))
     + toIntervalHour(8 + sample % 8), now64(9, 'UTC') - toIntervalMinute(30)),
   now64(9, 'UTC'),
