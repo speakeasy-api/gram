@@ -169,10 +169,14 @@ export function XaaConfirmBar({
               </a>
             ) : (
               "Okta Applications"
-            )}
-            , select the resource app, then go to Resource Server → Cross App
-            Access (XAA). Copy Issuer URL, not the separate Audience/tenant ID.
-            Use the HTTPS address from that field, not the MCP server URL.
+            )}{" "}
+            and select the resource app: the app you added from the Okta
+            Integration Network for the service this MCP server connects to,
+            which Speakeasy is being allowed to reach through Cross App Access.
+            It is not one of your Speakeasy apps. Go to Resource Server → Cross
+            App Access (XAA); if it is disabled there, enable it first. Copy
+            Issuer URL, not the separate Audience/tenant ID. Use the HTTPS
+            address from that field, not the MCP server URL.
           </FieldDescription>
           {trimmed !== "" && audience === undefined && (
             <p
@@ -222,7 +226,7 @@ export function XaaConfirmBar({
               ? recordedAppId
                 ? "No applications are available. Keep the recorded app, or sync the Applications tab to pick another."
                 : "No applications are available. You can confirm without one, or sync the Applications tab to pick one."
-              : "Choose the Okta app you used for this setup. This label is saved for reference."}
+              : "Choose the resource app you copied the Issuer URL from, not a Speakeasy app. This label is saved for reference."}
           </FieldDescription>
           {appUnavailable && (
             <Text small role="alert">

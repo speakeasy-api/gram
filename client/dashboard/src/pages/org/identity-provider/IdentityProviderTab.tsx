@@ -49,7 +49,8 @@ export function IdentityProviderTab({
               </li>
               <li>
                 In Okta, review and reuse an existing connection from your AI
-                agent to the resource application, or create one if needed.
+                agent to each resource app (the Okta Integration Network app for
+                the service an MCP server connects to), or create one if needed.
               </li>
               <li>
                 Return to Speakeasy to record the settings you configured in
