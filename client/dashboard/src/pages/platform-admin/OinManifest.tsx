@@ -129,9 +129,12 @@ export default function PlatformAdminOinManifest(): JSX.Element {
             OIN Cross App Access manifest
           </Page.Section.Title>
           <Page.Section.Description>
-            The Speakeasy platform catalog for review in Okta&apos;s OIN Wizard.
-            Nothing here is customer data: only global issuers and global
-            clients are exported.
+            To appear in Okta&apos;s app catalog (the Okta Integration Network,
+            or OIN) as an app that can use Cross App Access, Speakeasy has to
+            tell Okta which services it connects to on a user&apos;s behalf.
+            This page builds that list from our platform-wide configuration so
+            it can be copied into Okta&apos;s submission form, the OIN Wizard.
+            It contains no customer data.
           </Page.Section.Description>
           <Page.Section.Body>
             <StrictPlatformAdminGate>
@@ -206,6 +209,35 @@ function ManifestView(): JSX.Element {
 
   return (
     <div className="space-y-8">
+      <Alert variant="info" alignTop>
+        <div className="min-w-0 space-y-1">
+          <Text variant="body" className="font-medium">
+            How to use this page
+          </Text>
+          <ol className="list-decimal space-y-1 pl-5">
+            <li>
+              <Text small>
+                Check that every service below is marked Catalog ready. A
+                service that is Not ready lists what is still missing from our
+                configuration.
+              </Text>
+            </li>
+            <li>
+              <Text small>
+                Download the manifest and copy its values into the OIN Wizard
+                when submitting or updating the Speakeasy listing.
+              </Text>
+            </li>
+            <li>
+              <Text small>
+                Run Okta&apos;s own checks in the wizard. This page only reads
+                our configuration; it does not test anything against Okta.
+              </Text>
+            </li>
+          </ol>
+        </div>
+      </Alert>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Text muted small>
           Generated {new Date(manifest.generated_at).toLocaleString()} ·
@@ -234,22 +266,22 @@ function ManifestView(): JSX.Element {
 
       <MetricCard.Group>
         <MetricCard
-          label="Registrations"
+          label="Services"
           value={manifest.summary.registrations}
           tone="neutral"
-          description="Global issuers advertising the ID-JAG profile."
+          description="Services whose sign-in server says it accepts Cross App Access (the ID-JAG grant)."
         />
         <MetricCard
           label="Catalog ready"
           value={manifest.summary.ready}
           tone={manifest.summary.ready > 0 ? "success" : "neutral"}
-          description="Pairs with no catalog blockers."
+          description="Services with everything Okta needs already configured."
         />
         <MetricCard
           label="Not ready"
           value={manifest.summary.blocked}
           tone={manifest.summary.blocked > 0 ? "warning" : "neutral"}
-          description="Pairs with unresolved catalog blockers."
+          description="Services still missing a value. Each one is listed below."
         />
       </MetricCard.Group>
 
@@ -257,9 +289,9 @@ function ManifestView(): JSX.Element {
         <Alert variant="warning" alignTop>
           <div className="min-w-0 space-y-2">
             <Text variant="body" className="font-medium">
-              Not ready: {blocked.length} registration
-              {blocked.length === 1 ? "" : "s"} still carr
-              {blocked.length === 1 ? "ies" : "y"} blockers
+              Not ready: {blocked.length} service
+              {blocked.length === 1 ? "" : "s"} still need
+              {blocked.length === 1 ? "s" : ""} configuration
             </Text>
             <ul className="list-disc space-y-1 pl-5" aria-label="Blockers">
               {blocked.map((registration) => (
@@ -303,7 +335,7 @@ function ManifestView(): JSX.Element {
 
       <AdminSection
         title="Requesting app"
-        description="Configured through GRAM_OIN_LISTING_NAME and GRAM_OIN_LISTING_ORG_DOMAIN; unset values render as unset."
+        description="How Speakeasy itself appears in the listing. Okta calls the app that asks for access the requesting app. Configured through GRAM_OIN_LISTING_NAME and GRAM_OIN_LISTING_ORG_DOMAIN; unset values render as unset."
       >
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 px-4 py-3 text-sm">
           <dt className="text-muted-foreground">Listing name</dt>
@@ -324,8 +356,8 @@ function ManifestView(): JSX.Element {
       </AdminSection>
 
       <AdminSection
-        title="Resource registrations"
-        description="One row per global ID-JAG issuer and the global client Speakeasy presents to it."
+        title="Services Speakeasy can reach"
+        description="One row per service (Okta calls these resource apps): its sign-in server, and the client ID Speakeasy is registered under there."
       >
         <RegistrationsTable registrations={manifest.resource_registrations} />
       </AdminSection>
