@@ -30,6 +30,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import {
   hasRevealableEvent,
   REVEAL_DENIED_REASON,
+  REVEAL_DENIED_TOOLTIP,
   REVEAL_SCOPE,
   useUnmaskedMatch,
 } from "./unmask";
@@ -325,7 +326,7 @@ function LockedRedactedMatch({
   wrap?: boolean;
 }): JSX.Element {
   return (
-    <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+    <SimpleTooltip tooltip={REVEAL_DENIED_TOOLTIP}>
       <span
         className={cn(
           "inline-flex max-w-full min-w-0 gap-1 text-xs",
@@ -400,7 +401,7 @@ export function EventMatchDialog({
     if (summary) {
       return (
         <span className="flex min-w-0 items-center gap-1.5">
-          <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+          <SimpleTooltip tooltip={REVEAL_DENIED_TOOLTIP}>
             <Lock
               role="img"
               aria-label={REVEAL_DENIED_REASON}

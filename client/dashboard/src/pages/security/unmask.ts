@@ -10,6 +10,17 @@ export const REVEAL_SCOPE: Scope = "chat:read";
 export const REVEAL_DENIED_REASON =
   "You need the chat:read scope to reveal flagged values.";
 
+/** Tooltip for a value that can never be revealed in place: says why, then
+ * points at the one thing the viewer *can* do — open the session and read the
+ * message the finding was flagged in. */
+export const REVEAL_DENIED_TOOLTIP = `${REVEAL_DENIED_REASON} Open the session to see the message this was found in.`;
+
+/** What activating a findings-list row does. The evidence cell owns its own
+ * reveal affordance, so the row needs to read as "open the session at this
+ * finding" rather than as an unlabelled click target. */
+export const OPEN_AT_FINDING_HINT =
+  "Open the session transcript at this finding's message";
+
 // The server redacts an absent match to this exact sentinel (no sha segment,
 // unlike a real fingerprint). A prompt-based policy finding records the judge's
 // verdict rather than a span of the message, so it lands here: there is no

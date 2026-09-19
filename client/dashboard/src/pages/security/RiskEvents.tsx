@@ -41,6 +41,7 @@ import {
   RevealAllToggle,
   RuleLabel,
 } from "./risk-ui";
+import { OPEN_AT_FINDING_HINT } from "./unmask";
 import {
   isJudgeSource,
   isShadowMcpSource,
@@ -167,6 +168,9 @@ export default function RiskEvents(): JSX.Element {
     featuresQuery.data?.logsEnabled === false;
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
+  // The evidence row the transcript was opened from, so the panel can point at
+  // that finding's message instead of the session's first one.
+  const selectedFindingId = searchParams.get("finding_id");
   const containerRef = useRef<HTMLDivElement>(null);
   const headerMeasure = useMeasuredHeight<HTMLDivElement>();
 
@@ -194,8 +198,8 @@ export default function RiskEvents(): JSX.Element {
     return { from: undefined, to: undefined };
   }, [values.date]);
 
-  const setSelectedChatId = useCallback(
-    (chatId: string | null) => {
+  const setSelectedChat = useCallback(
+    (chatId: string | null, findingId?: string) => {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -204,12 +208,24 @@ export default function RiskEvents(): JSX.Element {
           } else {
             next.delete("chat_id");
           }
+          if (chatId && findingId) {
+            next.set("finding_id", findingId);
+          } else {
+            next.delete("finding_id");
+          }
           return next;
         },
         { replace: true },
       );
     },
     [setSearchParams],
+  );
+  const openFinding = useCallback(
+    (result: RiskResult) => {
+      if (!result.chatId) return;
+      setSelectedChat(result.chatId, result.id);
+    },
+    [setSelectedChat],
   );
 
   const { data: policiesData, isLoading: policiesLoading } =
@@ -486,8 +502,9 @@ export default function RiskEvents(): JSX.Element {
         detail={
           <ChatDetailSheet
             chatId={selectedChatId}
-            onClose={() => setSelectedChatId(null)}
-            onDelete={() => setSelectedChatId(null)}
+            onClose={() => setSelectedChat(null)}
+            onDelete={() => setSelectedChat(null)}
+            focusedFindingId={selectedFindingId ?? undefined}
             riskFocus
           />
         }
@@ -503,7 +520,7 @@ export default function RiskEvents(): JSX.Element {
           policyNameById={policyNameById}
           policyScoreById={policyScoreById}
           scrollRef={containerRef}
-          onSelectChat={setSelectedChatId}
+          onOpenFinding={openFinding}
           selection={selection}
           onDismiss={(r) => dismiss([r])}
           onSetupExclusion={(r) => exclusionRule.open([r])}
@@ -583,7 +600,7 @@ function RiskEventsRows({
   policyNameById,
   policyScoreById,
   scrollRef,
-  onSelectChat,
+  onOpenFinding,
   selection,
   onDismiss,
   onSetupExclusion,
@@ -594,7 +611,7 @@ function RiskEventsRows({
   policyNameById: Map<string, string>;
   policyScoreById: Map<string, number>;
   scrollRef: RefObject<HTMLDivElement | null>;
-  onSelectChat: (chatId: string | null) => void;
+  onOpenFinding: (result: RiskResult) => void;
   selection: RowSelection<RiskResult>;
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
@@ -670,7 +687,7 @@ function RiskEventsRows({
               result={result}
               policyName={policyNameById.get(result.policyId)}
               policyScore={policyScoreById.get(result.policyId)}
-              onSelectChat={onSelectChat}
+              onOpenFinding={onOpenFinding}
               selection={selection}
               onDismiss={onDismiss}
               onSetupExclusion={onSetupExclusion}
@@ -686,7 +703,7 @@ function RiskEventsRow({
   result,
   policyName,
   policyScore,
-  onSelectChat,
+  onOpenFinding,
   selection,
   onDismiss,
   onSetupExclusion,
@@ -694,7 +711,7 @@ function RiskEventsRow({
   result: RiskResult;
   policyName: string | undefined;
   policyScore: number | undefined;
-  onSelectChat: (chatId: string | null) => void;
+  onOpenFinding: (result: RiskResult) => void;
   selection: RowSelection<RiskResult>;
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
@@ -717,13 +734,16 @@ function RiskEventsRow({
     if (!result.chatId) return;
     const url = new URL(window.location.href);
     url.searchParams.set("chat_id", result.chatId);
+    // Share the finding too, so the link opens the transcript on this row's
+    // message rather than the session's first flagged one.
+    url.searchParams.set("finding_id", result.id);
     try {
       await navigator.clipboard.writeText(url.toString());
       toast.success("Link copied to clipboard");
     } catch {
       toast.error("Failed to copy link");
     }
-  }, [result.chatId]);
+  }, [result.chatId, result.id]);
 
   const rowActions: Action[] = [
     ...(result.chatId
@@ -737,6 +757,10 @@ function RiskEventsRow({
     <div
       role={result.chatId ? "button" : undefined}
       tabIndex={result.chatId ? 0 : undefined}
+      // Names what activating the row does — the evidence value has its own
+      // reveal affordance, so the row itself needs to read as "open the
+      // session at this finding" rather than an unlabelled click target.
+      aria-label={result.chatId ? OPEN_AT_FINDING_HINT : undefined}
       className={cn(
         RISK_EVENTS_GRID,
         "hover:bg-muted/30 w-full items-center border-b border-l-2 px-5 py-3 text-left text-sm transition-colors",
@@ -760,9 +784,7 @@ function RiskEventsRow({
         // reliably stop this handler under React's event delegation, so guard on
         // the real target too.
         if ((e.target as HTMLElement).closest("button, a")) return;
-        if (result.chatId) {
-          onSelectChat(result.chatId);
-        }
+        onOpenFinding(result);
       }}
       onKeyDown={(e) => {
         // Only the row itself activates on Enter/Space. Key events bubbling up
@@ -773,7 +795,7 @@ function RiskEventsRow({
         if (!result.chatId) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onSelectChat(result.chatId);
+          onOpenFinding(result);
         }
       }}
     >

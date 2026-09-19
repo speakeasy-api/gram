@@ -1,4 +1,4 @@
-import { ArrowRight, ChevronsDownUp, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, ChevronsDownUp, Eye, EyeOff, Lock } from "lucide-react";
 import {
   Fragment,
   type ReactElement,
@@ -24,13 +24,16 @@ import {
   collapseToMatchWindows,
   getMatchStrings,
   getRiskBadgeLabel,
+  hasHiddenMatch,
   highlightMatches,
   maskValue,
   matchShownInDescription,
+  resultsAreMaskable,
   resultsAreSensitive,
   shouldShowRiskRuleId,
   useRowReveal,
 } from "./chatHelpers";
+import { REVEAL_DENIED_REASON } from "@/pages/security/unmask";
 
 /** Marks a stretch of message text collapsed away between (or around) the
  * context windows kept for a long flagged message. */
@@ -42,6 +45,18 @@ function Ellipsis(): ReactNode {
     >
       {" … "}
     </span>
+  );
+}
+
+/** Why a flagged message carries no marked span: the server withheld the
+ * matched value from this viewer, so there is nothing to point at in the text.
+ * Without it the message reads as if nothing was found in it. */
+function HiddenMatchNote(): ReactNode {
+  return (
+    <div className="text-muted-foreground flex items-start gap-1 text-xs">
+      <Lock className="mt-0.5 size-3 shrink-0" aria-hidden />
+      <span>The flagged value is hidden here. {REVEAL_DENIED_REASON}</span>
+    </div>
   );
 }
 
@@ -60,6 +75,10 @@ export function HighlightedMessageText({
 }): ReactNode {
   const matches = useMemo(() => getMatchStrings(results), [results]);
   const sensitive = resultsAreSensitive(results);
+  // A withheld match leaves nothing masked on screen, so the reveal toggle (and
+  // the fixed-width masking style) would be inert — the locked note below says
+  // why the message carries no highlight instead.
+  const maskable = sensitive && matches.length > 0;
   const internal = useRowReveal(sensitive);
   const isControlled = controlledRevealed !== undefined;
   const revealed = controlledRevealed ?? internal.revealed;
@@ -76,7 +95,7 @@ export function HighlightedMessageText({
   );
   const [expanded, setExpanded] = useState(false);
   const collapsed = snippets !== null && !expanded;
-  const masked = sensitive && !revealed;
+  const masked = maskable && !revealed;
   // Lets a reviewer act on a flagged (especially just-revealed) secret right
   // where it's read, not just from the turn-level "N risks" popover.
   const actions = useFindingActions(results);
@@ -90,13 +109,13 @@ export function HighlightedMessageText({
               {snippets.map((snippet, i) => (
                 <Fragment key={i}>
                   {i > 0 && <Ellipsis />}
-                  {highlightMatches(snippet.text, matches, masked, sensitive)}
+                  {highlightMatches(snippet.text, matches, masked, maskable)}
                 </Fragment>
               ))}
               {snippets[snippets.length - 1]!.elidedAfter && <Ellipsis />}
             </>
           ) : (
-            highlightMatches(text, matches, masked, sensitive)
+            highlightMatches(text, matches, masked, maskable)
           )}
         </div>
       )}
@@ -122,13 +141,14 @@ export function HighlightedMessageText({
                 key={i}
                 className="bg-destructive/10 text-destructive px-1 py-0.5 font-mono break-all"
               >
-                {sensitive && !revealed ? maskValue(m) : m}
+                {masked ? maskValue(m) : m}
               </code>
             ))}
           </div>
         </div>
       )}
-      {sensitive && !isControlled && (
+      {hasHiddenMatch(results) && <HiddenMatchNote />}
+      {maskable && !isControlled && (
         <button
           type="button"
           className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
@@ -525,7 +545,7 @@ export function RevealSecretButton({
   revealed: boolean;
   onToggle: () => void;
 }): ReactNode {
-  if (!resultsAreSensitive(results)) return null;
+  if (!resultsAreMaskable(results)) return null;
   return (
     <button type="button" className={META_ACTION_CLASS} onClick={onToggle}>
       {revealed ? <Eye className="size-3" /> : <EyeOff className="size-3" />}

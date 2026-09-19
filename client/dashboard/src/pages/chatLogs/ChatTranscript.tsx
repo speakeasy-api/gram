@@ -80,6 +80,7 @@ import {
 import {
   getMatchStrings,
   distinctRiskCount,
+  resultsAreMaskable,
   resultsAreSensitive,
   useRowReveal,
 } from "./chatHelpers";
@@ -444,7 +445,7 @@ function UserMessageRow({
     (!!results && results.length > 0) ||
     row.attachments.some((attachment) => attachment.isRisk);
   const messageSensitive =
-    !!messageResults && resultsAreSensitive(messageResults);
+    !!messageResults && resultsAreMaskable(messageResults);
   const { revealed, setRevealed } = useRowReveal(messageSensitive);
   const decoration = ctx.rowDecoration?.([message.id]) ?? null;
   let attachmentOccurrenceOffset = 0;
@@ -559,7 +560,7 @@ function PromptAttachmentChip({
   const text = messageText(attachment.content);
   const hasDetailedResults = !!results && results.length > 0;
   const flagged = hasDetailedResults || attachment.isRisk;
-  const sensitive = hasDetailedResults && resultsAreSensitive(results);
+  const sensitive = hasDetailedResults && resultsAreMaskable(results);
   const { revealed, setRevealed } = useRowReveal(sensitive);
   const [expanded, setExpanded] = useState(flagged || activeOccurrence != null);
 
@@ -649,7 +650,7 @@ function AssistantMessageRow({
   const results = ctx.riskResultsByMessage.get(message.id);
   const text = messageText(message.content);
   const flagged = !!results && results.length > 0;
-  const sensitive = flagged && resultsAreSensitive(results);
+  const sensitive = flagged && resultsAreMaskable(results);
   const { revealed, setRevealed } = useRowReveal(sensitive);
   const decoration = ctx.rowDecoration?.([message.id]) ?? null;
 
@@ -1444,7 +1445,12 @@ export function ChatTranscript({
                 ref={virtualizer.measureElement}
                 className={cn(
                   "absolute top-0 left-0 w-full transition-colors",
-                  focused && "bg-warning/10 ring-warning/40 ring-1 ring-inset",
+                  // Browser-find idiom for the row someone was sent to (an
+                  // evidence row, a provenance citation): the soft warning wash
+                  // plus a hairline in the same family. `bg-warning` itself is
+                  // near-white in light mode, so it read as no highlight at all.
+                  focused &&
+                    "bg-warning-softest ring-1 ring-[var(--border-warning-softest)] ring-inset",
                 )}
                 style={{ transform: `translateY(${virtualRow.start}px)` }}
               >

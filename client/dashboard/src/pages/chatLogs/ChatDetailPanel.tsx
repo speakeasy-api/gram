@@ -78,6 +78,7 @@ import { useChatTranscript } from "./useChatTranscript";
 import { useWindowedTranscript } from "./useWindowedTranscript";
 import { CreateExclusionContext } from "./exclusionContext";
 import { riskResultAnchorId } from "./chatHelpers";
+import { FindingFocusNotice } from "./FindingFocusNotice";
 import {
   ChatTranscript,
   type RowContext,
@@ -121,6 +122,10 @@ interface ChatDetailPanelProps {
   onDelete: (chatId: string) => void;
   /** One-based raw transcript message index to load, center, and highlight. */
   focusedMessageTurn?: number;
+  /** Risk result the panel was opened from (an evidence row in Risk Events or
+   * Risk Overview). Its message is scrolled to and highlighted, and a notice
+   * strip names the finding — including why its value may stay masked. */
+  focusedFindingId?: string;
   /** Risk-focused view: collapse the transcript to the flagged messages plus a
    * few of context either side, expandable via "show more". Implies dimming. */
   riskFocus?: boolean;
@@ -209,6 +214,7 @@ export function ChatDetailSheet({
   onClose,
   onDelete,
   focusedMessageTurn,
+  focusedFindingId,
   riskFocus,
   dimNonRisk,
   onOpenChat,
@@ -236,6 +242,7 @@ export function ChatDetailSheet({
                   onClose={onClose}
                   onDelete={onDelete}
                   focusedMessageTurn={focusedMessageTurn}
+                  focusedFindingId={focusedFindingId}
                   riskFocus={riskFocus}
                   dimNonRisk={dimNonRisk}
                   onOpenChat={onOpenChat}
@@ -1078,6 +1085,7 @@ function ChatDetailPanel({
   onClose,
   onDelete,
   focusedMessageTurn,
+  focusedFindingId,
   riskFocus = false,
   dimNonRisk: dimNonRiskProp = false,
   onOpenChat,
@@ -1223,7 +1231,7 @@ function ChatDetailPanel({
     transcriptHasMoreAfter,
     loadNextTranscriptPage,
   ]);
-  const focusedMessageId =
+  const focusedTurnMessageId =
     validFocusedMessageTurn === undefined
       ? null
       : (transcript.messages[validFocusedMessageTurn - 1]?.id ?? null);
@@ -1294,7 +1302,9 @@ function ChatDetailPanel({
   );
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
 
-  const { data: riskData } = useRiskListResults({ chatId });
+  const { data: riskData, isPending: riskResultsPending } = useRiskListResults({
+    chatId,
+  });
   const riskResults = useMemo(() => {
     const all = riskData?.results ?? [];
     if (optimisticExcluded.size === 0) return all;
@@ -1312,6 +1322,21 @@ function ChatDetailPanel({
     }
     return map;
   }, [riskResults]);
+
+  // The finding the panel was opened from, resolved against this session's
+  // results so the notice can name it and the transcript can ring its message.
+  // A provenance-cited turn keeps its own focus when no finding is in play.
+  const focusedFinding = useMemo(
+    () =>
+      focusedFindingId
+        ? riskResults.find((r) => r.id === focusedFindingId)
+        : undefined,
+    [focusedFindingId, riskResults],
+  );
+  const focusedFindingMessageId = focusedFinding
+    ? riskResultAnchorId(focusedFinding)
+    : undefined;
+  const focusedMessageId = focusedFindingMessageId ?? focusedTurnMessageId;
 
   const claudeUsageByMessage = useMemo(() => {
     const turns =
@@ -1449,6 +1474,13 @@ function ChatDetailPanel({
       setScrollNonce((n) => n + 1);
     },
     [occurrences, activeOccurrenceIdx],
+  );
+  // Backs the focus notice's "Jump to message": the transcript keys its scroll
+  // effect on the nonce, so bumping it re-scrolls to the focused row even when
+  // the target index hasn't changed (the reader scrolled away from it).
+  const jumpToFocusedMessage = useCallback(
+    () => setScrollNonce((n) => n + 1),
+    [],
   );
 
   const transcriptPagination = useMemo<TranscriptPagination>(() => {
@@ -1757,6 +1789,14 @@ function ChatDetailPanel({
           it, so returning lands back at the same scroll position rather than
           re-scrolling to the first finding. */}
       <div className="relative flex flex-1 flex-col overflow-hidden">
+        {focusedFindingId && (
+          <FindingFocusNotice
+            finding={focusedFinding}
+            isLoading={riskResultsPending}
+            located={focusedItemIndex !== null}
+            onJump={jumpToFocusedMessage}
+          />
+        )}
         {!fullyLoaded && (
           <div className="bg-muted/30 flex items-center justify-center border-b px-4 py-1.5">
             <button

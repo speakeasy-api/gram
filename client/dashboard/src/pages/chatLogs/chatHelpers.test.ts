@@ -3,8 +3,10 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   collapseToMatchWindows,
   getMatchStrings,
+  hasHiddenMatch,
   matchRanges,
   matchShownInDescription,
+  resultsAreMaskable,
   riskResultAnchorId,
 } from "./chatHelpers";
 
@@ -158,6 +160,57 @@ describe("getMatchStrings", () => {
   it("returns [] for empty or undefined input", () => {
     expect(getMatchStrings([])).toEqual([]);
     expect(getMatchStrings(undefined)).toEqual([]);
+  });
+});
+
+describe("hasHiddenMatch", () => {
+  // What risk.results.list returns for a caller without chat:read on the chat:
+  // no raw match, just the fingerprint.
+  const redacted = (source: string) =>
+    result(source, undefined, {
+      matchRedacted: "<redacted len=20 sha=abcd12>",
+    });
+
+  it("is true when a content finding's value was withheld", () => {
+    expect(hasHiddenMatch([redacted("gitleaks")])).toBe(true);
+  });
+
+  it("is false once the raw match is available to highlight", () => {
+    expect(hasHiddenMatch([result("gitleaks", "AKIAEXAMPLE")])).toBe(false);
+  });
+
+  it("is false for findings whose match was never message content", () => {
+    // Their value is restated in the description and never highlighted, so a
+    // withheld match explains nothing about the message text.
+    expect(hasHiddenMatch([redacted("account_identity")])).toBe(false);
+    expect(hasHiddenMatch([redacted("prompt_injection")])).toBe(false);
+  });
+
+  it("is false for empty or undefined input", () => {
+    expect(hasHiddenMatch([])).toBe(false);
+    expect(hasHiddenMatch(undefined)).toBe(false);
+  });
+});
+
+describe("resultsAreMaskable", () => {
+  it("is true for a secret finding whose span is on screen", () => {
+    expect(resultsAreMaskable([result("gitleaks", "AKIAEXAMPLE")])).toBe(true);
+  });
+
+  it("is false when the value was withheld, so nothing on screen is masked", () => {
+    expect(
+      resultsAreMaskable([
+        result("gitleaks", undefined, {
+          matchRedacted: "<redacted len=20 sha=abcd12>",
+        }),
+      ]),
+    ).toBe(false);
+  });
+
+  it("is false for non-secret sources", () => {
+    expect(
+      resultsAreMaskable([result("shadow_mcp", "https://mcp.example")]),
+    ).toBe(false);
   });
 });
 
