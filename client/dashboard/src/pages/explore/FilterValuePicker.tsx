@@ -90,9 +90,9 @@ export function FilterValuePicker({
     >
       <PopoverTrigger asChild>
         {/* A div rather than a button, so the chips' remove buttons are not
-            interactive elements nested inside another. Enter, Space and
-            ArrowDown open it as a button would; a key pressed on a chip's
-            own button is that button's business. */}
+            interactive elements nested inside another. Enter and Space
+            toggle it as a button would, ArrowDown opens it; a key pressed on
+            a chip's own button is that button's business. */}
         <div
           role="combobox"
           tabIndex={0}
@@ -101,7 +101,10 @@ export function FilterValuePicker({
           aria-label={single ? "Filter value" : "Filter values"}
           onKeyDown={(event) => {
             if (event.target !== event.currentTarget) return;
-            if (["Enter", " ", "ArrowDown"].includes(event.key)) {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              setOpen(!open);
+            } else if (event.key === "ArrowDown") {
               event.preventDefault();
               setOpen(true);
             }
