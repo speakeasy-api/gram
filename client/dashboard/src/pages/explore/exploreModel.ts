@@ -203,6 +203,18 @@ function isFilterOperator(operator: string): operator is FilterOperator {
   return operator in FILTER_OPERATOR_LABELS;
 }
 
+/**
+ * A fresh filter on a field: its first admitted operator and no values, so
+ * values picked for one dimension never carry over to another.
+ */
+export function filterForField(
+  dataset: AnalyticsDataset | undefined,
+  name: string,
+): FilterDraft {
+  const operator = operatorsForField(fieldByName(dataset, name))[0] ?? "in";
+  return { field: name, operator, values: [] };
+}
+
 /** The operators legal on a field, in the catalog's declared order. */
 export function operatorsForField(
   field: AnalyticsField | undefined,
@@ -250,7 +262,7 @@ export function completeMeasures(drafts: MeasureDraft[]): MeasureDraft[] {
  * operand; `in` reads every distinct non-empty one.
  */
 /** At most this many values per filter, matching the analytics design. */
-const MAX_FILTER_VALUES = 100;
+export const MAX_FILTER_VALUES = 100;
 
 export function completeFilters(drafts: FilterDraft[]): AnalyticsFilter[] {
   // The server takes at most this many values per filter and rejects the

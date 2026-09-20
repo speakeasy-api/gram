@@ -1,6 +1,7 @@
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { describe, expect, it } from "vitest";
 import {
+  filterForField,
   autoGrain,
   completeFilters,
   completeMeasures,
@@ -319,5 +320,12 @@ describe("formatting", () => {
     expect(textCell(undefined)).toBe("—");
     expect(textCell(3)).toBe("3");
     expect(textCell(true)).toBe("true");
+  });
+});
+
+describe("filterForField", () => {
+  it("starts a filter on a field with its first operator and no values", () => {
+    const next = filterForField(sessions, "user");
+    expect(next).toEqual({ field: "user", operator: "equals", values: [] });
   });
 });

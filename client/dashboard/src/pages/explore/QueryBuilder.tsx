@@ -149,6 +149,7 @@ export function QueryBuilder({
             <FilterRow
               key={index}
               dataset={dataset}
+              window={spec.window}
               filter={filter}
               onChange={(next) => setFilter(index, next)}
               onRemove={() => patch({ filters: removeAt(spec.filters, index) })}
