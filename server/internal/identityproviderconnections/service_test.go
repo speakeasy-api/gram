@@ -129,7 +129,7 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 	keys := checklistKeys(created.Checklist)
 	require.Equal(t, []string{
 		"create_api_services_app", "public_key_auth", "dpop", "grant_scopes", "assign_admin_roles", "submit_client_id",
-		"create_ai_agent",
+		"register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection",
 	}, keys)
 	for _, item := range created.Checklist {
 		switch item.Key {
@@ -142,11 +142,9 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 		case "submit_client_id":
 			require.NotNil(t, item.Completed)
 			require.False(t, *item.Completed)
-		case "create_ai_agent":
+		case "register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection":
 			require.Equal(t, "cross_app_access", item.Group)
-			require.Len(t, item.Details, 5)
-		}
-		if item.Key != "create_ai_agent" {
+		default:
 			require.Equal(t, "connect", item.Group)
 		}
 	}
@@ -174,7 +172,7 @@ func TestCreate_OINListingSkipsCustomAppAndXAASteps(t *testing.T) {
 	keys := checklistKeys(created.Checklist)
 	require.Contains(t, keys, "add_oin_app")
 	require.NotContains(t, keys, "create_api_services_app")
-	require.Contains(t, keys, "create_ai_agent")
+	require.Contains(t, keys, "record_ai_agent")
 }
 
 func TestCreate_SecondLiveConnectionConflicts(t *testing.T) {

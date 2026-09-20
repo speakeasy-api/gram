@@ -63,7 +63,14 @@ func missingScopes(granted []string) []string {
 	return missing
 }
 
-func buildConnectionView(r connectionRows) *gen.OktaIdentityProviderConnection {
+// agentSignal is what the database holds about the Cross App Access steps.
+// Nil fields were not observed.
+type agentSignal struct {
+	App                *AgentAppSignal
+	ConnectionRecorded *bool
+}
+
+func buildConnectionView(r connectionRows, agent agentSignal) *gen.OktaIdentityProviderConnection {
 	var clientID *string
 	if r.clientIDSubmitted() {
 		clientID = conv.PtrEmpty(r.Managed.ClientID)
@@ -88,11 +95,14 @@ func buildConnectionView(r connectionRows) *gen.OktaIdentityProviderConnection {
 	}
 
 	checklist := OktaChecklist(r.Okta.ListingMode, r.jwksURL(), ChecklistSignal{
-		Checked:           r.checked() && r.lastError() == nil,
-		ClientIDSubmitted: r.clientIDSubmitted(),
-		DPoPBound:         r.Okta.DpopRequired,
-		MissingScopes:     missing,
-		Reasons:           r.reasons(),
+		Checked:            r.checked() && r.lastError() == nil,
+		ClientIDSubmitted:  r.clientIDSubmitted(),
+		DPoPBound:          r.Okta.DpopRequired,
+		MissingScopes:      missing,
+		Reasons:            r.reasons(),
+		AgentRecorded:      r.Okta.AgentID.Valid && r.Okta.AgentID.String != "",
+		AgentApp:           agent.App,
+		ConnectionRecorded: agent.ConnectionRecorded,
 	})
 	items := make([]*gen.IdentityProviderConnectionChecklistItem, 0, len(checklist))
 	for _, item := range checklist {

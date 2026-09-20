@@ -45,7 +45,7 @@ function item(
     title: `Step ${key}`,
     description: `Do ${key}.`,
     details:
-      key === "create_ai_agent" ? ["Create it", "Delegate", "Activate"] : [],
+      key === "record_ai_agent" ? ["Create it", "Delegate", "Activate"] : [],
     ...(completed === undefined ? {} : { completed }),
   };
 }
@@ -66,7 +66,7 @@ const pendingChecklist = [
   item("create_api_services_app", "connect"),
   item("public_key_auth", "connect"),
   item("submit_client_id", "connect", false),
-  item("create_ai_agent", "cross_app_access"),
+  item("record_ai_agent", "cross_app_access"),
 ];
 
 function renderChecklist(
@@ -113,10 +113,10 @@ describe("ConnectionChecklist", () => {
         item("dpop", "connect", true),
         item("assign_admin_roles", "connect"),
         item("submit_client_id", "connect", true),
-        item("create_ai_agent", "cross_app_access"),
+        item("record_ai_agent", "cross_app_access"),
       ]),
     );
-    expect(screen.getByText("Step create_ai_agent")).toBeTruthy();
+    expect(screen.getByText("Step record_ai_agent")).toBeTruthy();
     expect(screen.getByText("Activate")).toBeTruthy();
     const connect = screen.getByRole("button", {
       name: "Connect, 3 of 4 complete",
@@ -132,7 +132,7 @@ describe("ConnectionChecklist", () => {
     renderChecklist(
       connectionWith("degraded", [
         item("grant_scopes", "connect", false),
-        item("create_ai_agent", "cross_app_access"),
+        item("record_ai_agent", "cross_app_access"),
       ]),
     );
     expect(
@@ -172,7 +172,7 @@ it("shows six of six complete and starts Connect collapsed after verification", 
   renderChecklist(
     connectionWith("verified", [
       ...checklist,
-      item("create_ai_agent", "cross_app_access"),
+      item("record_ai_agent", "cross_app_access"),
     ]),
   );
   const connect = screen.getByRole("button", {
@@ -183,7 +183,7 @@ it("shows six of six complete and starts Connect collapsed after verification", 
     screen.getByText("Okta connection and required access verified."),
   ).toBeTruthy();
   expect(screen.queryByText("Step create_api_services_app")).toBeNull();
-  expect(screen.getByText("Step create_ai_agent")).toBeTruthy();
+  expect(screen.getByText("Step record_ai_agent")).toBeTruthy();
   fireEvent.click(connect);
   expect(
     screen.getByText("Step create_api_services_app").textContent,
@@ -196,9 +196,28 @@ it("shows six of six complete and starts Connect collapsed after verification", 
   ).toBeNull();
 });
 
+it("links the first connection step to the Cross App Access tab", () => {
+  renderChecklist(
+    connectionWith("verified", [
+      ...pendingChecklist,
+      item("first_resource_connection", "cross_app_access"),
+    ]),
+  );
+  const step = screen
+    .getByText("Step first_resource_connection")
+    .closest("li")!;
+  expect(
+    within(step)
+      .getByRole("link", { name: "Configure Cross App Access" })
+      .getAttribute("href"),
+  ).toBe(
+    "/identity?tab=enterprise-managed-auth&provider=okta&view=cross-app-access",
+  );
+});
+
 it("places the save form inside the agent checklist step and preserves drafts when collapsed", () => {
   renderChecklist(connectionWith("verified", pendingChecklist));
-  const step = screen.getByText("Step create_ai_agent").closest("li")!;
+  const step = screen.getByText("Step record_ai_agent").closest("li")!;
   const form = within(step).getByRole("region", { name: "Save Okta AI agent" });
   expect(within(form).getByRole("button", { name: "Save agent" })).toBeTruthy();
   expect(screen.getAllByLabelText("Agent ID")).toHaveLength(1);

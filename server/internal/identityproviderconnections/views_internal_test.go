@@ -49,7 +49,7 @@ func TestBuildConnectionView_ChecklistVerification(t *testing.T) {
 						Connection: connection,
 						Okta:       repo.OktaIdentityProviderConnection{ListingMode: mode, GrantedScopes: tt.granted, DpopRequired: tt.dpop},
 						Managed:    &ManagedClient{ClientID: clientID},
-					})
+					}, agentSignal{App: nil, ConnectionRecorded: nil})
 					appKey := "create_api_services_app"
 					if mode == ListingModeOIN {
 						appKey = "add_oin_app"

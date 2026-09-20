@@ -79,7 +79,7 @@ const CHECKLIST_GROUPS: Record<
   cross_app_access: {
     title: "Cross App Access setup",
     description:
-      "Register the Speakeasy AI agent once so Okta can issue Cross App Access assertions; per-server connections are handled on the Cross App Access tab.",
+      "Required for Enterprise Managed Auth: connecting Okta and syncing applications alone does not give AI agents access to your MCP servers. Register the Speakeasy AI agent once, then connect it to each MCP server.",
   },
 };
 
@@ -102,11 +102,18 @@ export function groupChecklist(
   }).filter((group) => group.items.length > 0);
 }
 
-/** The group the admin is working in: Connect until a clean verification, then the agent. */
+/** Connect until a verification has run, then the agent; nothing once the agent steps are all complete. */
 export function activeChecklistGroup(connection: {
   status: OktaIdentityProviderConnectionStatus;
-}): ChecklistGroupId {
-  return isConnectionChecked(connection) ? "cross_app_access" : "connect";
+  checklist: IdentityProviderConnectionChecklistItem[];
+}): ChecklistGroupId | null {
+  if (!isConnectionChecked(connection)) return "connect";
+  const agent = groupChecklist(connection.checklist).find(
+    (group) => group.id === "cross_app_access",
+  );
+  const done =
+    agent !== undefined && agent.completedCount === agent.items.length;
+  return done ? null : "cross_app_access";
 }
 
 /** The Okta admin console for an org URL (`acme.okta.com` → `acme-admin.okta.com`). */

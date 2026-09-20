@@ -257,6 +257,43 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 	return s.withManagedClient(ctx, logger, s.db, row.IdentityProviderConnection, row.OktaIdentityProviderConnection)
 }
 
+// view renders the connection with what the last applications sync saw of the
+// agent's linked app and whether a resource connection is recorded. A failed
+// read leaves those steps unchecked.
+func (s *Service) view(ctx context.Context, logger *slog.Logger, dbtx repo.DBTX, rows connectionRows) *gen.OktaIdentityProviderConnection {
+	q := repo.New(dbtx)
+	signal := agentSignal{App: nil, ConnectionRecorded: nil}
+
+	recorded, err := q.HasOktaResourceConnection(ctx, repo.HasOktaResourceConnectionParams{
+		OrganizationID:               rows.Connection.OrganizationID,
+		IdentityProviderConnectionID: rows.Connection.ID,
+	})
+	if err != nil {
+		logger.ErrorContext(ctx, "read resource connections", attr.SlogError(err))
+	} else {
+		signal.ConnectionRecorded = &recorded
+	}
+
+	appID := rows.Okta.AgentAppID.String
+	if appID == "" || !rows.Okta.ApplicationsSyncedAt.Valid {
+		return buildConnectionView(rows, signal)
+	}
+	state, err := q.GetOktaAgentAppState(ctx, repo.GetOktaAgentAppStateParams{
+		OrganizationID:               rows.Connection.OrganizationID,
+		IdentityProviderConnectionID: rows.Connection.ID,
+		OktaAppID:                    appID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		signal.App = &AgentAppSignal{Found: false, Active: false, Assigned: false}
+	case err != nil:
+		logger.ErrorContext(ctx, "read agent app state", attr.SlogError(err))
+	default:
+		signal.App = &AgentAppSignal{Found: true, Active: state.Status == "ACTIVE", Assigned: state.AssignmentCount > 0}
+	}
+	return buildConnectionView(rows, signal)
+}
+
 // withManagedClient reads on dbtx so a caller holding a transaction never waits on a second pool connection.
 func (s *Service) withManagedClient(ctx context.Context, logger *slog.Logger, dbtx repo.DBTX, connection repo.IdentityProviderConnection, oktaRow repo.OktaIdentityProviderConnection) (*connectionRows, error) {
 	managed, err := s.provisioner.GetManagedClientTx(ctx, dbtx, connection.OrganizationID, connection.ID)
@@ -424,7 +461,7 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 	}
 
 	s.metrics.recordCreate(ctx, ProviderOkta, createOutcomeCreated)
-	return buildConnectionView(*rows), nil
+	return s.view(ctx, logger, s.db, *rows), nil
 }
 
 // requireNoLiveConnection conflicts on a live connection; a parent whose create never wrote its Okta details is abandoned instead.
@@ -752,7 +789,7 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 		return nil, oops.E(oops.CodeUnexpected, err, "commit client id submission").LogError(ctx, logger)
 	}
 	s.metrics.recordVerify(ctx, ProviderOkta, outcome.Status)
-	return buildConnectionView(*after), nil
+	return s.view(ctx, logger, s.db, *after), nil
 }
 
 func (s *Service) Verify(ctx context.Context, payload *gen.VerifyPayload) (*gen.OktaIdentityProviderConnection, error) {
@@ -805,7 +842,7 @@ func (s *Service) Verify(ctx context.Context, payload *gen.VerifyPayload) (*gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "commit connection verification").LogError(ctx, logger)
 	}
 	s.metrics.recordVerify(ctx, ProviderOkta, outcome.Status)
-	return buildConnectionView(*after), nil
+	return s.view(ctx, logger, s.db, *after), nil
 }
 
 // runVerification verifies the connection's current credential; any failure forgets the memoized client.
@@ -949,7 +986,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetIde
 	case err != nil:
 		return nil, err
 	}
-	return &gen.GetIdentityProviderConnectionResult{Connection: buildConnectionView(*rows)}, nil
+	return &gen.GetIdentityProviderConnectionResult{Connection: s.view(ctx, logger, s.db, *rows)}, nil
 }
 
 func (s *Service) RecordAgent(ctx context.Context, payload *gen.RecordAgentPayload) (*gen.OktaIdentityProviderConnection, error) {
@@ -983,7 +1020,7 @@ func (s *Service) RecordAgent(ctx context.Context, payload *gen.RecordAgentPaylo
 		return nil, err
 	}
 	if before.Okta.AgentID.String == agentID && before.Okta.AgentAppID.String == agentAppID {
-		return buildConnectionView(*before), nil
+		return s.view(ctx, logger, dbtx, *before), nil
 	}
 	oktaRow, err := q.UpdateOktaIdentityProviderConnectionAgent(ctx, repo.UpdateOktaIdentityProviderConnectionAgentParams{
 		AgentID:                      conv.ToPGTextEmpty(agentID),
@@ -1005,7 +1042,7 @@ func (s *Service) RecordAgent(ctx context.Context, payload *gen.RecordAgentPaylo
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit agent record").LogError(ctx, logger)
 	}
-	return buildConnectionView(after), nil
+	return s.view(ctx, logger, s.db, after), nil
 }
 
 func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.OktaIdentityProviderConnection, error) {
@@ -1089,7 +1126,7 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 	if err != nil {
 		return nil, err
 	}
-	return buildConnectionView(*rows), nil
+	return buildConnectionView(*rows, agentSignal{App: nil, ConnectionRecorded: nil}), nil
 }
 
 // loadRevocable reads through the tombstone; only a revoked tombstone is visible.
@@ -1115,7 +1152,7 @@ func (s *Service) revokedView(ctx context.Context, logger *slog.Logger, dbtx rep
 	if err != nil {
 		return nil, err
 	}
-	return buildConnectionView(*rows), nil
+	return buildConnectionView(*rows, agentSignal{App: nil, ConnectionRecorded: nil}), nil
 }
 
 func orEmpty(values []string) []string {

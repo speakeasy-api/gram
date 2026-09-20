@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router";
+import { Link, useLocation } from "react-router";
 import { Check, ChevronDown } from "lucide-react";
 
 import {
@@ -8,12 +8,14 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { IdentityProviderConnectionChecklistItem } from "@gram/client/models/components/identityproviderconnectionchecklistitem.js";
 import type { OktaIdentityProviderConnection } from "@gram/client/models/components/oktaidentityproviderconnection.js";
 
+import { identityTabHref } from "./identityProviderQueries";
 import { AGENT_SECTION_ID, AgentSetupForm } from "./OktaConnectionSteps";
 import {
   activeChecklistGroup,
@@ -57,12 +59,22 @@ function StepAffordance({
           />
         </span>
       );
-    case "create_ai_agent":
+    case "record_ai_agent":
       return connection.status === "revoked" ? null : (
         <AgentSetupForm
           key={`${connection.agentId ?? ""}|${connection.agentAppId ?? ""}`}
           connection={connection}
         />
+      );
+    case "first_resource_connection":
+      return connection.status === "revoked" ? null : (
+        <div>
+          <Button asChild variant="secondary">
+            <Link to={identityTabHref("cross-app-access")}>
+              Configure Cross App Access
+            </Link>
+          </Button>
+        </div>
       );
     default:
       return null;
@@ -81,16 +93,13 @@ function Step({
   const done = item.completed === true;
   return (
     <li
-      className={cn(
-        "flex gap-4 py-4 first:pt-0 last:pb-0",
-        done && "opacity-60",
-      )}
+      className="flex gap-4 py-4 first:pt-0 last:pb-0"
       data-completed={done ? "true" : undefined}
     >
       <span
         className={cn(
           "flex h-5 w-6 shrink-0 items-center font-mono text-xs leading-5",
-          done ? "text-success-foreground" : "text-muted-foreground",
+          done ? "text-success-foreground opacity-60" : "text-muted-foreground",
         )}
         aria-hidden="true"
       >
@@ -101,31 +110,33 @@ function Step({
         )}
       </span>
       <div className="flex min-w-0 flex-col gap-1.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Text className={cn("font-medium", done && "line-through")}>
-            {item.title}
-            {done && <span className="sr-only"> (done)</span>}
+        <div className={cn("flex flex-col gap-1.5", done && "opacity-60")}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Text className={cn("font-medium", done && "line-through")}>
+              {item.title}
+              {done && <span className="sr-only"> (done)</span>}
+            </Text>
+            {!done && (
+              <Badge variant={item.completed === false ? "warning" : "neutral"}>
+                {item.completed === false ? "Needs attention" : "Not checked"}
+              </Badge>
+            )}
+          </div>
+          <Text muted small className="break-words whitespace-pre-line">
+            {item.description}
           </Text>
-          {!done && (
-            <Badge variant={item.completed === false ? "warning" : "neutral"}>
-              {item.completed === false ? "Needs attention" : "Not checked"}
-            </Badge>
+          {item.details.length > 0 && (
+            <ol className="list-decimal space-y-1 pl-5">
+              {item.details.map((detail) => (
+                <li key={detail}>
+                  <Text muted small>
+                    {detail}
+                  </Text>
+                </li>
+              ))}
+            </ol>
           )}
         </div>
-        <Text muted small className="break-words whitespace-pre-line">
-          {item.description}
-        </Text>
-        {item.details.length > 0 && (
-          <ol className="list-decimal space-y-1 pl-5">
-            {item.details.map((detail) => (
-              <li key={detail}>
-                <Text muted small>
-                  {detail}
-                </Text>
-              </li>
-            ))}
-          </ol>
-        )}
         <StepAffordance item={item} connection={connection} />
       </div>
     </li>

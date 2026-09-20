@@ -130,7 +130,7 @@ describe("groupChecklist", () => {
       (g) => g.id === "cross_app_access",
     );
     expect(group?.description).toBe(
-      "Register the Speakeasy AI agent once so Okta can issue Cross App Access assertions; per-server connections are handled on the Cross App Access tab.",
+      "Required for Enterprise Managed Auth: connecting Okta and syncing applications alone does not give AI agents access to your MCP servers. Register the Speakeasy AI agent once, then connect it to each MCP server.",
     );
   });
 
@@ -140,14 +140,28 @@ describe("groupChecklist", () => {
     ]);
   });
 
-  it("expands Cross App Access after a completed verification", () => {
-    expect(activeChecklistGroup({ status: "pending" })).toBe("connect");
-    expect(activeChecklistGroup({ status: "degraded" })).toBe(
+  it("opens Connect until verified, then the agent, and nothing once the agent steps are complete", () => {
+    const step = (completed: boolean | undefined) => ({
+      key: `agent-${String(completed)}`,
+      group: "cross_app_access" as const,
+      title: "",
+      description: "",
+      details: [],
+      completed,
+    });
+    const open = [step(true), step(undefined)];
+    expect(activeChecklistGroup({ status: "pending", checklist: open })).toBe(
+      "connect",
+    );
+    expect(activeChecklistGroup({ status: "degraded", checklist: open })).toBe(
       "cross_app_access",
     );
-    expect(activeChecklistGroup({ status: "verified" })).toBe(
+    expect(activeChecklistGroup({ status: "verified", checklist: open })).toBe(
       "cross_app_access",
     );
+    expect(
+      activeChecklistGroup({ status: "verified", checklist: [step(true)] }),
+    ).toBeNull();
   });
 
   it.each(["okta.com", "oktapreview.com", "okta-emea.com", "okta.mil"])(

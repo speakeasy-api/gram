@@ -14,11 +14,11 @@ import type { OktaIdentityProviderConnection } from "@gram/client/models/compone
 import { useCreateIdentityProviderConnectionMutation } from "@gram/client/react-query/createIdentityProviderConnection.js";
 import { useVerifyIdentityProviderConnectionMutation } from "@gram/client/react-query/verifyIdentityProviderConnection.js";
 
-import { ConnectionNextSteps } from "./ConnectionNextSteps";
 import { ConnectionChecklist } from "./ConnectionChecklist";
 import { ConnectionFacts, ConnectionScopes } from "./OktaConnectionDetails";
 import { ClientIdStep, RevokeConnectionButton } from "./OktaConnectionSteps";
 import {
+  activeChecklistGroup,
   connectionStatusLabel,
   connectionStatusVariant,
   connectionStep,
@@ -346,7 +346,7 @@ function ChecklistSection({
       <SettingsSection.Panel>
         <SettingsSection.Body>
           <ConnectionChecklist
-            key={connection.status}
+            key={`${connection.status}|${activeChecklistGroup(connection) ?? "done"}`}
             connection={connection}
           />
         </SettingsSection.Body>
@@ -366,10 +366,9 @@ export function OktaConnectionTab({
   return (
     <div className="flex flex-col gap-10">
       <ConnectionSetupProgress connection={connection} />
-      <ConnectionNextSteps connection={connection} />
-      <ConnectionCard connection={connection} />
       <ChecklistSection connection={connection} />
       {step === "submit_client_id" && <ClientIdStep connection={connection} />}
+      <ConnectionCard connection={connection} />
     </div>
   );
 }
