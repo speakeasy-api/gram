@@ -145,8 +145,11 @@ describe("Explore", () => {
     expect(screen.getByRole("combobox", { name: "Dataset" }).textContent).toBe(
       "sessions",
     );
-    // The description and grain live in the picker's tooltip, not the row.
+    // The description and grain live behind the info icon, not in the row.
     expect(screen.queryByText("One row per agent session.")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "About this dataset" }),
+    ).toBeTruthy();
     expect(
       screen.getByRole("combobox", { name: "Aggregation" }).textContent,
     ).toBe("count");

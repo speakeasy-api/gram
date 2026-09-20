@@ -15,6 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
+import { Info } from "lucide-react";
 import type { JSX } from "react";
 import { AddRowButton, BuilderField, ClauseRow } from "./ClauseRow";
 import {
@@ -110,27 +111,36 @@ export function QueryBuilder({
   return (
     <div className="border-border bg-card flex flex-col gap-5 border p-5">
       <ClauseRow label="Dataset">
-        <Select value={spec.dataset} onValueChange={changeDataset}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <SelectTrigger className="w-64" aria-label="Dataset">
-                <SelectValue />
-              </SelectTrigger>
-            </TooltipTrigger>
-            {dataset ? (
-              <TooltipContent side="bottom" align="start">
+        <div className="flex items-center gap-2">
+          <Select value={spec.dataset} onValueChange={changeDataset}>
+            <SelectTrigger className="w-64" aria-label="Dataset">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {datasets.map((candidate) => (
+                <SelectItem key={candidate.name} value={candidate.name}>
+                  {candidate.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {dataset ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="About this dataset"
+                  className="text-muted-foreground hover:text-foreground focus-visible:ring-ring flex size-6 shrink-0 items-center justify-center rounded-sm focus-visible:ring-2 focus-visible:outline-none"
+                >
+                  <Info className="size-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" align="start">
                 <DatasetSummary dataset={dataset} />
               </TooltipContent>
-            ) : null}
-          </Tooltip>
-          <SelectContent>
-            {datasets.map((candidate) => (
-              <SelectItem key={candidate.name} value={candidate.name}>
-                {candidate.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            </Tooltip>
+          ) : null}
+        </div>
       </ClauseRow>
 
       <ClauseRow label="Where">
@@ -302,8 +312,9 @@ export function QueryBuilder({
   );
 }
 
-// The dataset's one-line description with its grain, shown on hover over
-// the picker so the row stays one control wide.
+// The dataset's one-line description with its grain, behind an info icon
+// beside the picker so the row stays one control wide and the picker itself
+// carries no hover text.
 function DatasetSummary({
   dataset,
 }: {
