@@ -2,7 +2,7 @@ import type { AnalyticsDataset } from "@gram/client/models/components/analyticsd
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FilterDraft } from "./exploreModel";
+import { MAX_FILTER_VALUES, type FilterDraft } from "./exploreModel";
 import { FilterRow } from "./FilterRow";
 
 const testState = vi.hoisted(() => ({
@@ -174,6 +174,22 @@ describe("FilterRow", () => {
       operator: "in",
       values: ["Edit"],
     });
+  });
+
+  it("stops offering values once an in filter holds as many as the query sends", () => {
+    const full = Array.from({ length: MAX_FILTER_VALUES }, (_, i) => `v${i}`);
+    render(
+      <Harness
+        initial={{ field: "tool_name", operator: "in", values: full }}
+        onChange={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("combobox", { name: "Filter values" }));
+    fireEvent.change(screen.getByPlaceholderText("Search or type a value"), {
+      target: { value: "Edit" },
+    });
+    expect(screen.queryByText(/Use “Edit”/)).toBeNull();
+    expect(screen.getByText(/At the 100-value limit/)).toBeTruthy();
   });
 
   it("says so while values load and when the window holds none", () => {

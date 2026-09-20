@@ -203,7 +203,6 @@ function isFilterOperator(operator: string): operator is FilterOperator {
   return operator in FILTER_OPERATOR_LABELS;
 }
 
-/** The operators legal on a field, in the catalog's declared order. */
 /**
  * A fresh filter on a field: its first admitted operator and no values, so
  * values picked for one dimension never carry over to another.
@@ -216,6 +215,7 @@ export function filterForField(
   return { field: name, operator, values: [] };
 }
 
+/** The operators legal on a field, in the catalog's declared order. */
 export function operatorsForField(
   field: AnalyticsField | undefined,
 ): FilterOperator[] {

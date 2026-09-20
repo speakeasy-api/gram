@@ -58,8 +58,11 @@ export function FilterValuePicker({
     ? all.filter((entry) => entry.value.toLowerCase().includes(needle))
     : all;
   const typed = search.trim();
+  // in stops at the cap the query sends; equals replaces its one value.
+  const capped = !single && values.length >= MAX_FILTER_VALUES;
   const canAddTyped =
     typed !== "" &&
+    !capped &&
     !all.some((entry) => entry.value === typed) &&
     !values.includes(typed);
 
@@ -86,12 +89,24 @@ export function FilterValuePicker({
       }}
     >
       <PopoverTrigger asChild>
-        <button
-          type="button"
+        {/* A div rather than a button, so the chips' remove buttons are not
+            interactive elements nested inside another. Enter, Space and
+            ArrowDown open it as a button would; a key pressed on a chip's
+            own button is that button's business. */}
+        <div
           role="combobox"
+          tabIndex={0}
           aria-expanded={open}
+          aria-haspopup="listbox"
           aria-label={single ? "Filter value" : "Filter values"}
-          className="border-input bg-surface-primary-default focus-visible:border-focus flex min-h-9 min-w-64 max-w-3xl flex-wrap items-center gap-1.5 border px-3 py-1.5 text-left text-sm focus-visible:outline-none"
+          onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (["Enter", " ", "ArrowDown"].includes(event.key)) {
+              event.preventDefault();
+              setOpen(true);
+            }
+          }}
+          className="border-input bg-surface-primary-default focus-visible:border-focus flex min-h-9 min-w-64 max-w-3xl cursor-pointer flex-wrap items-center gap-1.5 border px-3 py-1.5 text-left text-sm focus-visible:outline-none"
         >
           {values.length === 0 ? (
             <span className="text-muted-foreground">
@@ -110,31 +125,23 @@ export function FilterValuePicker({
                   {value}
                 </Badge.Text>
                 <Badge.RightIcon>
-                  <span
-                    role="button"
-                    tabIndex={0}
+                  <button
+                    type="button"
                     aria-label={`Remove ${value}`}
                     onClick={(event) => {
                       event.stopPropagation();
                       remove(value);
                     }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        remove(value);
-                      }
-                    }}
-                    className="flex h-3 w-3 cursor-pointer items-center justify-center hover:opacity-70"
+                    className="flex h-3 w-3 cursor-pointer items-center justify-center hover:opacity-70 focus:outline-none focus-visible:ring-1"
                   >
                     <XIcon className="h-3 w-3" />
-                  </span>
+                  </button>
                 </Badge.RightIcon>
               </Badge>
             ))
           )}
           <ChevronsUpDown className="text-muted-foreground ml-auto size-4 shrink-0" />
-        </button>
+        </div>
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="start">
         <Command shouldFilter={false} label="Filter values">
@@ -145,6 +152,12 @@ export function FilterValuePicker({
             className="h-9"
           />
           <CommandList>
+            {capped ? (
+              <Notice>
+                At the {MAX_FILTER_VALUES}-value limit. Remove one to add
+                another.
+              </Notice>
+            ) : null}
             {canAddTyped ? (
               <CommandGroup>
                 <CommandItem
@@ -174,7 +187,8 @@ export function FilterValuePicker({
               shown={shown}
               selected={values}
               onPick={pick}
-              capped={all.length >= DIMENSION_VALUES_LIMIT}
+              full={capped}
+              truncated={all.length >= DIMENSION_VALUES_LIMIT}
             />
           </CommandList>
         </Command>
@@ -188,13 +202,17 @@ function ValueList({
   shown,
   selected,
   onPick,
-  capped,
+  full,
+  truncated,
 }: {
   state: "loading" | "error" | "empty" | "no-match" | "ready";
   shown: { value: string; count: number }[];
   selected: string[];
   onPick: (value: string) => void;
-  capped: boolean;
+  /** The filter holds as many values as the query sends. */
+  full: boolean;
+  /** The list stopped at the endpoint's cap, so a value can be missing. */
+  truncated: boolean;
 }): JSX.Element {
   // cmdk's own empty state is off with its filtering, so the states are
   // rendered by hand, each as plain text rather than an item.
@@ -219,6 +237,7 @@ function ValueList({
             key={entry.value}
             value={entry.value}
             onSelect={() => onPick(entry.value)}
+            disabled={full && !picked}
             className="cursor-pointer"
           >
             <Check
@@ -233,7 +252,7 @@ function ValueList({
           </CommandItem>
         );
       })}
-      {capped ? (
+      {truncated ? (
         <Notice>
           Showing the {DIMENSION_VALUES_LIMIT} most frequent. Type a value to
           add one that is not listed.
