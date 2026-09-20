@@ -118,7 +118,7 @@ describe("FilterRow", () => {
   });
 
   it("picks one value for equals and closes", () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(next: FilterDraft) => void>();
     render(
       <Harness
         initial={{ field: "tool_name", operator: "equals", values: [] }}
@@ -136,7 +136,7 @@ describe("FilterRow", () => {
   });
 
   it("collects several values for in, shown as chips", () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(next: FilterDraft) => void>();
     render(
       <Harness
         initial={{ field: "tool_name", operator: "in", values: [] }}
@@ -156,7 +156,7 @@ describe("FilterRow", () => {
   });
 
   it("adds a typed value that is not in the list, set apart from listed ones", () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(next: FilterDraft) => void>();
     render(
       <Harness
         initial={{ field: "tool_name", operator: "in", values: [] }}
