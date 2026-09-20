@@ -8,10 +8,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { remoteMcpVerifyURL } from "../funcs/remoteMcpVerifyURL.js";
+import { remoteMcpProbeURL } from "../funcs/remoteMcpProbeURL.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { VerifyURLResult } from "../models/components/verifyurlresult.js";
+import { ProbeURLResult } from "../models/components/probeurlresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,22 +24,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  VerifyRemoteMcpURLRequest,
-  VerifyRemoteMcpURLSecurity,
-} from "../models/operations/verifyremotemcpurl.js";
+  ProbeRemoteMcpURLRequest,
+  ProbeRemoteMcpURLSecurity,
+} from "../models/operations/proberemotemcpurl.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type VerifyRemoteMcpURLMutationVariables = {
-  request: VerifyRemoteMcpURLRequest;
-  security?: VerifyRemoteMcpURLSecurity | undefined;
+export type ProbeRemoteMcpURLMutationVariables = {
+  request: ProbeRemoteMcpURLRequest;
+  security?: ProbeRemoteMcpURLSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type VerifyRemoteMcpURLMutationData = VerifyURLResult;
+export type ProbeRemoteMcpURLMutationData = ProbeURLResult;
 
-export type VerifyRemoteMcpURLMutationError =
+export type ProbeRemoteMcpURLMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -51,53 +51,49 @@ export type VerifyRemoteMcpURLMutationError =
   | SDKValidationError;
 
 /**
- * verifyURL remoteMcp
+ * probeURL remoteMcp
  *
  * @remarks
- * Probe a candidate remote MCP server URL and return the legacy boolean verification result.
- *
- * Deprecated: use probeURL instead.
- *
- * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
+ * Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.
  */
-export function useVerifyRemoteMcpURLMutation(
+export function useProbeRemoteMcpURLMutation(
   options?: MutationHookOptions<
-    VerifyRemoteMcpURLMutationData,
-    VerifyRemoteMcpURLMutationError,
-    VerifyRemoteMcpURLMutationVariables
+    ProbeRemoteMcpURLMutationData,
+    ProbeRemoteMcpURLMutationError,
+    ProbeRemoteMcpURLMutationVariables
   >,
 ): UseMutationResult<
-  VerifyRemoteMcpURLMutationData,
-  VerifyRemoteMcpURLMutationError,
-  VerifyRemoteMcpURLMutationVariables
+  ProbeRemoteMcpURLMutationData,
+  ProbeRemoteMcpURLMutationError,
+  ProbeRemoteMcpURLMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildVerifyRemoteMcpURLMutation(client, options),
+    ...buildProbeRemoteMcpURLMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyVerifyRemoteMcpURL(): MutationKey {
-  return ["@gram/client", "remoteMcp", "verifyURL"];
+export function mutationKeyProbeRemoteMcpURL(): MutationKey {
+  return ["@gram/client", "remoteMcp", "probeURL"];
 }
 
-export function buildVerifyRemoteMcpURLMutation(
+export function buildProbeRemoteMcpURLMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: VerifyRemoteMcpURLMutationVariables,
-  ) => Promise<VerifyRemoteMcpURLMutationData>;
+    variables: ProbeRemoteMcpURLMutationVariables,
+  ) => Promise<ProbeRemoteMcpURLMutationData>;
 } {
   return {
-    mutationKey: mutationKeyVerifyRemoteMcpURL(),
-    mutationFn: function verifyRemoteMcpURLMutationFn({
+    mutationKey: mutationKeyProbeRemoteMcpURL(),
+    mutationFn: function probeRemoteMcpURLMutationFn({
       request,
       security,
       options,
-    }): Promise<VerifyRemoteMcpURLMutationData> {
+    }): Promise<ProbeRemoteMcpURLMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -110,7 +106,7 @@ export function buildVerifyRemoteMcpURLMutation(
           ),
         },
       };
-      return unwrapAsync(remoteMcpVerifyURL(
+      return unwrapAsync(remoteMcpProbeURL(
         client$,
         request,
         security,
