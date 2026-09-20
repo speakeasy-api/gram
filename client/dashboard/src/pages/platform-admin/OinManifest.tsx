@@ -335,7 +335,7 @@ function ManifestView(): JSX.Element {
 
       <AdminSection
         title="Requesting app"
-        description="How Speakeasy itself appears in the listing. Okta calls the app that asks for access the requesting app. Configured through GRAM_OIN_LISTING_NAME and GRAM_OIN_LISTING_ORG_DOMAIN; unset values render as unset."
+        description="How Speakeasy itself appears in the listing. Requesting app is Okta's name for the app that asks for access. Configured through GRAM_OIN_LISTING_NAME and GRAM_OIN_LISTING_ORG_DOMAIN; unset values render as unset."
       >
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 px-4 py-3 text-sm">
           <dt className="text-muted-foreground">Listing name</dt>
