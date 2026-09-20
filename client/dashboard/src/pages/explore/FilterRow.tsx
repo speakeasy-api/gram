@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import {
   Select,
   SelectContent,
@@ -7,27 +6,35 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { TagInput } from "@/components/ui/TagInput";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import type { JSX, ReactNode } from "react";
 import {
   FILTER_OPERATOR_LABELS,
   fieldByName,
+  filterForField,
   filterableFields,
   operatorsForField,
   type FilterDraft,
   type FilterOperator,
+  type WindowPreset,
 } from "./exploreModel";
+import { FilterValuePicker } from "./FilterValuePicker";
 
-/** One WHERE row: a field, an operator the catalog allows on it, and values. */
+/**
+ * One WHERE row: a field, an operator the catalog allows on it, and values
+ * picked from what the dimension holds inside the builder's window.
+ */
 export function FilterRow({
   dataset,
+  window,
   filter,
   onChange,
   onRemove,
   trailing,
 }: {
   dataset: AnalyticsDataset | undefined;
+  /** The builder's window: the picker lists values seen inside it. */
+  window: WindowPreset;
   filter: FilterDraft;
   onChange: (next: FilterDraft) => void;
   onRemove: () => void;
@@ -35,10 +42,7 @@ export function FilterRow({
 }): JSX.Element {
   const field = fieldByName(dataset, filter.field);
 
-  const changeField = (name: string) => {
-    const operator = operatorsForField(fieldByName(dataset, name))[0] ?? "in";
-    onChange({ field: name, operator, values: [] });
-  };
+  const changeField = (name: string) => onChange(filterForField(dataset, name));
   const changeOperator = (operator: FilterOperator) =>
     onChange({
       ...filter,
@@ -77,7 +81,16 @@ export function FilterRow({
           </SelectContent>
         </Select>
       ) : null}
-      {field ? <FilterValues filter={filter} onChange={onChange} /> : null}
+      {field && dataset ? (
+        <FilterValuePicker
+          dataset={dataset.name}
+          dimension={field.name}
+          window={window}
+          operator={filter.operator}
+          values={filter.values}
+          onChange={(values) => onChange({ ...filter, values })}
+        />
+      ) : null}
       <Button
         variant="tertiary"
         size="sm"
@@ -87,38 +100,5 @@ export function FilterRow({
       />
       {trailing}
     </div>
-  );
-}
-
-// Values are typed for now. The picker that offers the values the project
-// has actually seen replaces this once dimension values are wired in.
-function FilterValues({
-  filter,
-  onChange,
-}: {
-  filter: FilterDraft;
-  onChange: (next: FilterDraft) => void;
-}): JSX.Element {
-  if (filter.operator === "equals") {
-    return (
-      <Input
-        value={filter.values[0] ?? ""}
-        onChange={(value) =>
-          onChange({ ...filter, values: value === "" ? [] : [value] })
-        }
-        placeholder="Value"
-        aria-label="Filter value"
-        className="w-56"
-      />
-    );
-  }
-  return (
-    <TagInput
-      value={filter.values}
-      onChange={(values) => onChange({ ...filter, values })}
-      ariaLabel="Filter values"
-      placeholder="Type a value, then Enter"
-      className="min-w-64 flex-1"
-    />
   );
 }
