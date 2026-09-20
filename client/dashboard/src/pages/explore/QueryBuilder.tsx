@@ -9,7 +9,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
+import { Info } from "lucide-react";
 import type { JSX } from "react";
 import { AddRowButton, BuilderField, ClauseRow } from "./ClauseRow";
 import {
@@ -55,10 +61,16 @@ export function QueryBuilder({
   datasets,
   spec,
   onChange,
+  onRun,
+  changed,
 }: {
   datasets: AnalyticsDataset[];
   spec: ExploreSpec;
   onChange: (spec: ExploreSpec) => void;
+  /** Run the query the builder currently describes. */
+  onRun: () => void;
+  /** Whether the builder has moved on from the query the results answer. */
+  changed: boolean;
 }): JSX.Element {
   const dataset = findDataset(datasets, spec.dataset);
   const grouped = spec.chartType !== "number";
@@ -99,47 +111,35 @@ export function QueryBuilder({
   return (
     <div className="border-border bg-card flex flex-col gap-5 border p-5">
       <ClauseRow label="Dataset">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
           <Select value={spec.dataset} onValueChange={changeDataset}>
             <SelectTrigger className="w-64" aria-label="Dataset">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {datasets.map((candidate) => (
-                <SelectItem
-                  key={candidate.name}
-                  value={candidate.name}
-                  description={candidate.description}
-                >
+                <SelectItem key={candidate.name} value={candidate.name}>
                   {candidate.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {dataset ? <DatasetSummary dataset={dataset} /> : null}
-        </div>
-      </ClauseRow>
-
-      <ClauseRow label="Visualize">
-        <div className="flex flex-col gap-2">
-          {spec.measures.map((measure, index) => (
-            <MeasureRow
-              key={index}
-              dataset={dataset}
-              measure={measure}
-              onChange={(next) => setMeasure(index, next)}
-              onRemove={
-                spec.measures.length > 1
-                  ? () => patch(withMeasures(removeAt(spec.measures, index)))
-                  : undefined
-              }
-              trailing={
-                index === spec.measures.length - 1 ? (
-                  <AddRowButton label="Add measure" onClick={addMeasure} />
-                ) : undefined
-              }
-            />
-          ))}
+          {dataset ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="About this dataset"
+                  className="text-muted-foreground hover:text-foreground focus-visible:ring-ring flex size-6 shrink-0 items-center justify-center rounded-sm focus-visible:ring-2 focus-visible:outline-none"
+                >
+                  <Info className="size-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" align="start">
+                <DatasetSummary dataset={dataset} />
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
         </div>
       </ClauseRow>
 
@@ -172,6 +172,47 @@ export function QueryBuilder({
               >
                 Add filter
               </Button>
+            </div>
+          ) : null}
+        </div>
+      </ClauseRow>
+
+      <ClauseRow label="Visualize">
+        <div className="flex flex-col gap-2">
+          {spec.measures.map((measure, index) => (
+            <MeasureRow
+              key={index}
+              dataset={dataset}
+              measure={measure}
+              onChange={(next) => setMeasure(index, next)}
+              onRemove={() =>
+                patch(withMeasures(removeAt(spec.measures, index)))
+              }
+              trailing={
+                index === spec.measures.length - 1 ? (
+                  <AddRowButton
+                    label="Add another measure"
+                    onClick={addMeasure}
+                  />
+                ) : undefined
+              }
+            />
+          ))}
+          {spec.measures.length === 0 ? (
+            // Nothing measured is still a question: the rows themselves.
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="tertiary"
+                size="sm"
+                icon="plus"
+                onClick={addMeasure}
+              >
+                Add measure
+              </Button>
+              <span className="text-muted-foreground text-xs">
+                Nothing measured, so the results are rows at the dataset's
+                grain.
+              </span>
             </div>
           ) : null}
         </div>
@@ -252,6 +293,16 @@ export function QueryBuilder({
             className="w-32"
           />
         </BuilderField>
+        <div className="ml-auto flex items-center gap-3">
+          {changed ? (
+            <span className="text-muted-foreground text-xs">
+              Changed since the last run.
+            </span>
+          ) : null}
+          <Button variant="primary" size="sm" icon="play" onClick={onRun}>
+            Run query
+          </Button>
+        </div>
       </div>
       <p className="text-muted-foreground text-xs">
         Buckets are sized from the window. Order and limit shape the summary
@@ -261,14 +312,16 @@ export function QueryBuilder({
   );
 }
 
-// The dataset's one-line description, with its grain as a mono tag.
+// The dataset's one-line description with its grain, behind an info icon
+// beside the picker so the row stays one control wide and the picker itself
+// carries no hover text.
 function DatasetSummary({
   dataset,
 }: {
   dataset: AnalyticsDataset;
 }): JSX.Element {
   return (
-    <span className="text-muted-foreground min-w-0 text-sm">
+    <span className="block max-w-sm">
       {dataset.description}
       <span className="font-mono text-xs"> · {dataset.grain} grain</span>
     </span>
