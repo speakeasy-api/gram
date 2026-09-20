@@ -84,7 +84,7 @@ describe("ExploreResults", () => {
     expect(screen.queryByText("No rows to show")).toBeNull();
   });
 
-  it("names the dataset the results answer for", () => {
+  it("tables a loaded run without naming a plan or dataset in the header", () => {
     render(
       <ExploreResults
         dataset={dataset}
@@ -93,7 +93,7 @@ describe("ExploreResults", () => {
         summary={loaded([{ user: "ann", count: 1250 }])}
       />,
     );
-    expect(screen.getByText("sessions")).toBeTruthy();
+    expect(screen.queryByText("sessions")).toBeNull();
     expect(screen.getByText("ann")).toBeTruthy();
     expect(screen.getByText("1.3K")).toBeTruthy();
   });

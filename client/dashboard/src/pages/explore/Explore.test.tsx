@@ -1,5 +1,6 @@
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import type { AnalyticsQueryPayload } from "@gram/client/models/components/analyticsquerypayload.js";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -112,6 +113,16 @@ const toolCalls: AnalyticsDataset = {
   ],
 };
 
+// The dataset picker carries a tooltip, which needs the provider the app
+// mounts above every page.
+function renderExplore() {
+  return render(
+    <TooltipProvider>
+      <Explore />
+    </TooltipProvider>,
+  );
+}
+
 describe("Explore", () => {
   beforeEach(() => {
     testState.isPending = false;
@@ -127,15 +138,15 @@ describe("Explore", () => {
   });
 
   it("opens on the catalog's first dataset with its defaults", () => {
-    render(<Explore />);
+    renderExplore();
 
     expect(screen.getByRole("heading", { name: "Explore" })).toBeTruthy();
     expect(screen.getByText("preview")).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Dataset" }).textContent).toBe(
       "sessions",
     );
-    expect(screen.getByText("One row per agent session.")).toBeTruthy();
-    expect(screen.getByText("· session grain")).toBeTruthy();
+    // The description and grain live in the picker's tooltip, not the row.
+    expect(screen.queryByText("One row per agent session.")).toBeNull();
     expect(
       screen.getByRole("combobox", { name: "Aggregation" }).textContent,
     ).toBe("count");
@@ -145,7 +156,7 @@ describe("Explore", () => {
   });
 
   it("runs nothing until asked, then both shapes of the query", () => {
-    render(<Explore />);
+    renderExplore();
 
     expect(screen.getByText("Nothing has run yet")).toBeTruthy();
     expect(testState.bodies.every((body) => body === null)).toBe(true);
@@ -167,7 +178,7 @@ describe("Explore", () => {
   });
 
   it("stops asking for a chart once the chart type is a table", () => {
-    render(<Explore />);
+    renderExplore();
     fireEvent.click(screen.getByRole("button", { name: "Table" }));
     testState.bodies = [];
 
@@ -178,7 +189,7 @@ describe("Explore", () => {
   });
 
   it("keeps the last run's results while the builder moves on", () => {
-    render(<Explore />);
+    renderExplore();
     fireEvent.click(screen.getByRole("button", { name: "Run query" }));
     testState.bodies = [];
 
@@ -196,7 +207,7 @@ describe("Explore", () => {
   });
 
   it("adds and removes filter rows", () => {
-    render(<Explore />);
+    renderExplore();
 
     expect(screen.queryByRole("combobox", { name: "Filter field" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
@@ -212,7 +223,7 @@ describe("Explore", () => {
   });
 
   it("adds and removes measure rows, and no measure means rows", () => {
-    render(<Explore />);
+    renderExplore();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Add another measure" }),
@@ -240,7 +251,7 @@ describe("Explore", () => {
 
   it("shows the catalog loading", () => {
     testState.isPending = true;
-    render(<Explore />);
+    renderExplore();
 
     expect(screen.getByLabelText("Loading the catalog")).toBeTruthy();
     expect(screen.queryByRole("combobox", { name: "Dataset" })).toBeNull();
@@ -248,7 +259,7 @@ describe("Explore", () => {
 
   it("offers a retry when the catalog fails to load", () => {
     testState.isError = true;
-    render(<Explore />);
+    renderExplore();
 
     expect(screen.getByText("The catalog did not load")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -257,7 +268,7 @@ describe("Explore", () => {
 
   it("says so when the catalog has no datasets, and runs nothing", () => {
     testState.datasets = [];
-    render(<Explore />);
+    renderExplore();
 
     expect(screen.getByText("No datasets yet")).toBeTruthy();
     expect(screen.queryByRole("combobox", { name: "Dataset" })).toBeNull();
@@ -267,7 +278,7 @@ describe("Explore", () => {
   it("stays closed to an organization the rollout has not reached", () => {
     testState.flagStatus = "disabled";
     testState.describeCalls = 0;
-    render(<Explore />);
+    renderExplore();
 
     expect(screen.getByText("Explore is not available yet")).toBeTruthy();
     expect(screen.queryByRole("combobox", { name: "Dataset" })).toBeNull();
@@ -276,7 +287,7 @@ describe("Explore", () => {
 
   it("waits rather than saying no while the flag is still loading", () => {
     testState.flagStatus = "loading";
-    render(<Explore />);
+    renderExplore();
 
     expect(screen.getByLabelText("Loading the catalog")).toBeTruthy();
     expect(screen.queryByText("Explore is not available yet")).toBeNull();

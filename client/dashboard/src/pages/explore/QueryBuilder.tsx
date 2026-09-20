@@ -9,6 +9,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import type { JSX } from "react";
 import { AddRowButton, BuilderField, ClauseRow } from "./ClauseRow";
@@ -105,21 +110,27 @@ export function QueryBuilder({
   return (
     <div className="border-border bg-card flex flex-col gap-5 border p-5">
       <ClauseRow label="Dataset">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <Select value={spec.dataset} onValueChange={changeDataset}>
-            <SelectTrigger className="w-64" aria-label="Dataset">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {datasets.map((candidate) => (
-                <SelectItem key={candidate.name} value={candidate.name}>
-                  {candidate.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {dataset ? <DatasetSummary dataset={dataset} /> : null}
-        </div>
+        <Select value={spec.dataset} onValueChange={changeDataset}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <SelectTrigger className="w-64" aria-label="Dataset">
+                <SelectValue />
+              </SelectTrigger>
+            </TooltipTrigger>
+            {dataset ? (
+              <TooltipContent side="bottom" align="start">
+                <DatasetSummary dataset={dataset} />
+              </TooltipContent>
+            ) : null}
+          </Tooltip>
+          <SelectContent>
+            {datasets.map((candidate) => (
+              <SelectItem key={candidate.name} value={candidate.name}>
+                {candidate.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </ClauseRow>
 
       <ClauseRow label="Where">
@@ -291,14 +302,15 @@ export function QueryBuilder({
   );
 }
 
-// The dataset's one-line description, with its grain as a mono tag.
+// The dataset's one-line description with its grain, shown on hover over
+// the picker so the row stays one control wide.
 function DatasetSummary({
   dataset,
 }: {
   dataset: AnalyticsDataset;
 }): JSX.Element {
   return (
-    <span className="text-muted-foreground min-w-0 text-sm">
+    <span className="block max-w-sm">
       {dataset.description}
       <span className="font-mono text-xs"> · {dataset.grain} grain</span>
     </span>

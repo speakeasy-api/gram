@@ -47,12 +47,7 @@ export function ExploreResults({
       className="border-border bg-card flex flex-col gap-4 border p-5"
       aria-busy={busy}
     >
-      <div className="flex items-center justify-between gap-4">
-        <span className="text-eyebrow">Results</span>
-        <span className="text-muted-foreground font-mono text-xs">
-          {spec.dataset}
-        </span>
-      </div>
+      <span className="text-eyebrow">Results</span>
       <ResultsBody
         dataset={dataset}
         spec={spec}
