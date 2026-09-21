@@ -106,6 +106,46 @@ describe("exclusionOptions", () => {
   });
 });
 
+describe("exclusionOptions source titles", () => {
+  const sourceOption = (source: string, ruleId = "r") =>
+    exclusionOptions([result({ source, ruleId })]).find(
+      (o) => o.value === "source",
+    );
+
+  it.each([
+    ["gitleaks", "Anything detected by secret scanning"],
+    ["presidio", "Anything detected by personal data detection"],
+    ["prompt_injection", "Anything detected by prompt injection detection"],
+    ["llm_judge", "Anything detected by prompt policies"],
+    ["llm_analyzer", "Anything detected by the risk model"],
+    ["shadow_mcp", "Anything detected by Shadow MCP"],
+  ])("titles the %s option without the raw source", (source, title) => {
+    const option = sourceOption(source);
+    expect(option?.title).toBe(title);
+    // The rule itself is still written against the raw source.
+    expect(option?.fields).toMatchObject({
+      matchType: "source",
+      matchValue: source,
+    });
+  });
+
+  it("falls back to the raw source when nothing classifies it", () => {
+    expect(sourceOption("catalog")?.title).toBe("Anything detected by catalog");
+  });
+
+  it("names the LLM analyzer's rule option by category, not by id", () => {
+    const options = exclusionOptions([
+      result({ source: "llm_analyzer", ruleId: "secret.llm" }),
+    ]);
+    const rule = options.find((o) => o.value === "rule");
+    expect(rule?.title).toBe("Any Secret finding");
+    expect(rule?.fields).toMatchObject({
+      matchType: "rule_id",
+      matchValue: "secret.llm",
+    });
+  });
+});
+
 describe("exactCandidate", () => {
   const masked = result({ matchRedacted: "<redacted len=13 sha=ab12>" });
 
