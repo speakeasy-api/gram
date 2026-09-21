@@ -53,6 +53,18 @@ var errWorkloadIssuerUntrusted = errors.New("no workload issuer in this tenancy 
 // 401 must not answer one here.
 var errWorkloadIssuerLookupRateLimited = errors.New("workload issuer lookups are rate limited for this endpoint")
 
+// workloadIssuerRateLimitedError is errWorkloadIssuerLookupRateLimited with
+// the limiter's Retry-After, so the token endpoint can relay it.
+type workloadIssuerRateLimitedError struct {
+	retryAfter time.Duration
+}
+
+func (e *workloadIssuerRateLimitedError) Error() string {
+	return fmt.Sprintf("%s: retry after %s", errWorkloadIssuerLookupRateLimited, e.retryAfter)
+}
+
+func (e *workloadIssuerRateLimitedError) Unwrap() error { return errWorkloadIssuerLookupRateLimited }
+
 // errWorkloadIssuerLimiterUnavailable reports that the limiter's store could
 // not answer. Fails closed, and stays distinct from a refusal so an outage is
 // not reported as a rate limit an operator can wait out.
@@ -174,7 +186,7 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 			return nil, fmt.Errorf("%w: %w", errWorkloadIssuerLimiterUnavailable, chargeErr)
 		}
 		if !charged.Allowed {
-			return nil, fmt.Errorf("%w: retry after %s", errWorkloadIssuerLookupRateLimited, charged.RetryAfter)
+			return nil, &workloadIssuerRateLimitedError{retryAfter: charged.RetryAfter}
 		}
 
 		issuer, found, lookupErr := a.lookup(lookupCtx, endpoint, issuerURL)

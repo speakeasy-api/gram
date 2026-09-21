@@ -34,6 +34,12 @@ const (
 	// credential and authorization safety gate is promoted.
 	FlagAgentMCPAuthorizationM2 Flag = "gram-agent-mcp-authorization-m2"
 
+	// FlagWorkloadAssertionGrant gates the clientless workload assertion grant
+	// at the MCP token endpoint, per organization. It fails closed unless
+	// explicitly on, and the grant also requires the agent authorization
+	// rollout, since a workload acts through its assigned agent's policy.
+	FlagWorkloadAssertionGrant Flag = "gram-workload-assertion-grant"
+
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
 	// its hardware serial against device-keyed ones, falling back to email

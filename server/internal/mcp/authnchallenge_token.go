@@ -106,6 +106,7 @@ type mintSessionParams struct {
 }
 
 type mintedSession struct {
+	ID                     uuid.UUID
 	AccessExpiresAt        time.Time
 	AuthorizationExpiresAt time.Time
 	Body                   []byte
@@ -120,6 +121,10 @@ type sessionIssuancePolicy string
 const (
 	sessionIssuancePolicyIssuerScoped   sessionIssuancePolicy = "issuer_scoped"
 	sessionIssuancePolicyResourceScoped sessionIssuancePolicy = "resource_scoped"
+	// sessionIssuancePolicyWorkload is a resource-scoped session for a
+	// workload: no client, no refresh token, and an agent-shaped delegated
+	// policy with no authorizer.
+	sessionIssuancePolicyWorkload sessionIssuancePolicy = "workload"
 )
 
 const idJAGRefreshTokenHashPrefix = "id-jag:"
@@ -244,7 +249,7 @@ func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds present
 			// current client metadata before authenticating the client.
 			return tokenGrant{clientAuth: tokenClientAuthRequired, resolveMode: resolveClientCIMD, authenticated: s.handleTokenJWTBearerGrant, clientless: nil}, true
 		}
-		return tokenGrant{clientAuth: tokenClientAuthNone, resolveMode: "", authenticated: nil, clientless: refuseClientlessTokenGrant}, true
+		return tokenGrant{clientAuth: tokenClientAuthNone, resolveMode: "", authenticated: nil, clientless: s.handleWorkloadAssertionGrant}, true
 	default:
 		return tokenGrant{clientAuth: tokenClientAuthUndeclared, resolveMode: "", authenticated: nil, clientless: nil}, false
 	}
@@ -312,7 +317,8 @@ func (s *Service) serveTokenGrant(
 }
 
 // refuseClientlessTokenGrant answers a JWT bearer request that presents no
-// client authentication with the response a missing client_id produces.
+// client authentication with the response a missing client_id produces. It is
+// the answer while the workload assertion grant is off.
 func refuseClientlessTokenGrant(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -1379,6 +1385,10 @@ const accessTokenLifetime = 1 * time.Hour
 // stable high-entropy JTI that can be reused when re-signing for another origin.
 // Params.ToolSelection is the consent-screen policy persisted verbatim; refresh
 // rotation carries the prior session's value forward.
+//
+// Workload sessions are the one policy minted without a client: clientRow is
+// nil, the session stores no refresh token hash, and it stays authorized
+// exactly as long as its access token.
 func (s *Service) mintSession(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
@@ -1389,6 +1399,7 @@ func (s *Service) mintSession(
 ) (*mintedSession, error) {
 	audience := endpoint.AudienceURN
 	refreshable := true
+	storesRefreshHash := true
 	switch params.Policy {
 	case sessionIssuancePolicyIssuerScoped:
 		if params.Audience != "" {
@@ -1402,18 +1413,39 @@ func (s *Service) mintSession(
 		refreshable = false
 		emaLifetime := accessTokenLifetime
 		params.DesiredSessionDuration = &emaLifetime
+	case sessionIssuancePolicyWorkload:
+		if clientRow != nil || params.Audience == "" || params.AuthorizationExpiresAt != nil || params.DesiredSessionDuration == nil || params.Replayable || params.AuthorizerUserID.Valid || params.ToolSelection != nil || params.Subject.Kind != urn.SessionSubjectKindWorkload {
+			return nil, oops.E(oops.CodeUnexpected, nil, "invalid workload session issuance parameters").LogError(ctx, logger)
+		}
+		audience = params.Audience
+		refreshable = false
+		storesRefreshHash = false
 	default:
 		return nil, oops.E(oops.CodeUnexpected, nil, "unknown session issuance policy").LogError(ctx, logger)
 	}
 
-	if params.Subject.Kind == urn.SessionSubjectKindAgent {
+	if clientRow == nil && params.Policy != sessionIssuancePolicyWorkload {
+		return nil, oops.E(oops.CodeUnexpected, nil, "session issuance requires a client").LogError(ctx, logger)
+	}
+
+	switch {
+	case params.Subject.Kind == urn.SessionSubjectKindAgent:
 		if _, err := loadAgentSessionCredential(
 			endpoint, params.Subject, params.Subject, pgtype.Text{String: endpoint.OrganizationID, Valid: true},
 			params.AuthorizerUserID, params.DelegatedGrants, params.DelegatedGrantsVersion,
 		); err != nil {
 			return nil, oops.C(oops.CodeUnauthorized)
 		}
-	} else if params.AuthorizerUserID.Valid || params.DelegatedGrants != nil || params.DelegatedGrantsVersion.Valid {
+	case params.Policy == sessionIssuancePolicyWorkload:
+		// The same check the MCP side applies to the stored row, so a session
+		// it would refuse is never written.
+		if _, err := loadWorkloadSessionCredential(
+			endpoint, params.Subject, params.Subject, pgtype.Text{String: endpoint.OrganizationID, Valid: true},
+			params.DelegatedGrants, params.DelegatedGrantsVersion,
+		); err != nil {
+			return nil, oops.C(oops.CodeUnauthorized)
+		}
+	case params.AuthorizerUserID.Valid || params.DelegatedGrants != nil || params.DelegatedGrantsVersion.Valid:
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
@@ -1473,10 +1505,16 @@ func (s *Service) mintSession(
 			return nil, oops.E(oops.CodeUnexpected, err, "generate replayable session jti").LogError(ctx, logger)
 		}
 	}
+	clientID := ""
+	userSessionClientID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if clientRow != nil {
+		clientID = clientRow.ClientID
+		userSessionClientID = uuid.NullUUID{UUID: clientRow.ID, Valid: true}
+	}
 	access, jti, err := s.mintUserSessionAccessToken(mintUserSessionAccessTokenParams{
 		AccessExpiresAt: accessExpiresAt,
 		AudienceURN:     audience,
-		ClientID:        clientRow.ClientID,
+		ClientID:        clientID,
 		Issuer:          issuerURL,
 		JTI:             jti,
 		Subject:         params.Subject,
@@ -1486,24 +1524,27 @@ func (s *Service) mintSession(
 	}
 
 	refreshTokenRaw := ""
-	refreshTokenHash := idJAGRefreshTokenHashPrefix + sha256Hex(jti+":"+uuid.NewString())
-	if refreshable {
+	refreshTokenHash := conv.ToPGText(idJAGRefreshTokenHashPrefix + sha256Hex(jti+":"+uuid.NewString()))
+	switch {
+	case refreshable:
 		refreshTokenRaw, err = generateOpaqueToken()
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "generate refresh token").LogError(ctx, logger)
 		}
-		refreshTokenHash = sha256Hex(refreshTokenRaw)
+		refreshTokenHash = conv.ToPGText(sha256Hex(refreshTokenRaw))
+	case !storesRefreshHash:
+		refreshTokenHash = pgtype.Text{String: "", Valid: false}
 	}
 
-	_, err = queries.CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
+	session, err := queries.CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
 		UserSessionIssuerID:    endpoint.UserSessionIssuerID,
-		UserSessionClientID:    uuid.NullUUID{UUID: clientRow.ID, Valid: true},
+		UserSessionClientID:    userSessionClientID,
 		SubjectUrn:             params.Subject,
 		AuthorizerUserID:       params.AuthorizerUserID,
 		DelegatedGrants:        params.DelegatedGrants,
 		DelegatedGrantsVersion: params.DelegatedGrantsVersion,
 		Jti:                    jti,
-		RefreshTokenHash:       conv.ToPGText(refreshTokenHash),
+		RefreshTokenHash:       refreshTokenHash,
 		ExpiresAt:              pgtype.Timestamptz{Time: accessExpiresAt, InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt:       pgtype.Timestamptz{Time: *params.AuthorizationExpiresAt, InfinityModifier: 0, Valid: true},
 		ToolSelection:          params.ToolSelection,
@@ -1525,6 +1566,7 @@ func (s *Service) mintSession(
 	}
 
 	return &mintedSession{
+		ID:                     session.ID,
 		AccessExpiresAt:        accessExpiresAt,
 		AuthorizationExpiresAt: *params.AuthorizationExpiresAt,
 		Body:                   body,
