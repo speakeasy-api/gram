@@ -18,7 +18,12 @@ const exploreDemoGoTo = vi.hoisted(() => vi.fn());
 const logout = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock("@/contexts/Auth", () => ({
-  useUser: () => ({ displayName: "Sagar", email: "s@x.dev", photoUrl: "" }),
+  useUser: () => ({
+    id: "user_01h8x",
+    displayName: "Sagar",
+    email: "s@x.dev",
+    photoUrl: "",
+  }),
   useSession: () => ({ organizations: [{ id: "o1" }] }),
   useOrganization: () => ({ slug: orgSlug.current }),
   useIsPlatformAdmin: () => isPlatformAdmin(),
@@ -26,14 +31,20 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ projectSlug: "proj" }),
   useSdkClient: () => ({ auth: { logout } }),
+  useProjectSlugForRequests: () => "proj",
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasAnyScope: () => true }),
+  useRBAC: () => ({ hasAnyScope: () => true, isLoading: false }),
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     settings: { goTo: vi.fn() },
     exploreDemo: { goTo: exploreDemoGoTo },
+    identities: {
+      detail: {
+        overview: { href: (urn: string) => `/identities/${urn}` },
+      },
+    },
   }),
   useOrgRoutes: () => ({
     billing: { goTo: vi.fn() },
@@ -41,6 +52,19 @@ vi.mock("@/routes", () => ({
 }));
 vi.mock("react-router", () => ({
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ search: "" }),
+  Link: ({
+    to,
+    children,
+    ...props
+  }: {
+    to: string;
+    children: React.ReactNode;
+  }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
 }));
 vi.mock("@/components/ui/Dropdown", () => ({
   // Radix DropdownMenu requires pointerDown+click to open in happy-dom.
