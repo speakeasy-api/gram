@@ -228,6 +228,41 @@ describe("EvidenceTitle", () => {
     expect(screen.queryByText(/café/)).toBeNull();
   });
 
+  it("leaves out tool call arguments that can't be parsed", async () => {
+    hasScope.mockReturnValue(true);
+    loadChat.mockResolvedValue({
+      messages: [
+        {
+          id: "msg-flagged",
+          role: "assistant",
+          content: "Logging in now.",
+          toolCalls: JSON.stringify([
+            {
+              id: "call-1",
+              function: {
+                name: "login",
+                arguments: '{"password":"caf\\u00e9/pw',
+              },
+            },
+          ]),
+        },
+      ],
+    });
+    listFindings.mockResolvedValue({
+      results: [
+        { source: "gitleaks", match: "café/pw", chatMessageId: "msg-other" },
+      ],
+    });
+    renderTitle("chat-1");
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Show flagged message" }));
+
+    expect(await screen.findByText(/arguments can't be parsed/)).toBeTruthy();
+    expect(screen.queryByText(/u00e9/)).toBeNull();
+  });
+
   it("refuses to show a message whose flagged secret can't be found in its text", async () => {
     hasScope.mockReturnValue(true);
     loadChat.mockResolvedValue({

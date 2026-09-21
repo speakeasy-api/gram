@@ -265,18 +265,20 @@ function flaggedMessageText(message: ChatMessage): string {
 
 /** Tool call arguments re-serialized, so a provider's own escaping (`\u00e9`,
  * `\/`) becomes the form `jsonEscaped` produces and every finding in the chat
- * lines up. Arguments that don't parse are kept as written. */
+ * lines up. Arguments that don't parse can't be matched, so they are left out. */
 function canonicalArgs(args: string | object | undefined): string | undefined {
   if (typeof args !== "string") return argsToString(args);
+  if (!args.trim()) return undefined;
   try {
     return argsToString(JSON.parse(args));
   } catch {
-    return argsToString(args);
+    return "(arguments can't be parsed, so they aren't shown)";
   }
 }
 
 /** Whether a secret flagged on this message can't be found in `text`, e.g. in
- * arguments that don't parse, so it would print in the clear. A match in the stripped harness envelope is never shown, so it's fine. */
+ * arguments that were left out, so the message would read as if it had none.
+ * A match in the stripped harness envelope is never shown, so it's fine. */
 function hasUnlocatedSecret(
   findings: RiskResult[],
   message: ChatMessage,
