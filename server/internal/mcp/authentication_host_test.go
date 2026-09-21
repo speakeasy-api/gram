@@ -336,7 +336,7 @@ func TestAuthenticationHost_OptedInIssuerAnnouncesAuthenticationHost(t *testing.
 	require.Equal(t, authIssuer+"/register", meta["registration_endpoint"])
 	require.Equal(t, authIssuer+"/revoke", meta["revocation_endpoint"])
 
-	// The MCP host no longer serves a document naming a different issuer.
+	// The MCP host serves no document naming a different issuer.
 	req := wellKnownRequest(t, "/.well-known/oauth-authorization-server/mcp/", slug)
 	requireNotFound(t, ti.service.HandleGetAuthorizationServer(httptest.NewRecorder(), req))
 
@@ -366,7 +366,7 @@ func TestAuthenticationHost_OptedInTokensCarryAuthenticationHostIssuer(t *testin
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Equal(t, authIssuer, accessTokenClaims(t, w.Body.Bytes())["iss"])
 
-	// The MCP host's token endpoint still serves the same issuer.
+	// The MCP host's token endpoint mints the same issuer.
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, client)
 	w = postForm(t, ti, slug, "token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, authIssuer)))
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
