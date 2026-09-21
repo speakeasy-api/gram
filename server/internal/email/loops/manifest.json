@@ -91,35 +91,6 @@
       "source": "trial_ending_soon.lmx",
       "variables": ["organization_name", "trial_end_date", "action_url"]
     },
-    "tum_usage_overage": {
-      "managed_name": "gram.transactional.v2.tum_usage_overage",
-      "subject": "{data.organization_name} has exceeded its token allowance",
-      "preview_text": "Usage is at {data.threshold_percent}% for the current billing cycle.",
-      "source": "tum_usage_overage.lmx",
-      "variables": [
-        "organization_name",
-        "threshold_percent",
-        "usage_tokens",
-        "token_limit",
-        "overage_tokens",
-        "cycle_start",
-        "cycle_end"
-      ]
-    },
-    "tum_usage_threshold": {
-      "managed_name": "gram.transactional.v2.tum_usage_threshold",
-      "subject": "{data.organization_name} is at {data.threshold_percent}% of its token allowance",
-      "preview_text": "Review current tokens-under-management usage.",
-      "source": "tum_usage_threshold.lmx",
-      "variables": [
-        "organization_name",
-        "threshold_percent",
-        "usage_tokens",
-        "token_limit",
-        "cycle_start",
-        "cycle_end"
-      ]
-    },
     "weekly_usage_summary": {
       "managed_name": "gram.transactional.v2.weekly_usage_summary",
       "subject": "Weekly usage for {data.organization_name}",
