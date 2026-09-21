@@ -61,9 +61,12 @@ func TestDeniedToolRetryDoesNotBecomeAccepted(t *testing.T) {
 		{Role: "user", Content: json.RawMessage(`[{"type":"tool_result","tool_use_id":"call-example","content":"benign result"}]`)},
 	}
 	store := &memoryStore{}
-	var calls atomic.Int32
+	var calls, promptScans atomic.Int32
 	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scannerFunc(func(_ context.Context, r risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 		calls.Add(1)
+		if r.Text == "prompt" {
+			promptScans.Add(1)
+		}
 		if r.ToolName == "blocked_tool" {
 			return &risk.ScanResult{Action: "block"}, nil
 		}
@@ -82,7 +85,10 @@ func TestDeniedToolRetryDoesNotBecomeAccepted(t *testing.T) {
 		require.Equal(t, "deny", verdict.Action)
 		require.Equal(t, markerA, store.accepted)
 	}
-	require.LessOrEqual(t, int(calls.Load()), 1+2*scanConcurrency)
+	// The accepted prompt is scanned once; each retry scans only the two
+	// trailing inputs, concurrently.
+	require.EqualValues(t, 1, promptScans.Load())
+	require.LessOrEqual(t, int(calls.Load()), 1+2*2)
 	require.Len(t, store.saved, 3)
 	// An edited retry recovers: denial is not sticky session state.
 	frame.Messages[1] = textMessage("assistant", "safe reply")

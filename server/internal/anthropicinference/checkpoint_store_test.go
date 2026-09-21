@@ -155,7 +155,12 @@ func TestPostgresCheckpointRequiresSuccessfulEvaluation(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, raw)
 	}
-	require.LessOrEqual(t, int(calls.Load()), 2*3)
+	// Denied deliveries leave the checkpoint empty, so each pass scans the
+	// transcript again. Inputs scan concurrently and a denial cancels the
+	// ones not yet started, so a pass scans between the denied input and
+	// every input.
+	require.GreaterOrEqual(t, int(calls.Load()), 2*2)
+	require.LessOrEqual(t, int(calls.Load()), 2*len(frame.Messages))
 	frame.Messages[1] = textMessage("assistant", "safe reply")
 	verdict, err := service.Process(t.Context(), config, frame)
 	require.NoError(t, err)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -79,4 +80,16 @@ func TestProjectFlagStateResolvesEachFlagOncePerRequest(t *testing.T) {
 	require.True(t, ProjectFlagEnabled(t.Context(), logger, queries, provider, orgID, project.ID, feature.FlagRiskLLMAnalyzer))
 	require.True(t, ProjectFlagEnabled(t.Context(), logger, queries, provider, orgID, project.ID, feature.FlagRiskLLMAnalyzer))
 	require.EqualValues(t, 4, provider.calls.Load())
+
+	// Concurrent scans sharing one memo still resolve each flag once.
+	provider.calls.Store(0)
+	ctx = WithRequestMemo(t.Context())
+	var group sync.WaitGroup
+	for range 8 {
+		for _, flag := range []feature.Flag{feature.FlagRiskLLMAnalyzer, feature.FlagRiskEnforcementPubsub} {
+			group.Go(func() { _ = ProjectFlagEnabled(ctx, logger, queries, provider, orgID, project.ID, flag) })
+		}
+	}
+	group.Wait()
+	require.EqualValues(t, 2, provider.calls.Load())
 }

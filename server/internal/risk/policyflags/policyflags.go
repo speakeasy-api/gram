@@ -49,20 +49,19 @@ func ProjectFlagState(ctx context.Context, logger *slog.Logger, queries *repo.Qu
 		return false, ""
 	}
 	memo, _ := ctx.Value(memoKey{}).(*requestMemo)
-	key := projectID.String() + ":" + string(flag)
-	if memo != nil {
-		memo.mu.Lock()
-		state, ok := memo.states[key]
-		memo.mu.Unlock()
-		if ok {
-			return state.enabled, state.orgSlug
-		}
+	if memo == nil {
+		state := resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
+		return state.enabled, state.orgSlug
 	}
-	state := resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
-	if memo != nil {
-		memo.mu.Lock()
+	// The lock is held through resolution so concurrent scans that miss the
+	// same flag wait for one lookup instead of each making their own.
+	memo.mu.Lock()
+	defer memo.mu.Unlock()
+	key := projectID.String() + ":" + string(flag)
+	state, ok := memo.states[key]
+	if !ok {
+		state = resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
 		memo.states[key] = state
-		memo.mu.Unlock()
 	}
 	return state.enabled, state.orgSlug
 }
