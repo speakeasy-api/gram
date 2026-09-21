@@ -32,10 +32,10 @@ var (
 	// the reverse.
 	//
 	// jwt-bearer is claimable because the ID-JAG exchange authenticates a
-	// registered client. The workload grant shares that grant_type but takes
-	// no client at all: a request presenting client credentials is always
-	// handled as ID-JAG, so claiming jwt-bearer here grants nothing on the
-	// workload path.
+	// registered client. The same grant_type without client credentials takes
+	// the token endpoint's clientless branch, and a request presenting client
+	// credentials is always handled as ID-JAG, so claiming jwt-bearer here
+	// confers nothing on the clientless path.
 	RegistrableGrantTypes = []string{
 		oauthwire.GrantTypeAuthorizationCode,
 		oauthwire.GrantTypeRefreshToken,
