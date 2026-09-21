@@ -27,6 +27,7 @@ func TestUsageChangePercent_UsesExactLargeQuantities(t *testing.T) {
 	require.True(t, ok)
 	current := new(big.Int).Add(previous, new(big.Int).Quo(previous, big.NewInt(2)))
 	require.Equal(t, "+50%", usageChangePercent(current, previous))
+	require.Equal(t, "+0%", usageChangePercent(previous, previous))
 }
 
 func TestUsageChangePercent_NoPreviousUsage(t *testing.T) {
