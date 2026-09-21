@@ -39,6 +39,7 @@ func registerReadDocTool(reg *Registrar) {
 		Description: "Read one reviewed Speakeasy setup guide in full, by the gram:// URI search_gram_docs returned. Constraints: returns guide_unavailable when no reviewed guide stands behind that URI — say so and hand the user the canonical links rather than inventing steps.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{
+		Authorization: ExternalAuthorizationOrgAdmin,
 		// Assistant-only. External clients read the same content through
 		// resources/read, and offering both would be two names for one thing.
 		Audiences: []Audience{AudienceAssistant}, ProjectScope: ProjectScopeNone,

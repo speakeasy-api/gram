@@ -48,6 +48,7 @@ WITH assignments AS (
       ) AS destination_invoice_id
   FROM stripe_invoice_allocations allocation
   WHERE allocation.organization_id = $1
+    AND allocation.source_kind = 'openrouter_daily_spend'
     AND allocation.amount_usd > 0
     AND allocation.destination_invoice_id IS NULL
     AND allocation.original_invoice_id IS NOT NULL
@@ -74,28 +75,6 @@ func (q *Queries) AssignPositiveCarryToStripeInvoice(ctx context.Context, organi
 	return result.RowsAffected(), nil
 }
 
-const attachTUMCarryToOriginalInvoice = `-- name: AttachTUMCarryToOriginalInvoice :execrows
-UPDATE stripe_invoice_allocations allocation
-SET original_invoice_id = invoice.stripe_invoice_id,
-    destination_invoice_id = CASE WHEN allocation.amount_usd < 0 THEN invoice.stripe_invoice_id END,
-    updated_at = clock_timestamp()
-FROM stripe_invoices invoice
-WHERE allocation.organization_id = $1
-  AND allocation.source_kind = 'tum_cycle'
-  AND allocation.original_invoice_id IS NULL
-  AND invoice.organization_id = allocation.organization_id
-  AND invoice.service_period_start = allocation.source_period_start
-  AND invoice.service_period_end = allocation.source_period_end
-`
-
-func (q *Queries) AttachTUMCarryToOriginalInvoice(ctx context.Context, organizationID pgtype.Text) (int64, error) {
-	result, err := q.db.Exec(ctx, attachTUMCarryToOriginalInvoice, organizationID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const claimNextStripeInvoiceAllocation = `-- name: ClaimNextStripeInvoiceAllocation :one
 WITH candidate AS (
   SELECT
@@ -107,6 +86,7 @@ WITH candidate AS (
     ON destination.stripe_invoice_id = allocation.destination_invoice_id
    AND destination.organization_id = allocation.organization_id
   WHERE allocation.organization_id = $1
+    AND allocation.source_kind = 'openrouter_daily_spend'
     AND allocation.delivery_state IN ('pending', 'ambiguous')
     AND allocation.amount_usd <> 0
     AND (
@@ -132,8 +112,6 @@ WITH candidate AS (
   , allocation.source_key
   , allocation.seq
   , allocation.source_day
-  , allocation.source_period_start
-  , allocation.source_period_end
   , allocation.amount_usd
   , allocation.original_invoice_id
   , allocation.destination_invoice_id
@@ -143,7 +121,7 @@ WITH candidate AS (
   , candidate.previous_delivery_state
 )
 SELECT
-    claimed.id, claimed.organization_id, claimed.source_kind, claimed.source_key, claimed.seq, claimed.source_day, claimed.source_period_start, claimed.source_period_end, claimed.amount_usd, claimed.original_invoice_id, claimed.destination_invoice_id, claimed.idempotency_key, claimed.delivery_state, claimed.previous_first_attempted_at, claimed.previous_delivery_state
+    claimed.id, claimed.organization_id, claimed.source_kind, claimed.source_key, claimed.seq, claimed.source_day, claimed.amount_usd, claimed.original_invoice_id, claimed.destination_invoice_id, claimed.idempotency_key, claimed.delivery_state, claimed.previous_first_attempted_at, claimed.previous_delivery_state
   , destination.stripe_customer_id
   , destination.stripe_subscription_id
   , destination.service_period_start AS destination_period_start
@@ -168,8 +146,6 @@ type ClaimNextStripeInvoiceAllocationRow struct {
 	SourceKey                string
 	Seq                      int32
 	SourceDay                pgtype.Date
-	SourcePeriodStart        pgtype.Timestamptz
-	SourcePeriodEnd          pgtype.Timestamptz
 	AmountUsd                pgtype.Numeric
 	OriginalInvoiceID        pgtype.Text
 	DestinationInvoiceID     pgtype.Text
@@ -194,8 +170,6 @@ func (q *Queries) ClaimNextStripeInvoiceAllocation(ctx context.Context, arg Clai
 		&i.SourceKey,
 		&i.Seq,
 		&i.SourceDay,
-		&i.SourcePeriodStart,
-		&i.SourcePeriodEnd,
 		&i.AmountUsd,
 		&i.OriginalInvoiceID,
 		&i.DestinationInvoiceID,
@@ -555,59 +529,6 @@ func (q *Queries) CreateStripeInvoiceFixture(ctx context.Context, arg CreateStri
 	return err
 }
 
-const createTUMInvoiceAllocationFixture = `-- name: CreateTUMInvoiceAllocationFixture :exec
-INSERT INTO stripe_invoice_allocations (
-    organization_id
-  , source_kind
-  , source_key
-  , seq
-  , source_period_start
-  , source_period_end
-  , source_snapshot_usd
-  , delta_tokens
-  , original_tum_unit_price_usd
-  , amount_usd
-  , idempotency_key
-  , delivery_state
-) VALUES (
-    $1
-  , 'tum_cycle'
-  , $2
-  , 1
-  , $3
-  , $4
-  , $5
-  , 1
-  , 0.000000350000
-  , $6
-  , $7
-  , 'pending'
-)
-`
-
-type CreateTUMInvoiceAllocationFixtureParams struct {
-	OrganizationID    pgtype.Text
-	SourceKey         string
-	SourcePeriodStart pgtype.Timestamptz
-	SourcePeriodEnd   pgtype.Timestamptz
-	SourceSnapshotUsd pgtype.Numeric
-	AmountUsd         pgtype.Numeric
-	IdempotencyKey    string
-}
-
-func (q *Queries) CreateTUMInvoiceAllocationFixture(ctx context.Context, arg CreateTUMInvoiceAllocationFixtureParams) error {
-	_, err := q.db.Exec(ctx, createTUMInvoiceAllocationFixture,
-		arg.OrganizationID,
-		arg.SourceKey,
-		arg.SourcePeriodStart,
-		arg.SourcePeriodEnd,
-		arg.SourceSnapshotUsd,
-		arg.AmountUsd,
-		arg.IdempotencyKey,
-	)
-	return err
-}
-
 const deadLetterPublishOutboxRows = `-- name: DeadLetterPublishOutboxRows :execrows
 WITH failures AS (
   SELECT unnest($1::bigint[]) AS id,
@@ -726,51 +647,6 @@ func (q *Queries) GCPublishOutboxDeadLetters(ctx context.Context, arg GCPublishO
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const getAllOrganizationsWithToolsets = `-- name: GetAllOrganizationsWithToolsets :many
-SELECT
-    organization_metadata.id,
-    organization_metadata.name,
-    organization_metadata.slug,
-    gram_account_type
-FROM organization_metadata
-JOIN toolsets ON organization_metadata.id = toolsets.organization_id
-WHERE toolsets.deleted = false
-GROUP BY organization_metadata.id
-HAVING COUNT(toolsets.id) > 0
-`
-
-type GetAllOrganizationsWithToolsetsRow struct {
-	ID              string
-	Name            string
-	Slug            string
-	GramAccountType string
-}
-
-func (q *Queries) GetAllOrganizationsWithToolsets(ctx context.Context) ([]GetAllOrganizationsWithToolsetsRow, error) {
-	rows, err := q.db.Query(ctx, getAllOrganizationsWithToolsets)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetAllOrganizationsWithToolsetsRow
-	for rows.Next() {
-		var i GetAllOrganizationsWithToolsetsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Slug,
-			&i.GramAccountType,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getOpenRouterCreditsAlertRecipients = `-- name: GetOpenRouterCreditsAlertRecipients :many
@@ -1514,8 +1390,20 @@ func (q *Queries) ListOpenRouterInvoiceSourceDays(ctx context.Context, arg ListO
 const listProjectsForToolsetIndexing = `-- name: ListProjectsForToolsetIndexing :many
 SELECT t.project_id
 FROM toolsets t
+JOIN projects p ON p.id = t.project_id
+    AND p.organization_id = t.organization_id
+    AND p.deleted IS FALSE
+JOIN organization_metadata om ON om.id = p.organization_id
 WHERE t.deleted IS FALSE
   AND t.mcp_enabled IS TRUE
+  AND NOT EXISTS (
+      SELECT 1
+      FROM openrouter_api_keys k
+      WHERE k.organization_id = t.organization_id
+        AND k.key_type = 'chat'
+        AND k.deleted IS FALSE
+        AND COALESCE(cardinality(k.disable_causes) > 0, k.disabled)
+  )
   AND COALESCE((
       SELECT cardinality(tv.tool_urns)
       FROM toolset_versions tv
@@ -1674,16 +1562,13 @@ WHERE invoice.organization_id IS NOT NULL
       SELECT 1
       FROM stripe_invoice_allocations allocation
       WHERE allocation.organization_id = invoice.organization_id
+        AND allocation.source_kind = 'openrouter_daily_spend'
         AND (
           allocation.delivery_state IN ('pending', 'ambiguous')
           OR (
             allocation.amount_usd > 0
             AND allocation.destination_invoice_id IS NULL
             AND allocation.original_invoice_id IS NOT NULL
-          )
-          OR (
-            allocation.source_kind = 'tum_cycle'
-            AND allocation.original_invoice_id IS NULL
           )
         )
     )
@@ -1772,6 +1657,7 @@ WHERE invoice.organization_id = $1
       SELECT 1
       FROM stripe_invoice_allocations allocation
       WHERE allocation.organization_id = invoice.organization_id
+        AND allocation.source_kind = 'openrouter_daily_spend'
         AND (
           allocation.original_invoice_id = invoice.stripe_invoice_id
           OR allocation.destination_invoice_id = invoice.stripe_invoice_id
@@ -1780,12 +1666,6 @@ WHERE invoice.organization_id = $1
             AND allocation.amount_usd > 0
             AND allocation.destination_invoice_id IS NULL
             AND allocation.original_invoice_id IS NOT NULL
-          )
-          OR (
-            allocation.source_kind = 'tum_cycle'
-            AND allocation.original_invoice_id IS NULL
-            AND allocation.source_period_start = invoice.service_period_start
-            AND allocation.source_period_end = invoice.service_period_end
           )
         )
     )
@@ -1998,6 +1878,10 @@ WITH latest_toolsets AS (
         tv.version,
         tv.tool_urns
     FROM toolsets t
+    JOIN projects p ON p.id = t.project_id
+        AND p.organization_id = t.organization_id
+        AND p.deleted IS FALSE
+    JOIN organization_metadata om ON om.id = p.organization_id
     JOIN LATERAL (
         SELECT version, tool_urns
         FROM toolset_versions
@@ -2008,6 +1892,14 @@ WITH latest_toolsets AS (
     ) tv ON TRUE
     WHERE t.deleted IS FALSE
       AND t.mcp_enabled IS TRUE
+      AND NOT EXISTS (
+          SELECT 1
+          FROM openrouter_api_keys k
+          WHERE k.organization_id = t.organization_id
+            AND k.key_type = 'chat'
+            AND k.deleted IS FALSE
+            AND COALESCE(cardinality(k.disable_causes) > 0, k.disabled)
+      )
       AND t.project_id = ANY($3::uuid[])
       AND cardinality(tv.tool_urns) > 0
 ), candidates AS (
@@ -2188,11 +2080,11 @@ type ListWeeklyUsageSummaryTargetsRow struct {
 	BillingCycleAnchorDay int32
 }
 
-// Organizations that receive the weekly tokens-under-management usage
-// summary email: enabled enterprise organizations with an explicit billing
-// alert email and enabled PAYG organizations (whose fallback audience is
-// resolved by the activity). The anchor day determines the billing cycle
-// window; the slug builds the billing page link.
+// Organizations that receive the weekly metered usage summary email: enabled
+// enterprise organizations with an explicit billing alert email and enabled
+// PAYG organizations (whose fallback audience is resolved by the activity).
+// The anchor day determines the billing-cycle windows; the slug builds the
+// billing page link.
 func (q *Queries) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]ListWeeklyUsageSummaryTargetsRow, error) {
 	rows, err := q.db.Query(ctx, listWeeklyUsageSummaryTargets)
 	if err != nil {

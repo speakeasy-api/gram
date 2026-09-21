@@ -1,10 +1,10 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -80,11 +80,12 @@ func newMetricToolProxy(t *testing.T, reader sdkmetric.Reader) *ToolProxy {
 	tracerProvider := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 
 	return NewToolProxy(
 		testenv.NewLogger(t),
 		tracerProvider,
-		sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)),
+		meterProvider,
 		ToolCallSourceMCP,
 		testenv.NewEncryptionClient(t),
 		nil,
@@ -148,7 +149,7 @@ func callToolProxy(t *testing.T, ctx context.Context, proxy *ToolProxy, plan *To
 	t.Helper()
 
 	recorder := httptest.NewRecorder()
-	err := proxy.Do(ctx, recorder, bytes.NewReader([]byte(body)), toolconfig.ToolCallEnv{
+	err := proxy.Do(ctx, recorder, strings.NewReader(body), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",

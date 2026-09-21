@@ -26,6 +26,8 @@ interface GrantAccessDialogProps {
   scope: string;
   /** Optional resource the scope was requested for; narrows role suggestions. */
   resourceId?: string;
+  /** Project containing an MCP resource, when known. */
+  projectId?: string;
   onClose: () => void;
 }
 
@@ -47,6 +49,7 @@ export function GrantAccessDialog({
   userId,
   scope,
   resourceId,
+  projectId,
   onClose,
 }: GrantAccessDialogProps): JSX.Element {
   const [assignedRoleId, setAssignedRoleId] = useState<string | null>(null);
@@ -70,8 +73,9 @@ export function GrantAccessDialog({
   );
 
   const suggestedRoles = useMemo(
-    () => rolesCoveringScope(rolesData?.roles ?? [], scope, resourceId),
-    [rolesData?.roles, scope, resourceId],
+    () =>
+      rolesCoveringScope(rolesData?.roles ?? [], scope, resourceId, projectId),
+    [rolesData?.roles, scope, resourceId, projectId],
   );
 
   const updateMemberRoles = useUpdateMemberRolesMutation({

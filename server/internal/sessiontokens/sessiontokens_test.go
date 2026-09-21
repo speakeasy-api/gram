@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -144,6 +145,28 @@ func TestSigner_VerifiedJTI(t *testing.T) {
 	require.Equal(t, jti, verifiedJTI)
 }
 
+// VerifiedSubject reads the subject of a token that no longer validates, but
+// only when Gram signed it.
+func TestSigner_VerifiedSubjectToleratesExpiryButNotForgery(t *testing.T) {
+	t.Parallel()
+
+	signer := sessiontokens.NewSigner("test-jwt-secret")
+	subject := urn.NewWorkloadSubject(uuid.New(), "repo:acme/payments-api:ref:refs/heads/main")
+	expiresAt := time.Now().Add(-time.Minute)
+	token, _, err := signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: "platform-mcp", Issuer: "https://example.test", ExpiresAt: &expiresAt})
+	require.NoError(t, err)
+
+	_, err = signer.ValidateBearer(t.Context(), token, "platform-mcp", neverRevoked{})
+	require.Error(t, err)
+
+	verified, err := signer.VerifiedSubject(token)
+	require.NoError(t, err)
+	require.Equal(t, subject.String(), verified.String())
+
+	_, err = sessiontokens.NewSigner("other-secret").VerifiedSubject(token)
+	require.Error(t, err)
+}
+
 func TestSigner_ValidateExactAudienceRejectsAdditionalAudience(t *testing.T) {
 	t.Parallel()
 
@@ -153,6 +176,42 @@ func TestSigner_ValidateExactAudienceRejectsAdditionalAudience(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = signer.ValidateExactAudience(token, "platform-mcp")
+	require.ErrorContains(t, err, "audience must exactly match")
+}
+
+func TestSigner_ValidateExactAudienceBearer(t *testing.T) {
+	t.Parallel()
+
+	signer := sessiontokens.NewSigner("test-jwt-secret")
+	subject := urn.NewUserSubject("user-1")
+	token, jti, err := signer.Mint(sessiontokens.MintParams{
+		Subject:  subject,
+		Audience: "https://example.test/mcp/target",
+		Issuer:   "https://example.test/mcp/target",
+		Lifetime: time.Hour,
+		ClientID: "client-abc",
+	})
+	require.NoError(t, err)
+
+	session, err := signer.ValidateExactAudienceBearer(t.Context(), token, "https://example.test/mcp/target", neverRevoked{})
+	require.NoError(t, err)
+	require.Equal(t, subject, session.Subject())
+	require.Equal(t, jti, session.JTI())
+	require.Equal(t, "client-abc", session.ClientID())
+
+	_, err = signer.ValidateExactAudienceBearer(t.Context(), token, "https://example.test/mcp/sibling", neverRevoked{})
+	require.ErrorIs(t, err, jwt.ErrTokenInvalidAudience)
+}
+
+func TestSigner_ValidateExactAudienceBearerRejectsAdditionalAudience(t *testing.T) {
+	t.Parallel()
+
+	signer := sessiontokens.NewSigner("test-jwt-secret")
+	claims := sessiontokens.SessionClaims{RegisteredClaims: jwt.RegisteredClaims{Subject: urn.NewUserSubject("user-1").String(), Audience: jwt.ClaimStrings{"https://example.test/mcp/target", "https://example.test/mcp/sibling"}, ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)), ID: "jti-multiple-audiences"}}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte("test-jwt-secret"))
+	require.NoError(t, err)
+
+	_, err = signer.ValidateExactAudienceBearer(t.Context(), token, "https://example.test/mcp/target", neverRevoked{})
 	require.ErrorContains(t, err, "audience must exactly match")
 }
 
@@ -216,8 +275,12 @@ func TestSigner_FailsClosedOnRevocation(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = signer.ValidateBearer(t.Context(), token, "platform-mcp", revoked{})
-	require.ErrorContains(t, err, "token is revoked")
+	require.ErrorIs(t, err, sessiontokens.ErrTokenRevoked)
 
+	// A store that cannot answer still fails the request closed, but it is not
+	// the same outcome: callers key a "discard your token" challenge off the
+	// revoked sentinel alone.
 	_, err = signer.ValidateBearer(t.Context(), token, "platform-mcp", unavailableRevocationStore{})
-	require.ErrorContains(t, err, "check revocation")
+	require.ErrorIs(t, err, sessiontokens.ErrRevocationUnavailable)
+	require.NotErrorIs(t, err, sessiontokens.ErrTokenRevoked)
 }

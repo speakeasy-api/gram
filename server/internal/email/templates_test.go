@@ -26,8 +26,6 @@ func TestParseTemplateIDs_ValidatesCompleteRegistry(t *testing.T) {
 	ids, err := ParseTemplateIDs(`{
 		"team_invite":"id-1",
 		"enterprise_admin_onboarding":"id-2",
-		"tum_usage_threshold":"id-3",
-		"tum_usage_overage":"id-4",
 		"openrouter_chat_credits_threshold":"id-5",
 		"openrouter_internal_credits_threshold":"id-6",
 		"custom_domain_unhealthy":"id-7",

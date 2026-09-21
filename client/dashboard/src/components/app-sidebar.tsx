@@ -15,6 +15,7 @@ import { useMemo, useState } from "react";
 import { Button } from "./ui/Button";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { SidebarBrandHeader } from "./sidebar-brand-header";
+import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { Icon } from "@/components/ui/Icon";
 import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { Link } from "react-router";
@@ -42,13 +43,14 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
 
+/** A top-level navigation item gated by its required scopes. */
 function ScopeGatedTopLevelItem({
   item,
-  scope,
+  scope = ["project:read"],
   resourceId,
 }: {
   item: AppRoute;
-  scope: Scope | Scope[];
+  scope?: Scope | Scope[];
   resourceId?: string;
 }) {
   return (
@@ -87,7 +89,10 @@ export function AppSidebar({
   }, [allNavRoutes]);
   const isAssistantsEnabled = navAccess.has(routes.assistants.url);
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
+  const isExploreEnabled = navAccess.has(routes.explore.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
+  const isUserSessionsEnabled = navAccess.has(routes.mcpSessions.url);
+  const isAgentManagementEnabled = navAccess.has(routes.agents.url);
 
   // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
   // highlight and the page header always agree on the area. "Organization"
@@ -100,10 +105,13 @@ export function AppSidebar({
   const activeRoute = allNavRoutes.find((entry) => entry.route.active)?.route;
   const accessFor = (
     route: AppRoute,
-  ): Pick<ProjectNavRoute, "scope" | "resourceId"> => {
+  ): { scope?: Scope[]; resourceId?: string } => {
     const entry = navAccess.get(route.url);
     return entry
-      ? { scope: entry.scope, resourceId: entry.resourceId }
+      ? {
+          scope: entry.scope.length > 0 ? entry.scope : undefined,
+          resourceId: entry.resourceId,
+        }
       : { scope: ["project:read"] };
   };
   // In collapsed mode, sub-items are hidden — fall back to group highlight.
@@ -198,24 +206,27 @@ export function AppSidebar({
             <div className="border-border border-t" />
           </li>
 
-          {/* Observability group */}
+          {/* Identity group */}
           <ScopeGatedNavGroup
-            label="Observability"
-            Icon={(p) => <Icon {...p} name="eye" />}
+            label="Identity"
+            Icon={(p) => <Icon {...p} name="fingerprint" />}
             items={[
-              // First in the group: an identity is the subject the rest of
-              // these pages measure.
               { item: routes.identities, ...accessFor(routes.identities) },
-              { item: routes.costs, ...accessFor(routes.costs) },
-              { item: routes.insights, ...accessFor(routes.insights) },
-              {
-                item: routes.agentSessions,
-                ...accessFor(routes.agentSessions),
-              },
-              ...(isOrgMemoryEnabled
-                ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
+              ...(isAgentManagementEnabled
+                ? [{ item: routes.agents, ...accessFor(routes.agents) }]
                 : []),
-              { item: routes.logs, ...accessFor(routes.logs) },
+              ...(isUserSessionsEnabled
+                ? [
+                    {
+                      item: routes.mcpSessions,
+                      ...accessFor(routes.mcpSessions),
+                    },
+                  ]
+                : []),
+              {
+                item: routes.remoteIdentityProviders,
+                ...accessFor(routes.remoteIdentityProviders),
+              },
             ]}
           />
 
@@ -253,7 +264,28 @@ export function AppSidebar({
                   ]),
               { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
               { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-              { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
+              { item: routes.shadowAI, ...accessFor(routes.shadowAI) },
+            ]}
+          />
+
+          {/* Observability group */}
+          <ScopeGatedNavGroup
+            label="Observability"
+            Icon={(p) => <Icon {...p} name="eye" />}
+            items={[
+              { item: routes.costs, ...accessFor(routes.costs) },
+              ...(isExploreEnabled
+                ? [{ item: routes.explore, ...accessFor(routes.explore) }]
+                : []),
+              { item: routes.insights, ...accessFor(routes.insights) },
+              {
+                item: routes.agentSessions,
+                ...accessFor(routes.agentSessions),
+              },
+              ...(isOrgMemoryEnabled
+                ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
+                : []),
+              { item: routes.logs, ...accessFor(routes.logs) },
             ]}
           />
 
@@ -274,11 +306,17 @@ export function AppSidebar({
       <SidebarContent className="pt-2">{sidebarContent}</SidebarContent>
       <SidebarFooter className="border-t">
         <FreeTierExceededNotification />
-        <div className="mb-2 flex flex-col gap-1.5">
+        {/* Every card here is conditional — the trial banner, the guide CTA,
+            and the dock's resume button (absent while the dock is open). When
+            they all stand down the wrapper renders empty, and its margin was
+            left behind as a band of blank space above the user menu, so it
+            hides itself instead. */}
+        <div className="mb-2 flex flex-col gap-1.5 empty:hidden">
           <TrialStatusCard />
           <ProjectGuideSidebarCta />
           <InsightsDockResumeButton />
         </div>
+        {DevSidebarSlot && <DevSidebarSlot />}
         <SidebarUserMenu />
       </SidebarFooter>
       <FeatureRequestModal

@@ -32,20 +32,26 @@ func authorizeGlobalOperation(ctx context.Context, logger *slog.Logger) (globalA
 func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 	return &Service{
-		auth:            nil,
-		sessions:        nil,
-		authz:           nil,
-		environments:    nil,
-		auditLogger:     nil,
-		serverURL:       nil,
-		refresher:       nil,
-		productFeatures: nil,
-		logger:          logger,
-		tracer:          tp.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
-		db:              db,
-		enc:             enc,
-		policy:          policy,
-		revoker:         NewUpstreamRevoker(logger, tp, mp, db, enc, policy),
-		jwksResolver:    jwks.NewResolver(policy, mp, logger),
+		bindingAuthorizer: nil,
+		auth:              nil,
+		sessions:          nil,
+		authz:             nil,
+		environments:      nil,
+		auditLogger:       nil,
+		serverURL:         nil,
+		refresher:         nil,
+		rotator:           nil,
+		productFeatures:   nil,
+		logger:            logger,
+		tracer:            tp.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
+		db:                db,
+		enc:               enc,
+		policy:            policy,
+		tunnels:           nil,
+		jwksResolver:      jwks.NewResolver(policy, mp, logger),
+		// No tunnel transport: a global identity provider cannot be bound to a
+		// project tunnel, so revocation always dials directly. A binding that
+		// somehow existed would fail closed rather than silently dial out.
+		revoker: NewUpstreamRevoker(logger, tp, mp, db, enc, policy, nil),
 	}
 }

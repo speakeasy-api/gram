@@ -13,6 +13,10 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { useOrganization, useSession } from "@/contexts/Auth";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
@@ -43,6 +47,33 @@ import { AgentPolicySection } from "./AgentPolicySection";
 import { ManagedAgentSessions } from "./ManagedAgentSessions";
 
 export default function AgentsPage(): JSX.Element {
+  const flag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
+  if (flag.status !== "enabled") {
+    return (
+      <FormPage
+        title={
+          flag.status === "loading"
+            ? "Loading agent management"
+            : "Agent management unavailable"
+        }
+        description={
+          flag.status === "loading"
+            ? "Checking feature availability."
+            : flag.status === "disabled"
+              ? "Agent management is not enabled for this organization."
+              : "Unable to determine agent management availability. Try again later."
+        }
+      >
+        {null}
+      </FormPage>
+    );
+  }
+
+  // Do not mount inventory, detail, or policy discovery until rollout is enabled.
+  return <AgentManagementPage />;
+}
+
+function AgentManagementPage(): JSX.Element {
   const organization = useOrganization();
   const session = useSession();
   const { sessionReason, isDemo } = useAgentManagementAvailability();
@@ -111,15 +142,7 @@ function AgentList({
   onCreate: () => void;
 }) {
   // Ownership is an independent authorization path. Do not gate this query on RBAC.
-  const organization = useOrganization();
-  const sdk = useSdkClient();
-  const agents = useQuery({
-    queryKey: ["managed-agents", organization.id, "list"],
-    queryKeyHashFn: hashKey,
-    queryFn: ({ signal }) => sdk.agents.list(undefined, undefined, { signal }),
-    throwOnError: false,
-    retry: false,
-  });
+  const agents = useReadableAgents(true);
   const [search, setSearch] = useState("");
   const rows = (agents.data ?? []).filter((agent) =>
     agent.name.toLowerCase().includes(search.trim().toLowerCase()),
@@ -149,7 +172,7 @@ function AgentList({
     <ResourceListPage
       title="Agents"
       description="Agents visible to you."
-      primaryAction={<Button onClick={onCreate}>Create agent</Button>}
+      primaryAction={<Button onClick={onCreate}>New agent identity</Button>}
       search={{
         value: search,
         onChange: setSearch,
@@ -166,7 +189,11 @@ function AgentList({
       isRefreshing={agents.isFetching}
     >
       {agents.isError ? (
-        <Text role="alert">Unable to load agents. Try again.</Text>
+        <Text role="alert">
+          {agents.error instanceof GramError && agents.error.statusCode === 404
+            ? "Agent management is not enabled for this organization."
+            : "Unable to load agents. Try again."}
+        </Text>
       ) : rows.length === 0 ? (
         <Text>No matching agents</Text>
       ) : (
@@ -319,6 +346,8 @@ function AgentSettings({
   agentID: string;
   onBack: () => void;
 }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [credentialBusy, setCredentialBusy] = useState(false);
   const queryClient = useQueryClient();
   const organization = useOrganization();
   const sdk = useSdkClient();
@@ -358,6 +387,31 @@ function AgentSettings({
     });
   };
 
+  if (searchParams.get("credential") === "new")
+    return (
+      <FormPage
+        title="Create API key"
+        description={`Choose what ${agentQuery.data.name} can access.`}
+        width="wide"
+        primaryAction={
+          <Button
+            variant="secondary"
+            onClick={() => setSearchParams({ id: agentID })}
+            disabled={credentialBusy}
+          >
+            Back to agent
+          </Button>
+        }
+      >
+        <AgentAPIKeys
+          agent={agentQuery.data}
+          creation
+          onBusy={setCredentialBusy}
+          onDone={() => setSearchParams({ id: agentID })}
+        />
+      </FormPage>
+    );
+
   return (
     <SettingsPage
       title={agentQuery.data.name}
@@ -380,7 +434,10 @@ function AgentSettings({
         key={`policy-${agentQuery.data.id}`}
         agent={agentQuery.data}
       />
-      <AgentAPIKeys agent={agentQuery.data} />
+      <AgentAPIKeys
+        agent={agentQuery.data}
+        onCreate={() => setSearchParams({ id: agentID, credential: "new" })}
+      />
       <ManagedAgentSessions
         key={`sessions-${agentQuery.data.id}`}
         agent={agentQuery.data}

@@ -10,6 +10,8 @@ import { telemetryGetMetaMcpServerUsage } from "../funcs/telemetryGetMetaMcpServ
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetryGetProjectOverview } from "../funcs/telemetryGetProjectOverview.js";
+import { telemetryGetToolUsageClients } from "../funcs/telemetryGetToolUsageClients.js";
+import { telemetryGetToolUsageClientToolBreakdown } from "../funcs/telemetryGetToolUsageClientToolBreakdown.js";
 import { telemetryGetToolUsageFilterOptions } from "../funcs/telemetryGetToolUsageFilterOptions.js";
 import { telemetryGetToolUsageSummary } from "../funcs/telemetryGetToolUsageSummary.js";
 import { telemetryGetToolUsageTargets } from "../funcs/telemetryGetToolUsageTargets.js";
@@ -44,6 +46,8 @@ import { GetMetaMcpServerUsageResult } from "../models/components/getmetamcpserv
 import { GetMetricsSummaryResult } from "../models/components/getmetricssummaryresult.js";
 import { GetObservabilityOverviewResult } from "../models/components/getobservabilityoverviewresult.js";
 import { GetProjectOverviewResult } from "../models/components/getprojectoverviewresult.js";
+import { GetToolUsageClientsResult } from "../models/components/gettoolusageclientsresult.js";
+import { GetToolUsageClientToolBreakdownResult } from "../models/components/gettoolusageclienttoolbreakdownresult.js";
 import { GetToolUsageFilterOptionsResult } from "../models/components/gettoolusagefilteroptionsresult.js";
 import { GetToolUsageSummaryResult } from "../models/components/gettoolusagesummaryresult.js";
 import { GetToolUsageTargetsResult } from "../models/components/gettoolusagetargetsresult.js";
@@ -101,6 +105,14 @@ import {
   GetProjectOverviewRequest,
   GetProjectOverviewSecurity,
 } from "../models/operations/getprojectoverview.js";
+import {
+  GetToolUsageClientsRequest,
+  GetToolUsageClientsSecurity,
+} from "../models/operations/gettoolusageclients.js";
+import {
+  GetToolUsageClientToolBreakdownRequest,
+  GetToolUsageClientToolBreakdownSecurity,
+} from "../models/operations/gettoolusageclienttoolbreakdown.js";
 import {
   GetToolUsageFilterOptionsRequest,
   GetToolUsageFilterOptionsSecurity,
@@ -346,6 +358,44 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetProjectOverviewResult> {
     return unwrapAsync(telemetryGetProjectOverview(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getToolUsageClientToolBreakdown telemetry
+   *
+   * @remarks
+   * Get per-tool MCP and tool usage grouped by MCP client
+   */
+  async getToolUsageClientToolBreakdown(
+    request: GetToolUsageClientToolBreakdownRequest,
+    security?: GetToolUsageClientToolBreakdownSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetToolUsageClientToolBreakdownResult> {
+    return unwrapAsync(telemetryGetToolUsageClientToolBreakdown(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getToolUsageClients telemetry
+   *
+   * @remarks
+   * Get top MCP clients by tool usage
+   */
+  async getToolUsageClients(
+    request: GetToolUsageClientsRequest,
+    security?: GetToolUsageClientsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetToolUsageClientsResult> {
+    return unwrapAsync(telemetryGetToolUsageClients(
       this,
       request,
       security,

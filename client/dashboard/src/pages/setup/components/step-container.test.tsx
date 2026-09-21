@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JourneyStepsProvider } from "./journey-steps-provider";
-import { StepContainer } from "./step-container";
+import { StepContainer, StepSupportProvider } from "./step-container";
 import { StepSection } from "./step-section";
 
 afterEach(cleanup);
@@ -26,6 +26,39 @@ function Card({ onContinue }: { onContinue: () => void }): JSX.Element {
 }
 
 describe("StepContainer", () => {
+  it("preserves visible keyboard focus on every footer action", () => {
+    const onSupport = vi.fn();
+    render(
+      <MemoryRouter>
+        <JourneyStepsProvider>
+          <StepSupportProvider onSupport={() => void onSupport()}>
+            <Card onContinue={() => {}} />
+          </StepSupportProvider>
+        </JourneyStepsProvider>
+      </MemoryRouter>,
+    );
+    function expectFocus(name: string) {
+      const button = screen.getByRole("button", { name });
+      button.focus();
+      expect(document.activeElement).toBe(button);
+      for (const utility of [
+        "focus-visible:ring-2",
+        "focus-visible:ring-offset-3",
+        "focus-visible:ring-[var(--border-focus)]",
+        "focus-visible:ring-offset-[var(--bg-surface-primary-default)]",
+      ]) {
+        expect(button.classList.contains(utility)).toBe(true);
+      }
+      expect(button.classList.contains("focus-visible:ring-0")).toBe(false);
+      return button;
+    }
+    fireEvent.click(expectFocus("Get support"));
+    expect(onSupport).toHaveBeenCalledOnce();
+    fireEvent.click(expectFocus("Next step"));
+    expectFocus("Back");
+    expectFocus("Mark done");
+  });
+
   it("walks sub-steps with Next step, then offers Mark done, with no Back or Skip", () => {
     const onContinue = vi.fn();
     render(

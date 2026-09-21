@@ -48,6 +48,10 @@ vi.mock("@/routes", () => ({
     agents: { href: () => "/agents" },
     deviceAgent: { href: () => "/device-agent" },
   }),
+  // Agent management is project-scoped, so the page resolves it per project.
+  useRoutes: () => ({
+    agents: { href: () => "/org/projects/project-one/agent-management" },
+  }),
 }));
 vi.mock("@/lib/utils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/utils")>()),

@@ -50,6 +50,7 @@ export function buildListAgentDelegableGrantsQuery(
   return {
     queryKey: queryKeyListAgentDelegableGrants({
       agentId: request.agentId,
+      toolsetId: request.toolsetId,
       gramSession: request.gramSession,
     }),
     queryFn: async function listAgentDelegableGrantsQueryFn(
@@ -77,7 +78,11 @@ export function buildListAgentDelegableGrantsQuery(
 }
 
 export function queryKeyListAgentDelegableGrants(
-  parameters: { agentId: string; gramSession?: string | undefined },
+  parameters: {
+    agentId: string;
+    toolsetId?: string | undefined;
+    gramSession?: string | undefined;
+  },
 ): QueryKey {
   return ["@gram/client", "agents", "listDelegableGrants", parameters];
 }

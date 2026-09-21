@@ -3,6 +3,7 @@ package guardian
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"go.opentelemetry.io/otel/metric"
 )
@@ -47,4 +48,8 @@ func (b NoopBreaker) Allow(ctx context.Context, key Partition, policy BreakerPol
 		RetryAfter: -1,
 		Report:     func(bool) {},
 	}, nil
+}
+
+func (NoopBreaker) RemainingDelay(context.Context, Partition, BreakerPolicy) (time.Duration, error) {
+	return 0, nil
 }

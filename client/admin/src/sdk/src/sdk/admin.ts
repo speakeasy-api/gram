@@ -4,6 +4,7 @@
 
 import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
+import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
 import { adminCreateGlobalIssuer } from "../funcs/adminCreateGlobalIssuer.js";
 import { adminCreateOrganization } from "../funcs/adminCreateOrganization.js";
 import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
@@ -16,6 +17,7 @@ import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalI
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
+import { adminGetMeterUsage } from "../funcs/adminGetMeterUsage.js";
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
 import { adminGetOrganizationChatAnalysisSettings } from "../funcs/adminGetOrganizationChatAnalysisSettings.js";
 import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
@@ -23,8 +25,10 @@ import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js
 import { adminGetPaygBillingSummary } from "../funcs/adminGetPaygBillingSummary.js";
 import { adminGetProject } from "../funcs/adminGetProject.js";
 import { adminGetSession } from "../funcs/adminGetSession.js";
+import { adminGetSpendBreakdown } from "../funcs/adminGetSpendBreakdown.js";
 import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
 import { adminGetStripeSubscription } from "../funcs/adminGetStripeSubscription.js";
+import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
 import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
 import { adminListOrganizationActivity } from "../funcs/adminListOrganizationActivity.js";
@@ -42,9 +46,11 @@ import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyM
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
+import { adminStartTrial } from "../funcs/adminStartTrial.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
 import { adminUpdateGlobalIssuer } from "../funcs/adminUpdateGlobalIssuer.js";
 import { adminUpdateOrganization } from "../funcs/adminUpdateOrganization.js";
+import { adminUpdateSupportMatrix } from "../funcs/adminUpdateSupportMatrix.js";
 import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
@@ -55,15 +61,18 @@ import { AdminInferenceKeyLimit } from "../models/components/admininferencekeyli
 import { AdminInferenceSpendMonth } from "../models/components/admininferencespendmonth.js";
 import { AdminListOrganizationMembersResult } from "../models/components/adminlistorganizationmembersresult.js";
 import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
+import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOrganization } from "../models/components/adminorganization.js";
 import { AdminOrganizationStats } from "../models/components/adminorganizationstats.js";
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
 import { AdminProjectDetail } from "../models/components/adminprojectdetail.js";
 import { AdminSession } from "../models/components/adminsession.js";
+import { AdminSpendBreakdownResponse } from "../models/components/adminspendbreakdownresponse.js";
 import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js";
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
+import { ChangeTrialEndDateRequestBody } from "../models/components/changetrialenddaterequestbody.js";
 import { CreateOrganizationRequestBody } from "../models/components/createorganizationrequestbody.js";
 import { CreateRemoteSessionIssuerForm } from "../models/components/createremotesessionissuerform.js";
 import { DisableOrganizationRequestBody } from "../models/components/disableorganizationrequestbody.js";
@@ -88,9 +97,12 @@ import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/set
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
+import { StartTrialRequestBody } from "../models/components/starttrialrequestbody.js";
+import { SupportMatrix } from "../models/components/supportmatrix.js";
 import { TriggerOrganizationChatAnalysisRequestBody } from "../models/components/triggerorganizationchatanalysisrequestbody.js";
 import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
 import { UpdateRemoteSessionIssuerForm } from "../models/components/updateremotesessionissuerform.js";
+import { UpdateSupportMatrixRequestBody } from "../models/components/updatesupportmatrixrequestbody.js";
 import { UploadImageResult } from "../models/components/uploadimageresult.js";
 import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
 import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
@@ -98,11 +110,13 @@ import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operati
 import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
 import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinferencekeys.js";
 import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
+import { AdminGetMeterUsageRequest } from "../models/operations/admingetmeterusage.js";
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
 import { AdminGetProjectRequest } from "../models/operations/admingetproject.js";
+import { AdminGetSpendBreakdownRequest } from "../models/operations/admingetspendbreakdown.js";
 import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
 import {
@@ -488,6 +502,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * getSpendBreakdown admin
+   *
+   * @remarks
+   * Returns exact current PAYG list-price estimates for an organization's three metered products over a maximum of three calendar months. Available for every organization regardless of account type or subscription state.
+   */
+  async getSpendBreakdown(
+    request: AdminGetSpendBreakdownRequest,
+    options?: RequestOptions,
+  ): Promise<AdminSpendBreakdownResponse> {
+    return unwrapAsync(adminGetSpendBreakdown(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * getStripeCustomer admin
    *
    * @remarks
@@ -549,6 +580,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminBulkUpdateAccountTypeResult> {
     return unwrapAsync(adminBulkUpdateAccountType(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getMeterUsage admin
+   *
+   * @remarks
+   * Returns totals-only ordinary meter usage for an organization over a bounded UTC-day window.
+   */
+  async getMeterUsage(
+    request: AdminGetMeterUsageRequest,
+    options?: RequestOptions,
+  ): Promise<AdminMeterUsageResponse> {
+    return unwrapAsync(adminGetMeterUsage(
       this,
       request,
       options,
@@ -813,6 +861,55 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * getSupportMatrix admin
+   *
+   * @remarks
+   * Read the shared support catalog and product coverage.
+   */
+  async getSupportMatrix(
+    options?: RequestOptions,
+  ): Promise<SupportMatrix> {
+    return unwrapAsync(adminGetSupportMatrix(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * updateSupportMatrix admin
+   *
+   * @remarks
+   * Save coverage against the last read revision; rejects concurrent changes.
+   */
+  async updateSupportMatrix(
+    request: UpdateSupportMatrixRequestBody,
+    options?: RequestOptions,
+  ): Promise<SupportMatrix> {
+    return unwrapAsync(adminUpdateSupportMatrix(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * changeTrialEndDate admin
+   *
+   * @remarks
+   * Sets a running trial's end date to a future instant, shortening or extending it without restarting the trial.
+   */
+  async changeTrialEndDate(
+    request: ChangeTrialEndDateRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganization> {
+    return unwrapAsync(adminChangeTrialEndDate(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * markEnterpriseTrialConverted admin
    *
    * @remarks
@@ -857,6 +954,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminRearmTrial(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * startTrial admin
+   *
+   * @remarks
+   * Starts a new enterprise trial for an organization that has never trialled, or restarts one that has expired without converting or being demoted. Sets the account type, whitelist flag, trial entitlements and a fresh runway counted from now. A running, demoted or converted trial is rejected: those are extend, re-arm and a contract.
+   */
+  async startTrial(
+    request: StartTrialRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganization> {
+    return unwrapAsync(adminStartTrial(
       this,
       request,
       options,

@@ -154,6 +154,19 @@ services:
       - "127.0.0.1:9099:9090" # Prometheus UI/API
       - "127.0.0.1:4317:4317" # OTLP gRPC receiver
       - "127.0.0.1:4318:4318" # OTLP HTTP receiver
+    environment:
+      # Adds the demo-activity forwarding pipeline beside the image's own
+      # config rather than replacing it; see the file for what it does.
+      OTELCOL_EXTRA_ARGS: "--config=/etc/gram/otelcol-demo-forward.yaml"
+      # Where that pipeline posts. Defaults to the main worktree's server, so
+      # the container still starts when nothing set it; a worktree whose
+      # server port was remapped passes its own (mise.toml derives it).
+      GRAM_DEMO_OTLP_LOGS_ENDPOINT: "${GRAM_DEMO_OTLP_LOGS_ENDPOINT:-https://host.docker.internal:8080/rpc/hooks.otel/v1/logs}"
+    # Docker Desktop resolves host.docker.internal on its own; Docker Engine on
+    # Linux does not, and without this the pipeline above accepts demo logs and
+    # then cannot deliver them.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       # Runs as root, so wipe this from inside the container rather than sudo:
       # docker compose -f compose.shared.yml -p gram-shared exec lgtm \
@@ -164,6 +177,10 @@ services:
       # would put the data wherever that tree is — letting which worktree
       # booted the machine silently decide where everyone's telemetry lives.
       - lgtm_data:/data
+      # This one is a bind mount on purpose: unlike the data above, the file
+      # is checked in and identical in every worktree, so it does not matter
+      # which tree started the stack.
+      - ./local/otel/gram-demo-forward.yaml:/etc/gram/otelcol-demo-forward.yaml:ro
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
       interval: 10s

@@ -32,6 +32,7 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   chatgpt: "ChatGPT",
   "chatgpt-work": "ChatGPT Work",
   opencode: "opencode",
+  pi: "Pi",
   openclaw: "OpenClaw",
   litellm: "LiteLLM",
   copilot: "Copilot",

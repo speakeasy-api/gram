@@ -16,6 +16,8 @@ import (
 // Client is the "usage" service client.
 type Client struct {
 	GetPeriodUsageEndpoint            goa.Endpoint
+	GetMeterUsageEndpoint             goa.Endpoint
+	GetSpendBreakdownEndpoint         goa.Endpoint
 	GetTokensUnderManagementEndpoint  goa.Endpoint
 	SetBillingMetadataEndpoint        goa.Endpoint
 	GetBillingEmailEndpoint           goa.Endpoint
@@ -35,9 +37,11 @@ type Client struct {
 }
 
 // NewClient initializes a "usage" service client given the endpoints.
-func NewClient(getPeriodUsage, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, setSpendCap, getInferenceSpendCaps, getUsageTiers, createCustomerSession, createCheckout, createStripeCheckout, getStripeSubscription, getPaygBillingSummary, createStripePortalSession, cancelStripeSubscription, resumeStripeSubscription, createTopUpCheckout goa.Endpoint) *Client {
+func NewClient(getPeriodUsage, getMeterUsage, getSpendBreakdown, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, setSpendCap, getInferenceSpendCaps, getUsageTiers, createCustomerSession, createCheckout, createStripeCheckout, getStripeSubscription, getPaygBillingSummary, createStripePortalSession, cancelStripeSubscription, resumeStripeSubscription, createTopUpCheckout goa.Endpoint) *Client {
 	return &Client{
 		GetPeriodUsageEndpoint:            getPeriodUsage,
+		GetMeterUsageEndpoint:             getMeterUsage,
+		GetSpendBreakdownEndpoint:         getSpendBreakdown,
 		GetTokensUnderManagementEndpoint:  getTokensUnderManagement,
 		SetBillingMetadataEndpoint:        setBillingMetadata,
 		GetBillingEmailEndpoint:           getBillingEmail,
@@ -77,6 +81,51 @@ func (c *Client) GetPeriodUsage(ctx context.Context, p *GetPeriodUsagePayload) (
 		return
 	}
 	return ires.(*PeriodUsage), nil
+}
+
+// GetMeterUsage calls the "getMeterUsage" endpoint of the "usage" service.
+// GetMeterUsage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetMeterUsage(ctx context.Context, p *GetMeterUsagePayload) (res *MeterUsageResponse, err error) {
+	var ires any
+	ires, err = c.GetMeterUsageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*MeterUsageResponse), nil
+}
+
+// GetSpendBreakdown calls the "getSpendBreakdown" endpoint of the "usage"
+// service.
+// GetSpendBreakdown may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetSpendBreakdown(ctx context.Context, p *GetSpendBreakdownPayload) (res *SpendBreakdownResponse, err error) {
+	var ires any
+	ires, err = c.GetSpendBreakdownEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SpendBreakdownResponse), nil
 }
 
 // GetTokensUnderManagement calls the "getTokensUnderManagement" endpoint of

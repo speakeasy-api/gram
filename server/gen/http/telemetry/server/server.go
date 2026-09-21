@@ -44,6 +44,8 @@ type Server struct {
 	GetToolUsageTotals               http.Handler
 	GetToolUsageTargets              http.Handler
 	GetToolUsageUsers                http.Handler
+	GetToolUsageClients              http.Handler
+	GetToolUsageClientToolBreakdown  http.Handler
 	GetToolUsageTargetTimeSeries     http.Handler
 	GetToolUsageUserTimeSeries       http.Handler
 	GetToolUsageUsersByTarget        http.Handler
@@ -106,6 +108,8 @@ func New(
 			{"GetToolUsageTotals", "POST", "/rpc/telemetry.getToolUsageTotals"},
 			{"GetToolUsageTargets", "POST", "/rpc/telemetry.getToolUsageTargets"},
 			{"GetToolUsageUsers", "POST", "/rpc/telemetry.getToolUsageUsers"},
+			{"GetToolUsageClients", "POST", "/rpc/telemetry.getToolUsageClients"},
+			{"GetToolUsageClientToolBreakdown", "POST", "/rpc/telemetry.getToolUsageClientToolBreakdown"},
 			{"GetToolUsageTargetTimeSeries", "POST", "/rpc/telemetry.getToolUsageTargetTimeSeries"},
 			{"GetToolUsageUserTimeSeries", "POST", "/rpc/telemetry.getToolUsageUserTimeSeries"},
 			{"GetToolUsageUsersByTarget", "POST", "/rpc/telemetry.getToolUsageUsersByTarget"},
@@ -140,6 +144,8 @@ func New(
 		GetToolUsageTotals:               NewGetToolUsageTotalsHandler(e.GetToolUsageTotals, mux, decoder, encoder, errhandler, formatter),
 		GetToolUsageTargets:              NewGetToolUsageTargetsHandler(e.GetToolUsageTargets, mux, decoder, encoder, errhandler, formatter),
 		GetToolUsageUsers:                NewGetToolUsageUsersHandler(e.GetToolUsageUsers, mux, decoder, encoder, errhandler, formatter),
+		GetToolUsageClients:              NewGetToolUsageClientsHandler(e.GetToolUsageClients, mux, decoder, encoder, errhandler, formatter),
+		GetToolUsageClientToolBreakdown:  NewGetToolUsageClientToolBreakdownHandler(e.GetToolUsageClientToolBreakdown, mux, decoder, encoder, errhandler, formatter),
 		GetToolUsageTargetTimeSeries:     NewGetToolUsageTargetTimeSeriesHandler(e.GetToolUsageTargetTimeSeries, mux, decoder, encoder, errhandler, formatter),
 		GetToolUsageUserTimeSeries:       NewGetToolUsageUserTimeSeriesHandler(e.GetToolUsageUserTimeSeries, mux, decoder, encoder, errhandler, formatter),
 		GetToolUsageUsersByTarget:        NewGetToolUsageUsersByTargetHandler(e.GetToolUsageUsersByTarget, mux, decoder, encoder, errhandler, formatter),
@@ -181,6 +187,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetToolUsageTotals = m(s.GetToolUsageTotals)
 	s.GetToolUsageTargets = m(s.GetToolUsageTargets)
 	s.GetToolUsageUsers = m(s.GetToolUsageUsers)
+	s.GetToolUsageClients = m(s.GetToolUsageClients)
+	s.GetToolUsageClientToolBreakdown = m(s.GetToolUsageClientToolBreakdown)
 	s.GetToolUsageTargetTimeSeries = m(s.GetToolUsageTargetTimeSeries)
 	s.GetToolUsageUserTimeSeries = m(s.GetToolUsageUserTimeSeries)
 	s.GetToolUsageUsersByTarget = m(s.GetToolUsageUsersByTarget)
@@ -221,6 +229,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetToolUsageTotalsHandler(mux, h.GetToolUsageTotals)
 	MountGetToolUsageTargetsHandler(mux, h.GetToolUsageTargets)
 	MountGetToolUsageUsersHandler(mux, h.GetToolUsageUsers)
+	MountGetToolUsageClientsHandler(mux, h.GetToolUsageClients)
+	MountGetToolUsageClientToolBreakdownHandler(mux, h.GetToolUsageClientToolBreakdown)
 	MountGetToolUsageTargetTimeSeriesHandler(mux, h.GetToolUsageTargetTimeSeries)
 	MountGetToolUsageUserTimeSeriesHandler(mux, h.GetToolUsageUserTimeSeries)
 	MountGetToolUsageUsersByTargetHandler(mux, h.GetToolUsageUsersByTarget)
@@ -1545,6 +1555,113 @@ func NewGetToolUsageUsersHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getToolUsageUsers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetToolUsageClientsHandler configures the mux to serve the "telemetry"
+// service "getToolUsageClients" endpoint.
+func MountGetToolUsageClientsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.getToolUsageClients", f)
+}
+
+// NewGetToolUsageClientsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "telemetry" service "getToolUsageClients" endpoint.
+func NewGetToolUsageClientsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetToolUsageClientsRequest(mux, decoder)
+		encodeResponse = EncodeGetToolUsageClientsResponse(encoder)
+		encodeError    = EncodeGetToolUsageClientsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getToolUsageClients")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetToolUsageClientToolBreakdownHandler configures the mux to serve the
+// "telemetry" service "getToolUsageClientToolBreakdown" endpoint.
+func MountGetToolUsageClientToolBreakdownHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.getToolUsageClientToolBreakdown", f)
+}
+
+// NewGetToolUsageClientToolBreakdownHandler creates a HTTP handler which loads
+// the HTTP request and calls the "telemetry" service
+// "getToolUsageClientToolBreakdown" endpoint.
+func NewGetToolUsageClientToolBreakdownHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetToolUsageClientToolBreakdownRequest(mux, decoder)
+		encodeResponse = EncodeGetToolUsageClientToolBreakdownResponse(encoder)
+		encodeError    = EncodeGetToolUsageClientToolBreakdownError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getToolUsageClientToolBreakdown")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {

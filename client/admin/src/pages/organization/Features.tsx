@@ -75,6 +75,13 @@ const PRODUCT_FEATURES = {
     description:
       "Allows this organization to authenticate to and use Platform MCP, including manual setup. Disabling it denies runtime access without removing existing setup records.",
   },
+  network_ingress: {
+    kind: "toggle",
+    enabledKey: "networkIngressEnabled",
+    label: "Tailscale private access",
+    description:
+      "Allows this organization to connect Tailscale and configure private MCP access where the deployment's private ingress runtime and reconciler are enabled.",
+  },
   remote_session_auto_refresh: {
     kind: "toggle",
     enabledKey: "remoteSessionAutoRefreshEnabled",
@@ -140,11 +147,6 @@ const PRODUCT_FEATURES = {
   remote_session_auto_refresh_enforced: {
     kind: "omitted",
     where: "Dashboard remote session settings",
-  },
-  // reason: managed through private network ingress management
-  network_ingress: {
-    kind: "omitted",
-    where: "Private network ingress management",
   },
   // reason: managed in dashboard consent settings
   consent_tool_filtering: {

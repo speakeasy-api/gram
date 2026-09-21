@@ -29,12 +29,20 @@ type RemoteSessionClient struct {
 	// hosts its OAuth client metadata document at this URL and uses it as the
 	// client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string
-	ClientIDIssuedAt    string
+	ClientIDIssuedAt    *string
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string

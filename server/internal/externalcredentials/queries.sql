@@ -161,6 +161,19 @@ SELECT EXISTS (
     AND deleted IS FALSE
 );
 
+-- Live managed signing keys (identity provider connections) that a platform
+-- credential backs; mutating the credential would break every one of them. Run
+-- after LockExternalCredentialForUpdate: a managed key insert takes FOR KEY
+-- SHARE on the credential, so it either shows up here or waits behind the lock.
+-- Live managed signing keys (identity provider connections) that a platform
+-- credential backs; mutating the credential would break every one of them.
+-- name: CountLiveManagedExternalKeysByCredential :one
+SELECT count(*)
+FROM external_keys
+WHERE external_credential_id = @external_credential_id::uuid
+  AND identity_provider_connection_id IS NOT NULL
+  AND deleted IS FALSE;
+
 -- name: SoftDeleteExternalCredential :one
 UPDATE external_credentials
 SET deleted_at = clock_timestamp()

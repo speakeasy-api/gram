@@ -253,6 +253,8 @@ type remoteSessionCard struct {
 	ConnectedAs string
 	// AccountChips is upstream-supplied provider context (workspace, team, login), rendered escaped on its own line.
 	AccountChips []string
+	// IdentityCaveat qualifies ConnectedAs when it was not recorded as the grant's identity; rendered as a hover note.
+	IdentityCaveat string
 
 	// TokenActive is set when the provider's introspection last reported the access token active.
 	TokenActive bool
@@ -558,7 +560,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	agentSetupURL := ""
 	var agentOptions []consentAgentOption
 	if !challengeState.FirstParty && challengeState.AuthorizerUserID != "" {
-		if enabled, setupURL := s.agentAuthorizationRollout(ctx, logger, endpoint); enabled {
+		if enabled, setupURL, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); enabled {
 			options, aerr := s.eligibleConsentAgents(ctx, challengeState, endpoint)
 			if aerr != nil {
 				logger.WarnContext(ctx, "eligible agent selection unavailable", attr.SlogError(aerr))
@@ -787,11 +789,25 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeBadRequest, nil, "agent approval action and selection do not match").LogError(ctx, logger)
 	}
 	if selectedAgentID != "" {
-		if enabled, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
+		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
 			return oops.E(oops.CodeForbidden, nil, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
-		if _, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID); err != nil {
+		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
+		if err != nil {
 			return oops.E(oops.CodeForbidden, err, "selected agent is not eligible").LogWarn(ctx, logger)
+		}
+		// Keep the challenge retryable while the human connects and attaches
+		// required services. Human-owned tokens alone do not authorize an agent.
+		subject := urn.NewAgentSubject(selectedAgent.AgentID)
+		agentCtx, err := s.contextForSessionSubject(ctx, endpoint, subject, "", "")
+		if err != nil {
+			return oops.E(oops.CodeUnavailable, err, "resolve selected agent identity").LogWarn(ctx, logger)
+		}
+		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); err != nil {
+			if !errors.Is(err, remotesessions.ErrNoValidToken) {
+				return oops.E(oops.CodeUnavailable, err, "check agent connections").LogError(ctx, logger)
+			}
+			return oops.E(oops.CodeConflict, err, "connect and attach the required services before authorizing this agent").LogWarn(ctx, logger)
 		}
 	}
 
@@ -884,7 +900,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeForbidden, ferr, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
-		if enabled, _ := s.agentAuthorizationRollout(ctx, logger, finalEndpoint); !enabled {
+		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, finalEndpoint); !enabled {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeForbidden, nil, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
@@ -1441,6 +1457,7 @@ func (s *Service) buildRemoteSessionCards(
 			AutoRefreshChecked:     checked,
 			ConnectedAs:            state.ConnectedAs,
 			AccountChips:           state.AccountChips,
+			IdentityCaveat:         state.IdentityCaveat,
 			TokenActive:            tokenActive,
 			TokenExpiresAt:         tokenExpiresAt,
 			TokenExpiresIn:         tokenExpiresIn,

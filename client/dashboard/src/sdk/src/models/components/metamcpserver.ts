@@ -51,6 +51,10 @@ export type MetaMcpServer = {
    */
   id: string;
   /**
+   * Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Gram's built-in instructions.
+   */
+  instructions?: string | undefined;
+  /**
    * The number of live members. Only populated by listMetaMcpServers.
    */
   memberCount?: number | undefined;
@@ -105,6 +109,7 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
+    instructions: z.optional(z.string()),
     member_count: z.optional(z.int()),
     name: z.string(),
     network_access_mode: MetaMcpServerNetworkAccessMode$inboundSchema,

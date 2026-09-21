@@ -60,9 +60,9 @@ func newCheckpoint(registry *killswitches.Registry, evaluation evaluator, timeou
 	if timeout <= 0 {
 		return nil, errors.New("mcp tool-execution checkpoint timeout must be positive")
 	}
-	principal, ok := registry.PrincipalAdapter(PrincipalKindUser)
-	if !ok {
-		return nil, errors.New("authenticated-user principal adapter is not registered")
+	principal, err := registeredPrincipalAdapter(registry)
+	if err != nil {
+		return nil, err
 	}
 	resource, ok := registry.ResourceAdapter(ResourceKindMCPServer)
 	if !ok {
@@ -134,8 +134,8 @@ func (c *Checkpoint) Evaluate(ctx context.Context, organizationID, mcpServerID s
 		return c.infrastructureFailure(fmt.Errorf("derive authenticated user: %w", derivation.principalErr))
 	}
 	if derivation.principalResult.Kind() == killswitches.PrincipalCandidateResultUnsupported {
-		if derivation.hasAgentPrincipal() {
-			return c.infrastructureFailure(errors.New("agent principals are not supported by the MCP tool-execution kill switch"))
+		if derivation.hasAgentBackedPrincipal() {
+			return c.infrastructureFailure(errors.New("agent or workload principal has no kill-switch principal candidate"))
 		}
 		return killswitches.NewContinueDisposition(), nil
 	}

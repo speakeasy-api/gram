@@ -30,7 +30,7 @@ import {
   useAgentManagementAvailability,
 } from "@/pages/agents/agent-management-availability";
 import { invalidateAgentPolicy } from "@/pages/agents/agent-policy-grants";
-import { useOrgRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { useCreateAgentMutation } from "@gram/client/react-query/createAgent.js";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
@@ -320,7 +320,12 @@ function ExistingAgentSelect({
   onChange: (agent: ManagedAgent | null) => void;
   disabled: boolean;
 }) {
-  const agentsHref = useOrgRoutes().agents.href();
+  const organization = useOrganization();
+  // Agent management is project-scoped while this setup page is org-scoped, so
+  // the link resolves against the organization's first project.
+  const agentsHref = useRoutes({
+    projectSlug: organization.projects[0]?.slug ?? "",
+  }).agents.href();
   if (isLoading) return <Text muted>Loading agents…</Text>;
   if (isError) return <Text role="alert">Unable to load agents.</Text>;
   if (agents.length === 0)
@@ -641,7 +646,10 @@ function CheckInStatus({
   awaitingKeyId?: string;
 }) {
   const organization = useOrganization();
-  const agentHref = `${useOrgRoutes().agents.href()}?id=${encodeURIComponent(agent.id)}`;
+  const agentsHref = useRoutes({
+    projectSlug: organization.projects[0]?.slug ?? "",
+  }).agents.href();
+  const agentHref = `${agentsHref}?id=${encodeURIComponent(agent.id)}`;
   const keys = useListAPIKeys({ agentId: agent.id }, security, {
     queryKeyHashFn: (key) => JSON.stringify([organization.id, key]),
     enabled: agent.permissions.authorize,

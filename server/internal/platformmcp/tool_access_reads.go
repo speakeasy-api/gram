@@ -20,7 +20,7 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 		Title:       "List MCP Access Roles",
 		Description: "List the organization's roles and summarize the MCP access each role carries. Member counts are withheld for small groups, and each role is represented by a short-lived opaque reference rather than a role ID or principal.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, ListAccessRolesOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, ListAccessRolesOutput, error) {
 		return principalToolCall(ctx, accessReadToolResult, func(principal Principal) (ListAccessRolesOutput, error) {
 			return accessReads.ListRoles(ctx, principal)
 		})
@@ -31,7 +31,7 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 		Title:       "Find Organization Members for MCP Access",
 		Description: "Find organization members by an explicit identity query of at least three characters or a role reference. Returns masked identities, role names, and short-lived opaque member references only when at least five people match; smaller result sets are withheld rather than enumerated.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListAccessMembersInput) (*mcp.CallToolResult, ListAccessMembersOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListAccessMembersInput) (*mcp.CallToolResult, ListAccessMembersOutput, error) {
 		return principalToolCall(ctx, accessReadToolResult, func(principal Principal) (ListAccessMembersOutput, error) {
 			return accessReads.ListMembers(ctx, principal, input)
 		})
@@ -42,7 +42,7 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 		Title:       "Inspect Access to One MCP Server",
 		Description: "Inspect which roles can enter one exact configured MCP server through its configured endpoint and which known tools or behavior classes they can use. Uses the same authorization resource and selector semantics as that endpoint; dynamic servers may not have an enumerable tool catalog.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPAccessInput) (*mcp.CallToolResult, GetMCPAccessOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPAccessInput) (*mcp.CallToolResult, GetMCPAccessOutput, error) {
 		return principalToolCall(ctx, accessReadToolResult, func(principal Principal) (GetMCPAccessOutput, error) {
 			return accessReads.GetMCPAccess(ctx, principal, input)
 		})
@@ -65,7 +65,7 @@ func registerUnavailableAccessReadTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: externalOnly, ProjectScope: tool.projectScope}, unavailableTool("mcp_access_reads"))
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: tool.projectScope}, unavailableTool("mcp_access_reads"))
 	}
 }
 

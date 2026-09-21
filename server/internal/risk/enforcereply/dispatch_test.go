@@ -52,7 +52,21 @@ func (p *capturePublisher[T]) Stop(context.Context) error {
 type (
 	captureEnforcementPublisher = capturePublisher[*riskv1.GitleaksEnforcement]
 	capturePresidioPublisher    = capturePublisher[*riskv1.PresidioEnforcement]
+	captureLLMPublisher         = capturePublisher[*riskv1.LLMEnforcement]
 )
+
+// replyOK answers every publish on the lane with an OK reply so the dispatcher's
+// waiter resolves immediately.
+func replyOK[T proto.Message](te *inboxTestEnv, lane Lane) func(context.Context, T, map[string]string) error {
+	return func(ctx context.Context, _ T, attributes map[string]string) error {
+		replyURN := attributes[requestreply.ReplyURNAttribute]
+		_, correlationID, err := ParseReplyURN(replyURN)
+		if err != nil {
+			return err
+		}
+		return te.writer.Reply(ctx, replyURN, testReply(correlationID, lane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
+	}
+}
 
 func int64CounterValue(metrics metricdata.ResourceMetrics, name string) int64 {
 	for _, scope := range metrics.ScopeMetrics {
@@ -74,18 +88,52 @@ func testDispatcher(te *inboxTestEnv, publisher *captureEnforcementPublisher, wa
 }
 
 func testDispatcherWithPresidio(te *inboxTestEnv, gitleaksPub *captureEnforcementPublisher, presidioPub *capturePresidioPublisher, waitTimeout time.Duration) *Dispatcher {
+	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
+	return testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{WaitTimeout: waitTimeout, LaneWaitTimeout: nil})
+}
+
+func testDispatcherWithLanes(te *inboxTestEnv, gitleaksPub *captureEnforcementPublisher, presidioPub *capturePresidioPublisher, llmPub *captureLLMPublisher, cfg DispatcherConfig) *Dispatcher {
 	gitleaksReq := redisinbox.NewRequestBroker(te.inbox, gitleaksPub)
 	presidioReq := redisinbox.NewRequestBroker(te.inbox, presidioPub)
+	llmReq := redisinbox.NewRequestBroker(te.inbox, llmPub)
 	return &Dispatcher{
 		gitleaks: &typedEnforcementLane[*riskv1.GitleaksEnforcement]{broker: gitleaksReq},
 		presidio: &typedEnforcementLane[*riskv1.PresidioEnforcement]{broker: presidioReq},
+		llm:      &typedEnforcementLane[*riskv1.LLMEnforcement]{broker: llmReq},
 		close: func(ctx context.Context) error {
-			return errors.Join(gitleaksReq.Close(ctx), presidioReq.Close(ctx))
+			return errors.Join(gitleaksReq.Close(ctx), presidioReq.Close(ctx), llmReq.Close(ctx))
 		},
-		waitTimeout: waitTimeout,
-		logger:      newTestLogger(),
-		truncations: newTruncationCounter(te.meterProvider),
-		stokenCodec: stokens.NewCodec(),
+		waitTimeout:     cfg.WaitTimeout,
+		laneWaitTimeout: cfg.LaneWaitTimeout,
+		logger:          newTestLogger(),
+		truncations:     newTruncationCounter(te.meterProvider),
+		stokenCodec:     stokens.NewCodec(),
+	}
+}
+
+func testLLMDispatcher(te *inboxTestEnv, llmPub *captureLLMPublisher, cfg DispatcherConfig) *Dispatcher {
+	gitleaksPub := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
+	presidioPub := &capturePresidioPublisher{messages: nil, attributes: nil, onPublish: nil}
+	return testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, cfg)
+}
+
+func llmDispatchRequest(lanes []Lane, origins map[Lane]metering.RiskProvenance) DispatchRequest {
+	return DispatchRequest{
+		OrganizationID:   "org-llm",
+		OrganizationSlug: "org-llm-slug",
+		ProjectID:        "project-llm",
+		Content:          "raw scanned content",
+		Body:             "please run the deploy",
+		ToolName:         "bash",
+		MessageType:      "tool_request",
+		ToolCalls: []ToolCall{
+			{ID: "toolu_1", Name: "bash", Arguments: `{"command":"git reset --hard"}`},
+			{ID: "toolu_2", Name: "read_file", Arguments: `{"path":".env"}`},
+		},
+		PresidioEntities:       nil,
+		PresidioScoreThreshold: nil,
+		Lanes:                  lanes,
+		Origins:                origins,
 	}
 }
 
@@ -454,6 +502,208 @@ func TestDispatchTruncatesAtMultibyteRuneBoundary(t *testing.T) {
 	require.Equal(t, expected, gitleaksPub.messages[0].GetContent())
 	require.True(t, utf8.ValidString(gitleaksPub.messages[0].GetContent()))
 	require.True(t, gitleaksPub.messages[0].GetContentTruncated())
+}
+
+func TestDispatchPublishesLLMLaneFields(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-llm")
+	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
+	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
+
+	origins := testOrigins(llmLane)
+	origin := origins[llmLane]
+	origin.ToolCallID = "toolu_1"
+	origins[llmLane] = origin
+	request := llmDispatchRequest([]Lane{llmLane}, origins)
+
+	outcome, err := dispatcher.Dispatch(t.Context(), request)
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.False(t, outcome.Deadline)
+	require.False(t, outcome.Truncated)
+	require.Empty(t, outcome.Failed)
+	reply := outcome.ByLane[llmLane]
+	require.NotNil(t, reply)
+	require.Equal(t, riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER, reply.GetScanner())
+	require.Empty(t, reply.GetPolicyId())
+
+	require.Len(t, llmPub.messages, 1)
+	message := llmPub.messages[0]
+	require.Equal(t, "org-llm", message.GetOrganizationId())
+	require.Equal(t, "org-llm-slug", message.GetOrganizationSlug())
+	require.Equal(t, "project-llm", message.GetProjectId())
+	require.Equal(t, "raw scanned content", message.GetContent())
+	require.Equal(t, "please run the deploy", message.GetBody())
+	require.Equal(t, "bash", message.GetToolName())
+	require.Equal(t, "tool_request", message.GetMessageType())
+	require.False(t, message.GetContentTruncated())
+	require.Len(t, message.GetToolCalls(), 2)
+	require.Equal(t, "toolu_1", message.GetToolCalls()[0].GetId())
+	require.Equal(t, "bash", message.GetToolCalls()[0].GetName())
+	require.JSONEq(t, `{"command":"git reset --hard"}`, message.GetToolCalls()[0].GetArguments())
+	require.Equal(t, "toolu_2", message.GetToolCalls()[1].GetId())
+	require.Equal(t, "read_file", message.GetToolCalls()[1].GetName())
+	require.JSONEq(t, `{"path":".env"}`, message.GetToolCalls()[1].GetArguments())
+
+	// Provenance is copied from the lane origin exactly as the gitleaks lane does.
+	require.Equal(t, origin.OperationID, message.GetRequestId())
+	require.Equal(t, origin.RiskPolicyID.String(), message.GetOriginRiskPolicyId())
+	require.Equal(t, origin.RiskPolicyVersion, message.GetOriginRiskPolicyVersion())
+	require.Equal(t, origin.ExecutionPath, message.GetExecutionPath())
+	require.Equal(t, origin.MessageLinkReason, message.GetMessageLinkReason())
+	require.Equal(t, origin.PolicyLinkReason, message.GetPolicyLinkReason())
+	require.Equal(t, origin.ExternalConversationID, message.GetExternalConversationId())
+	require.Equal(t, origin.HookSource, message.GetHookSource())
+	require.Equal(t, origin.UserID, message.GetUserId())
+	require.Equal(t, "toolu_1", message.GetToolCallId())
+	require.Empty(t, message.GetChatId())
+	require.Empty(t, message.GetChatMessageId())
+	require.Empty(t, message.GetRiskPolicyId(), "shared origin must not alter finding/reply policy correlation")
+	_, err = time.Parse(time.RFC3339Nano, message.GetCreatedAt())
+	require.NoError(t, err)
+
+	require.Len(t, llmPub.attributes, 1)
+	replyURN := llmPub.attributes[0][requestreply.ReplyURNAttribute]
+	_, correlationID, err := ParseReplyURN(replyURN)
+	require.NoError(t, err)
+	parsedCorrelationID, err := uuid.Parse(correlationID)
+	require.NoError(t, err)
+	require.Equal(t, uuid.Version(7), parsedCorrelationID.Version())
+	require.Equal(t, correlationID, reply.GetCorrelationId())
+}
+
+func TestDispatchLLMLaneFallsBackToOriginMessageFields(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-llm-fallback")
+	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
+	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
+
+	origins := testOrigins(llmLane)
+	origin := origins[llmLane]
+	origin.ToolName = "origin-tool"
+	origin.MessageType = "origin_message_type"
+	origins[llmLane] = origin
+	request := llmDispatchRequest([]Lane{llmLane}, origins)
+	request.ToolName = ""
+	request.MessageType = ""
+	request.ToolCalls = nil
+
+	outcome, err := dispatcher.Dispatch(t.Context(), request)
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.Len(t, llmPub.messages, 1)
+	message := llmPub.messages[0]
+	require.Equal(t, "origin-tool", message.GetToolName())
+	require.Equal(t, "origin_message_type", message.GetMessageType())
+	require.Empty(t, message.GetToolCalls())
+}
+
+func TestDispatchFansOutGitleaksAndLLMLanes(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-gitleaks-llm")
+	gitleaksPub := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
+	gitleaksPub.onPublish = replyOK[*riskv1.GitleaksEnforcement](te, gitleaksLane)
+	presidioPub := &capturePresidioPublisher{messages: nil, attributes: nil, onPublish: nil}
+	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
+	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
+	dispatcher := testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
+
+	origins := testOrigins(gitleaksLane, llmLane)
+	outcome, err := dispatcher.Dispatch(t.Context(), llmDispatchRequest([]Lane{gitleaksLane, llmLane}, origins))
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.NotNil(t, outcome.ByLane[gitleaksLane])
+	require.NotNil(t, outcome.ByLane[llmLane])
+	require.Equal(t, riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, outcome.ByLane[gitleaksLane].GetScanner())
+	require.Equal(t, riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER, outcome.ByLane[llmLane].GetScanner())
+	require.Len(t, gitleaksPub.messages, 1)
+	require.Len(t, llmPub.messages, 1)
+	require.Empty(t, presidioPub.messages)
+	// Both lanes share one request id but each gets its own correlation id.
+	require.Equal(t, gitleaksPub.messages[0].GetRequestId(), llmPub.messages[0].GetRequestId())
+	require.Equal(t, "raw scanned content", gitleaksPub.messages[0].GetContent())
+	require.Equal(t, "raw scanned content", llmPub.messages[0].GetContent())
+	_, gitleaksCorrelation, err := ParseReplyURN(gitleaksPub.attributes[0][requestreply.ReplyURNAttribute])
+	require.NoError(t, err)
+	_, llmCorrelation, err := ParseReplyURN(llmPub.attributes[0][requestreply.ReplyURNAttribute])
+	require.NoError(t, err)
+	require.NotEqual(t, gitleaksCorrelation, llmCorrelation)
+}
+
+func TestDispatchHonoursLaneWaitTimeoutOverride(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-lane-timeout")
+	gitleaksPub := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
+	gitleaksPub.onPublish = replyOK[*riskv1.GitleaksEnforcement](te, gitleaksLane)
+	presidioPub := &capturePresidioPublisher{messages: nil, attributes: nil, onPublish: nil}
+	// The LLM publisher never replies, so only the lane override bounds its wait.
+	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
+	dispatcher := testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{
+		WaitTimeout: 10 * time.Second,
+		LaneWaitTimeout: map[riskv1.EnforcementScanner]time.Duration{ //nolint:exhaustive // only the LLM lane is overridden
+			riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER: 25 * time.Millisecond,
+		},
+	})
+
+	origins := testOrigins(gitleaksLane, llmLane)
+	started := time.Now()
+	outcome, err := dispatcher.Dispatch(t.Context(), llmDispatchRequest([]Lane{gitleaksLane, llmLane}, origins))
+	require.NoError(t, err)
+	require.Less(t, time.Since(started), 5*time.Second, "LLM lane must time out on its override, not the default wait")
+	require.False(t, outcome.Complete)
+	require.True(t, outcome.Deadline)
+	require.NotNil(t, outcome.ByLane[gitleaksLane])
+	require.Nil(t, outcome.ByLane[llmLane])
+	require.ErrorIs(t, outcome.Failed[llmLane], context.DeadlineExceeded)
+	require.NotContains(t, outcome.Failed, gitleaksLane)
+	require.Len(t, llmPub.messages, 1)
+	require.Zero(t, te.inbox.Snapshot().Waiters)
+}
+
+func TestDispatchRejectsLLMLaneWithPolicyID(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-llm-policy")
+	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
+
+	policyLane := Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER, PolicyID: uuid.NewString()}
+	_, err := dispatcher.Dispatch(t.Context(), llmDispatchRequest([]Lane{policyLane}, testOrigins(policyLane)))
+	require.ErrorContains(t, err, "unsupported enforcement lane")
+	require.Empty(t, llmPub.messages)
+}
+
+func TestDispatchTruncatesOversizedLLMBody(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-llm-body")
+	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
+	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
+
+	expected := strings.Repeat("x", MaxContentBytes-1)
+	request := llmDispatchRequest([]Lane{llmLane}, testOrigins(llmLane))
+	request.Body = expected + "€tail"
+
+	outcome, err := dispatcher.Dispatch(t.Context(), request)
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.True(t, outcome.Truncated)
+	require.Len(t, llmPub.messages, 1)
+	message := llmPub.messages[0]
+	require.Equal(t, expected, message.GetBody())
+	require.True(t, utf8.ValidString(message.GetBody()))
+	require.Equal(t, "raw scanned content", message.GetContent(), "content below the cap is left intact")
+	require.True(t, message.GetContentTruncated())
+	var metrics metricdata.ResourceMetrics
+	require.NoError(t, te.reader.Collect(t.Context(), &metrics))
+	require.Equal(t, int64(1), int64CounterValue(metrics, "risk.enforcement.truncations"))
 }
 
 func TestDispatchRejectsDuplicateLane(t *testing.T) {

@@ -69,6 +69,16 @@ filtered AS (
         END::text AS trial_state
     FROM organization_metadata om
     LEFT JOIN trials t ON t.organization_id = om.id
+    -- Match the list's active-membership definition without multiplying rows.
+    -- Guard access inside the aggregate: generic plans must not scan members
+    -- when both bounds are absent.
+    CROSS JOIN LATERAL (
+        SELECT count(*)::bigint AS member_count
+        FROM organization_user_relationships our
+        WHERE ($3::bigint IS NOT NULL OR $4::bigint IS NOT NULL)
+          AND our.organization_id = om.id
+          AND our.deleted IS FALSE
+    ) members
     CROSS JOIN search
     WHERE
         (
@@ -78,11 +88,16 @@ filtered AS (
             OR lower(om.id) = lower(search.term)
             OR lower(om.workos_id) = lower(search.term)
         )
-        AND (coalesce(cardinality($3::text[]), 0) = 0 OR om.gram_account_type = ANY($3::text[]))
+        AND (coalesce(cardinality($5::text[]), 0) = 0 OR om.gram_account_type = ANY($5::text[]))
+        AND ($3::bigint IS NULL OR members.member_count >= $3::bigint)
+        AND ($4::bigint IS NULL OR members.member_count <= $4::bigint)
+        AND ($6::timestamptz IS NULL OR om.created_at >= $6::timestamptz)
+        AND ($7::timestamptz IS NULL OR om.created_at < $7::timestamptz)
+        -- Status is strict, including exact organization and WorkOS ID searches.
         AND (
-            (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($4::text[])
-            OR lower(om.id) = lower(search.term)
-            OR lower(om.workos_id) = lower(search.term)
+            $8::text = 'all'
+            OR ($8::text = 'active' AND om.disabled_at IS NULL)
+            OR ($8::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
 )
 SELECT count(*)::bigint FROM filtered
@@ -92,8 +107,12 @@ WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
 type AdminCountOrganizationsParams struct {
 	TrialStates    []string
 	Q              pgtype.Text
+	MinMembers     pgtype.Int8
+	MaxMembers     pgtype.Int8
 	AccountTypes   []string
-	DisabledStates []string
+	CreatedAtGte   pgtype.Timestamptz
+	CreatedAtLt    pgtype.Timestamptz
+	DisabledStatus string
 }
 
 // The count cannot ride on the page query. That query carries the cursor
@@ -111,8 +130,12 @@ func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrg
 	row := q.db.QueryRow(ctx, adminCountOrganizations,
 		arg.TrialStates,
 		arg.Q,
+		arg.MinMembers,
+		arg.MaxMembers,
 		arg.AccountTypes,
-		arg.DisabledStates,
+		arg.CreatedAtGte,
+		arg.CreatedAtLt,
+		arg.DisabledStatus,
 	)
 	var column_1 int64
 	err := row.Scan(&column_1)
@@ -502,8 +525,8 @@ WITH search AS (
     -- single-character wildcard, so an unescaped pasted id draws incidental
     -- matches out of the name and slug arms.
     SELECT
-        $6::text AS term,
-        '%' || replace(replace(replace($6::text, '\', '\\'), '%', '\%'), '_', '\_') || '%' AS pattern
+        $3::text AS term,
+        '%' || replace(replace(replace($3::text, '\', '\\'), '%', '\%'), '_', '\_') || '%' AS pattern
 ),
 filtered AS (
     SELECT
@@ -528,15 +551,21 @@ filtered AS (
         t.ends_at AS trial_ends_at,
         om.created_at,
         om.updated_at,
-        (
-            SELECT count(*)
-            FROM organization_user_relationships our
-            WHERE our.organization_id = om.id
-              AND our.deleted IS FALSE
-        )::bigint AS member_count
+        members.member_count
     FROM organization_metadata om
     LEFT JOIN trials t ON t.organization_id = om.id
     LEFT JOIN billing_metadata bm ON bm.organization_id = om.id
+    -- Only bounds/member sorting need pre-page counts. Keep the guard inside
+    -- the aggregate so generic plans skip membership access too. NULL marks
+    -- deferred display counts; real zero-member counts remain zero.
+    CROSS JOIN LATERAL (
+        SELECT CASE WHEN ($4::bigint IS NOT NULL OR $5::bigint IS NOT NULL OR $1::text = 'member_count')
+                    THEN count(*) END::bigint AS member_count
+        FROM organization_user_relationships our
+        WHERE ($4::bigint IS NOT NULL OR $5::bigint IS NOT NULL OR $1::text = 'member_count')
+          AND our.organization_id = om.id
+          AND our.deleted IS FALSE
+    ) members
     CROSS JOIN search
     WHERE
         -- The id arms compare exactly because a substring match on an opaque high-cardinality id produces incidental hits an operator cannot explain.
@@ -552,62 +581,98 @@ filtered AS (
         -- coalesce, not a bare cardinality: an absent filter reaches pgx as a nil
         -- slice and encodes to a NULL array, and cardinality(NULL) is NULL, which
         -- would drop every row instead of keeping every row.
-        AND (coalesce(cardinality($7::text[]), 0) = 0 OR om.gram_account_type = ANY($7::text[]))
-        -- No empty arm: the handler resolves an absent filter to {active}.
-        -- The id arms repeat here, and only here, so a pasted id reaches a disabled organization: investigating one is a leading reason to paste an id at all.
-        -- Deliberately not repeated on the account type arm or the cursor, which keep applying to an id match.
+        AND (coalesce(cardinality($6::text[]), 0) = 0 OR om.gram_account_type = ANY($6::text[]))
+        AND ($4::bigint IS NULL OR members.member_count >= $4::bigint)
+        AND ($5::bigint IS NULL OR members.member_count <= $5::bigint)
+        AND ($7::timestamptz IS NULL OR om.created_at >= $7::timestamptz)
+        AND ($8::timestamptz IS NULL OR om.created_at < $8::timestamptz)
+        -- Status is strict, including exact organization and WorkOS ID searches.
         AND (
-            (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY($8::text[])
-            OR lower(om.id) = lower(search.term)
-            OR lower(om.workos_id) = lower(search.term)
+            $9::text = 'all'
+            OR ($9::text = 'active' AND om.disabled_at IS NULL)
+            OR ($9::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
         -- Keep ID-shaped cursors compatible, but seek in the default creation
         -- order, not ID order. Resolve the anchor outside the filters so changes
         -- to its account/disabled state do not break an existing cursor. A
         -- deleted or unknown anchor exhausts the walk rather than restarting it.
         AND (
-            $9::text IS NULL
+            $10::text IS NULL
             OR EXISTS (
                 SELECT 1 FROM organization_metadata anchor
-                WHERE anchor.id = $9::text
+                WHERE anchor.id = $10::text
                   AND (om.created_at < anchor.created_at
                        OR (om.created_at = anchor.created_at AND om.id > anchor.id))
             )
         )
-)
+),
+paged AS MATERIALIZED (
 SELECT id, name, slug, account_type, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
-WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
+WHERE coalesce(cardinality($11::text[]), 0) = 0 OR trial_state = ANY($11::text[])
 ORDER BY
-    CASE WHEN $2::text = 'name' AND $3::text = 'asc' THEN name END ASC NULLS LAST,
-    CASE WHEN $2::text = 'name' AND $3::text = 'desc' THEN name END DESC NULLS LAST,
-    CASE WHEN $2::text = 'slug' AND $3::text = 'asc' THEN slug END ASC NULLS LAST,
-    CASE WHEN $2::text = 'slug' AND $3::text = 'desc' THEN slug END DESC NULLS LAST,
-    CASE WHEN $2::text = 'account_type' AND $3::text = 'asc' THEN account_type END ASC NULLS LAST,
-    CASE WHEN $2::text = 'account_type' AND $3::text = 'desc' THEN account_type END DESC NULLS LAST,
-    CASE WHEN $2::text = 'member_count' AND $3::text = 'asc' THEN member_count END ASC NULLS LAST,
-    CASE WHEN $2::text = 'member_count' AND $3::text = 'desc' THEN member_count END DESC NULLS LAST,
-    CASE WHEN $2::text = 'created_at' AND $3::text = 'asc' THEN created_at END ASC NULLS LAST,
-    CASE WHEN $2::text = 'created_at' AND $3::text = 'desc' THEN created_at END DESC NULLS LAST,
-    CASE WHEN $2::text = 'disabled_at' AND $3::text = 'asc' THEN disabled_at END ASC NULLS LAST,
-    CASE WHEN $2::text = 'disabled_at' AND $3::text = 'desc' THEN disabled_at END DESC NULLS LAST,
-    CASE WHEN $2::text = 'trial_ends_at' AND $3::text = 'asc' THEN trial_ends_at END ASC NULLS LAST,
-    CASE WHEN $2::text = 'trial_ends_at' AND $3::text = 'desc' THEN trial_ends_at END DESC NULLS LAST,
+    CASE WHEN $1::text = 'name' AND $2::text = 'asc' THEN name END ASC NULLS LAST,
+    CASE WHEN $1::text = 'name' AND $2::text = 'desc' THEN name END DESC NULLS LAST,
+    CASE WHEN $1::text = 'slug' AND $2::text = 'asc' THEN slug END ASC NULLS LAST,
+    CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
+    CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
+    CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
+    CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
+    CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,
+    CASE WHEN $1::text = 'created_at' AND $2::text = 'desc' THEN created_at END DESC NULLS LAST,
+    CASE WHEN $1::text = 'disabled_at' AND $2::text = 'asc' THEN disabled_at END ASC NULLS LAST,
+    CASE WHEN $1::text = 'disabled_at' AND $2::text = 'desc' THEN disabled_at END DESC NULLS LAST,
+    CASE WHEN $1::text = 'trial_ends_at' AND $2::text = 'asc' THEN trial_ends_at END ASC NULLS LAST,
+    CASE WHEN $1::text = 'trial_ends_at' AND $2::text = 'desc' THEN trial_ends_at END DESC NULLS LAST,
     -- Without this tiebreaker rows that tie on the sort key can swap between calls, which drops or repeats rows across a page boundary.
     id ASC
-LIMIT $5::int
-OFFSET $4::bigint
+LIMIT $13::int
+OFFSET $12::bigint
+)
+SELECT
+    id, name, slug, account_type, workos_id, stripe_customer_id,
+    stripe_subscription_id, whitelisted, disabled_at, trial_state,
+    trial_ends_at, created_at, updated_at,
+    coalesce(member_count, (
+        SELECT count(*)
+        FROM organization_user_relationships our
+        WHERE our.organization_id = paged.id
+          AND our.deleted IS FALSE
+    ))::bigint AS member_count
+FROM paged
+ORDER BY
+    CASE WHEN $1::text = 'name' AND $2::text = 'asc' THEN name END ASC NULLS LAST,
+    CASE WHEN $1::text = 'name' AND $2::text = 'desc' THEN name END DESC NULLS LAST,
+    CASE WHEN $1::text = 'slug' AND $2::text = 'asc' THEN slug END ASC NULLS LAST,
+    CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
+    CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
+    CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
+    CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
+    CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,
+    CASE WHEN $1::text = 'created_at' AND $2::text = 'desc' THEN created_at END DESC NULLS LAST,
+    CASE WHEN $1::text = 'disabled_at' AND $2::text = 'asc' THEN disabled_at END ASC NULLS LAST,
+    CASE WHEN $1::text = 'disabled_at' AND $2::text = 'desc' THEN disabled_at END DESC NULLS LAST,
+    CASE WHEN $1::text = 'trial_ends_at' AND $2::text = 'asc' THEN trial_ends_at END ASC NULLS LAST,
+    CASE WHEN $1::text = 'trial_ends_at' AND $2::text = 'desc' THEN trial_ends_at END DESC NULLS LAST,
+    -- Without this tiebreaker rows that tie on the sort key can swap between calls, which drops or repeats rows across a page boundary.
+    id ASC
 `
 
 type AdminListOrganizationsParams struct {
-	TrialStates    []string
 	SortBy         string
 	SortDir        string
+	Q              pgtype.Text
+	MinMembers     pgtype.Int8
+	MaxMembers     pgtype.Int8
+	AccountTypes   []string
+	CreatedAtGte   pgtype.Timestamptz
+	CreatedAtLt    pgtype.Timestamptz
+	DisabledStatus string
+	AfterID        pgtype.Text
+	TrialStates    []string
 	PageOffset     int64
 	PageLimit      int32
-	Q              pgtype.Text
-	AccountTypes   []string
-	DisabledStates []string
-	AfterID        pgtype.Text
 }
 
 type AdminListOrganizationsRow struct {
@@ -637,17 +702,22 @@ type AdminListOrganizationsRow struct {
 // bottom under DESC, where Postgres would otherwise put them first; on the ASC
 // arms it only spells out the default. Both are written out so the two arms of a
 // column read alike.
+// MATERIALIZED keeps display-only membership access after LIMIT and OFFSET.
 func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrganizationsParams) ([]AdminListOrganizationsRow, error) {
 	rows, err := q.db.Query(ctx, adminListOrganizations,
-		arg.TrialStates,
 		arg.SortBy,
 		arg.SortDir,
+		arg.Q,
+		arg.MinMembers,
+		arg.MaxMembers,
+		arg.AccountTypes,
+		arg.CreatedAtGte,
+		arg.CreatedAtLt,
+		arg.DisabledStatus,
+		arg.AfterID,
+		arg.TrialStates,
 		arg.PageOffset,
 		arg.PageLimit,
-		arg.Q,
-		arg.AccountTypes,
-		arg.DisabledStates,
-		arg.AfterID,
 	)
 	if err != nil {
 		return nil, err
@@ -928,4 +998,181 @@ func (q *Queries) LockOrganizationMetadata(ctx context.Context, id string) (stri
 	var id_2 string
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const lockSupportMatrix = `-- name: LockSupportMatrix :exec
+SELECT pg_advisory_xact_lock(719438201)
+`
+
+func (q *Queries) LockSupportMatrix(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockSupportMatrix)
+	return err
+}
+
+const readSupportMatrix = `-- name: ReadSupportMatrix :one
+WITH reference_facts AS (
+  SELECT m.slug AS method_slug, jsonb_object_agg(c.slug, jsonb_build_object('status', r.status, 'note', r.notes, 'verify', r.needs_verification)) AS facts
+  FROM support_matrix_method_capabilities r
+  JOIN support_matrix_integration_methods m ON m.id = r.integration_method_id AND m.deleted_at IS NULL
+  JOIN support_matrix_capabilities c ON c.id = r.capability_id AND c.deleted_at IS NULL
+  WHERE r.deleted_at IS NULL GROUP BY m.slug
+), coverage_facts AS (
+  SELECT f.method_platform_id, jsonb_object_agg(c.slug, jsonb_build_object('status', f.status, 'note', f.notes, 'verify', f.needs_verification)) AS facts
+  FROM support_matrix_coverage f
+  JOIN support_matrix_capabilities c ON c.id = f.capability_id AND c.deleted_at IS NULL
+  WHERE f.deleted_at IS NULL GROUP BY f.method_platform_id
+), mappings AS (
+  SELECT m.slug || '/' || p.slug AS key,
+    jsonb_build_object('applicability', mp.applicability, 'conditions', mp.conditions, 'facts', coalesce(cf.facts, '{}'::jsonb)) AS value
+  FROM support_matrix_method_platforms mp
+  JOIN support_matrix_integration_methods m ON m.id = mp.integration_method_id AND m.deleted_at IS NULL
+  JOIN support_matrix_platforms p ON p.id = mp.platform_id AND p.deleted_at IS NULL
+  LEFT JOIN coverage_facts cf ON cf.method_platform_id = mp.id
+  WHERE mp.deleted_at IS NULL
+)
+SELECT jsonb_build_object(
+ 'methods', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', m.slug, 'name', m.name, 'vendor', m.vendor, 'plans', m.plan_notes, 'facts', coalesce(r.facts, '{}'::jsonb)) ORDER BY m.sort_order, m.slug), '[]'::jsonb) FROM support_matrix_integration_methods m LEFT JOIN reference_facts r ON r.method_slug = m.slug WHERE m.deleted_at IS NULL),
+ 'products', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', p.slug, 'name', p.name, 'vendor', p.vendor, 'family', p.family, 'surface', p.surface) ORDER BY p.sort_order, p.slug), '[]'::jsonb) FROM support_matrix_platforms p WHERE p.deleted_at IS NULL),
+ 'capabilities', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', c.slug, 'name', c.name, 'group', c.category) ORDER BY c.sort_order, c.slug), '[]'::jsonb) FROM support_matrix_capabilities c WHERE c.deleted_at IS NULL),
+ 'draft', jsonb_build_object('mappings', (SELECT coalesce(jsonb_object_agg(key, value), '{}'::jsonb) FROM mappings), 'references', (SELECT coalesce(jsonb_object_agg(method_slug, facts), '{}'::jsonb) FROM reference_facts))
+)::jsonb AS snapshot
+`
+
+func (q *Queries) ReadSupportMatrix(ctx context.Context) ([]byte, error) {
+	row := q.db.QueryRow(ctx, readSupportMatrix)
+	var snapshot []byte
+	err := row.Scan(&snapshot)
+	return snapshot, err
+}
+
+const seedSupportCapabilities = `-- name: SeedSupportCapabilities :exec
+INSERT INTO support_matrix_capabilities (slug, name, category, sort_order)
+SELECT value->>'id', value->>'name', value->>'group', ordinality::integer
+FROM jsonb_array_elements($1::jsonb->'capabilities') WITH ORDINALITY
+ON CONFLICT (slug) DO NOTHING
+`
+
+func (q *Queries) SeedSupportCapabilities(ctx context.Context, catalog []byte) error {
+	_, err := q.db.Exec(ctx, seedSupportCapabilities, catalog)
+	return err
+}
+
+const seedSupportMethods = `-- name: SeedSupportMethods :exec
+INSERT INTO support_matrix_integration_methods (slug, name, vendor, plan_notes, sort_order)
+SELECT value->>'id', value->>'name', value->>'vendor', value->>'plans', ordinality::integer
+FROM jsonb_array_elements($1::jsonb->'methods') WITH ORDINALITY
+ON CONFLICT (slug) DO NOTHING
+`
+
+func (q *Queries) SeedSupportMethods(ctx context.Context, catalog []byte) error {
+	_, err := q.db.Exec(ctx, seedSupportMethods, catalog)
+	return err
+}
+
+const seedSupportPlatforms = `-- name: SeedSupportPlatforms :exec
+INSERT INTO support_matrix_platforms (slug, name, vendor, family, surface, sort_order)
+SELECT value->>'id', value->>'name', value->>'vendor', value->>'family', value->>'surface', ordinality::integer
+FROM jsonb_array_elements($1::jsonb->'products') WITH ORDINALITY
+ON CONFLICT (slug) DO NOTHING
+`
+
+func (q *Queries) SeedSupportPlatforms(ctx context.Context, catalog []byte) error {
+	_, err := q.db.Exec(ctx, seedSupportPlatforms, catalog)
+	return err
+}
+
+const seedSupportReferences = `-- name: SeedSupportReferences :exec
+INSERT INTO support_matrix_method_capabilities (integration_method_id, capability_id, status, notes, needs_verification)
+SELECT m.id, c.id, f.value->>'status', f.value->>'note', (f.value->>'verify')::boolean
+FROM jsonb_array_elements($1::jsonb->'methods') AS source
+CROSS JOIN LATERAL jsonb_each(source->'facts') AS f
+JOIN support_matrix_integration_methods m ON m.slug = source->>'id'
+JOIN support_matrix_capabilities c ON c.slug = f.key
+ON CONFLICT (integration_method_id, capability_id) DO NOTHING
+`
+
+func (q *Queries) SeedSupportReferences(ctx context.Context, catalog []byte) error {
+	_, err := q.db.Exec(ctx, seedSupportReferences, catalog)
+	return err
+}
+
+const upsertSupportCoverage = `-- name: UpsertSupportCoverage :exec
+INSERT INTO support_matrix_coverage (method_platform_id, capability_id, status, notes, needs_verification)
+SELECT $1::uuid, c.id, $2::text, $3::text, $4::boolean
+FROM support_matrix_capabilities c WHERE c.slug = $5::text AND c.deleted_at IS NULL
+ON CONFLICT (method_platform_id, capability_id) DO UPDATE SET status = EXCLUDED.status, notes = EXCLUDED.notes, needs_verification = EXCLUDED.needs_verification, verified_at = NULL, updated_at = clock_timestamp(), deleted_at = NULL
+`
+
+type UpsertSupportCoverageParams struct {
+	MappingID         uuid.UUID
+	Status            string
+	Notes             string
+	NeedsVerification bool
+	CapabilitySlug    string
+}
+
+func (q *Queries) UpsertSupportCoverage(ctx context.Context, arg UpsertSupportCoverageParams) error {
+	_, err := q.db.Exec(ctx, upsertSupportCoverage,
+		arg.MappingID,
+		arg.Status,
+		arg.Notes,
+		arg.NeedsVerification,
+		arg.CapabilitySlug,
+	)
+	return err
+}
+
+const upsertSupportMapping = `-- name: UpsertSupportMapping :one
+INSERT INTO support_matrix_method_platforms (integration_method_id, platform_id, applicability, conditions)
+SELECT m.id, p.id, $1::text, $2::text
+FROM support_matrix_integration_methods m, support_matrix_platforms p
+WHERE m.slug = $3::text AND p.slug = $4::text AND m.deleted_at IS NULL AND p.deleted_at IS NULL
+ON CONFLICT (integration_method_id, platform_id) DO UPDATE SET applicability = EXCLUDED.applicability, conditions = EXCLUDED.conditions, updated_at = clock_timestamp(), deleted_at = NULL
+RETURNING id
+`
+
+type UpsertSupportMappingParams struct {
+	Applicability string
+	Conditions    string
+	MethodSlug    string
+	PlatformSlug  string
+}
+
+func (q *Queries) UpsertSupportMapping(ctx context.Context, arg UpsertSupportMappingParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertSupportMapping,
+		arg.Applicability,
+		arg.Conditions,
+		arg.MethodSlug,
+		arg.PlatformSlug,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const upsertSupportReference = `-- name: UpsertSupportReference :exec
+INSERT INTO support_matrix_method_capabilities (integration_method_id, capability_id, status, notes, needs_verification)
+SELECT m.id, c.id, $1::text, $2::text, $3::boolean
+FROM support_matrix_integration_methods m, support_matrix_capabilities c
+WHERE m.slug = $4::text AND c.slug = $5::text AND m.deleted_at IS NULL AND c.deleted_at IS NULL
+ON CONFLICT (integration_method_id, capability_id) DO UPDATE SET status = EXCLUDED.status, notes = EXCLUDED.notes, needs_verification = EXCLUDED.needs_verification, verified_at = NULL, updated_at = clock_timestamp(), deleted_at = NULL
+`
+
+type UpsertSupportReferenceParams struct {
+	Status            string
+	Notes             string
+	NeedsVerification bool
+	MethodSlug        string
+	CapabilitySlug    string
+}
+
+func (q *Queries) UpsertSupportReference(ctx context.Context, arg UpsertSupportReferenceParams) error {
+	_, err := q.db.Exec(ctx, upsertSupportReference,
+		arg.Status,
+		arg.Notes,
+		arg.NeedsVerification,
+		arg.MethodSlug,
+		arg.CapabilitySlug,
+	)
+	return err
 }

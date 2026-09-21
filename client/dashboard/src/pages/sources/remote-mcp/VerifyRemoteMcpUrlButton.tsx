@@ -1,6 +1,44 @@
+import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Check } from "lucide-react";
+import { AlertCircle, Check, Loader2, Plug } from "lucide-react";
 import type { VerifyRemoteMcpUrlState } from "./useVerifyRemoteMcpUrl";
+
+// The create form folds verification into its submit button; this standalone
+// button is for settings surfaces where verify and save are separate actions.
+export function VerifyRemoteMcpUrlButton({
+  state,
+  url,
+  disabled,
+}: {
+  state: VerifyRemoteMcpUrlState;
+  url: string;
+  disabled?: boolean;
+}): JSX.Element {
+  const buttonDisabled = disabled || state.isPending || !url.trim();
+
+  return (
+    <Button
+      type="button"
+      variant="secondary"
+      size="md"
+      disabled={buttonDisabled}
+      onClick={() => {
+        void state.trigger();
+      }}
+    >
+      <Button.LeftIcon>
+        {state.isPending ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <Plug className="size-4" />
+        )}
+      </Button.LeftIcon>
+      <Button.Text>
+        {state.isPending ? "Verifying" : "Verify connectivity"}
+      </Button.Text>
+    </Button>
+  );
+}
 
 export function VerifyRemoteMcpUrlAlert({
   state,

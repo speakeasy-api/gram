@@ -193,7 +193,7 @@ func TestTypedFailOpenReasonsAreBounded(t *testing.T) {
 	require.Equal(t, "rate_limited", typedFailureReason(errTypedRateLimit, o11y.OutcomeFailure))
 	require.Equal(t, "timeout", typedFailureReason(context.DeadlineExceeded, o11y.OutcomeTimeout))
 	require.Equal(t, "malformed", typedFailureReason(errMalformedVerdict, o11y.OutcomeFailure))
-	require.Equal(t, "error", typedFailureReason(context.Canceled, o11y.OutcomeFailure))
+	require.Equal(t, "canceled", typedFailureReason(context.Canceled, o11y.OutcomeCanceled))
 }
 
 func TestTypedContextObservabilityIncludesSuppressedVerdict(t *testing.T) {

@@ -41,6 +41,8 @@ type Endpoints struct {
 	GetToolUsageTotals               goa.Endpoint
 	GetToolUsageTargets              goa.Endpoint
 	GetToolUsageUsers                goa.Endpoint
+	GetToolUsageClients              goa.Endpoint
+	GetToolUsageClientToolBreakdown  goa.Endpoint
 	GetToolUsageTargetTimeSeries     goa.Endpoint
 	GetToolUsageUserTimeSeries       goa.Endpoint
 	GetToolUsageUsersByTarget        goa.Endpoint
@@ -81,6 +83,8 @@ func NewEndpoints(s Service) *Endpoints {
 		GetToolUsageTotals:               NewGetToolUsageTotalsEndpoint(s, a.APIKeyAuth),
 		GetToolUsageTargets:              NewGetToolUsageTargetsEndpoint(s, a.APIKeyAuth),
 		GetToolUsageUsers:                NewGetToolUsageUsersEndpoint(s, a.APIKeyAuth),
+		GetToolUsageClients:              NewGetToolUsageClientsEndpoint(s, a.APIKeyAuth),
+		GetToolUsageClientToolBreakdown:  NewGetToolUsageClientToolBreakdownEndpoint(s, a.APIKeyAuth),
 		GetToolUsageTargetTimeSeries:     NewGetToolUsageTargetTimeSeriesEndpoint(s, a.APIKeyAuth),
 		GetToolUsageUserTimeSeries:       NewGetToolUsageUserTimeSeriesEndpoint(s, a.APIKeyAuth),
 		GetToolUsageUsersByTarget:        NewGetToolUsageUsersByTargetEndpoint(s, a.APIKeyAuth),
@@ -119,6 +123,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetToolUsageTotals = m(e.GetToolUsageTotals)
 	e.GetToolUsageTargets = m(e.GetToolUsageTargets)
 	e.GetToolUsageUsers = m(e.GetToolUsageUsers)
+	e.GetToolUsageClients = m(e.GetToolUsageClients)
+	e.GetToolUsageClientToolBreakdown = m(e.GetToolUsageClientToolBreakdown)
 	e.GetToolUsageTargetTimeSeries = m(e.GetToolUsageTargetTimeSeries)
 	e.GetToolUsageUserTimeSeries = m(e.GetToolUsageUserTimeSeries)
 	e.GetToolUsageUsersByTarget = m(e.GetToolUsageUsersByTarget)
@@ -1506,6 +1512,124 @@ func NewGetToolUsageUsersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.GetToolUsageUsers(ctx, p)
+	}
+}
+
+// NewGetToolUsageClientsEndpoint returns an endpoint function that calls the
+// method "getToolUsageClients" of service "telemetry".
+func NewGetToolUsageClientsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetToolUsageClientsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetToolUsageClients(ctx, p)
+	}
+}
+
+// NewGetToolUsageClientToolBreakdownEndpoint returns an endpoint function that
+// calls the method "getToolUsageClientToolBreakdown" of service "telemetry".
+func NewGetToolUsageClientToolBreakdownEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetToolUsageClientToolBreakdownPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetToolUsageClientToolBreakdown(ctx, p)
 	}
 }
 

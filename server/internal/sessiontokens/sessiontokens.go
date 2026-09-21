@@ -174,16 +174,43 @@ func (s *Signer) ValidateBearer(ctx context.Context, token, expectedAudience str
 	if err != nil {
 		return ValidatedSession{}, err
 	}
+	return validatedBearerFromClaims(ctx, claims, revocation)
+}
+
+// ValidateExactAudienceBearer verifies the same bearer properties as
+// ValidateBearer and additionally requires aud to be exactly one value. It is
+// used for resource-bound sessions that must not be broadened to other MCP
+// servers by an additional audience.
+func (s *Signer) ValidateExactAudienceBearer(ctx context.Context, token, expectedAudience string, revocation RevocationChecker) (ValidatedSession, error) {
+	claims, err := s.ValidateExactAudience(token, expectedAudience)
+	if err != nil {
+		return ValidatedSession{}, err
+	}
+	return validatedBearerFromClaims(ctx, claims, revocation)
+}
+
+// ErrRevocationUnavailable marks a revocation check that could not be
+// completed, such as an unreachable revocation store. The request still fails
+// closed, but the credential itself was never judged: callers that tell a
+// client to discard its token must not do so on this error, or an outage turns
+// every live token into a re-authentication.
+var ErrRevocationUnavailable = errors.New("revocation check unavailable")
+
+// ErrTokenRevoked marks a token whose jti the revocation store recognises. The
+// credential is genuinely dead, so a client holding it should discard it.
+var ErrTokenRevoked = errors.New("token is revoked")
+
+func validatedBearerFromClaims(ctx context.Context, claims *SessionClaims, revocation RevocationChecker) (ValidatedSession, error) {
 	if claims.ID == "" {
 		return ValidatedSession{}, errors.New("validate token: missing jti claim")
 	}
 
 	revoked, err := revocation.IsTokenRevoked(ctx, claims.ID)
 	if err != nil {
-		return ValidatedSession{}, fmt.Errorf("check revocation: %w", err)
+		return ValidatedSession{}, fmt.Errorf("%w: %w", ErrRevocationUnavailable, err)
 	}
 	if revoked {
-		return ValidatedSession{}, errors.New("token is revoked")
+		return ValidatedSession{}, ErrTokenRevoked
 	}
 
 	subject, err := urn.ParseSessionSubject(claims.Subject)
@@ -203,6 +230,33 @@ func validSuppliedJTI(jti string) bool {
 // expiry validation so clients can revoke an expired token, but a valid Gram
 // signature is required before the caller can affect the revocation cache.
 func (s *Signer) VerifiedJTI(token string) (string, error) {
+	claims, err := s.signatureVerifiedClaims(token)
+	if err != nil {
+		return "", err
+	}
+	if claims.ID == "" {
+		return "", errors.New("token missing jti claim")
+	}
+	return claims.ID, nil
+}
+
+// VerifiedSubject extracts the session subject after verifying the token's
+// signature, skipping expiry and audience validation. It says who a token was
+// minted for, never that the token is usable: callers use it to shape a
+// rejection, not to admit a request.
+func (s *Signer) VerifiedSubject(token string) (urn.SessionSubject, error) {
+	claims, err := s.signatureVerifiedClaims(token)
+	if err != nil {
+		return urn.SessionSubject{}, err
+	}
+	subject, err := urn.ParseSessionSubject(claims.Subject)
+	if err != nil {
+		return urn.SessionSubject{}, fmt.Errorf("parse session subject: %w", err)
+	}
+	return subject, nil
+}
+
+func (s *Signer) signatureVerifiedClaims(token string) (*SessionClaims, error) {
 	claims := SessionClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "",
@@ -222,10 +276,7 @@ func (s *Signer) VerifiedJTI(token string) (string, error) {
 		return s.key, nil
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithoutClaimsValidation())
 	if err != nil {
-		return "", fmt.Errorf("parse token: %w", err)
+		return nil, fmt.Errorf("parse token: %w", err)
 	}
-	if claims.ID == "" {
-		return "", errors.New("token missing jti claim")
-	}
-	return claims.ID, nil
+	return &claims, nil
 }

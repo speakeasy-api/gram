@@ -1,7 +1,8 @@
-import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
-import { Card } from "@/components/ui/Card";
-import { useToolsets } from "@/pages/toolsets/useToolsets";
 import { useRoutes } from "@/routes";
+import { Link } from "react-router";
+import { IdentityAvatar } from "@/components/identity-avatar";
+import { IdentityLink } from "@/components/identity-link";
+import { identityRefForKind } from "@/lib/identity-urn";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/Sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { cn } from "@/lib/utils";
@@ -14,11 +15,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
-import { Icon } from "@/components/ui/Icon";
-import { ChevronDown, Copy } from "lucide-react";
-import { useId, useState } from "react";
-import { ErrorBoundary } from "react-error-boundary";
-import { formatNanoTimestamp, getSeverityColorClass } from "./utils";
+import { Check, ChevronDown, ChevronRight, Copy } from "lucide-react";
+import { useEffect, useId, useMemo, useState } from "react";
+import {
+  DARK_THEME,
+  highlightCode,
+  type CodeLine,
+  type CodeToken,
+} from "@/components/ui/lib/codeUtils";
+import { formatNanoTimestamp } from "./utils";
 
 interface LogDetailSheetProps {
   log: TelemetryLogRecord | null;
@@ -60,15 +65,6 @@ const TOOL_IO_ATTR_KEYS = {
 } as const;
 
 const HOOK_BLOCK_REASON_KEY = "gram.hook.block_reason";
-
-/** Attributes surfaced as a prominent labeled row above Tool Input. Kept
- *  separate from the generic Attributes section to avoid duplication. */
-const HIGHLIGHT_ATTR_KEYS = [
-  { path: "gram.tool_call.source", label: "Server" },
-  { path: "gram.tool.name", label: "Tool" },
-  { path: "gram.hook.source", label: "LLM Client" },
-  { path: "gram.mcp.server_url", label: "MCP Server URL" },
-] as const;
 
 const HOOK_ERROR_KEY = "gram.hook.error";
 
@@ -115,40 +111,6 @@ function removeNestedKey(
   return clone;
 }
 
-function HostedServerCard({
-  toolsetSlug,
-}: {
-  toolsetSlug: string;
-}): JSX.Element {
-  const toolsets = useToolsets();
-  const routes = useRoutes();
-  const toolset = toolsets.find((item) => item.slug === toolsetSlug);
-  const unavailableCard = (
-    <Card href={routes.mcp.details.overview.href(toolsetSlug)}>
-      <Card.Header>
-        <Card.Title>{toolsetSlug}</Card.Title>
-        <Card.Description>Server details are unavailable</Card.Description>
-      </Card.Header>
-    </Card>
-  );
-  let card = unavailableCard;
-  if (toolset) {
-    card = (
-      <ErrorBoundary fallback={unavailableCard} resetKeys={[toolsetSlug]}>
-        <MCPCard toolset={toolset} />
-      </ErrorBoundary>
-    );
-  } else if (toolsets.isLoading) {
-    card = <MCPCardSkeleton />;
-  }
-  return (
-    <section aria-label="Hosted MCP server" className="flex flex-col gap-2">
-      <h3 className="text-eyebrow">Hosted MCP server</h3>
-      {card}
-    </section>
-  );
-}
-
 function LogDetailContent({
   log,
   hostedToolsetSlug,
@@ -158,7 +120,7 @@ function LogDetailContent({
   hostedToolsetSlug?: string;
   onAddFilter?: (path: string, op: Operator, value: string) => void;
 }) {
-  const severityClass = getSeverityColorClass(log.severityText);
+  const routes = useRoutes();
   const resourceAttrs = log.resourceAttributes as
     | { gram?: { tool?: { urn?: string } } }
     | undefined;
@@ -186,14 +148,6 @@ function LogDetailContent({
   const showToolIOHiddenMessage = Boolean(
     (toolCallID || toolName) && !toolInput,
   );
-  const highlights = attrs
-    ? HIGHLIGHT_ATTR_KEYS.map(({ path, label }) => ({
-        path,
-        label,
-        value: getNestedValue(attrs, path),
-      })).filter((h): h is typeof h & { value: string } => Boolean(h.value))
-    : [];
-
   // Remove surfaced keys from attributes to avoid duplication in the generic section
   let filteredAttrs = attrs;
   if (filteredAttrs && toolInput) {
@@ -208,32 +162,119 @@ function LogDetailContent({
   if (filteredAttrs && toolError) {
     filteredAttrs = removeNestedKey(filteredAttrs, HOOK_ERROR_KEY);
   }
-  for (const h of highlights) {
-    if (filteredAttrs) {
-      filteredAttrs = removeNestedKey(filteredAttrs, h.path);
+
+  // The caller, by the same precedence the roster uses: an address first,
+  // then the ids an agent or an external user is keyed on.
+  const caller = (() => {
+    if (!attrs) return null;
+    const email = getNestedValue(attrs, "user.email");
+    if (email) return { label: email, ref: identityRefForKind("email", email) };
+    const externalUserID = getNestedValue(attrs, "gram.external_user.id");
+    if (externalUserID) {
+      return {
+        label: externalUserID,
+        ref: identityRefForKind("external_user_id", externalUserID),
+      };
     }
-  }
+    const userID = getNestedValue(attrs, "user.id");
+    if (userID) {
+      return { label: userID, ref: identityRefForKind("user_id", userID) };
+    }
+    return null;
+  })();
+
+  // The row this was opened from derives failure from the HTTP status, so a
+  // 500 with no hook error must not read as a success here.
+  const statusCode = attrs
+    ? Number(getNestedValue(attrs, "http.response.status_code"))
+    : Number.NaN;
+  const failed =
+    Boolean(toolError) || (Number.isFinite(statusCode) && statusCode >= 400);
+  // A span with no status, no error and no result has not finished — the same
+  // definition the rows use. Calling that "Success" tells the reader the call
+  // returned when nothing ever came back.
+  const pending =
+    !failed &&
+    !blockReason &&
+    !Number.isFinite(statusCode) &&
+    !getNestedValue(attrs ?? {}, "gen_ai.tool.call.result");
 
   return (
     <div className="flex flex-col gap-6 px-5 pt-6 pb-6">
       {/* Header — severity word + headline, then a hairline-ruled meta list */}
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          {blockReason ? (
-            <div className="inline-flex items-center gap-1.5 font-mono text-xs tracking-wide uppercase text-[var(--color-feedback-orange-600)] dark:text-[var(--color-feedback-orange-400)]">
-              <Icon name="shield-alert" className="size-3" />
-              Blocked
-            </div>
-          ) : (
-            <div
-              className={`font-mono text-xs tracking-wide uppercase ${severityClass}`}
+        <div className="flex flex-col gap-2">
+          {/* Same primitives as the table row this was opened from: a dot for
+              the outcome, the tool in mono. Landing on a different visual
+              language than the row you clicked makes them feel unrelated. */}
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden
+              className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                blockReason
+                  ? "bg-amber-500"
+                  : failed
+                    ? "bg-rose-500"
+                    : pending
+                      ? "bg-muted-foreground/30"
+                      : "bg-emerald-500",
+              )}
+            />
+            <span
+              className={cn(
+                "font-mono text-xs tracking-wide uppercase",
+                blockReason
+                  ? "text-[var(--color-feedback-orange-600)] dark:text-[var(--color-feedback-orange-400)]"
+                  : failed
+                    ? "text-destructive"
+                    : "text-muted-foreground",
+              )}
             >
-              {log.severityText || "INFO"}
+              {blockReason
+                ? "Blocked"
+                : failed
+                  ? "Error"
+                  : pending
+                    ? "Pending"
+                    : "Success"}
+            </span>
+            <span className="text-muted-foreground font-mono text-xs">
+              {formatNanoTimestamp(log.timeUnixNano)}
+            </span>
+          </div>
+          <SheetTitle className="flex items-baseline gap-1.5 font-mono text-base font-medium">
+            {toolsetSlug && (
+              <span className="text-muted-foreground">
+                <Link
+                  to={routes.mcp.details.overview.href(toolsetSlug)}
+                  className="hover:text-foreground hover:underline"
+                >
+                  {toolsetSlug}
+                </Link>{" "}
+                /
+              </span>
+            )}
+            <span>{toolName || log.body?.slice(0, 60) || "(no message)"}</span>
+          </SheetTitle>
+          {/* Who made the call. The first question asked of a single trace is
+              usually "who did this", and it was previously only answerable by
+              unfolding Context. */}
+          {caller && (
+            <div className="flex items-center gap-2.5 pt-1.5">
+              <IdentityAvatar
+                label={caller.label}
+                className="size-7"
+                textClassName="text-xs"
+              />
+              <IdentityLink
+                identifier={caller.ref}
+                className="text-foreground truncate text-sm"
+              >
+                {caller.label}
+              </IdentityLink>
             </div>
           )}
-          <SheetTitle className="font-display text-xl font-light tracking-tight">
-            {log.body?.slice(0, 80) || "(no message)"}
-          </SheetTitle>
         </div>
 
         {blockReason && (
@@ -248,39 +289,7 @@ function LogDetailContent({
             </div>
           </div>
         )}
-
-        {/* Meta — definition-list rows with eyebrow keys and mono values */}
-        <div className="border-border divide-border flex flex-col divide-y border-y">
-          <MetadataRow label="Service" value={log.service?.name || "Unknown"} />
-          {gramUrn && (
-            <MetadataRow
-              label="Platform URN"
-              value={gramUrn}
-              copyValue={gramUrn}
-            />
-          )}
-          {log.traceId && (
-            <MetadataRow
-              label="Trace ID"
-              value={log.traceId}
-              copyValue={log.traceId}
-            />
-          )}
-          {log.spanId && (
-            <MetadataRow
-              label="Span ID"
-              value={log.spanId}
-              copyValue={log.spanId}
-            />
-          )}
-          <MetadataRow
-            label="Time"
-            value={formatNanoTimestamp(log.timeUnixNano)}
-          />
-        </div>
       </div>
-
-      {toolsetSlug && <HostedServerCard toolsetSlug={toolsetSlug} />}
 
       {/* Tabs: Details / Raw Data */}
       <Tabs defaultValue="details" className="w-full flex-1">
@@ -294,12 +303,15 @@ function LogDetailContent({
         </TabsList>
 
         <TabsContent value="details" className="mt-5 flex flex-col gap-5">
-          {/* Tool Error — red left edge so failures pop without a tint wash */}
+          {/* What happened, then what went in, then what came back. Everything
+              else — the identity, hook and project attributes that were filling
+              the sheet before you could reach the payload — sits behind one
+              disclosure below. */}
           {toolError && (
             <div className="border-l-destructive flex items-start gap-3 border-l-2 py-1 pl-3">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <div className="text-destructive-default font-mono text-xs tracking-wide uppercase">
-                  Tool Error
+                  Error
                 </div>
                 <div className="text-foreground text-sm break-words">
                   {toolError}
@@ -308,26 +320,8 @@ function LogDetailContent({
             </div>
           )}
 
-          {/* Highlights — prominent labeled rows pulled out of attributes */}
-          {highlights.length > 0 && (
-            <div className="border-border divide-border flex flex-col divide-y border-y">
-              {highlights.map((h) => (
-                <div
-                  key={h.path}
-                  className="flex items-baseline justify-between gap-4 py-2"
-                >
-                  <div className="text-eyebrow shrink-0">{h.label}</div>
-                  <div className="text-foreground min-w-0 font-mono text-xs break-all">
-                    {h.value}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Tool Input */}
           {toolInput && (
-            <CollapsibleBodySection title="Tool Input" content={toolInput} />
+            <CollapsibleBodySection title="Arguments" content={toolInput} />
           )}
           {showToolIOHiddenMessage && (
             <div className="text-muted-foreground border-border border px-3 py-2 text-sm">
@@ -335,64 +329,246 @@ function LogDetailContent({
             </div>
           )}
 
-          {/* Tool Output */}
           {toolOutput && (
-            <CollapsibleBodySection title="Tool Output" content={toolOutput} />
+            <CollapsibleBodySection title="Result" content={toolOutput} />
           )}
 
-          {/* Attributes (with tool I/O + highlighted keys removed) */}
-          {filteredAttrs && Object.keys(filteredAttrs).length > 0 && (
-            <AttributesSection
-              title="Attributes"
-              data={filteredAttrs}
-              onAddFilter={onAddFilter}
-            />
-          )}
+          <CollapsibleSection title="Context" defaultOpen={false}>
+            <div className="border-border divide-border flex flex-col divide-y border-y">
+              <MetadataRow
+                label="Service"
+                value={log.service?.name || "Unknown"}
+              />
+              {gramUrn && (
+                <MetadataRow
+                  label="Platform URN"
+                  value={gramUrn}
+                  copyValue={gramUrn}
+                />
+              )}
+              {log.traceId && (
+                <MetadataRow
+                  label="Trace ID"
+                  value={log.traceId}
+                  copyValue={log.traceId}
+                />
+              )}
+              {log.spanId && (
+                <MetadataRow
+                  label="Span ID"
+                  value={log.spanId}
+                  copyValue={log.spanId}
+                />
+              )}
+            </div>
 
-          {/* Resource — no onAddFilter: the backend's attribute filter
-              resolves paths against `attributes.*`, not `resource_attributes.*`,
-              so resource-derived filters would silently return no results. */}
-          {log.resourceAttributes &&
-            Object.keys(log.resourceAttributes as object).length > 0 && (
+            {filteredAttrs && Object.keys(filteredAttrs).length > 0 && (
               <AttributesSection
-                title="Resource"
-                data={log.resourceAttributes as Record<string, unknown>}
+                title="Attributes"
+                data={filteredAttrs}
+                onAddFilter={onAddFilter}
               />
             )}
 
-          {/* Message — demoted to a collapsed section below attributes. The
-              body is the OTEL log body, which for tool-call events is just a
-              "Tool: X, Hook: Y" stub that duplicates info now shown above. */}
-          {log.body && (
-            <CollapsibleBodySection
-              title="Message"
-              content={log.body}
-              defaultOpen={false}
-            />
-          )}
+            {/* Resource — no onAddFilter: the backend's attribute filter
+                resolves paths against `attributes.*`, not
+                `resource_attributes.*`, so resource-derived filters would
+                silently return no results. */}
+            {log.resourceAttributes &&
+              Object.keys(log.resourceAttributes as object).length > 0 && (
+                <AttributesSection
+                  title="Resource"
+                  data={log.resourceAttributes as Record<string, unknown>}
+                />
+              )}
+
+            {/* The OTEL log body, which for tool-call events is a
+                "Tool: X, Hook: Y" stub duplicating what is shown above. */}
+            {log.body && (
+              <CollapsibleBodySection
+                title="Message"
+                content={log.body}
+                defaultOpen={false}
+              />
+            )}
+          </CollapsibleSection>
         </TabsContent>
 
         <TabsContent value="raw" className="mt-5 flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div className="text-eyebrow">Full Log Record</div>
-            <button
-              className="hover:bg-muted p-1.5"
-              onClick={() => {
-                void navigator.clipboard.writeText(
-                  JSON.stringify(log, null, 2),
-                );
-              }}
-            >
-              <Copy className="size-4" />
-            </button>
+            <CopyIconButton
+              value={JSON.stringify(log, null, 2)}
+              label="log record"
+            />
           </div>
-          <div className="border-border flex-1 overflow-y-auto border p-4">
-            <pre className="font-mono text-sm break-all whitespace-pre-wrap">
-              {JSON.stringify(log, null, 2)}
-            </pre>
+          <div className="border-border flex-1 overflow-y-auto border">
+            <CodeBlock content={JSON.stringify(log, null, 2)} />
           </div>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+/**
+ * A payload rendered the way a code editor renders it: Shiki tokens on a dark
+ * ground. Always dark, whichever theme the dashboard is in — these blocks are
+ * quoted machine output, and the shift in ground is what separates them from
+ * the sheet's own prose.
+ */
+// Shiki's FontStyle bitmask. A theme that italicizes comments or bolds
+// keywords carries that in the token, not in its color.
+const FONT_STYLE_ITALIC = 1;
+const FONT_STYLE_BOLD = 2;
+const FONT_STYLE_UNDERLINE = 4;
+
+function tokenStyle(token: CodeToken): React.CSSProperties {
+  const style: React.CSSProperties = { color: token.color };
+  if (token.fontStyle == null) return style;
+  if (token.fontStyle & FONT_STYLE_ITALIC) style.fontStyle = "italic";
+  if (token.fontStyle & FONT_STYLE_BOLD) style.fontWeight = 700;
+  if (token.fontStyle & FONT_STYLE_UNDERLINE)
+    style.textDecoration = "underline";
+  return style;
+}
+
+function CodeBlock({ content }: { content: string }) {
+  // Keyed by the content it was produced from. Highlighting is async, so
+  // holding bare lines leaves the previous record's payload on screen while
+  // the new one tokenizes — the reader sees another call's arguments under
+  // this call's heading.
+  const [highlighted, setHighlighted] = useState<{
+    content: string;
+    lines: CodeLine[];
+  } | null>(null);
+  const lines = highlighted?.content === content ? highlighted.lines : null;
+
+  // Not every payload is JSON: a hook message body is plain text, and asking
+  // the JSON grammar to tokenize it produces a wall of error scopes. Plain
+  // text is also left untokenized entirely — the highlighter strips CodeHike
+  // annotation lines on its way through, and a log record has to read back
+  // exactly as it was recorded.
+  const isJson = useMemo(() => {
+    const trimmed = content.trimStart();
+    return trimmed.startsWith("{") || trimmed.startsWith("[");
+  }, [content]);
+
+  useEffect(() => {
+    if (!isJson) {
+      setHighlighted(null);
+      return;
+    }
+    let cancelled = false;
+    void highlightCode(content, "json", DARK_THEME).then((result) => {
+      if (!cancelled) setHighlighted({ content, lines: result.lines });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [content, isJson]);
+
+  return (
+    <pre className="bg-[#0d1117] p-4 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-[#e4e4e7]">
+      {lines
+        ? lines.map((line, lineIndex) => (
+            // A <pre> takes phrasing content, so each line is a block-display
+            // span rather than a div. Shiki returns tokens in source order, so
+            // the index is the identity here — there is nothing else to key on.
+            <span key={lineIndex} className="block min-h-[1.2em]">
+              {line.tokens.map((token, tokenIndex) => (
+                <span key={tokenIndex} style={tokenStyle(token)}>
+                  {token.content}
+                </span>
+              ))}
+            </span>
+          ))
+        : content}
+    </pre>
+  );
+}
+
+/**
+ * Copy affordance for the sheet's section headers. The icon swaps to a check
+ * for a beat: a clipboard write is otherwise completely silent, so without it
+ * there is no way to tell a click registered.
+ */
+function CopyIconButton({
+  value,
+  label,
+  className,
+}: {
+  value: string;
+  label: string;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1200);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  return (
+    <button
+      type="button"
+      aria-label={copied ? `${label} copied` : `Copy ${label}`}
+      className={cn("hover:bg-muted p-1.5", className)}
+      onClick={(event) => {
+        event.stopPropagation();
+        // Clipboard access can be denied outright; announcing a copy that
+        // never happened is worse than showing nothing.
+        void navigator.clipboard.writeText(value).then(
+          () => setCopied(true),
+          () => setCopied(false),
+        );
+      }}
+    >
+      {copied ? (
+        <Check aria-hidden="true" className="text-default-success size-4" />
+      ) : (
+        <Copy aria-hidden="true" className="size-4" />
+      )}
+    </button>
+  );
+}
+
+/** A disclosure for whole sections, as opposed to one body of text. */
+function CollapsibleSection({
+  title,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const contentId = useId();
+
+  return (
+    <div className="flex flex-col gap-3">
+      <button
+        type="button"
+        aria-controls={contentId}
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((open) => !open)}
+        className="group flex min-h-7 items-center gap-2"
+      >
+        <ChevronRight
+          className={cn(
+            "text-muted-foreground size-3.5 transition-transform",
+            isOpen && "rotate-90",
+          )}
+        />
+        <span className="text-eyebrow">{title}</span>
+      </button>
+      {isOpen && (
+        <div id={contentId} className="flex flex-col gap-5">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -436,22 +612,17 @@ function CollapsibleBodySection({
           )}
         />
       </button>
-      <button
-        type="button"
-        aria-label={`Copy ${title}`}
-        className="hover:bg-muted absolute top-0 right-5 z-10 p-1.5"
-        onClick={() => void navigator.clipboard.writeText(content)}
-      >
-        <Copy aria-hidden="true" className="size-4" />
-      </button>
+      <CopyIconButton
+        value={content}
+        label={title}
+        className="absolute top-0 right-5 z-10"
+      />
       {isOpen && (
         <div
           id={contentId}
-          className="border-border max-h-96 overflow-y-auto border p-4"
+          className="border-border max-h-96 overflow-y-auto border"
         >
-          <pre className="font-mono text-sm break-words whitespace-pre-wrap">
-            {displayContent}
-          </pre>
+          <CodeBlock content={displayContent} />
         </div>
       )}
     </div>
@@ -467,19 +638,39 @@ function MetadataRow({
   value: string;
   copyValue?: string;
 }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1200);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
   return (
     <button
       className="hover:bg-muted/50 flex items-center justify-between gap-4 py-2 text-left transition-colors"
       onClick={() => {
-        if (copyValue) {
-          void navigator.clipboard.writeText(copyValue);
-        }
+        if (!copyValue) return;
+        void navigator.clipboard.writeText(copyValue).then(
+          () => setCopied(true),
+          () => setCopied(false),
+        );
       }}
       disabled={!copyValue}
       title={copyValue ? `Copy ${label}` : undefined}
     >
       <span className="text-eyebrow shrink-0">{label}</span>
-      <span className="min-w-0 truncate font-mono text-xs">{value}</span>
+      <span className="flex min-w-0 items-center gap-2">
+        {/* The whole row is the button, so the check is the only sign the
+            click landed on anything. */}
+        {copied && (
+          <Check
+            aria-hidden="true"
+            className="text-default-success size-3.5 shrink-0"
+          />
+        )}
+        <span className="min-w-0 truncate font-mono text-xs">{value}</span>
+      </span>
     </button>
   );
 }
@@ -577,14 +768,7 @@ function AttributesSection({
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <div className="text-eyebrow">{title}</div>
-        <button
-          className="hover:bg-muted p-1.5"
-          onClick={() => {
-            void navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-          }}
-        >
-          <Copy className="size-4" />
-        </button>
+        <CopyIconButton value={JSON.stringify(data, null, 2)} label={title} />
       </div>
       <div className="border-border divide-border divide-y border-y">
         {flatEntries.map((entry) => {
@@ -592,8 +776,13 @@ function AttributesSection({
 
           const rowContent = (
             <>
-              <span className="text-muted-foreground text-xs">{entry.key}</span>
-              <span className="font-mono text-sm break-all">
+              <span className="text-muted-foreground shrink-0 text-xs">
+                {entry.key}
+              </span>
+              <span
+                className="min-w-0 truncate font-mono text-xs"
+                title={entry.displayValue}
+              >
                 {entry.displayValue}
               </span>
             </>
@@ -603,7 +792,7 @@ function AttributesSection({
             return (
               <div
                 key={entry.key}
-                className="hover:bg-muted/50 flex flex-col gap-1 px-2 py-2.5 transition-colors"
+                className="hover:bg-muted/50 flex items-center justify-between gap-4 py-2 transition-colors"
               >
                 {rowContent}
               </div>
@@ -618,7 +807,7 @@ function AttributesSection({
             >
               <DropdownMenuTrigger asChild>
                 <button
-                  className="hover:bg-muted/50 flex w-full cursor-pointer flex-col gap-1 px-2 py-2.5 text-left transition-colors"
+                  className="hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between gap-4 py-2 text-left transition-colors"
                   aria-label={`Attribute actions for ${entry.key}`}
                 >
                   {rowContent}

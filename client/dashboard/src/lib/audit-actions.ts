@@ -29,6 +29,7 @@ export const AUDIT_ACTIONS = [
   "ai_integration:retry_schedule",
   "ai_integration:update_schedule",
   "ai_integration:upsert",
+  "ai_tool_decision:set",
   "api_key:create",
   "api_key:revoke",
   "asset:create",
@@ -74,6 +75,12 @@ export const AUDIT_ACTIONS = [
   "gcp_kms_key:create",
   "gcp_kms_key:delete",
   "gcp_kms_key:update",
+  "identity-provider-connection:create",
+  "identity-provider-connection:record-agent",
+  "identity-provider-connection:revoke",
+  "identity-provider-connection:submit-client-id",
+  "identity-provider-connection:sync-applications",
+  "identity-provider-connection:verify",
   "json_web_key:activate",
   "json_web_key:delete",
   "json_web_key:publish",
@@ -120,10 +127,12 @@ export const AUDIT_ACTIONS = [
   "openrouter-key:set_spend_cap",
   "organization:device_agent_configuration_updated",
   "organization:enterprise_trial_armed",
+  "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
   "organization:enterprise_trial_extended",
+  "organization:enterprise_trial_end_changed",
   "organization:enterprise_trial_rearmed",
-  "organization:enterprise_trial_converted",
+  "organization:enterprise_trial_started",
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
   "organization:payg_activated",
@@ -156,6 +165,9 @@ export const AUDIT_ACTIONS = [
   "project:create",
   "project:delete",
   "project:update",
+  "query:create",
+  "query:delete",
+  "query:update",
   "remote-mcp-server-header:create",
   "remote-mcp-server-header:delete",
   "remote-mcp-server-header:update",
@@ -175,7 +187,9 @@ export const AUDIT_ACTIONS = [
   "remote-session-issuer:delete",
   "remote-session-issuer:migrate",
   "remote-session-issuer:update",
+  "remote-session:attach",
   "remote-session:delete",
+  "remote-session:detach",
   "remote-session:refresh",
   "risk_exclusion:create",
   "risk_exclusion:delete",
@@ -315,6 +329,9 @@ export function staticActionPhrase(action: AuditAction): string {
     case "ai_integration:retry_schedule":
       return "retried AI integration sync";
 
+    case "ai_tool_decision:set":
+      return "decided AI tool access for";
+
     case "api_key:create":
       return "created API key";
     case "api_key:revoke":
@@ -349,6 +366,18 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated GCP KMS key";
     case "gcp_kms_key:delete":
       return "removed GCP KMS key";
+    case "identity-provider-connection:create":
+      return "connected identity provider";
+    case "identity-provider-connection:submit-client-id":
+      return "submitted client ID for identity provider";
+    case "identity-provider-connection:verify":
+      return "verified identity provider connection to";
+    case "identity-provider-connection:record-agent":
+      return "recorded agent for identity provider";
+    case "identity-provider-connection:revoke":
+      return "revoked identity provider connection to";
+    case "identity-provider-connection:sync-applications":
+      return "requested an applications sync for identity provider";
     case "json_web_key_set:create":
       return "created JSON Web Key Set";
     case "json_web_key_set:update":
@@ -526,10 +555,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":
       return "ended enterprise trial";
+    case "organization:enterprise_trial_end_changed":
+      return "changed enterprise trial end date";
     case "organization:enterprise_trial_extended":
       return "extended enterprise trial";
     case "organization:enterprise_trial_rearmed":
       return "restarted enterprise trial";
+    case "organization:enterprise_trial_started":
+      return "started a new enterprise trial";
     case "organization:enterprise_trial_converted":
       return "converted enterprise trial for";
     case "organization:payg_activated":
@@ -595,6 +628,13 @@ export function staticActionPhrase(action: AuditAction): string {
     case "project:delete":
       return "deleted project";
 
+    case "query:create":
+      return "created saved query";
+    case "query:update":
+      return "updated saved query";
+    case "query:delete":
+      return "deleted saved query";
+
     case "remote-mcp:create":
       return "added remote MCP server";
     case "remote-mcp:update":
@@ -608,6 +648,10 @@ export function staticActionPhrase(action: AuditAction): string {
     case "remote-mcp-server-header:delete":
       return "removed a header from remote MCP server";
 
+    case "remote-session:attach":
+      return "attached a binding to";
+    case "remote-session:detach":
+      return "detached a binding from";
     case "remote-session:refresh":
       return "refreshed remote session";
     case "remote-session:delete":

@@ -32,7 +32,8 @@ import { invalidateDataExportDestinations } from "@gram/client/react-query/dataE
 import { buildListDataExportsForOrgQuery } from "@gram/client/react-query/listDataExportsForOrg.js";
 import { useUpdateDataExportDestinationMutation } from "@gram/client/react-query/updateDataExportDestination.js";
 import { useUpdateDataExportRouteMutation } from "@gram/client/react-query/updateDataExportRoute.js";
-import { useId, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import {
   ConfigureDestinationSheet,
@@ -48,23 +49,93 @@ const EMPTY_PROJECTS: ProjectEntry[] = [];
 const EMPTY_DESTINATIONS: OtelDataExportDestination[] = [];
 const EMPTY_ROUTES: DataExportRoute[] = [];
 
-const DATA_SOURCE_OPTIONS: Array<{
+type DataSourceOption = {
   value: DataSourceValue;
   label: string;
-  description: string;
-}> = [
+};
+
+const DATA_SOURCE_OPTIONS: DataSourceOption[] = [
   {
     value: DataSource.ProductTelemetry,
     label: "Product telemetry",
-    description:
-      "OTLP traces, logs, and metrics from MCP servers and tool calls.",
   },
   {
     value: DataSource.RiskFindings,
     label: "Risk findings",
-    description: "OTLP logs for findings detected by Gram risk scanners.",
+  },
+  {
+    value: DataSource.ToolCallLogs,
+    label: "Tool call logs",
   },
 ];
+
+function renderDataSourceDescription(
+  dataSource: DataSourceValue,
+  links: { eventFeed?: string; riskPolicies?: string; toolLogs?: string } = {},
+): ReactNode {
+  if (dataSource === DataSource.ProductTelemetry) {
+    return (
+      <>
+        OTLP traces, logs, and metrics your agent sessions send to
+        Speakeasy&apos;s /otel/v1 endpoints. These are the same records the{" "}
+        {links.eventFeed ? (
+          <Link
+            to={links.eventFeed}
+            className="pointer-events-auto relative z-30 text-link-primary"
+          >
+            Event Feed
+          </Link>
+        ) : (
+          "Event Feed"
+        )}{" "}
+        shows. Tool call logs that are recorded for hosted or proxied MCP
+        servers are not part of this stream.
+      </>
+    );
+  }
+
+  if (dataSource === DataSource.RiskFindings) {
+    return (
+      <>
+        OTLP logs for findings detected by{" "}
+        {links.riskPolicies ? (
+          <Link
+            to={links.riskPolicies}
+            className="pointer-events-auto relative z-30 text-link-primary"
+          >
+            risk policies
+          </Link>
+        ) : (
+          "risk policies"
+        )}
+        .
+      </>
+    );
+  }
+
+  if (dataSource === DataSource.ToolCallLogs) {
+    return (
+      <>
+        OTLP logs for every tool call served for hosted or proxied MCP servers,
+        successes and failures alike. These are the same records the{" "}
+        {links.toolLogs ? (
+          <Link
+            to={links.toolLogs}
+            className="pointer-events-auto relative z-30 text-link-primary"
+          >
+            Tool Logs
+          </Link>
+        ) : (
+          "Tool Logs"
+        )}{" "}
+        pages show. Tool use your agents report through hooks arrives as product
+        telemetry instead.
+      </>
+    );
+  }
+
+  return "OTLP data";
+}
 
 type ExportRow = {
   route: DataExportRoute;
@@ -100,14 +171,27 @@ function visualDestination({
 type VisualSource = {
   key: string;
   name: string;
-  detail: string;
+  detail: ReactNode;
 };
 
-function visualSource({ route }: ProjectExportRow): VisualSource {
+type ExportMapDescriptionLinks = {
+  eventFeed: string;
+  riskPolicies: (project: ProjectEntry) => string;
+  toolLogs: (project: ProjectEntry) => string;
+};
+
+function visualSource(
+  { project, route }: ProjectExportRow,
+  links?: ExportMapDescriptionLinks,
+): VisualSource {
   return {
     key: route.id,
     name: sourceLabel(route.dataSource),
-    detail: sourceDescription(route.dataSource),
+    detail: renderDataSourceDescription(route.dataSource, {
+      eventFeed: links?.eventFeed,
+      riskPolicies: links?.riskPolicies(project),
+      toolLogs: links?.toolLogs(project),
+    }),
   };
 }
 
@@ -133,13 +217,6 @@ function sourceLabel(dataSource: string): string {
   return (
     DATA_SOURCE_OPTIONS.find((option) => option.value === dataSource)?.label ??
     dataSource.replaceAll("_", " ")
-  );
-}
-
-function sourceDescription(dataSource: string): string {
-  return (
-    DATA_SOURCE_OPTIONS.find((option) => option.value === dataSource)
-      ?.description ?? "OTLP data"
   );
 }
 
@@ -249,11 +326,28 @@ function DataExportsInner(): JSX.Element {
   const configureRoute = configureState?.routes.find(
     (route) => route.id === configureTarget?.routeId,
   );
+  const defaultProject =
+    projects.find((project) => project.slug === "default") ?? projects[0];
+  // Tool Logs is per-project, so the link follows the project being
+  // configured when the sheet has one; the unscoped picker falls back.
+  const toolLogsProject = configureState?.project ?? defaultProject;
+  const linkedDataSourceOptions = DATA_SOURCE_OPTIONS.map((source) => ({
+    ...source,
+    description: renderDataSourceDescription(source.value, {
+      eventFeed: `/${organization.slug}/data/event-feed`,
+      riskPolicies: defaultProject
+        ? `/${organization.slug}/projects/${defaultProject.slug}/risk-policies?tab=policies`
+        : undefined,
+      toolLogs: toolLogsProject
+        ? `/${organization.slug}/projects/${toolLogsProject.slug}/logs`
+        : undefined,
+    }),
+  }));
   const configureDataSources = configureRoute
-    ? DATA_SOURCE_OPTIONS.filter(
+    ? linkedDataSourceOptions.filter(
         (source) => source.value === configureRoute.dataSource,
       )
-    : DATA_SOURCE_OPTIONS.filter(
+    : linkedDataSourceOptions.filter(
         (source) =>
           !configureState?.routes.some(
             (route) => route.dataSource === source.value,
@@ -457,7 +551,7 @@ function DataExportsInner(): JSX.Element {
           setConfigureTarget({ projectSlug: newExportProject.slug })
         }
       >
-        New export
+        New data export
       </Button>
     </RequireScope>
   ) : null;
@@ -479,6 +573,13 @@ function DataExportsInner(): JSX.Element {
         <ExportAnimationStyles />
         <ExportMap
           exports={configuredExports}
+          descriptionLinks={{
+            eventFeed: `/${organization.slug}/data/event-feed`,
+            riskPolicies: (project) =>
+              `/${organization.slug}/projects/${project.slug}/risk-policies?tab=policies`,
+            toolLogs: (project) =>
+              `/${organization.slug}/projects/${project.slug}/logs`,
+          }}
           mutating={mutating}
           onConfigure={(project, route) =>
             setConfigureTarget({
@@ -626,6 +727,7 @@ function groupExportsByDestination(
 
 type ExportMapProps = {
   exports: ProjectExportRow[];
+  descriptionLinks?: ExportMapDescriptionLinks;
   mutating: boolean;
   onConfigure: (project: ProjectEntry, route: DataExportRoute) => void;
   onConfigureDestination: (
@@ -642,6 +744,7 @@ type ExportMapProps = {
 
 export function ExportMap({
   exports,
+  descriptionLinks,
   mutating,
   onConfigure,
   onConfigureDestination,
@@ -672,6 +775,7 @@ export function ExportMap({
                 <ExportSourceNode
                   key={exportRow.route.id}
                   exportRow={exportRow}
+                  descriptionLinks={descriptionLinks}
                   row={rowIndex + 1}
                   mutating={mutating}
                   onConfigure={onConfigure}
@@ -701,6 +805,7 @@ export function ExportMap({
 
 function ExportSourceNode({
   exportRow,
+  descriptionLinks,
   row,
   mutating,
   onConfigure,
@@ -708,6 +813,7 @@ function ExportSourceNode({
   onDelete,
 }: {
   exportRow: ProjectExportRow;
+  descriptionLinks?: ExportMapDescriptionLinks;
   row: number;
   mutating: boolean;
   onConfigure: ExportMapProps["onConfigure"];
@@ -715,7 +821,7 @@ function ExportSourceNode({
   onDelete: ExportMapProps["onDelete"];
 }): JSX.Element {
   const { project, route } = exportRow;
-  const source = visualSource(exportRow);
+  const source = visualSource(exportRow, descriptionLinks);
 
   return (
     <div

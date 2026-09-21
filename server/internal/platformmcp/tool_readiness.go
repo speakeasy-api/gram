@@ -46,6 +46,7 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 		Description: "Say whether one MCP server is working, from the last stored check, when its registration ID is known. Constraints: forcing a fresh authenticated check is limited to three per minute for that MCP server, and is unavailable to managed project assistants.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{
+		Authorization: ExternalAuthorizationOrgAdmin,
 		// Assistants only read their own persisted, actor-scoped evidence. A
 		// forced provider probe stays external because it requires a connection.
 		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPReadinessToolInput) (*mcp.CallToolResult, GetMCPReadinessToolOutput, error) {
@@ -80,6 +81,7 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 		Description: "List the safe next actions for one MCP server that is not working, from the last stored check, when its registration ID is known. Constraints: managed project assistants read only their own actor-scoped evidence.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{
+		Authorization: ExternalAuthorizationOrgAdmin,
 		// Assistants receive a repair projection from their persisted,
 		// actor-scoped evidence; no provider probe or OAuth connection is used.
 		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPRepairPlanToolInput) (*mcp.CallToolResult, GetMCPRepairPlanToolOutput, error) {
