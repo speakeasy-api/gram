@@ -37,9 +37,15 @@ describe("formatCompact", () => {
 });
 
 describe("pluralize", () => {
-  it("keeps the noun singular for one", () => {
+  it("pluralizes the noun except when the count is one", () => {
     expect(pluralize(1, "selected server")).toBe("1 selected server");
     expect(pluralize(2, "server")).toBe("2 servers");
     expect(pluralize(0, "server")).toBe("0 servers");
+  });
+
+  it("follows the regular -ies and -es rules", () => {
+    expect(pluralize(2, "policy")).toBe("2 policies");
+    expect(pluralize(2, "status")).toBe("2 statuses");
+    expect(pluralize(2, "key")).toBe("2 keys");
   });
 });

@@ -4,13 +4,13 @@ import { toast } from "sonner";
 import { ApiErrorAlert } from "@/components/api-error-alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { describeApiError } from "@/lib/api-error";
 import type { XaaServerReadiness } from "@gram/client/models/components/xaaserverreadiness.js";
 import { useResetXaaConnectionMutation } from "@gram/client/react-query/resetXaaConnection.js";
 
 import {
-  invalidateIdentityProviderQueries,
   SESSION_SECURITY,
+  inlineError,
+  invalidateIdentityProviderQueries,
 } from "../../identityProviderQueries";
 
 export function ClearConfirmationDialog({
@@ -34,7 +34,7 @@ export function ClearConfirmationDialog({
       onClose();
       void invalidateIdentityProviderQueries(queryClient);
     },
-    onError: (error) => toast.error(describeApiError(error).message),
+    onError: inlineError,
   });
   const close = () => {
     if (reset.isPending) return;

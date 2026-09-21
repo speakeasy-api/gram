@@ -279,7 +279,13 @@ describe("ConnectionChecklist", () => {
     fireEvent.change(screen.getByLabelText("Agent ID"), {
       target: { value: "draft-agent" },
     });
+    const toggle = screen.getByRole("button", {
+      name: "Cross App Access setup, 0 of 1 complete",
+    });
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
     rerender(tree(connectionWith("degraded", pendingChecklist)));
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect((screen.getByLabelText("Agent ID") as HTMLInputElement).value).toBe(
       "draft-agent",
     );

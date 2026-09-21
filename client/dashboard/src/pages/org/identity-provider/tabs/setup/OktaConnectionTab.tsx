@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { useLocation } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -115,6 +116,10 @@ function ConnectionCard({
 }: {
   connection: LiveConnection;
 }): JSX.Element {
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === `#${CONNECTION_SECTION_ID}`) scrollToConnectionCard();
+  }, [location.hash, location.key]);
   const queryClient = useQueryClient();
   const step = connectionStep(connection);
   const status = CONNECTION_STATUS[connection.status];

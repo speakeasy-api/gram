@@ -96,5 +96,8 @@ func TestAccessDescription_ReplacesTheInstructionOnceObserved(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, accessInstruction, accessDescription(nil))
 	require.Equal(t, accessInstruction, accessDescription(new(false)))
-	require.NotEqual(t, accessInstruction, accessDescription(new(true)))
+	require.Equal(t, "Speakeasy can read apps, users, and groups", accessDescription(new(true)))
+	require.Contains(t, accessInstruction, "Application Administrator")
+	require.Contains(t, accessInstruction, "Read-only Administrator")
+	require.Contains(t, accessInstruction, "multi-factor authentication")
 }

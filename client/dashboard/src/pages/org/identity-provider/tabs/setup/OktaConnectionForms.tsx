@@ -75,7 +75,11 @@ export function CreateConnectionForm(): JSX.Element {
               inputMode="url"
               autoCapitalize="none"
               aria-invalid={trimmed !== "" && normalizedOrgUrl === undefined}
-              aria-describedby="okta-org-url-help okta-org-url-error"
+              aria-describedby={
+                trimmed !== "" && normalizedOrgUrl === undefined
+                  ? "okta-org-url-help okta-org-url-error"
+                  : "okta-org-url-help"
+              }
               value={orgUrl}
               onChange={setOrgUrl}
               placeholder="https://example.okta.com"

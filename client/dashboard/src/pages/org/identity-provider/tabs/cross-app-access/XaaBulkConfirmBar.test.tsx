@@ -72,7 +72,7 @@ describe("XaaBulkConfirmBar", () => {
     expect(screen.getByRole("combobox").hasAttribute("disabled")).toBe(true);
     fireEvent.keyDown(issuerInput(), { key: "Enter" });
     expect(onConfirm).toHaveBeenCalledTimes(1);
-    update({ selectedCount: 0 });
+    update({ pending: true, selectedCount: 0 });
     fireEvent.keyDown(issuerInput(), { key: "Enter" });
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
