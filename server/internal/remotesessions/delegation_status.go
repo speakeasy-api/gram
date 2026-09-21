@@ -58,12 +58,14 @@ func (s *Service) GetClientDelegationStatus(ctx context.Context, payload *orgcli
 	keyRevision, err := federatedSigningKeyRevision(ctx, s.db, authCtx.ActiveOrganizationID, row.RemoteSessionClient)
 	if err != nil {
 		if errors.Is(err, ErrFederatedConfiguration) {
+			result.Status = "configuration_failure"
 			return result, nil
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "read delegation signing key revision")
 	}
 	hash := FederatedDelegationConfigurationHash(authCtx.ActiveOrganizationID, issuer, row.RemoteSessionClient, keyRevision)
 	if hash == "" {
+		result.Status = "configuration_failure"
 		return result, nil
 	}
 	counts, err := q.CountTrustedDelegationObservations(ctx, repo.CountTrustedDelegationObservationsParams{OrganizationID: authCtx.ActiveOrganizationID, ClientID: clientID, ConfigHash: hash, ObservedSince: pgtype.Timestamptz{InfinityModifier: pgtype.Finite, Time: since, Valid: true}})

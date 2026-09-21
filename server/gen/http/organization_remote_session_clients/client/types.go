@@ -183,7 +183,9 @@ type GetClientResponseBody struct {
 // "organizationRemoteSessionClients" service "getClientDelegationStatus"
 // endpoint HTTP response body.
 type GetClientDelegationStatusResponseBody struct {
-	// Whether any current observations exist.
+	// unknown means no current observations; observed means matching observations
+	// exist; configuration_failure means the current delegation configuration is
+	// known to be invalid, not a per-human observation.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Inclusive observation window start.
 	WindowStart  *string                              `form:"window_start,omitempty" json:"window_start,omitempty" xml:"window_start,omitempty"`
@@ -5661,8 +5663,8 @@ func ValidateGetClientDelegationStatusResponseBody(body *GetClientDelegationStat
 		err = goa.MergeErrors(err, goa.MissingFieldError("observations", "body"))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "unknown" || *body.Status == "observed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"unknown", "observed"}))
+		if !(*body.Status == "unknown" || *body.Status == "observed" || *body.Status == "configuration_failure") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"unknown", "observed", "configuration_failure"}))
 		}
 	}
 	if body.WindowStart != nil {

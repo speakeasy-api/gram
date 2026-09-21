@@ -276,7 +276,9 @@ type ListOrganizationRemoteSessionClientsResult struct {
 // OrganizationClientDelegationStatus is the result type of the
 // organizationRemoteSessionClients service getClientDelegationStatus method.
 type OrganizationClientDelegationStatus struct {
-	// Whether any current observations exist.
+	// unknown means no current observations; observed means matching observations
+	// exist; configuration_failure means the current delegation configuration is
+	// known to be invalid, not a per-human observation.
 	Status string
 	// Inclusive observation window start.
 	WindowStart  string

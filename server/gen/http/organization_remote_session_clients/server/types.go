@@ -185,7 +185,9 @@ type GetClientResponseBody struct {
 // "organizationRemoteSessionClients" service "getClientDelegationStatus"
 // endpoint HTTP response body.
 type GetClientDelegationStatusResponseBody struct {
-	// Whether any current observations exist.
+	// unknown means no current observations; observed means matching observations
+	// exist; configuration_failure means the current delegation configuration is
+	// known to be invalid, not a per-human observation.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Inclusive observation window start.
 	WindowStart  string                               `form:"window_start" json:"window_start" xml:"window_start"`

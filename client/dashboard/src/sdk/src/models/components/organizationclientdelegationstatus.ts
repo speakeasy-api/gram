@@ -14,26 +14,27 @@ import {
 } from "./delegationstatuscount.js";
 
 /**
- * Whether any current observations exist.
+ * unknown means no current observations; observed means matching observations exist; configuration_failure means the current delegation configuration is known to be invalid, not a per-human observation.
  */
 export const OrganizationClientDelegationStatusStatus = {
   Unknown: "unknown",
   Observed: "observed",
+  ConfigurationFailure: "configuration_failure",
 } as const;
 /**
- * Whether any current observations exist.
+ * unknown means no current observations; observed means matching observations exist; configuration_failure means the current delegation configuration is known to be invalid, not a per-human observation.
  */
 export type OrganizationClientDelegationStatusStatus = ClosedEnum<
   typeof OrganizationClientDelegationStatusStatus
 >;
 
 /**
- * Latest per-human observations for the current client configuration within 30 days. Unknown when no matching observations exist. Credential presence does not guarantee future renewal.
+ * Latest per-human observations for the current client configuration within 30 days. Unknown when no matching observations exist. A known invalid delegation configuration, including a missing active signing key, reports configuration_failure with no observations. Credential presence does not guarantee future renewal.
  */
 export type OrganizationClientDelegationStatus = {
   observations: Array<DelegationStatusCount>;
   /**
-   * Whether any current observations exist.
+   * unknown means no current observations; observed means matching observations exist; configuration_failure means the current delegation configuration is known to be invalid, not a per-human observation.
    */
   status: OrganizationClientDelegationStatusStatus;
   /**

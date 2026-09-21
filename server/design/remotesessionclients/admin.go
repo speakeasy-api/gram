@@ -149,8 +149,8 @@ var CreateCimdOrganizationRemoteSessionClientForm = Type("CreateCimdOrganization
 
 // OrganizationClientDelegationStatus contains aggregates only, never identities or credentials.
 var OrganizationClientDelegationStatus = Type("OrganizationClientDelegationStatus", func() {
-	Description("Latest per-human observations for the current client configuration within 30 days. Unknown when no matching observations exist. Credential presence does not guarantee future renewal.")
-	Attribute("status", String, "Whether any current observations exist.", func() { Enum("unknown", "observed") })
+	Description("Latest per-human observations for the current client configuration within 30 days. Unknown when no matching observations exist. A known invalid delegation configuration, including a missing active signing key, reports configuration_failure with no observations. Credential presence does not guarantee future renewal.")
+	Attribute("status", String, "unknown means no current observations; observed means matching observations exist; configuration_failure means the current delegation configuration is known to be invalid, not a per-human observation.", func() { Enum("unknown", "observed", "configuration_failure") })
 	Attribute("window_start", String, "Inclusive observation window start.", func() { Format(FormatDateTime) })
 	Attribute("observations", ArrayOf(DelegationStatusCount))
 	Required("status", "window_start", "observations")

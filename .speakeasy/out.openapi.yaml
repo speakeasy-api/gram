@@ -85195,15 +85195,16 @@ components:
             $ref: '#/components/schemas/DelegationStatusCount'
         status:
           type: string
-          description: Whether any current observations exist.
+          description: unknown means no current observations; observed means matching observations exist; configuration_failure means the current delegation configuration is known to be invalid, not a per-human observation.
           enum:
             - unknown
             - observed
+            - configuration_failure
         window_start:
           type: string
           description: Inclusive observation window start.
           format: date-time
-      description: Latest per-human observations for the current client configuration within 30 days. Unknown when no matching observations exist. Credential presence does not guarantee future renewal.
+      description: Latest per-human observations for the current client configuration within 30 days. Unknown when no matching observations exist. A known invalid delegation configuration, including a missing active signing key, reports configuration_failure with no observations. Credential presence does not guarantee future renewal.
       required:
         - status
         - window_start

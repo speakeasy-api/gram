@@ -50,7 +50,9 @@ func TestGetClientDelegationStatusUnknownAndTenantIsolated(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "delegation-status-platform")
-	own, err := ti.service.CreateClient(ctx, newCreateClientPayload(platformID.String(), nil, nil))
+	create := newCreateClientPayload(platformID.String(), nil, nil)
+	create.Scope = []string{"openid", "email"}
+	own, err := ti.service.CreateClient(ctx, create)
 	require.NoError(t, err)
 	status, err := ti.service.GetClientDelegationStatus(ctx, &orgclientsgen.GetClientDelegationStatusPayload{ID: own.ID})
 	require.NoError(t, err)
@@ -158,7 +160,7 @@ func TestGetClientDelegationStatusCurrentObservationsOnly(t *testing.T) {
 	require.NoError(t, err)
 	got, err = ti.service.GetClientDelegationStatus(ctx, payload)
 	require.NoError(t, err)
-	require.Equal(t, "unknown", got.Status)
+	require.Equal(t, "configuration_failure", got.Status)
 	require.Empty(t, got.Observations)
 
 }
