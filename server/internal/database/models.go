@@ -18,6 +18,7 @@ type Agent struct {
 	ID                          uuid.UUID
 	OrganizationID              string
 	OwnerUserID                 string
+	ProjectID                   uuid.NullUUID
 	Name                        string
 	SuspendedAt                 pgtype.Timestamptz
 	RevokedAt                   pgtype.Timestamptz

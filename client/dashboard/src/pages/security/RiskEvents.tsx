@@ -42,7 +42,7 @@ import {
   RuleLabel,
 } from "./risk-ui";
 import {
-  isJudgeSource,
+  isRationaleSource,
   isShadowMcpSource,
   scoreToRating,
   SEVERITY_RATING_LABEL,
@@ -57,8 +57,8 @@ import {
 // single rule whose name only restates the category, so they render the badge
 // alone rather than an empty Rule cell.
 //
-// Evidence gets the widest track: for judge findings it holds a sentence or two
-// of rationale, where every other column holds a label.
+// Evidence gets the widest track: for judge and LLM analyzer findings it holds
+// a sentence or two of rationale, where every other column holds a label.
 const RISK_EVENTS_GRID =
   "grid grid-cols-[28px_88px_172px_minmax(0,1.3fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,2.4fr)_minmax(0,0.9fr)_110px] gap-3";
 
@@ -682,7 +682,7 @@ function RiskEventsRows({
   );
 }
 
-function RiskEventsRow({
+export function RiskEventsRow({
   result,
   policyName,
   policyScore,
@@ -698,9 +698,10 @@ function RiskEventsRow({
   selection: RowSelection<RiskResult>;
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
-}) {
+}): JSX.Element {
   const isShadowMCP = isShadowMcpSource(result.source);
-  const isEventSource = isJudgeSource(result.source);
+  // Judge and LLM analyzer findings carry their evidence as a rationale.
+  const isEventSource = isRationaleSource(result.source);
   // The 2px left edge carries the severity band color; rows whose policy
   // hasn't loaded a score keep a transparent edge so the grid stays aligned.
   const edgeRating =

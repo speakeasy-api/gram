@@ -71,6 +71,15 @@ where a value is expected.
    attribution columns did not land); at least one signal shows a previous
    count of 0 (a newly-emerged signal); top users render as
    `*@demo.getgram.ai` emails, not raw ids.
+   For Platform MCP, call `list_watchdog_findings` against the local rewritten
+   seed with `severity: "all"` and an explicit trailing 30-day window. Each
+   primary group is one rule-level alert, with a finding count, distinct
+   attributed users and observed client surfaces (`chat_source`), not an
+   individual finding. At least one alert must affect multiple users and
+   clients. Evidence is a fully redacted sample of the stored display value:
+   no partial secret, email domain, URL or judge rationale may pass through.
+   Compare with Watchdog using the same detection-time window and severity.
+   Optional finding breakdowns are not the dashboard's display sections.
 
 10. **MCP connections** — on the **Acme Partner Gateway** server's _Clients and
     Sessions_ tab, five registered agents and five connections. Grouped by

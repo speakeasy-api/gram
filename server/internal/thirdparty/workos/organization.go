@@ -2,10 +2,13 @@ package workos
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
+	"github.com/workos/workos-go/v6/pkg/workos_errors"
 )
 
 // Organization represents a WorkOS organization with the fields used by Gram.
@@ -87,6 +90,41 @@ func (wc *Client) CreateOrganization(ctx context.Context, name, gramOrgID string
 	return o.ID, nil
 }
 
+// ErrOrganizationCreationRejected marks a provider validation refusal of the
+// initial create, never a failure after the remote organization was created.
+var ErrOrganizationCreationRejected = errors.New("WorkOS rejected organization creation")
+
+// CreateOrganizationWithVerifiedDomain asserts prior administrator verification
+// of hostname. It does not retry because creation has no idempotency key.
+func (wc *Client) CreateOrganizationWithVerifiedDomain(ctx context.Context, name, hostname string) (string, error) {
+	o, err := wc.orgsNoRetry.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
+		Name:           name,
+		Domains:        nil,
+		DomainData:     []organizations.OrganizationDomainData{{Domain: hostname, State: organizations.Verified}},
+		ExternalID:     "",
+		IdempotencyKey: "",
+		Metadata:       nil,
+	})
+	if err != nil {
+		// WorkOS documents 400 as malformed parameters and 422 as validation
+		// failure. No duplicate-domain-specific code or 409 contract is assumed.
+		var providerError workos_errors.HTTPError
+		if errors.As(err, &providerError) && (providerError.Code == http.StatusBadRequest || providerError.Code == http.StatusUnprocessableEntity) {
+			return "", fmt.Errorf("%w: %w", ErrOrganizationCreationRejected, err)
+		}
+		return "", fmt.Errorf("create organization with verified domain: %w", err)
+	}
+	if o.ID == "" {
+		return "", fmt.Errorf("create organization with verified domain: missing organization ID")
+	}
+	for _, domain := range o.Domains {
+		if domain.Domain == hostname && domain.State == organizations.OrganizationDomainVerified {
+			return o.ID, nil
+		}
+	}
+	return "", fmt.Errorf("create organization with verified domain: expected verified domain not returned")
+}
+
 // CreateOrganizationMembership adds a WorkOS user to a WorkOS organization
 // with the given role and returns the membership ID.
 func (wc *Client) CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
@@ -122,7 +160,17 @@ func (wc *Client) EnsureOrgExternalID(ctx context.Context, workosOrgID, gramOrgI
 }
 
 func (wc *Client) UpdateOrganizationExternalID(ctx context.Context, workosOrgID, externalID string) error {
-	_, err := wc.orgs.UpdateOrganization(ctx, organizations.UpdateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
+	return updateOrganizationExternalID(ctx, wc.orgs, workosOrgID, externalID)
+}
+
+// UpdateOrganizationExternalIDWithoutRetry finishes administrator-verified
+// provisioning without automatically repeating a write after an uncertain outcome.
+func (wc *Client) UpdateOrganizationExternalIDWithoutRetry(ctx context.Context, workosOrgID, externalID string) error {
+	return updateOrganizationExternalID(ctx, wc.orgsNoRetry, workosOrgID, externalID)
+}
+
+func updateOrganizationExternalID(ctx context.Context, client *organizations.Client, workosOrgID, externalID string) error {
+	_, err := client.UpdateOrganization(ctx, organizations.UpdateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
 		Organization:     workosOrgID,
 		Name:             "",
 		Domains:          nil,

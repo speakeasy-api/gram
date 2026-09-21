@@ -19,6 +19,7 @@ import {
   scoreToRating,
   type SeverityRating,
 } from "./risk-utils";
+import { isLlmAnalyzerRuleId } from "./rule-ids";
 import { Badge } from "@/components/ui/Badge";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
@@ -82,9 +83,15 @@ export function RuleLabel({
   ruleId?: string;
 }): JSX.Element | null {
   if (!ruleId || isJudgeSource(source)) return null;
+  const title = getRuleTitleFallback(ruleId);
+  // The LLM analyzer's ids name the engine (`secret.llm`), which is the one
+  // thing this line must not surface — the tooltip repeats the label instead.
   return (
-    <span className="truncate font-mono text-xs" title={ruleId}>
-      {getRuleTitleFallback(ruleId)}
+    <span
+      className="truncate font-mono text-xs"
+      title={isLlmAnalyzerRuleId(ruleId) ? title : ruleId}
+    >
+      {title}
     </span>
   );
 }
@@ -369,6 +376,11 @@ function RationaleText({ text }: { text: string }): JSX.Element {
 // tool calls), not a one-line substring. The cell shows the judge's rationale
 // (`risk_results.description`) inline, and opens the payload in a scrollable
 // Dialog behind the same audited, chat:read-gated reveal as MaskedMatch.
+//
+// LLM analyzer findings take the same path: their `description` is the
+// model's reasoning and their match is empty, so the server fingerprints it
+// to the no-match sentinel and the cell reduces to the rationale alone, with
+// no reveal affordance to open an event that was never stored.
 //
 // The rationale itself is not gated: it's model-authored prose about the
 // finding, and the chat transcript's RiskBadge already renders it

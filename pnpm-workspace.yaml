@@ -22,11 +22,11 @@ catalog:
   "@types/react": ^19.2.18
   "@types/react-dom": ^19.2.7
   "@assistant-ui/react": ^0.15.18
-  "@vitejs/plugin-react": ^6.0.5
+  "@vitejs/plugin-react": ^6.1.1
   ai: ^7.0.97
   "lucide-react": ^1.28.0
   typescript: 7.0.2
-  vite: ^8.2.0
+  vite: ^8.3.0
 
 autoInstallPeers: false
 

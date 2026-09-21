@@ -505,3 +505,32 @@ func TestRevoke_DeletesApplicationsSnapshot(t *testing.T) {
 	require.Zero(t, countRows(t, ctx, si, "okta_application_assignments", id))
 	require.Zero(t, countRows(t, ctx, si, "okta_application_reconcile_runs", id))
 }
+
+func TestChecklist_LinkedAgentAppIsReadFromTheSync(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	verified := verifiedConnection(t, ctx, si)
+	id := mustParseUUID(t, verified.ID)
+
+	_, err := si.svc.RecordAgent(ctx, &gen.RecordAgentPayload{SessionToken: nil, ID: verified.ID, AgentID: new("wlpagent000000000001"), AgentAppID: new(appA)})
+	require.NoError(t, err)
+	step := func() map[string]*bool {
+		got, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: nil})
+		require.NoError(t, err)
+		return checklistCompletion(got.Connection.Checklist)
+	}
+	before := step()
+	require.True(t, *before[identityproviderconnections.ChecklistKeyRegisterAIAgent])
+	require.Nil(t, before[identityproviderconnections.ChecklistKeyLinkAgentApp], "nothing synced yet")
+	require.Nil(t, before[identityproviderconnections.ChecklistKeyFirstResourceConnection])
+
+	setFixtures(si, []okta.App{fixtureApp(appA, "Speakeasy Agent", "oidc_client")}, nil, nil)
+	runSync(t, ctx, newSyncer(t, si), id)
+	unassigned := step()
+	require.True(t, *unassigned[identityproviderconnections.ChecklistKeyLinkAgentApp])
+	require.False(t, *unassigned[identityproviderconnections.ChecklistKeyActivateAgentApp], "an app nobody is assigned to cannot issue assertions")
+
+	setFixtures(si, []okta.App{fixtureApp(appA, "Speakeasy Agent", "oidc_client")}, map[string][]okta.AppUser{appA: {{ID: "00uone", Scope: "USER"}}}, nil)
+	runSync(t, ctx, newSyncer(t, si), id)
+	require.True(t, *step()[identityproviderconnections.ChecklistKeyActivateAgentApp])
+}

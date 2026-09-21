@@ -1,9 +1,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
 vi.mock("@/contexts/Auth", () => ({
   useUser: () => ({
+    id: "user_admin",
     displayName: "Admin User",
     email: "admin@example.invalid",
   }),
@@ -14,18 +16,30 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ projectSlug: "project" }),
   useSdkClient: () => ({ auth: { logout: vi.fn() } }),
+  useProjectSlugForRequests: () => "project",
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasAnyScope: () => true }),
+  useRBAC: () => ({ hasAnyScope: () => true, isLoading: false }),
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     settings: { goTo: vi.fn() },
     exploreDemo: { goTo: vi.fn() },
+    identities: {
+      detail: { overview: { href: (urn: string) => `/identities/${urn}` } },
+    },
   }),
   useOrgRoutes: () => ({ billing: { goTo: vi.fn() } }),
 }));
-vi.mock("react-router", () => ({ useNavigate: () => vi.fn() }));
+vi.mock("react-router", () => ({
+  useNavigate: () => vi.fn(),
+  useLocation: () => ({ search: "" }),
+  Link: ({ to, children, ...props }: { to: string; children: ReactNode }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock("@/components/ui/ThemeSwitcher", () => ({ ThemeSwitcher: () => null }));
 
 import { SidebarUserMenu } from "./sidebar-user-menu";

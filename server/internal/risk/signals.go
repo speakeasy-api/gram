@@ -39,6 +39,11 @@ const signalDefaultBaseWeight = 5.0
 // policyScore <= 0 means no policy attribution (pre-policy rows), which
 // falls back to the rule category's fixed weight. Rounded to one decimal to
 // match the CVSS-style display format.
+// SignalScore returns the dashboard signal score for a policy score and category.
+func SignalScore(policyScore float64, category string) float64 {
+	return signalScore(policyScore, category)
+}
+
 func signalScore(policyScore float64, category string) float64 {
 	if policyScore > 0 {
 		return roundScore(policyScore)

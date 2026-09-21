@@ -129,18 +129,23 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 	keys := checklistKeys(created.Checklist)
 	require.Equal(t, []string{
 		"create_api_services_app", "public_key_auth", "dpop", "grant_scopes", "assign_admin_roles", "submit_client_id",
-		"enable_xaa_on_resource_apps", "create_ai_agent", "agent_delegated_caller", "agent_public_key", "activate_agent",
-		"resource_connections", "record_agent",
+		"register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection",
 	}, keys)
 	for _, item := range created.Checklist {
-		if item.Key == "public_key_auth" || item.Key == "agent_public_key" {
-			require.Contains(t, item.Description, created.JwksURL)
-		}
-		if item.Key == "resource_connections" {
-			require.Contains(t, item.Description, "Allow all")
-		}
-		if item.Key == "assign_admin_roles" {
-			require.Contains(t, item.Description, "MFA")
+		switch item.Key {
+		case "public_key_auth":
+			require.Contains(t, item.Details, "Enter this URL: "+created.JwksURL)
+			require.Nil(t, item.Completed, "nothing observed before the first verification")
+		case "assign_admin_roles":
+			require.Contains(t, item.Description, "multi-factor authentication")
+			require.Nil(t, item.Completed, "admin roles cannot be observed")
+		case "submit_client_id":
+			require.NotNil(t, item.Completed)
+			require.False(t, *item.Completed)
+		case "register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection":
+			require.Equal(t, "cross_app_access", item.Group)
+		default:
+			require.Equal(t, "connect", item.Group)
 		}
 	}
 
@@ -167,8 +172,7 @@ func TestCreate_OINListingSkipsCustomAppAndXAASteps(t *testing.T) {
 	keys := checklistKeys(created.Checklist)
 	require.Contains(t, keys, "add_oin_app")
 	require.NotContains(t, keys, "create_api_services_app")
-	require.NotContains(t, keys, "enable_xaa_on_resource_apps")
-	require.Contains(t, keys, "agent_delegated_caller")
+	require.Contains(t, keys, "record_ai_agent")
 }
 
 func TestCreate_SecondLiveConnectionConflicts(t *testing.T) {

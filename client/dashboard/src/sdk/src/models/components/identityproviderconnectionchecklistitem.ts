@@ -4,21 +4,70 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * Which phase the step belongs to: connect (the service app the connection authenticates with) or cross_app_access (the AI agent).
+ */
+export const Group = {
+  Connect: "connect",
+  CrossAppAccess: "cross_app_access",
+} as const;
+/**
+ * Which phase the step belongs to: connect (the service app the connection authenticates with) or cross_app_access (the AI agent).
+ */
+export type Group = ClosedEnum<typeof Group>;
+
+/**
+ * Stable step identifier.
+ */
+export const IdentityProviderConnectionChecklistItemKey = {
+  AddOinApp: "add_oin_app",
+  CreateApiServicesApp: "create_api_services_app",
+  PublicKeyAuth: "public_key_auth",
+  Dpop: "dpop",
+  GrantScopes: "grant_scopes",
+  AssignAdminRoles: "assign_admin_roles",
+  SubmitClientId: "submit_client_id",
+  RegisterAiAgent: "register_ai_agent",
+  LinkAgentApp: "link_agent_app",
+  ActivateAgentApp: "activate_agent_app",
+  RecordAiAgent: "record_ai_agent",
+  FirstResourceConnection: "first_resource_connection",
+} as const;
+/**
+ * Stable step identifier.
+ */
+export type IdentityProviderConnectionChecklistItemKey = ClosedEnum<
+  typeof IdentityProviderConnectionChecklistItemKey
+>;
 
 /**
  * One step the organization administrator completes in the identity provider's console. Ordered; keys are stable across responses.
  */
 export type IdentityProviderConnectionChecklistItem = {
   /**
+   * Whether the last verification observed this step done. Omitted for steps the server cannot observe; the administrator tracks those.
+   */
+  completed?: boolean | undefined;
+  /**
    * What to do in the console, including any value copied from this connection.
    */
   description: string;
   /**
+   * Sub-steps, in order. Empty when the description says it all.
+   */
+  details: Array<string>;
+  /**
+   * Which phase the step belongs to: connect (the service app the connection authenticates with) or cross_app_access (the AI agent).
+   */
+  group: Group;
+  /**
    * Stable step identifier.
    */
-  key: string;
+  key: IdentityProviderConnectionChecklistItemKey;
   /**
    * Short step title.
    */
@@ -26,10 +75,22 @@ export type IdentityProviderConnectionChecklistItem = {
 };
 
 /** @internal */
+export const Group$inboundSchema: z.ZodMiniEnum<typeof Group> = z.enum(Group);
+
+/** @internal */
+export const IdentityProviderConnectionChecklistItemKey$inboundSchema:
+  z.ZodMiniEnum<typeof IdentityProviderConnectionChecklistItemKey> = z.enum(
+    IdentityProviderConnectionChecklistItemKey,
+  );
+
+/** @internal */
 export const IdentityProviderConnectionChecklistItem$inboundSchema:
   z.ZodMiniType<IdentityProviderConnectionChecklistItem, unknown> = z.object({
+    completed: z.optional(z.boolean()),
     description: z.string(),
-    key: z.string(),
+    details: z.array(z.string()),
+    group: Group$inboundSchema,
+    key: IdentityProviderConnectionChecklistItemKey$inboundSchema,
     title: z.string(),
   });
 

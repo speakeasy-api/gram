@@ -89,7 +89,7 @@ const clearOrganizationWorkosID = `-- name: ClearOrganizationWorkosID :one
 UPDATE organizations
 SET workos_id = NULL, updated_at = ?1
 WHERE id = ?2
-RETURNING id, name, slug, account_type, workos_id, external_id, created_at, updated_at
+RETURNING id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at
 `
 
 type ClearOrganizationWorkosIDParams struct {
@@ -109,6 +109,7 @@ func (q *Queries) ClearOrganizationWorkosID(ctx context.Context, arg ClearOrgani
 		&i.AccountType,
 		&i.WorkosID,
 		&i.ExternalID,
+		&i.Domains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -642,17 +643,18 @@ func (q *Queries) CreateOAuthClient(ctx context.Context, arg CreateOAuthClientPa
 
 const createOrganization = `-- name: CreateOrganization :one
 
-INSERT INTO organizations (id, name, slug, account_type, workos_id, external_id)
+INSERT INTO organizations (id, name, slug, account_type, workos_id, external_id, domains)
 VALUES (
   ?1,
   ?2,
   ?3,
   COALESCE(?4, 'enterprise'),
   ?5,
-  ?6
+  ?6,
+  COALESCE(?7, '[]')
 )
 ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug
-RETURNING id, name, slug, account_type, workos_id, external_id, created_at, updated_at
+RETURNING id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at
 `
 
 type CreateOrganizationParams struct {
@@ -662,6 +664,7 @@ type CreateOrganizationParams struct {
 	AccountType interface{}
 	WorkosID    sql.NullString
 	ExternalID  sql.NullString
+	Domains     interface{}
 }
 
 // =============================================================================
@@ -679,6 +682,7 @@ func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganization
 		arg.AccountType,
 		arg.WorkosID,
 		arg.ExternalID,
+		arg.Domains,
 	)
 	var i Organization
 	err := row.Scan(
@@ -688,6 +692,7 @@ func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganization
 		&i.AccountType,
 		&i.WorkosID,
 		&i.ExternalID,
+		&i.Domains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1345,7 +1350,7 @@ func (q *Queries) GetOAuthClient(ctx context.Context, clientID string) (OauthCli
 }
 
 const getOrganization = `-- name: GetOrganization :one
-SELECT id, name, slug, account_type, workos_id, external_id, created_at, updated_at FROM organizations WHERE id = ?1
+SELECT id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at FROM organizations WHERE id = ?1
 `
 
 func (q *Queries) GetOrganization(ctx context.Context, id uuid.UUID) (Organization, error) {
@@ -1358,6 +1363,7 @@ func (q *Queries) GetOrganization(ctx context.Context, id uuid.UUID) (Organizati
 		&i.AccountType,
 		&i.WorkosID,
 		&i.ExternalID,
+		&i.Domains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1365,7 +1371,7 @@ func (q *Queries) GetOrganization(ctx context.Context, id uuid.UUID) (Organizati
 }
 
 const getOrganizationByWorkosID = `-- name: GetOrganizationByWorkosID :one
-SELECT id, name, slug, account_type, workos_id, external_id, created_at, updated_at FROM organizations WHERE workos_id = ?1
+SELECT id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at FROM organizations WHERE workos_id = ?1
 `
 
 // GetOrganizationByWorkosID looks up an organization by its workos_id
@@ -1381,6 +1387,7 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID sql.Nu
 		&i.AccountType,
 		&i.WorkosID,
 		&i.ExternalID,
+		&i.Domains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1894,7 +1901,7 @@ func (q *Queries) ListOrganizationRoles(ctx context.Context, organizationID uuid
 }
 
 const listOrganizations = `-- name: ListOrganizations :many
-SELECT id, name, slug, account_type, workos_id, external_id, created_at, updated_at FROM organizations
+SELECT id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at FROM organizations
 WHERE id > ?1
 ORDER BY id ASC
 LIMIT ?2
@@ -1925,6 +1932,7 @@ func (q *Queries) ListOrganizations(ctx context.Context, arg ListOrganizationsPa
 			&i.AccountType,
 			&i.WorkosID,
 			&i.ExternalID,
+			&i.Domains,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1942,7 +1950,7 @@ func (q *Queries) ListOrganizations(ctx context.Context, arg ListOrganizationsPa
 }
 
 const listOrganizationsForUser = `-- name: ListOrganizationsForUser :many
-SELECT o.id, o.name, o.slug, o.account_type, o.workos_id, o.external_id, o.created_at, o.updated_at FROM organizations o
+SELECT o.id, o.name, o.slug, o.account_type, o.workos_id, o.external_id, o.domains, o.created_at, o.updated_at FROM organizations o
 JOIN memberships m ON m.organization_id = o.id
 WHERE m.user_id = ?1
 ORDER BY o.name ASC
@@ -1964,6 +1972,7 @@ func (q *Queries) ListOrganizationsForUser(ctx context.Context, userID uuid.UUID
 			&i.AccountType,
 			&i.WorkosID,
 			&i.ExternalID,
+			&i.Domains,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -2148,7 +2157,7 @@ SET workos_id = ?1, updated_at = ?2
 WHERE id = (
   SELECT id FROM organizations WHERE workos_id IS NULL ORDER BY created_at ASC LIMIT 1
 )
-RETURNING id, name, slug, account_type, workos_id, external_id, created_at, updated_at
+RETURNING id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at
 `
 
 type SetOrganizationWorkosIDParams struct {
@@ -2169,6 +2178,7 @@ func (q *Queries) SetOrganizationWorkosID(ctx context.Context, arg SetOrganizati
 		&i.AccountType,
 		&i.WorkosID,
 		&i.ExternalID,
+		&i.Domains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2417,7 +2427,7 @@ SET
   external_id = COALESCE(?5, external_id),
   updated_at = ?6
 WHERE id = ?7
-RETURNING id, name, slug, account_type, workos_id, external_id, created_at, updated_at
+RETURNING id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at
 `
 
 type UpdateOrganizationParams struct {
@@ -2448,6 +2458,7 @@ func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganization
 		&i.AccountType,
 		&i.WorkosID,
 		&i.ExternalID,
+		&i.Domains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2576,7 +2587,7 @@ const upsertOrganizationBySlug = `-- name: UpsertOrganizationBySlug :one
 INSERT INTO organizations (id, name, slug)
 VALUES (?1, ?2, ?3)
 ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug
-RETURNING id, name, slug, account_type, workos_id, external_id, created_at, updated_at
+RETURNING id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at
 `
 
 type UpsertOrganizationBySlugParams struct {
@@ -2597,6 +2608,7 @@ func (q *Queries) UpsertOrganizationBySlug(ctx context.Context, arg UpsertOrgani
 		&i.AccountType,
 		&i.WorkosID,
 		&i.ExternalID,
+		&i.Domains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
