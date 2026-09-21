@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -134,7 +135,7 @@ func mintSelectionSession(t *testing.T, ctx context.Context, ti *testInstance, t
 		UserSessionClientID: uuid.NullUUID{},
 		SubjectUrn:          subject,
 		Jti:                 jti,
-		RefreshTokenHash:    "test-selection-" + uuid.NewString(),
+		RefreshTokenHash:    conv.ToPGText("test-selection-" + uuid.NewString()),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
 		ToolSelection:       selection,

@@ -692,7 +692,7 @@ RETURNING s.*;
 UPDATE user_sessions
 SET deleted_at = clock_timestamp()
 WHERE user_session_issuer_id = @user_session_issuer_id
-  AND refresh_token_hash = @refresh_token_hash
+  AND refresh_token_hash = @refresh_token_hash::text
   AND deleted IS FALSE
 RETURNING *;
 
@@ -757,7 +757,7 @@ WHERE user_session_issuer_id = @user_session_issuer_id
 SELECT *
 FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id
-  AND refresh_token_hash = @refresh_token_hash
+  AND refresh_token_hash = @refresh_token_hash::text
   AND deleted IS FALSE;
 
 -- The Create* queries below are exercised by tests and by the OAuth surface

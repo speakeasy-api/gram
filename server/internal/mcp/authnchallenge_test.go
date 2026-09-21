@@ -2140,7 +2140,7 @@ func seedUserSessionWithSelection(t *testing.T, ctx context.Context, ti *testIns
 		UserSessionClientID: uuid.NullUUID{UUID: clientRowID, Valid: true},
 		SubjectUrn:          subject,
 		Jti:                 uuid.NewString(),
-		RefreshTokenHash:    base64.RawURLEncoding.EncodeToString(sum[:]),
+		RefreshTokenHash:    conv.ToPGText(base64.RawURLEncoding.EncodeToString(sum[:])),
 		ExpiresAt:           pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), InfinityModifier: 0, Valid: true},
 		ToolSelection:       selection,

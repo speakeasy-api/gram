@@ -753,7 +753,7 @@ func seedAgentRefreshSession(
 		DelegatedGrants:        delegatedGrants,
 		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.CurrentDelegatedPolicyVersion), Valid: true},
 		Jti:                    base64.RawURLEncoding.EncodeToString(oldJTIHash[:]),
-		RefreshTokenHash:       base64.RawURLEncoding.EncodeToString(refreshHash[:]),
+		RefreshTokenHash:       conv.ToPGText(base64.RawURLEncoding.EncodeToString(refreshHash[:])),
 		RefreshExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
 		ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(10 * time.Minute), Valid: true},
 	})
@@ -788,7 +788,7 @@ func seedRefreshReplaySessionDetails(
 		UserSessionClientID: uuid.NullUUID{UUID: client.ID, Valid: true},
 		SubjectUrn:          urn.NewUserSubject("refresh-replay-user"),
 		Jti:                 oldJTI,
-		RefreshTokenHash:    base64.RawURLEncoding.EncodeToString(refreshHash[:]),
+		RefreshTokenHash:    conv.ToPGText(base64.RawURLEncoding.EncodeToString(refreshHash[:])),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: refreshExpiresAt, Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true},
 	})
