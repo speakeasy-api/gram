@@ -7331,6 +7331,14 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
+          description: 'Optional MCP authorization resource identifier: the toolset ID when present, otherwise the MCP server ID. Narrows discovery to this server and its project before evaluating exclusions.'
+          in: query
+          name: toolset_id
+          schema:
+            description: 'Optional MCP authorization resource identifier: the toolset ID when present, otherwise the MCP server ID. Narrows discovery to this server and its project before evaluating exclusions.'
+            format: uuid
+            type: string
+        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
@@ -9144,6 +9152,290 @@ paths:
       x-speakeasy-name-override: upsertConfig
       x-speakeasy-react-hook:
         name: UpsertAIIntegrationConfig
+  /rpc/analytics.describe:
+    get:
+      description: Describe every dataset and the fields it exposes, with the operators and aggregations each admits.
+      operationId: analyticsDescribe
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsDescribeResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: describe analytics
+      tags:
+        - analytics
+      x-speakeasy-name-override: describe
+      x-speakeasy-react-hook:
+        name: AnalyticsDescribe
+  /rpc/analytics.dimensionValues:
+    post:
+      description: List the values a dimension holds inside a window, most frequent first, for filter pickers. Values are resolved after the dataset collapses its observations, so every value returned is one a query would match.
+      operationId: analyticsDimensionValues
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DimensionValuesRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsDimensionValuesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: dimensionValues analytics
+      tags:
+        - analytics
+      x-speakeasy-name-override: dimensionValues
+      x-speakeasy-react-hook:
+        name: AnalyticsDimensionValues
+        type: query
+  /rpc/analytics.query:
+    post:
+      description: 'Run a query against one dataset. Grouped: aggregate over dimensions, optionally bucketed by time. Ungrouped: rows at the dataset''s grain, newest first.'
+      operationId: analyticsQuery
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyticsQueryPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsQueryResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: query analytics
+      tags:
+        - analytics
+      x-speakeasy-name-override: query
+      x-speakeasy-react-hook:
+        name: AnalyticsQuery
+        type: query
   /rpc/assets.createSignedChatAttachmentURL:
     post:
       description: Create a time-limited signed URL to access a chat attachment without authentication.
@@ -19551,6 +19843,384 @@ paths:
       x-speakeasy-name-override: updateBySlug
       x-speakeasy-react-hook:
         name: UpdateEnvironment
+  /rpc/explore.createQuery:
+    post:
+      description: Save a query. Any member of the project can. The spec is validated against the catalog before it is stored.
+      operationId: createExploreQuery
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateQueryRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExploreQuery'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: createQuery explore
+      tags:
+        - explore
+      x-speakeasy-name-override: createQuery
+      x-speakeasy-react-hook:
+        name: CreateExploreQuery
+  /rpc/explore.deleteQuery:
+    delete:
+      description: Delete a saved query. Its creator can; deleting someone else's needs project write access.
+      operationId: deleteExploreQuery
+      parameters:
+        - allowEmptyValue: true
+          description: The query to delete
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The query to delete
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: deleteQuery explore
+      tags:
+        - explore
+      x-speakeasy-name-override: deleteQuery
+      x-speakeasy-react-hook:
+        name: DeleteExploreQuery
+  /rpc/explore.listQueries:
+    get:
+      description: List the project's saved queries, most recently updated first. Each is validated against the catalog on read, so a query a catalog change broke says so.
+      operationId: listExploreQueries
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExploreListQueriesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listQueries explore
+      tags:
+        - explore
+      x-speakeasy-name-override: listQueries
+      x-speakeasy-react-hook:
+        name: ExploreQueries
+        type: query
+  /rpc/explore.updateQuery:
+    post:
+      description: Replace a saved query's name, dataset and spec. Any member of the project can.
+      operationId: updateExploreQuery
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateQueryRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExploreQuery'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: updateQuery explore
+      tags:
+        - explore
+      x-speakeasy-name-override: updateQuery
+      x-speakeasy-react-hook:
+        name: UpdateExploreQuery
   /rpc/external.receiveWorkOSWebhook:
     post:
       description: Receive and enqueue a WorkOS webhook event.
@@ -22955,6 +23625,825 @@ paths:
       x-speakeasy-name-override: resolve
       x-speakeasy-react-hook:
         name: Identity
+  /rpc/identityProviderConnections.create:
+    post:
+      description: Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin and the okta-connections rollout. One live connection per organization; creation is rate limited.
+      operationId: createIdentityProviderConnection
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIdentityProviderConnectionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: create identityProviderConnections
+      tags:
+        - identityProviderConnections
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateIdentityProviderConnection
+  /rpc/identityProviderConnections.get:
+    get:
+      description: Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.
+      operationId: getIdentityProviderConnection
+      parameters:
+        - allowEmptyValue: true
+          description: Connection ID. Omit to fetch the organization's live connection.
+          in: query
+          name: id
+          schema:
+            description: Connection ID. Omit to fetch the organization's live connection.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetIdentityProviderConnectionResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: get identityProviderConnections
+      tags:
+        - identityProviderConnections
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: IdentityProviderConnection
+  /rpc/identityProviderConnections.listApplications:
+    get:
+      description: List the applications snapshot for the connection with live assignment counts and the last reconcile run. The connection must be verified. Requires org:admin.
+      operationId: listIdentityProviderConnectionApplications
+      parameters:
+        - allowEmptyValue: true
+          description: Connection ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: Connection ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Include applications that disappeared from a run.
+          in: query
+          name: include_removed
+          schema:
+            default: false
+            description: Include applications that disappeared from a run.
+            type: boolean
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListIdentityProviderConnectionApplicationsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listApplications identityProviderConnections
+      tags:
+        - identityProviderConnections
+      x-speakeasy-name-override: listApplications
+      x-speakeasy-react-hook:
+        name: IdentityProviderConnectionApplications
+  /rpc/identityProviderConnections.recordAgent:
+    post:
+      description: Record the Okta AI agent ID and the application it is bound to, for display. Okta does not expose these through its API. Requires org:admin.
+      operationId: recordIdentityProviderConnectionAgent
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordIdentityProviderConnectionAgentRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: recordAgent identityProviderConnections
+      tags:
+        - identityProviderConnections
+      x-speakeasy-name-override: recordAgent
+      x-speakeasy-react-hook:
+        name: RecordIdentityProviderConnectionAgent
+  /rpc/identityProviderConnections.revoke:
+    post:
+      description: 'Revoke the connection: withdraw every signing key from the JWKS, disable the key material, and tombstone the connection so a new one can be created. Idempotent. Requires org:admin.'
+      operationId: revokeIdentityProviderConnection
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeIdentityProviderConnectionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: revoke identityProviderConnections
+      tags:
+        - identityProviderConnections
+      x-speakeasy-name-override: revoke
+      x-speakeasy-react-hook:
+        name: RevokeIdentityProviderConnection
+  /rpc/identityProviderConnections.submitClientId:
+    post:
+      description: Record the client ID of the Okta API Services application and verify it. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.
+      operationId: submitIdentityProviderConnectionClientId
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitIdentityProviderConnectionClientIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: submitClientId identityProviderConnections
+      tags:
+        - identityProviderConnections
+      x-speakeasy-name-override: submitClientId
+      x-speakeasy-react-hook:
+        name: SubmitIdentityProviderConnectionClientId
+  /rpc/identityProviderConnections.syncApplications:
+    post:
+      description: Run the applications snapshot on the next coordinator pass, within minutes, instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.
+      operationId: syncIdentityProviderConnectionApplications
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncIdentityProviderConnectionApplicationsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: syncApplications identityProviderConnections
+      tags:
+        - identityProviderConnections
+      x-speakeasy-name-override: syncApplications
+      x-speakeasy-react-hook:
+        name: SyncIdentityProviderConnectionApplications
+  /rpc/identityProviderConnections.verify:
+    post:
+      description: 'Re-verify the connection against Okta: mint a token, confirm each required scope with a read, and record the outcome. Rate limited per organization. Requires org:admin.'
+      operationId: verifyIdentityProviderConnection
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyIdentityProviderConnectionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: verify identityProviderConnections
+      tags:
+        - identityProviderConnections
+      x-speakeasy-name-override: verify
+      x-speakeasy-react-hook:
+        name: VerifyIdentityProviderConnection
   /rpc/instances.get:
     get:
       description: Load all relevant data for an instance of a toolset and environment
@@ -43180,6 +44669,111 @@ paths:
       x-speakeasy-name-override: listServers
       x-speakeasy-react-hook:
         name: RemoteMcpServers
+  /rpc/remoteMcp.probeURL:
+    post:
+      description: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.
+      operationId: probeRemoteMcpURL
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbeURLForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeURLResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: probeURL remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: probeURL
+      x-speakeasy-react-hook:
+        name: ProbeRemoteMcpURL
   /rpc/remoteMcp.updateServer:
     post:
       description: Update a remote MCP server
@@ -43392,7 +44986,11 @@ paths:
         name: UpdateRemoteMcpServerHeader
   /rpc/remoteMcp.verifyURL:
     post:
-      description: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.
+      deprecated: true
+      description: |-
+        Probe a candidate remote MCP server URL and return the legacy boolean verification result.
+
+        Deprecated: use probeURL instead.
       operationId: verifyRemoteMcpURL
       parameters:
         - allowEmptyValue: true
@@ -45478,11 +47076,211 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateRemoteSessionIssuer
+  /rpc/remoteSessions.attachBinding:
+    post:
+      description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+      operationId: attachBinding
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachBindingRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalRemoteSessionBinding'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: attachBinding remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: attachBinding
+  /rpc/remoteSessions.detachBinding:
+    post:
+      description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+      operationId: detachBinding
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetachBindingRequestBody'
+        required: true
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: detachBinding remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: detachBinding
   /rpc/remoteSessions.list:
     get:
-      description: List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
+      description: List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
       operationId: listRemoteSessions
       parameters:
+        - allowEmptyValue: true
+          description: Owned agent whose eligible sessions to list; requires user_session_issuer_id.
+          in: query
+          name: principal_id
+          schema:
+            description: Owned agent whose eligible sessions to list; requires user_session_issuer_id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Issuer configuration sessions must be eligible for; requires principal_id.
+          in: query
+          name: user_session_issuer_id
+          schema:
+            description: Issuer configuration sessions must be eligible for; requires principal_id.
+            format: uuid
+            type: string
         - allowEmptyValue: true
           description: Exact-match filter on subject URN.
           in: query
@@ -45615,6 +47413,108 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: RemoteSessions
+  /rpc/remoteSessions.listBindings:
+    get:
+      description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+      operationId: listBindings
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: principal_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: user_session_issuer_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListBindingsResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listBindings remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: listBindings
   /rpc/remoteSessions.revoke:
     post:
       description: Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.
@@ -64613,6 +66513,104 @@ paths:
       x-speakeasy-name-override: getPeriodUsage
       x-speakeasy-react-hook:
         name: getPeriodUsage
+  /rpc/usage.getSpendBreakdown:
+    get:
+      description: 'Report spend availability and estimate PAYG organizations'' three metered products at current list prices over a maximum of three calendar months. Other plans return unsupported_plan, empty products, and a zero total without calculating estimates. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.'
+      operationId: getSpendBreakdown
+      parameters:
+        - allowEmptyValue: true
+          description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+          in: query
+          name: from
+          schema:
+            description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+          in: query
+          name: to
+          schema:
+            description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpendBreakdownResponse'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getSpendBreakdown usage
+      tags:
+        - usage
+      x-speakeasy-name-override: getSpendBreakdown
+      x-speakeasy-react-hook:
+        name: getSpendBreakdown
   /rpc/usage.getStripeSubscription:
     get:
       description: Get the live lifecycle state of the organization's Stripe PAYG subscription
@@ -66897,7 +68895,7 @@ paths:
         name: UserSessionIssuerCimdClients
   /rpc/userSessionIssuersCimdClients.listPresets:
     get:
-      description: List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' — the default — admit every enabled entry here automatically, with no per-issuer configuration. The catalog is global and contains no tenant data.
+      description: List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' admit every enabled entry here automatically, with no per-issuer configuration. Presets mode is opt-in; an issuer without an explicit mode uses 'open' and evaluates this catalog only for its shadow measurement. The catalog is global and contains no tenant data.
       operationId: listCimdClientPresets
       parameters:
         - allowEmptyValue: true
@@ -69182,6 +71180,257 @@ components:
         - status
         - created_at
         - updated_at
+    AnalyticsDataset:
+      type: object
+      properties:
+        description:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsField'
+        grain:
+          type: string
+          description: What one row represents, as a noun
+          example: session
+        kind:
+          type: string
+          enum:
+            - event
+            - metric
+        name:
+          type: string
+          example: sessions
+      description: A dataset and the fields it exposes. The builder is generated from this.
+      required:
+        - name
+        - kind
+        - grain
+        - description
+        - fields
+    AnalyticsDescribeResult:
+      type: object
+      properties:
+        datasets:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsDataset'
+      required:
+        - datasets
+    AnalyticsDimensionValue:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Rows at the dataset's grain carrying this value inside the window
+          format: int64
+        value:
+          type: string
+          description: A non-empty value of the dimension
+      required:
+        - value
+        - count
+    AnalyticsDimensionValuesResult:
+      type: object
+      properties:
+        dataset:
+          type: string
+        dimension:
+          type: string
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsDimensionValue'
+      description: The values a dimension actually holds inside the window, most frequent first, after the dataset has collapsed its observations.
+      required:
+        - dataset
+        - dimension
+        - values
+    AnalyticsField:
+      type: object
+      properties:
+        aggregations:
+          type: array
+          items:
+            type: string
+          description: Ops a measure admits
+        default:
+          type: boolean
+          description: 'Part of the query the dataset opens on: a default dimension is in the opening group-by'
+          example: true
+        name:
+          type: string
+          example: user
+        operators:
+          type: array
+          items:
+            type: string
+          description: Filter operators a dimension admits
+        role:
+          type: string
+          enum:
+            - dimension
+            - measure
+        type:
+          type: string
+          enum:
+            - string
+            - int64
+            - float64
+        unit:
+          type: string
+          description: Unit of a measure, when it has one
+          example: s
+      description: One queryable field on a dataset.
+      required:
+        - name
+        - type
+        - role
+        - default
+    AnalyticsFilter:
+      type: object
+      properties:
+        field:
+          type: string
+          description: Dimension to filter on
+          example: surface
+        values:
+          type: array
+          items:
+            type: string
+          description: equals takes exactly one value; in matches any of them.
+          minItems: 1
+        operator: {$ref: "#/components/schemas/AnalyticsFilterOperator"}
+      description: A filter on a dimension. All filters are ANDed.
+      required:
+        - field
+        - operator
+        - values
+    AnalyticsMeasure:
+      type: object
+      properties:
+        alias:
+          type: string
+          description: Result column name. Defaults to the op, or op_field.
+          example: tool_calls
+        field:
+          type: string
+          description: Measure field the op applies to. Absent for count.
+          example: tool_call_count
+        op:
+          type: string
+          description: Aggregation to apply. count takes no field; every other op needs a measure field that admits it, per describe.
+          example: sum
+          enum:
+            - count
+            - sum
+            - avg
+            - min
+            - max
+            - p50
+            - p95
+            - p99
+      description: 'A composed measure: an op over a field, or count alone.'
+      required:
+        - op
+    AnalyticsOrderBy:
+      type: object
+      properties:
+        direction:
+          type: string
+          default: desc
+          enum:
+            - asc
+            - desc
+        measure:
+          type: string
+          description: Alias of a requested measure
+          example: tool_calls
+      description: Sort a grouped result by one of its measures.
+      required:
+        - measure
+    AnalyticsQueryPayload:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Dataset to query, per describe
+          example: sessions
+        dimensions:
+          type: array
+          items:
+            type: string
+          description: Group-by key when grouped; projected columns when ungrouped. At most 3.
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsFilter'
+          description: Filters, ANDed. At most 100 values per filter.
+        from:
+          type: string
+          description: Start of the half-open window [from, to), ISO 8601
+          example: "2026-09-01T00:00:00Z"
+          format: date-time
+        grain:
+          type: string
+          description: Time bucket width for a grouped query. Absent means none.
+          enum:
+            - none
+            - hour
+            - day
+            - week
+            - month
+        limit:
+          type: integer
+          description: Maximum rows. Defaults to 100, at most 1000.
+          default: 100
+          format: int64
+          minimum: 1
+          maximum: 1000
+        measures:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsMeasure'
+          description: Composed measures. Required when grouped, forbidden when ungrouped.
+        order_by:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsOrderBy'
+          description: Sort for a grouped result, by measure alias. Ungrouped rows are always newest first.
+        to:
+          type: string
+          description: End of the half-open window [from, to), ISO 8601
+          example: "2026-09-08T00:00:00Z"
+          format: date-time
+        ungrouped:
+          type: boolean
+          description: Return rows at the dataset's grain instead of aggregating.
+          default: false
+      description: A query against one dataset, in catalog vocabulary. Organization comes from the session and project from the project header; neither is a field.
+      required:
+        - dataset
+        - from
+        - to
+    AnalyticsQueryResult:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: The dataset queried
+        plan:
+          type: string
+          description: A stable diagnostic identifier for how the query was answered. Deliberately not a table name.
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Result rows
+      description: One shape for both modes. Row keys are the requested dimension names plus each measure's alias; time_bucket is present only when grain is set, and time on ungrouped rows.
+      required:
+        - dataset
+        - plan
+        - rows
     AnthropicInferenceConfig:
       type: object
       properties:
@@ -69651,6 +71900,22 @@ components:
           description: The toolset slug exposed to the assistant.
       required:
         - toolset_slug
+    AttachBindingRequestBody:
+      type: object
+      properties:
+        principal_id:
+          type: string
+          format: uuid
+        remote_session_id:
+          type: string
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          format: uuid
+      required:
+        - principal_id
+        - user_session_issuer_id
+        - remote_session_id
     AttachKeySetForm:
       type: object
       properties:
@@ -71460,6 +73725,7 @@ components:
           enum:
             - product_telemetry
             - risk_findings
+            - tool_call_logs
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -71652,6 +73918,20 @@ components:
       required:
         - remote_session_issuer_id
         - client_id
+    CreateIdentityProviderConnectionRequestBody:
+      type: object
+      properties:
+        listing_mode:
+          type: string
+          description: Checklist template. Defaults to custom_app.
+          enum:
+            - custom_app
+            - oin
+        org_url:
+          type: string
+          description: Okta org URL, for example https://example.okta.com. Must be https with no path; the host must be an Okta-owned domain.
+      required:
+        - org_url
     CreateIngressRequestBody:
       type: object
       properties:
@@ -72236,6 +74516,26 @@ components:
           $ref: '#/components/schemas/PromptTemplate'
       required:
         - template
+    CreateQueryRequestBody:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Catalog dataset the query asks
+          minLength: 1
+        name:
+          type: string
+          description: Display name, at most 200 characters
+          minLength: 1
+          maxLength: 200
+        spec:
+          type: object
+          description: Builder state. Validated against the catalog on save.
+          additionalProperties: true
+      required:
+        - name
+        - dataset
+        - spec
     CreateRemoteSessionClientForm:
       type: object
       properties:
@@ -73262,6 +75562,7 @@ components:
           enum:
             - product_telemetry
             - risk_findings
+            - tool_call_logs
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -73649,6 +75950,22 @@ components:
         - sensitive_data
         - created_at
         - updated_at
+    DetachBindingRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        principal_id:
+          type: string
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          format: uuid
+      required:
+        - principal_id
+        - user_session_issuer_id
+        - id
     DeviceAgentConfiguration:
       type: object
       properties:
@@ -73918,6 +76235,37 @@ components:
       description: Outcome of probing the provider with the stored credentials.
       required:
         - ok
+    DimensionValuesRequestBody:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Dataset to look in
+          example: sessions
+        dimension:
+          type: string
+          description: Dimension to list values of
+          example: model
+        from:
+          type: string
+          description: Start of the half-open window [from, to), ISO 8601
+          format: date-time
+        limit:
+          type: integer
+          description: Maximum values. Defaults to 50, at most 200.
+          default: 50
+          format: int64
+          minimum: 1
+          maximum: 200
+        to:
+          type: string
+          description: End of the half-open window [from, to), ISO 8601
+          format: date-time
+      required:
+        - dataset
+        - dimension
+        - from
+        - to
     DisableOpenRouterKeyRequestBody:
       type: object
       properties:
@@ -74439,6 +76787,60 @@ components:
           example: dev@acme.corp
       required:
         - email
+    ExploreListQueriesResult:
+      type: object
+      properties:
+        queries:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExploreQuery'
+          description: Queries in the project, most recently updated first
+      required:
+        - queries
+    ExploreQuery:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        created_by_user_id:
+          type: string
+          description: Who saved it, when known
+        dataset:
+          type: string
+          description: The catalog dataset the query asks
+          example: sessions
+        id:
+          type: string
+          format: uuid
+        invalid_reason:
+          type: string
+          description: Present when the saved spec no longer compiles against the catalog, naming what is wrong, so a catalog change fails visibly rather than returning wrong numbers.
+        name:
+          type: string
+          description: 'Display name. Not unique: two people saving the same name is normal.'
+        organization_id:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        spec:
+          type: object
+          description: 'Builder state: chart type, window, dimensions, measures, filters, grain, sort and limit. The client interprets it; the server validates the parts the catalog knows.'
+          additionalProperties: true
+        updated_at:
+          type: string
+          format: date-time
+      description: A named, saved question against a catalog dataset, kept with the builder state it was built with. Belongs to a project and is visible to everyone in the organization.
+      required:
+        - id
+        - project_id
+        - organization_id
+        - name
+        - dataset
+        - spec
+        - created_at
+        - updated_at
     ExportMcpMetadataRequestBody:
       type: object
       properties:
@@ -75740,6 +78142,12 @@ components:
         - time_series
         - skill_time_series
         - skill_breakdown
+    GetIdentityProviderConnectionResult:
+      type: object
+      properties:
+        connection:
+          $ref: '#/components/schemas/OktaIdentityProviderConnection'
+      description: The organization's Okta connection, or nothing when none is connected.
     GetInstanceResult:
       type: object
       properties:
@@ -77243,6 +79651,173 @@ components:
         - emails
         - external_user_ids
         - directory
+    IdentityProviderConnectionActiveKey:
+      type: object
+      properties:
+        activated_at:
+          type: string
+          description: ISO 8601 timestamp when the key became the signer.
+          format: date-time
+        id:
+          type: string
+          description: JSON Web Key row ID.
+          format: uuid
+        kid:
+          type: string
+          description: Key ID as published in the JWKS document.
+      description: The published signing key the identity provider currently trusts. Omitted after revocation.
+      required:
+        - id
+        - kid
+        - activated_at
+    IdentityProviderConnectionApplication:
+      type: object
+      properties:
+        features:
+          type: array
+          items:
+            type: string
+        first_seen_at:
+          type: string
+          format: date-time
+        group_assignments:
+          type: integer
+          description: Live group assignments.
+          format: int64
+        label:
+          type: string
+          description: Admin-facing label. Admin-editable; never a key.
+        last_seen_at:
+          type: string
+          format: date-time
+        name:
+          type: string
+          description: Okta application template name.
+        okta_app_id:
+          type: string
+          description: Okta application id.
+        removed_at:
+          type: string
+          description: Set when the application disappeared from a run; only returned with include_removed.
+          format: date-time
+        sign_on_mode:
+          type: string
+        status:
+          type: string
+          description: ACTIVE or INACTIVE.
+        user_assignments:
+          type: integer
+          description: Live direct and group-derived user assignments.
+          format: int64
+      description: One Okta application in the snapshot, keyed by its Okta id.
+      required:
+        - okta_app_id
+        - label
+        - name
+        - sign_on_mode
+        - status
+        - features
+        - user_assignments
+        - group_assignments
+        - first_seen_at
+        - last_seen_at
+    IdentityProviderConnectionApplicationsSync:
+      type: object
+      properties:
+        requested_at:
+          type: string
+          description: ISO 8601 timestamp of the last syncApplications call; a request newer than synced_at runs on the next coordinator pass.
+          format: date-time
+        synced_at:
+          type: string
+          description: ISO 8601 timestamp when the last completed run started. Omitted until the first run.
+          format: date-time
+      description: Watermarks of the scheduled applications snapshot. The snapshot is reconciled on a fixed platform-wide schedule.
+    IdentityProviderConnectionChecklistItem:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What to do in the console, including any value copied from this connection.
+        key:
+          type: string
+          description: Stable step identifier.
+        title:
+          type: string
+          description: Short step title.
+      description: One step the organization administrator completes in the identity provider's console. Ordered; keys are stable across responses.
+      required:
+        - key
+        - title
+        - description
+    IdentityProviderConnectionReconcileRun:
+      type: object
+      properties:
+        applications_added:
+          type: integer
+          format: int64
+        applications_removed:
+          type: integer
+          format: int64
+        applications_seen:
+          type: integer
+          description: Applications in the snapshot after skipping Okta-internal ones.
+          format: int64
+        assignments_added:
+          type: integer
+          format: int64
+        assignments_removed:
+          type: integer
+          format: int64
+        error:
+          type: string
+          description: Typed reason when the run failed. rate_limited and okta_unreachable are retried before being recorded; superseded means a newer run applied first; discarded means the connection stopped being verified during the run; interrupted means the worker died.
+          enum:
+            - rate_limited
+            - credential_rejected
+            - okta_unreachable
+            - client_unavailable
+            - superseded
+            - discarded
+            - interrupted
+        finished_at:
+          type: string
+          description: Omitted while running.
+          format: date-time
+        id:
+          type: string
+          description: Run ID.
+          format: uuid
+        skipped_app_ids:
+          type: array
+          items:
+            type: string
+          description: Okta-internal application ids left out of the snapshot.
+        started_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          description: running, succeeded, or failed.
+          enum:
+            - running
+            - succeeded
+            - failed
+        truncated:
+          type: boolean
+          description: Whether a listing hit the page or application cap; nothing missing from a truncated listing is removed.
+      description: One applications snapshot run and the changes it applied.
+      required:
+        - id
+        - status
+        - started_at
+        - applications_seen
+        - applications_added
+        - applications_removed
+        - assignments_added
+        - assignments_removed
+        - skipped_app_ids
+        - truncated
     InferenceSpendCap:
       type: object
       properties:
@@ -78383,6 +80958,15 @@ components:
           description: The cursor to be used for the next page of results.
       required:
         - logs
+    ListBindingsResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrincipalRemoteSessionBinding'
+      required:
+        - items
     ListBuiltinExclusionsResult:
       type: object
       properties:
@@ -78847,6 +81431,21 @@ components:
       required:
         - servers
         - skills
+    ListIdentityProviderConnectionApplicationsResult:
+      type: object
+      properties:
+        applications:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdentityProviderConnectionApplication'
+          description: Applications ordered by label, live rows first. Capped at 2000 rows, the same cap a run applies.
+        last_run:
+          $ref: '#/components/schemas/IdentityProviderConnectionReconcileRun'
+        sync:
+          $ref: '#/components/schemas/IdentityProviderConnectionApplicationsSync'
+      required:
+        - applications
+        - sync
     ListInstancesResponseBody:
       type: object
       properties:
@@ -81700,6 +84299,132 @@ components:
         - total_tool_calls
         - failed_tool_calls
         - avg_latency_ms
+    OktaIdentityProviderConnection:
+      type: object
+      properties:
+        active_key:
+          $ref: '#/components/schemas/IdentityProviderConnectionActiveKey'
+        agent_app_id:
+          type: string
+          description: Admin-entered Okta application ID the AI agent is bound to. Display only.
+        agent_id:
+          type: string
+          description: Admin-entered Okta AI agent ID. Display only.
+        applications_sync:
+          $ref: '#/components/schemas/IdentityProviderConnectionApplicationsSync'
+        checklist:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdentityProviderConnectionChecklistItem'
+          description: Console steps for the connection's listing mode, in order.
+        client_id:
+          type: string
+          description: Okta application client ID. Omitted until submitted.
+        client_id_submitted:
+          type: boolean
+          description: Whether the real Okta client ID has replaced the provisioning placeholder.
+        created_at:
+          type: string
+          format: date-time
+        dpop_required:
+          type: boolean
+          description: Whether Okta issued a DPoP-bound token at the last verification.
+        granted_scopes:
+          type: array
+          items:
+            type: string
+          description: Scopes Okta granted at the last verification.
+        id:
+          type: string
+          description: Connection ID.
+          format: uuid
+        issuer_url:
+          type: string
+          description: Discovered authorization server issuer. Equal to org_url by construction.
+        jwks_url:
+          type: string
+          description: Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+        last_error:
+          type: string
+          description: 'Why the last verification did not complete: Okta rejected the credential, or could not be reached. Omitted when it completed.'
+          enum:
+            - credential_rejected
+            - okta_unreachable
+        last_verified_at:
+          type: string
+          description: ISO 8601 timestamp of the last verification that found every required scope granted. Omitted until then.
+          format: date-time
+        listing_mode:
+          type: string
+          description: 'Which checklist template applies: custom_app when the admin creates the API Services app by hand, oin when the Speakeasy OIN listing is added from the catalog.'
+          enum:
+            - custom_app
+            - oin
+        missing_scopes:
+          type: array
+          items:
+            type: string
+          description: Required scopes Okta did not grant at the last verification.
+        org_url:
+          type: string
+          description: Okta org URL, for example https://example.okta.com.
+        organization_id:
+          type: string
+          description: Organization the connection belongs to.
+        provider:
+          type: string
+          description: Identity provider; always okta.
+          enum:
+            - okta
+        required_scopes:
+          type: array
+          items:
+            type: string
+          description: Okta API scopes the integration needs.
+        status:
+          type: string
+          description: Connection state. pending until the client ID is submitted and verified; verified when every required scope is granted over DPoP; degraded when verification found gaps (see verification_reasons); revoked once the credential was withdrawn.
+          enum:
+            - pending
+            - verified
+            - degraded
+            - revoked
+        updated_at:
+          type: string
+          format: date-time
+        verification_reasons:
+          type: array
+          items:
+            type: string
+            enum:
+              - missing_scope
+              - missing_role
+              - dpop_not_bound
+              - key_not_fetched
+              - read_failed:okta.apps.read
+              - read_failed:okta.users.read
+              - read_failed:okta.groups.read
+          description: Typed reasons recorded by the last verification; empty when verified or not yet verified. missing_role is reserved for a later release.
+      description: 'An organization''s Okta connection: the service application Gram authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.'
+      required:
+        - id
+        - organization_id
+        - provider
+        - status
+        - org_url
+        - issuer_url
+        - listing_mode
+        - jwks_url
+        - client_id_submitted
+        - dpop_required
+        - required_scopes
+        - granted_scopes
+        - missing_scopes
+        - verification_reasons
+        - checklist
+        - applications_sync
+        - created_at
+        - updated_at
     OnboardingHookEvent:
       type: object
       properties:
@@ -82962,6 +85687,67 @@ components:
         - window_start
         - window_end
         - actors
+    PrincipalRemoteSessionBinding:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        principal_id:
+          type: string
+          format: uuid
+        remote_session:
+          $ref: '#/components/schemas/RemoteSession'
+        remote_session_client_id:
+          type: string
+          format: uuid
+        remote_session_id:
+          type: string
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          format: uuid
+      required:
+        - id
+        - principal_id
+        - user_session_issuer_id
+        - remote_session_client_id
+        - remote_session_id
+    ProbeURLForm:
+      type: object
+      properties:
+        url:
+          type: string
+          description: The URL of the remote MCP server to probe
+          format: uri
+      description: Form for probing a remote MCP server URL
+      required:
+        - url
+    ProbeURLResult:
+      type: object
+      properties:
+        http_status:
+          type: integer
+          description: HTTP status returned by the remote server. Required for invalid_mcp_response and present for HTTP-based unreachable outcomes.
+          format: int64
+        outcome:
+          type: string
+          description: Probe outcome.
+          enum:
+            - mcp_available
+            - authentication_required
+            - invalid_mcp_response
+            - unreachable
+        protected_resource_metadata_url:
+          type: string
+          description: Absolute HTTP(S) protected resource metadata URL advertised by a WWW-Authenticate challenge. Present only when authentication is required and the advertised URL is valid.
+          format: uri
+        reason:
+          type: string
+          description: Stable machine-readable reason code. Present only when outcome is unreachable; currently timeout, rate_limited, server_error, dns_error, tls_error, guardian_rejected, or transport_error.
+      description: Structured outcome of probing a remote MCP server URL. Variant-specific fields are populated only when applicable.
+      required:
+        - outcome
     ProductFeatures:
       type: object
       properties:
@@ -83979,6 +86765,21 @@ components:
         - id
         - decision
         - rationale
+    RecordIdentityProviderConnectionAgentRequestBody:
+      type: object
+      properties:
+        agent_app_id:
+          type: string
+          description: Okta application ID the agent is bound to. Empty clears it.
+        agent_id:
+          type: string
+          description: Okta AI agent ID. Empty clears it.
+        id:
+          type: string
+          description: Connection ID.
+          format: uuid
+      required:
+        - id
     RecordInstallIntentRequestBody:
       type: object
       properties:
@@ -84162,6 +86963,9 @@ components:
           type: string
           description: The remote_session id.
           format: uuid
+        identity_source:
+          type: string
+          description: The upstream identity interface that supplied the stored account identity, such as an ID token or userinfo response. Absent when upstream identity is unknown.
         refresh_expires_at:
           type: string
           description: Upstream refresh-token expiry. Null when the session has no refresh token.
@@ -84187,6 +86991,12 @@ components:
         updated_at:
           type: string
           format: date-time
+        upstream_display_name:
+          type: string
+          description: Stored display name of the account at the upstream provider. Absent when no upstream identity interface supplied it.
+        upstream_email:
+          type: string
+          description: Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Gram subject.
         user_session_issuer_id:
           type: string
           description: The user_session_issuer this session is bound to.
@@ -84282,7 +87092,6 @@ components:
         - remote_session_issuer_id
         - user_session_issuer_ids
         - client_id
-        - client_id_issued_at
         - created_at
         - updated_at
     RemoteSessionIssuer:
@@ -85159,6 +87968,15 @@ components:
       description: Result type for revoking all of a client's remote_sessions.
       required:
         - revoked_count
+    RevokeIdentityProviderConnectionRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Connection ID.
+          format: uuid
+      required:
+        - id
     RevokeSessionRequestBody:
       type: object
       properties:
@@ -89402,6 +92220,73 @@ components:
         - source_kind
         - source_slug
         - environment_id
+    SpendBreakdownResponse:
+      type: object
+      properties:
+        availability:
+          type: string
+          description: Whether spend estimates are available for the organization's plan
+          enum:
+            - available
+            - unsupported_plan
+        billing_cycles:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeterUsageWindow'
+          description: Trailing twelve billing-cycle date windows
+        currency:
+          type: string
+          enum:
+            - USD
+        pricing_basis:
+          type: string
+          enum:
+            - current_payg_list_price
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpendProduct'
+          description: The three metered PAYG products in stable display order when available; empty when availability is unsupported_plan
+        queried_at:
+          type: string
+          description: Retrieval timestamp used to distinguish current and future buckets
+          format: date-time
+        total_cost_usd:
+          type: string
+          description: Exact estimated total at current PAYG list prices; zero when availability is unsupported_plan, meaning no estimate was calculated
+        window:
+          $ref: '#/components/schemas/MeterUsageWindow'
+      required:
+        - availability
+        - window
+        - billing_cycles
+        - currency
+        - pricing_basis
+        - queried_at
+        - total_cost_usd
+        - products
+    SpendBucket:
+      type: object
+      properties:
+        cost_usd:
+          type: string
+          description: Exact estimated cost at current PAYG list prices
+        from:
+          type: string
+          description: Inclusive bucket boundary
+          format: date-time
+        quantity:
+          type: string
+          description: Exact integer ordinary usage quantity as a decimal string
+        to:
+          type: string
+          description: Exclusive bucket boundary
+          format: date-time
+      required:
+        - from
+        - to
+        - quantity
+        - cost_usd
     SpendCap:
       type: object
       properties:
@@ -89420,6 +92305,48 @@ components:
       required:
         - key_type
         - monthly_credits
+    SpendProduct:
+      type: object
+      properties:
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpendBucket'
+          description: Dense UTC daily product buckets, including in-progress and future days
+        cost_usd:
+          type: string
+          description: Exact estimated product cost at current PAYG list prices
+        id:
+          type: string
+          enum:
+            - agent_session_storage
+            - risk_content_scans
+            - mcp_egress
+        label:
+          type: string
+        quantity:
+          type: string
+          description: Exact integer ordinary usage quantity as a decimal string
+        rate_quantity:
+          type: string
+          description: Exact integer quantity to which rate_usd applies
+        rate_usd:
+          type: string
+          description: Exact current PAYG USD list price
+        unit:
+          type: string
+          enum:
+            - stokens
+            - bytes
+      required:
+        - id
+        - label
+        - unit
+        - quantity
+        - rate_quantity
+        - rate_usd
+        - cost_usd
+        - buckets
     SpendRule:
       type: object
       properties:
@@ -89790,6 +92717,19 @@ components:
       required:
         - id
         - feedback
+    SubmitIdentityProviderConnectionClientIDRequestBody:
+      type: object
+      properties:
+        client_id:
+          type: string
+          description: Okta application client ID (0oa...).
+        id:
+          type: string
+          description: Connection ID.
+          format: uuid
+      required:
+        - id
+        - client_id
     SubmitRiskBlockFeedbackRequestBody:
       type: object
       properties:
@@ -89958,6 +92898,15 @@ components:
         - summary
         - impact
         - cached
+    SyncIdentityProviderConnectionApplicationsRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Connection ID.
+          format: uuid
+      required:
+        - id
     SyncedAgentUser:
       type: object
       properties:
@@ -90186,6 +93135,9 @@ components:
           type: integer
           description: The number of tool calls included in the tier
           format: int64
+        mcp_egress_price_per_gib_usd:
+          type: string
+          description: Exact USD list price per GiB of MCP gateway egress (optional)
         price_per_additional_server:
           type: number
           description: The price per additional server
@@ -90194,6 +93146,9 @@ components:
           type: number
           description: The price per additional tool call
           format: double
+        risk_scan_price_per_million_usd:
+          type: string
+          description: Exact USD list price per million tokens scanned for risk (optional)
         tum_price_per_million_usd:
           type: string
           description: Exact USD list price per million tokens under management (optional)
@@ -91117,6 +94072,7 @@ components:
             - email
             - external_user_id
             - user_id
+            - agent_id
             - unknown
         user_label:
           type: string
@@ -91158,6 +94114,7 @@ components:
             - email
             - external_user_id
             - user_id
+            - agent_id
             - unknown
       description: Typed user identity filter
       required:
@@ -91180,6 +94137,7 @@ components:
             - email
             - external_user_id
             - user_id
+            - agent_id
             - unknown
         user_label:
           type: string
@@ -91223,6 +94181,7 @@ components:
             - email
             - external_user_id
             - user_id
+            - agent_id
             - unknown
         user_label:
           type: string
@@ -91261,6 +94220,7 @@ components:
             - email
             - external_user_id
             - user_id
+            - agent_id
             - unknown
         user_label:
           type: string
@@ -91317,6 +94277,7 @@ components:
             - email
             - external_user_id
             - user_id
+            - agent_id
             - unknown
         user_label:
           type: string
@@ -93274,6 +96235,31 @@ components:
           $ref: '#/components/schemas/PromptTemplate'
       required:
         - template
+    UpdateQueryRequestBody:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Catalog dataset the query asks
+          minLength: 1
+        id:
+          type: string
+          description: The query to update
+          format: uuid
+        name:
+          type: string
+          description: Display name, at most 200 characters
+          minLength: 1
+          maxLength: 200
+        spec:
+          type: object
+          description: Builder state. Validated against the catalog on save.
+          additionalProperties: true
+      required:
+        - id
+        - name
+        - dataset
+        - spec
     UpdateRemoteSessionClientForm:
       type: object
       properties:
@@ -93625,6 +96611,7 @@ components:
           enum:
             - product_telemetry
             - risk_findings
+            - tool_call_logs
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -94945,6 +97932,15 @@ components:
       description: Result of a live probe that Gram can assume the identity the credential names.
       required:
         - verified
+    VerifyIdentityProviderConnectionRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Connection ID.
+          format: uuid
+      required:
+        - id
     VerifyKmsKeyResult:
       type: object
       properties:
@@ -95025,7 +98021,7 @@ components:
           type: string
           description: The URL of the remote MCP server to probe
           format: uri
-      description: Form for probing a remote MCP server URL
+      description: Legacy form for probing a remote MCP server URL
       required:
         - url
         - transport_type
@@ -95050,7 +98046,7 @@ components:
         verified:
           type: boolean
           description: Whether the URL responded in a way consistent with a remote MCP server
-      description: Outcome of a remote MCP server URL verification
+      description: Legacy outcome of a remote MCP server URL verification
       required:
         - verified
         - message
@@ -95133,6 +98129,7 @@ components:
     KillswitchHistoryAction: {type: string, enum: [created, edited, lifted, expired, restored]}
     KillswitchOverlapStatus: {type: string, enum: [active, scheduled]}
     KillswitchConflictName: {type: string, enum: [operation_conflict, version_conflict]}
+    AnalyticsFilterOperator: {type: string, enum: [equals, in]}
     KillswitchScopeAllServersType: {type: string, enum: [all_servers]}
     KillswitchScopeSelectedServersType: {type: string, enum: [selected_servers]}
     KillswitchScheduleStartNow: {type: string, enum: [now]}
@@ -95236,6 +98233,8 @@ tags:
     description: Human-only management of first-class agent principals.
   - name: aiIntegrations
     description: Manage organization-level AI provider integrations.
+  - name: analytics
+    description: Query agent session data by dataset and field, never by table or SQL. The catalog describe serves is the contract.
   - name: assets
     description: Manages assets used by Gram projects.
   - name: organizationAssets
@@ -95266,6 +98265,8 @@ tags:
     description: Manage custom domains for gram.
   - name: environments
     description: Managing toolset environments.
+  - name: explore
+    description: 'Queries: the saved questions Explore keeps. Explore''s only server-side surface; everything it shows comes from the analytics service.'
   - name: externalCredentials
     description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
   - name: externalKeys
@@ -95280,6 +98281,8 @@ tags:
     description: Receives hook events from coding assistants for tool usage observability.
   - name: identity
     description: Resolves the identifiers Gram records activity under into a single identity.
+  - name: identityProviderConnections
+    description: 'Manage the organization''s Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.'
   - name: instances
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations

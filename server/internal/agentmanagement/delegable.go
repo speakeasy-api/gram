@@ -2,10 +2,13 @@ package agentmanagement
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -44,6 +47,27 @@ func (s *Service) ListDelegableGrants(ctx context.Context, payload *gen.ListDele
 		if agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
 			return oops.C(oops.CodeForbidden)
 		}
+		var constraint authz.Selector
+		if payload.ToolsetID != nil {
+			resourceID, err := uuid.Parse(*payload.ToolsetID)
+			if err != nil {
+				return oops.C(oops.CodeBadRequest)
+			}
+			// The wire field retains its legacy name, but inventory normalizes
+			// toolset-backed servers to their toolset ID and remote servers to
+			// their MCP server ID. Resolve both through the existing RBAC lookup.
+			projectID, err := accessrepo.New(tx).FindMCPResourceProject(ctx, accessrepo.FindMCPResourceProjectParams{
+				ResourceID: resourceID, OrganizationID: human.Auth.ActiveOrganizationID,
+			})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return oops.C(oops.CodeNotFound)
+			}
+			if err != nil {
+				return fmt.Errorf("load delegable MCP resource: %w", err)
+			}
+			constraint = authz.NewSelector(authz.ScopeMCPConnect, resourceID.String())
+			constraint[authz.SelectorKeyProjectID] = projectID.String()
+		}
 		agentPolicy, err := runtimepolicy.LoadAgentPolicy(ctx, tx, human.Auth.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()))
 		if err != nil {
 			return fmt.Errorf("load delegable agent policy: %w", err)
@@ -56,7 +80,7 @@ func (s *Service) ListDelegableGrants(ctx context.Context, payload *gen.ListDele
 		if err != nil {
 			return fmt.Errorf("load delegable owner policy: %w", err)
 		}
-		grants, err := runtimepolicy.DelegableGrants(agentPolicy, ownerPolicy, human.grants)
+		grants, err := runtimepolicy.DelegableGrants(agentPolicy, ownerPolicy, human.grants, constraint)
 		if err != nil {
 			return fmt.Errorf("derive delegable grants: %w", err)
 		}

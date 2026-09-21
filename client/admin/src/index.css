@@ -81,6 +81,9 @@
   --border: hsl(0 0% 86%);
   --input: hsl(0 0% 73%);
   --ring: hsl(215 71% 40%);
+  --billing-storage: hsl(215 78% 46%);
+  --billing-risk: hsl(275 65% 48%);
+  --billing-mcp: hsl(35 90% 40%);
 
   --sidebar: hsl(0 0% 100%);
   --sidebar-foreground: hsl(0 0% 7%);
@@ -114,6 +117,9 @@
     --border: hsl(0 0% 33%);
     --input: hsl(0 0% 33%);
     --ring: hsl(215 100% 77%);
+    --billing-storage: hsl(215 90% 70%);
+    --billing-risk: hsl(275 85% 74%);
+    --billing-mcp: hsl(35 90% 65%);
 
     --sidebar: hsl(0 0% 7%);
     --sidebar-foreground: hsl(0 0% 100%);

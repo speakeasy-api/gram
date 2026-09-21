@@ -2,16 +2,18 @@ package plugins_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
-	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -424,7 +426,7 @@ func TestListPluginPublishCandidates_IncludesNeverPublishedDefaultPlugin(t *test
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
-	require.Equal(t, authCtx.UserID, candidates[0].CreatedByUserID)
+	require.Equal(t, authCtx.ActiveOrganizationID, candidates[0].OrganizationID)
 }
 
 func TestListPluginPublishCandidates_ExcludesProjectWithoutDefaultPlugin(t *testing.T) {
@@ -475,178 +477,30 @@ func TestListPluginPublishCandidates_IncludesConnectedProjectWithoutDefaultPlugi
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
-	require.Equal(t, authCtx.UserID, candidates[0].CreatedByUserID)
+	require.Equal(t, authCtx.ActiveOrganizationID, candidates[0].OrganizationID)
 }
 
-func TestListPluginPublishCandidates_FallsBackWhenPluginsMCPKeyHasPlaceholderCreator(t *testing.T) {
+func TestPublishProject_NonMemberActorPublishesAsMember(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestPluginsService(t)
-
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	queries := pluginsrepo.New(ti.conn)
-
-	_, err := queries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-	})
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Actor Test"})
 	require.NoError(t, err)
-
-	keyHash, err := auth.GetAPIKeyHash("gram_local_" + uuid.NewString())
-	require.NoError(t, err)
-	_, err = keysrepo.New(ti.conn).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		ProjectID:       uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		CreatedByUserID: "system",
-		Name:            "plugins-mcp-20260708-120102-abc123",
-		KeyPrefix:       "gram_local_abcde",
-		KeyHash:         keyHash,
-		Scopes:          []string{"consumer"},
-	})
-	require.NoError(t, err)
-
-	candidates, err := queries.ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{
-		AfterProjectID: uuid.Nil,
-		ResultLimit:    100,
-	})
-	require.NoError(t, err)
-	require.Len(t, candidates, 1)
-	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
-	require.Equal(t, authCtx.UserID, candidates[0].CreatedByUserID)
-}
-
-func TestListPluginPublishCandidates_FallsBackWhenNewestKeyCreatorLeftOrg(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestPluginsService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	queries := pluginsrepo.New(ti.conn)
-
-	_, err := queries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
+	toolset := createTestToolset(t, ctx, ti.conn, "actor-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Actor Server"),
+		Policy:      "required",
+		SortOrder:   0,
 	})
 	require.NoError(t, err)
 
 	_, err = usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
-		ID:          "user_departed_member",
-		Email:       "departed-member@example.test",
-		DisplayName: "Departed",
-		PhotoUrl:    pgtype.Text{},
-		Admin:       false,
-	})
-	require.NoError(t, err)
-	require.NoError(t, testrepo.New(ti.conn).CreateOrganizationUserRelationshipFixture(ctx, testrepo.CreateOrganizationUserRelationshipFixtureParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		UserID:         pgtype.Text{String: "user_departed_member", Valid: true},
-	}))
-
-	keyHash, err := auth.GetAPIKeyHash("gram_local_" + uuid.NewString())
-	require.NoError(t, err)
-	_, err = keysrepo.New(ti.conn).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		ProjectID:       uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		CreatedByUserID: "user_departed_member",
-		Name:            "plugins-mcp-20260708-120102-abc123",
-		KeyPrefix:       "gram_local_abcde",
-		KeyHash:         keyHash,
-		Scopes:          []string{"consumer"},
-	})
-	require.NoError(t, err)
-
-	require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteOrganizationUserRelationship(ctx, testrepo.ForceSoftDeleteOrganizationUserRelationshipParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		UserID:         pgtype.Text{String: "user_departed_member", Valid: true},
-	}))
-
-	candidates, err := queries.ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{
-		AfterProjectID: uuid.Nil,
-		ResultLimit:    100,
-	})
-	require.NoError(t, err)
-	require.Len(t, candidates, 1)
-	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
-	require.Equal(t, authCtx.UserID, candidates[0].CreatedByUserID)
-}
-
-func TestListPluginPublishCandidates_EmptyActorWhenOrgHasNoMember(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestPluginsService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	queries := pluginsrepo.New(ti.conn)
-
-	_, err := queries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
-
-	require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx, authCtx.ActiveOrganizationID))
-
-	candidates, err := queries.ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{
-		AfterProjectID: uuid.Nil,
-		ResultLimit:    100,
-	})
-	require.NoError(t, err)
-	require.Len(t, candidates, 1)
-	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
-	require.Empty(t, candidates[0].CreatedByUserID)
-}
-
-func TestPublishProject_RejectsPlaceholderCreator(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestPluginsService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	_, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
-		ProjectID:       *authCtx.ProjectID,
-		CreatedByUserID: "system",
-		CommitMessage:   "Update plugin packages",
-		SkipIfUnchanged: true,
-	})
-	require.Error(t, err)
-	require.ErrorContains(t, err, "real user")
-}
-
-func TestPublishProject_RejectsUnknownCreator(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestPluginsService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	_, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
-		ProjectID:       *authCtx.ProjectID,
-		CreatedByUserID: "user_does_not_exist",
-		CommitMessage:   "Update plugin packages",
-		SkipIfUnchanged: true,
-	})
-	require.Error(t, err)
-	require.ErrorContains(t, err, "not a member of the organization")
-}
-
-func TestPublishProject_RejectsForeignOrgCreator(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestPluginsService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	_, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
 		ID:          "user_foreign_org",
 		Email:       "foreign-org-creator@example.test",
 		DisplayName: "Foreign",
@@ -655,12 +509,67 @@ func TestPublishProject_RejectsForeignOrgCreator(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+	mintedBy := func() []string {
+		keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+		require.NoError(t, err)
+		creators := make([]string, 0, len(keys))
+		for _, key := range keys {
+			if strings.HasPrefix(key.Name, "plugins-") {
+				creators = append(creators, key.CreatedByUserID)
+			}
+		}
+		return creators
+	}
+
+	// A user from another organization (a Speakeasy admin editing this one)
+	// triggers the publish, but the keys it mints must belong to a member of
+	// this organization or GetAPIKeyByKeyHash never finds them.
+	result, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
 		ProjectID:       *authCtx.ProjectID,
 		CreatedByUserID: "user_foreign_org",
 		CommitMessage:   "Update plugin packages",
 		SkipIfUnchanged: true,
 	})
-	require.Error(t, err)
-	require.ErrorContains(t, err, "not a member of the organization")
+	require.NoError(t, err)
+	require.False(t, result.Skipped)
+	require.True(t, mock.pushFilesCalled)
+	creators := mintedBy()
+	require.NotEmpty(t, creators)
+	for _, creator := range creators {
+		require.Equal(t, authCtx.UserID, creator)
+	}
+
+	// The historical placeholder resolves the same way instead of being
+	// refused.
+	result, err = ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: "system",
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: false,
+	})
+	require.NoError(t, err)
+	require.False(t, result.Skipped)
+	for _, creator := range mintedBy() {
+		require.Equal(t, authCtx.UserID, creator)
+	}
+}
+
+func TestPublishProject_RejectsWhenOrganizationHasNoMember(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx, authCtx.ActiveOrganizationID))
+
+	_, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	})
+	require.ErrorIs(t, err, plugins.ErrPluginAPIKeyCreatorNotMember)
+	require.False(t, mock.pushFilesCalled)
 }

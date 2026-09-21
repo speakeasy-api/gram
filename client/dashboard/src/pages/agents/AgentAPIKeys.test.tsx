@@ -1,3 +1,8 @@
+import { queryKeyRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { queryKeyRemoteSessions } from "@gram/client/react-query/remoteSessions.js";
+import { queryKeyRemoteSessionsListBindings } from "@gram/client/react-query/remoteSessionsListBindings.js";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import { useEffect, useState } from "react";
 import {
   cleanup,
   fireEvent,
@@ -17,6 +22,9 @@ import { AgentAPIKeys } from "./AgentAPIKeys";
 import { validateAgentAPIKeyName } from "./agent-api-key-grants";
 
 const mocks = vi.hoisted(() => ({
+  serverScoping: false,
+  selectedServerId: "server_one",
+  selectedIssuerId: undefined as string | undefined,
   list: vi.fn(),
   create: vi.fn(),
   revoke: vi.fn(),
@@ -29,6 +37,19 @@ const mocks = vi.hoisted(() => ({
   user: "user_example",
   projects: [{ id: "project_one", name: "Project one", slug: "project-one" }],
 }));
+// Legacy selector/mutation regression cases deliberately isolate the generic
+// grant editor. MCP-centered integration cases below enable the real scoping
+// adapter; its complete narrowing matrix also has dedicated unit tests.
+vi.mock("./agent-key-server-grants", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./agent-key-server-grants")>();
+  return {
+    narrowGrantsToServers: (
+      ...args: Parameters<typeof actual.narrowGrantsToServers>
+    ) =>
+      mocks.serverScoping ? actual.narrowGrantsToServers(...args) : args[0],
+  };
+});
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: mocks.org, projects: mocks.projects }),
   useSession: () => ({ user: { id: mocks.user } }),
@@ -81,6 +102,92 @@ vi.mock("@gram/client/react-query/listMcpServerToolMetadata.js", () => ({
       ...options,
     }),
 }));
+// Account/server transport is covered separately. Keep these tests focused on
+// the existing delegation ceiling, mutations, and credential lifetime.
+vi.mock("./AgentKeyServers", () => ({
+  AgentKeyServers: ({
+    step,
+    onChange,
+    onReady,
+    onInventory,
+    discoveryComplete,
+    discoveryError,
+    grants,
+  }: {
+    onInventory: (servers: unknown[]) => void;
+    discoveryComplete: boolean;
+    discoveryError: boolean;
+    grants: unknown[];
+    step: number;
+    onChange: (servers: unknown[]) => void;
+    onReady: (ready: boolean) => void;
+  }) => {
+    useEffect(() => {
+      onInventory([
+        {
+          id: mocks.selectedServerId,
+          resourceId: mocks.selectedServerId,
+          projectId: "project_one",
+          projectSlug: "project-one",
+          kind: "Toolset",
+          name: "Server one",
+        },
+      ]);
+    }, [onInventory]);
+    useEffect(() => {
+      onReady(true);
+    }, [step, onReady]);
+    return (
+      <button
+        data-discovery-state={
+          discoveryComplete
+            ? grants.length
+              ? "ready"
+              : "empty"
+            : discoveryError
+              ? "error"
+              : "loading"
+        }
+        onClick={() =>
+          onChange([
+            {
+              id: mocks.selectedServerId,
+              resourceId: mocks.selectedServerId,
+              issuerId: mocks.selectedIssuerId,
+              name: "Server one",
+              projectId: "project_one",
+              projectSlug: "project-one",
+              kind: "Toolset",
+              endpoints: ["https://example.test/mcp/server-one"],
+            },
+          ])
+        }
+      >
+        Choose fixture server
+      </button>
+    );
+  },
+}));
+function KeyPage({ agent }: { agent: ManagedAgent }) {
+  const [creation, setCreation] = useState(false);
+  const [busy, setBusy] = useState(false);
+  return (
+    <>
+      {creation && (
+        <button disabled={busy} onClick={() => setCreation(false)}>
+          Back to agent
+        </button>
+      )}
+      <AgentAPIKeys
+        agent={agent}
+        creation={creation}
+        onCreate={() => setCreation(true)}
+        onDone={() => setCreation(false)}
+        onBusy={setBusy}
+      />
+    </>
+  );
+}
 const agent: ManagedAgent = {
   id: "agent_example",
   name: "Example",
@@ -99,7 +206,16 @@ const key = {
 const grant = {
   effect: "allow",
   scope: "mcp:connect",
-  selector: { resourceKind: "mcp", resourceId: "example" },
+  selector: { resourceKind: "mcp", resourceId: "server_one" },
+};
+const creationGrant = {
+  ...grant,
+  selector: {
+    resourceKind: "mcp",
+    resourceId: "server_one",
+    projectId: "project_one",
+    tool: "search",
+  },
 };
 function setup(current = agent) {
   const client = new QueryClient({
@@ -107,7 +223,12 @@ function setup(current = agent) {
   });
   const view = (value: ManagedAgent) => (
     <QueryClientProvider client={client}>
-      <AgentAPIKeys agent={value} />
+      <TooltipProvider>
+        <KeyPage
+          key={`${mocks.org}:${mocks.user}:${value.id}:${value.permissions.authorize}`}
+          agent={value}
+        />
+      </TooltipProvider>
     </QueryClientProvider>
   );
   const result = render(view(current));
@@ -117,36 +238,37 @@ function setup(current = agent) {
     change: (value = current) => result.rerender(view(value)),
   };
 }
-function optionText(select: HTMLElement): string {
-  return Array.from(
-    select.querySelectorAll("option"),
-    (option) => option.textContent ?? "",
-  ).join(" ");
-}
-const twoProjects = [
-  { id: "project_one", name: "Project one", slug: "project-one" },
-  { id: "project_two", name: "Project two", slug: "project-two" },
-];
-const twoServers = [
-  {
-    id: "server_one",
-    name: "Server one",
-    slug: "server-one",
-    projectId: "project_one",
-    tools: [{ id: "tool_one", name: "search", type: "http" }],
-  },
-  {
-    id: "server_two",
-    name: "Server two",
-    slug: "server-two",
-    projectId: "project_two",
-    tools: [{ id: "tool_two", name: "lookup", type: "http" }],
-  },
-];
-async function openCreate() {
+async function beginCreate() {
   fireEvent.click(
     await screen.findByRole("button", { name: "Create API key" }),
   );
+  if (!screen.queryByRole("button", { name: "Choose fixture server" })) return;
+  fireEvent.click(
+    screen.getByRole("button", { name: "Choose fixture server" }),
+  );
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+}
+function submitKey() {
+  const review = screen.queryByRole("button", { name: "Review key" });
+  if (review) fireEvent.click(review);
+  const create = screen.queryByRole("button", { name: "Create key" });
+  if (create) fireEvent.click(create);
+}
+async function openCreate() {
+  await beginCreate();
   fireEvent.change(screen.getByLabelText("Key name"), {
     target: { value: "New key" },
   });
@@ -154,13 +276,20 @@ async function openCreate() {
     expect(screen.queryByText("Loading delegable permissions…")).toBeNull(),
   );
 }
-async function selectedCreate() {
+async function createWithGrant() {
   await openCreate();
-  fireEvent.click(await screen.findByRole("checkbox", { name: /mcp:connect/ }));
-  fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+  submitKey();
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  HTMLElement.prototype.scrollIntoView = vi.fn<() => void>();
+  HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
+  HTMLElement.prototype.releasePointerCapture =
+    vi.fn<(pointerId: number) => void>();
+  mocks.serverScoping = false;
+  mocks.selectedServerId = "server_one";
+  mocks.selectedIssuerId = undefined;
   mocks.flag = "enabled";
   mocks.org = "org_example";
   mocks.user = "user_example";
@@ -170,7 +299,7 @@ beforeEach(() => {
   mocks.list.mockResolvedValue({ keys: [key] });
   mocks.create.mockResolvedValue({ ...key, key: "secret_example_once" });
   mocks.revoke.mockResolvedValue(undefined);
-  mocks.listDelegableGrants.mockResolvedValue([grant]);
+  mocks.listDelegableGrants.mockResolvedValue([creationGrant]);
   mocks.toolsets.mockResolvedValue({
     toolsets: [
       {
@@ -192,6 +321,123 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Agent API keys", () => {
+  it("reviews a confirmed zero-client issuer without claiming account identity is unavailable", async () => {
+    mocks.selectedIssuerId = "issuer_example";
+    const { client } = setup();
+    client.setQueryData(
+      [
+        ...queryKeyRemoteSessionClients({
+          gramProject: "project-one",
+          userSessionIssuerId: "issuer_example",
+        }),
+        { organizationId: mocks.org, userId: mocks.user },
+        "all-pages",
+      ],
+      [],
+    );
+    await openCreate();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Review key" }));
+    expect(
+      await screen.findByText("No connected account required."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Account identity unavailable/)).toBeNull();
+  });
+  it.each([true, false])(
+    "only carries a bound canonical upstream identity into review (canonical: %s)",
+    async (canonical) => {
+      mocks.selectedIssuerId = "issuer_example";
+      const { client } = setup();
+      const request = {
+        gramProject: "project-one",
+        principalId: agent.id,
+        userSessionIssuerId: "issuer_example",
+      };
+      const ownerScope = { organizationId: mocks.org, userId: mocks.user };
+      client.setQueryData(
+        [...queryKeyRemoteSessions(request), ownerScope, "all-pages"],
+        [
+          {
+            id: "session_example",
+            remoteSessionClientId: "client_example",
+            scopes: [],
+            upstreamDisplayName: "Example upstream user",
+            upstreamEmail: "upstream@example.test",
+            subjectEmail: "gram@example.test",
+          },
+        ],
+      );
+      client.setQueryData(
+        [...queryKeyRemoteSessionsListBindings(request), ownerScope],
+        {
+          items: [
+            {
+              remoteSessionId: "session_example",
+              remoteSession: canonical
+                ? {
+                    upstreamDisplayName: "Example upstream user",
+                    upstreamEmail: "upstream@example.test",
+                  }
+                : undefined,
+            },
+          ],
+        },
+      );
+      await openCreate();
+      fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Review key" }));
+      if (canonical) {
+        expect(
+          await screen.findByText(
+            "Example upstream user · upstream@example.test",
+          ),
+        ).toBeTruthy();
+      } else {
+        expect(
+          screen.queryByText("Example upstream user · upstream@example.test"),
+        ).toBeNull();
+        expect(screen.getByText(/Account identity unavailable/)).toBeTruthy();
+      }
+      expect(screen.queryByText(/gram@example.test/)).toBeNull();
+      expect(mocks.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("reviews the key and selected server before creating a credential", async () => {
+    setup();
+    await openCreate();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Review key" }));
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "Review your key" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("region", { name: "Key review" }).textContent,
+    ).toContain("Server one");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    await screen.findByText("secret_example_once");
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+  it("does not offer creation again when success omits the secret", async () => {
+    mocks.create.mockResolvedValue(key);
+    setup();
+    await createWithGrant();
+    await screen.findByText(
+      /The key was created but its secret was not returned/,
+    );
+    expect(screen.queryByRole("button", { name: "Create key" })).toBeNull();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Copy API key",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
   it("requires authorize to list or issue credentials", () => {
     setup({
       ...agent,
@@ -249,25 +495,51 @@ describe("Agent API keys", () => {
       { sessionHeaderGramSession: "" },
     );
   });
-  it("requires at least one permission without an empty-key bypass", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([]);
+  it("blocks header navigation during submission and the deferred post-issue refetch", async () => {
+    let finishCreate!: (value: typeof key & { key: string }) => void;
+    let finishRefetch!: (value: { keys: (typeof key)[] }) => void;
+    mocks.create.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishCreate = resolve;
+        }),
+    );
     setup();
     await openCreate();
-    await screen.findByText(/No permissions can be delegated to this agent/);
+    mocks.list.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishRefetch = resolve;
+        }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    submitKey();
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
     expect(
-      screen.queryByRole("checkbox", { name: /Create without permissions/ }),
-    ).toBeNull();
+      screen.getByRole("button", { name: "Back to agent" }),
+    ).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByRole("button", { name: "Back to agent" }));
+    expect(screen.getByRole("button", { name: "Creating…" })).toBeTruthy();
+    finishCreate({ ...key, key: "secret_example_once" });
+    await screen.findByText("secret_example_once");
+    await waitFor(() => expect(finishRefetch).toBeTypeOf("function"));
     expect(
-      (screen.getByRole("button", { name: "Create key" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-    fireEvent.submit(screen.getByLabelText("Key name").closest("form")!);
-    expect(mocks.create).not.toHaveBeenCalled();
+      screen.getByRole("button", { name: "Back to agent" }),
+    ).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByRole("button", { name: "Back to agent" }));
+    expect(screen.getByText("secret_example_once")).toBeTruthy();
+    finishRefetch({ keys: [key] });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Back to agent" }),
+      ).toHaveProperty("disabled", false),
+    );
+    expect(screen.getByText("secret_example_once")).toBeTruthy();
   });
   it("reveals secrets once without copying them to query cache or storage", async () => {
     const storage = vi.spyOn(Storage.prototype, "setItem");
     const { client } = setup();
-    await selectedCreate();
+    await createWithGrant();
     await screen.findByText("secret_example_once");
     expect(
       JSON.stringify(
@@ -291,7 +563,7 @@ describe("Agent API keys", () => {
     "clears a revealed secret on %s change",
     async (kind) => {
       const { change } = setup();
-      await selectedCreate();
+      await createWithGrant();
       await screen.findByText("secret_example_once");
       if (kind === "organization") mocks.org = "org_other";
       change(kind === "agent" ? { ...agent, id: "agent_other" } : agent);
@@ -307,38 +579,16 @@ describe("Agent API keys", () => {
         }),
     );
     const { change } = setup();
-    await selectedCreate();
+    await createWithGrant();
     await waitFor(() => expect(mocks.create).toHaveBeenCalled());
     change({ ...agent, id: "agent_other" });
     resolve({ ...key, key: "secret_example_once" });
     await screen.findByText("Example key");
     expect(screen.queryByText("secret_example_once")).toBeNull();
   });
-  it("retains a known key and open revocation when rollout is disabled", async () => {
-    const { change, client } = setup();
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Revoke API key" }),
-    );
-    mocks.flag = "disabled";
-    change();
-    expect(screen.getByText("Example key")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Confirm revoke" })).toBeTruthy();
-    mocks.list.mockClear();
-    await client.invalidateQueries();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm revoke" }));
-    await waitFor(() => expect(screen.queryByText("Example key")).toBeNull());
-    expect(mocks.revoke).toHaveBeenCalledWith(
-      { security: { sessionHeaderGramSession: "" }, request: { id: key.id } },
-      expect.anything(),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Create API key" }));
-    expect(mocks.list).not.toHaveBeenCalled();
-    expect(mocks.create).not.toHaveBeenCalled();
-    expect(mocks.listDelegableGrants).not.toHaveBeenCalled();
-  });
   it("closes creation and clears the secret on rollout loss", async () => {
     const { change } = setup();
-    await selectedCreate();
+    await createWithGrant();
     await screen.findByText("secret_example_once");
     mocks.flag = "disabled";
     change();
@@ -357,7 +607,7 @@ describe("Agent API keys", () => {
         }),
     );
     const { change } = setup();
-    await selectedCreate();
+    await createWithGrant();
     await waitFor(() => expect(mocks.create).toHaveBeenCalled());
     mocks.flag = "disabled";
     change();
@@ -398,39 +648,37 @@ describe("Agent API keys", () => {
       ).toBeNull();
     },
   );
-  it("stops discovery refetch and creation on rollout loss", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([]);
-    const { change, client } = setup();
-    await openCreate();
-    await screen.findByText(/No permissions can be delegated to this agent/);
-    mocks.flag = "disabled";
-    change();
-    mocks.listDelegableGrants.mockClear();
-    mocks.list.mockClear();
-    await client.invalidateQueries();
-    fireEvent.click(screen.getByRole("button", { name: "Create API key" }));
-    expect(screen.queryByLabelText("Key name")).toBeNull();
-    expect(mocks.listDelegableGrants).not.toHaveBeenCalled();
-    expect(mocks.list).not.toHaveBeenCalled();
-    expect(mocks.create).not.toHaveBeenCalled();
-  });
   it("loads candidates only once creation opens, with nothing selected by default", async () => {
     mocks.listDelegableGrants.mockResolvedValue([
       {
         effect: "allow",
         scope: "mcp:connect",
-        selector: { resourceKind: "mcp", resourceId: "example" },
+        selector: { resourceKind: "mcp", resourceId: "server_one" },
       },
     ]);
     setup();
     expect(mocks.listDelegableGrants).not.toHaveBeenCalled();
     await openCreate();
     const checkbox = await screen.findByRole("checkbox", {
-      name: /mcp:connect/,
+      name: /Use tools/,
     });
-    expect((checkbox as HTMLInputElement).checked).toBe(false);
+    expect(checkbox.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("button", { name: "Review key" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    fireEvent.submit(screen.getByLabelText("Key name").closest("form")!);
+    expect(mocks.create).not.toHaveBeenCalled();
     fireEvent.click(checkbox);
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    fireEvent.click(checkbox);
+    expect(screen.getByRole("button", { name: "Review key" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    fireEvent.submit(screen.getByLabelText("Key name").closest("form")!);
+    expect(mocks.create).not.toHaveBeenCalled();
+    fireEvent.click(checkbox);
+    submitKey();
     await screen.findByText("secret_example_once");
     expect(
       mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
@@ -438,24 +686,20 @@ describe("Agent API keys", () => {
       {
         effect: "allow",
         scope: "mcp:connect",
-        selector: { resourceKind: "mcp", resourceId: "example" },
+        selector: { resourceKind: "mcp", resourceId: "server_one" },
       },
     ]);
   });
   it.each(["disabled", "missing", "error", "loading"])(
-    "distinguishes flag %s from empty",
-    (flag) => {
-      mocks.flag = flag;
+    "does not expose credential UI or discovery when flag is %s",
+    async (status) => {
+      mocks.flag = status;
       setup();
-      expect(mocks.list).not.toHaveBeenCalled();
-      expect(screen.queryByText("No API keys yet")).toBeNull();
       expect(
-        (
-          screen.getByRole("button", {
-            name: "Create API key",
-          }) as HTMLButtonElement
-        ).disabled,
-      ).toBe(true);
+        screen.queryByRole("button", { name: "Create API key" }),
+      ).toBeNull();
+      expect(mocks.listDelegableGrants).not.toHaveBeenCalled();
+      expect(mocks.list).not.toHaveBeenCalled();
     },
   );
   it.each([404, 500])(
@@ -475,11 +719,12 @@ describe("Agent API keys", () => {
   it("explains issuance validation failures without displaying server secrets", async () => {
     mocks.create.mockRejectedValue(new Error("secret_server_error"));
     setup();
-    await selectedCreate();
-    expect(await screen.findByRole("alert")).toHaveProperty(
-      "textContent",
-      expect.stringContaining("owner's live permissions"),
-    );
+    await createWithGrant();
+    expect(
+      await screen.findByText(
+        /Could not create API key.*owner's live permissions/,
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText("secret_server_error")).toBeNull();
   });
   it("reports revoke failures and keeps confirmation available", async () => {
@@ -498,26 +743,13 @@ describe("Agent API keys", () => {
     mocks.listDelegableGrants.mockResolvedValue([{ ...grant }]);
     setup();
     await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: /Use tools/ }));
+    submitKey();
     await screen.findByText("secret_example_once");
     const payload = mocks.create.mock.calls[0]?.[0].request.createKeyForm;
     expect(payload).not.toHaveProperty("projectId");
     expect(payload.scopes).toEqual([]);
     expect(payload.requestedGrants).toEqual([grant]);
-  });
-  it("does not treat a failed discovery read as an empty candidate set", async () => {
-    mocks.listDelegableGrants.mockRejectedValue(new Error("forbidden"));
-    setup();
-    await openCreate();
-    await screen.findByText(/Delegable permissions could not be loaded/);
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    expect(mocks.create).not.toHaveBeenCalled();
-    expect(
-      screen.getByRole("button", { name: "Retry permissions" }),
-    ).toBeTruthy();
   });
   it.each([
     " plugins-example ",
@@ -529,13 +761,11 @@ describe("Agent API keys", () => {
     fireEvent.change(screen.getByLabelText("Key name"), {
       target: { value: name },
     });
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    submitKey();
+    expect(screen.getByRole("alert").textContent).toMatch(
+      /reserved|255 Unicode characters/,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    expect(
-      screen.getByLabelText(/reserved|255 Unicode characters/),
-    ).toBeTruthy();
     expect(mocks.create).not.toHaveBeenCalled();
   });
   it("submits a trimmed name at the Unicode codepoint limit", async () => {
@@ -544,10 +774,8 @@ describe("Agent API keys", () => {
     fireEvent.change(screen.getByLabelText("Key name"), {
       target: { value: `  ${"😀".repeat(255)}  ` },
     });
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    submitKey();
     await screen.findByText("secret_example_once");
     expect(mocks.create.mock.calls[0]?.[0].request.createKeyForm.name).toBe(
       "😀".repeat(255),
@@ -563,178 +791,6 @@ describe("Agent API keys", () => {
       "Enter a key name",
     );
   });
-  it("blocks editing and issuance of cached candidates while a refetch is pending", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([grant]);
-    const { client } = setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    let resolveRefetch!: (value: unknown) => void;
-    mocks.listDelegableGrants.mockImplementation(
-      () =>
-        new Promise((done) => {
-          resolveRefetch = done;
-        }),
-    );
-    void client.invalidateQueries({ queryKey: ["agent-delegable-grants"] });
-    await screen.findByText("Loading delegable permissions…");
-    // The cached candidate is still in the query cache, but the current read
-    // has not confirmed it, so it must not be editable or submittable.
-    expect(screen.queryByRole("checkbox", { name: /mcp:connect/ })).toBeNull();
-    expect(
-      (
-        screen.getByRole("button", {
-          name: "Create key",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
-    fireEvent.submit(screen.getByLabelText("Key name").closest("form")!);
-    expect(mocks.create).not.toHaveBeenCalled();
-    expect(
-      screen.getByLabelText(/Delegable permissions are still loading/),
-    ).toBeTruthy();
-
-    resolveRefetch([grant]);
-    const restored = await screen.findByRole("checkbox", {
-      name: /mcp:connect/,
-    });
-    expect((restored as HTMLInputElement).checked).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    await screen.findByText("secret_example_once");
-    expect(
-      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
-    ).toEqual([grant]);
-  });
-  it("never submits a stale selection the refreshed candidates no longer contain", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([grant]);
-    const { client } = setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    const narrowed = {
-      ...grant,
-      scope: "mcp:read",
-      selector: { resourceKind: "mcp", resourceId: "server_one" },
-    };
-    mocks.listDelegableGrants.mockResolvedValue([narrowed]);
-    void client.invalidateQueries({ queryKey: ["agent-delegable-grants"] });
-    await screen.findByRole("checkbox", { name: /mcp:read/ });
-    expect(screen.queryByRole("checkbox", { name: /mcp:connect/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    expect(mocks.create).not.toHaveBeenCalled();
-    expect(
-      screen.getByLabelText(/Select at least one valid permission/),
-    ).toBeTruthy();
-    fireEvent.click(await screen.findByRole("checkbox", { name: /mcp:read/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    await screen.findByText("secret_example_once");
-    expect(
-      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
-    ).toEqual([narrowed]);
-  });
-  it("accumulates loading, name and permission reasons on the accessible wrapper", async () => {
-    mocks.listDelegableGrants.mockImplementation(() => new Promise(() => {}));
-    setup();
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Create API key" }),
-    );
-    await screen.findByText("Loading delegable permissions…");
-    const wrapper = screen.getByLabelText(
-      /Delegable permissions are still loading/,
-    );
-    expect(wrapper.getAttribute("aria-label")).toMatch(/Enter a key name/);
-    expect(wrapper.getAttribute("aria-label")).toMatch(
-      /Select at least one valid permission/,
-    );
-    expect(wrapper.tabIndex).toBe(0);
-    fireEvent.submit(screen.getByLabelText("Key name").closest("form")!);
-    expect(mocks.create).not.toHaveBeenCalled();
-  });
-  it("explains pending creation and loss of issuance eligibility together", async () => {
-    mocks.create.mockImplementation(() => new Promise(() => {}));
-    const { change } = setup();
-    await selectedCreate();
-    await screen.findByRole("button", { name: "Creating…" });
-    change({ ...agent, lifecycle: "suspended" });
-    const wrapper = screen.getByLabelText(/An API key is being created/);
-    expect(wrapper.getAttribute("aria-label")).toMatch(
-      /Issuance requires an active agent/,
-    );
-    fireEvent.focus(wrapper);
-    expect((await screen.findByRole("tooltip")).textContent).toMatch(
-      /An API key is being created/,
-    );
-    expect(screen.getByRole("tooltip").textContent).toMatch(
-      /Issuance requires an active agent/,
-    );
-  });
-  it("defaults expiry to 90 days", async () => {
-    setup();
-    const before = Date.now();
-    await selectedCreate();
-    await screen.findByText("secret_example_once");
-    const expiry =
-      mocks.create.mock.calls[0]?.[0].request.createKeyForm.expiresAt;
-    expect(expiry.getTime()).toBeGreaterThanOrEqual(before + 90 * 86400000);
-    expect(expiry.getTime()).toBeLessThanOrEqual(Date.now() + 90 * 86400000);
-  });
-  it.each([7, 30, 90, 180, 365])(
-    "submits a selected %i-day expiry",
-    async (days) => {
-      setup();
-      await openCreate();
-      fireEvent.click(
-        await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-      );
-      fireEvent.keyDown(screen.getByLabelText("Expiration"), { key: "Enter" });
-      fireEvent.click(
-        await screen.findByRole("option", { name: `${days} days` }),
-      );
-      const before = Date.now();
-      fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-      await screen.findByText("secret_example_once");
-      const expiry =
-        mocks.create.mock.calls[0]?.[0].request.createKeyForm.expiresAt;
-      const lifetime = days * 86400000 - (days === 365 ? 5 * 60_000 : 0);
-      expect(expiry.getTime()).toBeGreaterThanOrEqual(before + lifetime);
-      expect(expiry.getTime()).toBeLessThanOrEqual(Date.now() + lifetime);
-      if (days === 365) {
-        // A server clock four minutes behind still accepts the one-year preset.
-        const serverNow = before - 4 * 60_000;
-        expect(expiry.getTime()).toBeLessThan(serverNow + 365 * 86400000);
-      }
-    },
-  );
-  it("submits a custom expiry at local midnight", async () => {
-    setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    fireEvent.keyDown(screen.getByLabelText("Expiration"), { key: "Enter" });
-    fireEvent.click(await screen.findByRole("option", { name: "Custom date" }));
-    const date = new Date(Date.now() + 10 * 86_400_000);
-    const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    fireEvent.change(screen.getByLabelText("Expiration date"), {
-      target: { value },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    await screen.findByText("secret_example_once");
-    expect(
-      mocks.create.mock.calls[0]?.[0].request.createKeyForm.expiresAt,
-    ).toEqual(new Date(`${value}T00:00:00`));
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    await openCreate();
-    expect(screen.getByLabelText("Expiration").textContent).toBe("90 days");
-    expect(screen.queryByLabelText("Expiration date")).toBeNull();
-    fireEvent.keyDown(screen.getByLabelText("Expiration"), { key: "Enter" });
-    fireEvent.click(await screen.findByRole("option", { name: "Custom date" }));
-    expect(
-      (screen.getByLabelText("Expiration date") as HTMLInputElement).value,
-    ).toBe("");
-  });
   it.each([
     ["missing", "", "Choose a valid expiration date."],
     ["invalid", "not-a-date", "Choose a valid expiration date."],
@@ -745,7 +801,7 @@ describe("Agent API keys", () => {
       "Expiration date must be within 365 days minus a 5-minute clock-skew margin.",
     ],
   ])(
-    "blocks %s custom expiry and accumulates tooltip reasons",
+    "blocks %s custom expiry and explains the reason",
     async (_label, value, reason) => {
       setup();
       await openCreate();
@@ -756,17 +812,9 @@ describe("Agent API keys", () => {
       fireEvent.change(screen.getByLabelText("Expiration date"), {
         target: { value },
       });
-      const button = screen.getByRole("button", { name: "Create key" });
+      const button = screen.getByRole("button", { name: "Review key" });
       expect((button as HTMLButtonElement).disabled).toBe(true);
-      const wrapper = button.parentElement!;
-      expect(wrapper.getAttribute("aria-label")).toContain(reason);
-      expect(wrapper.getAttribute("aria-label")).toContain(
-        "Select at least one valid permission.",
-      );
-      fireEvent.focus(wrapper);
-      expect((await screen.findByRole("tooltip")).textContent).toContain(
-        reason,
-      );
+      expect(button.getAttribute("title")).toContain(reason);
       fireEvent.submit(screen.getByLabelText("Key name").closest("form")!);
       expect(mocks.create).not.toHaveBeenCalled();
       // An invalid custom date must not prevent switching back to a preset.
@@ -787,394 +835,36 @@ describe("Agent API keys", () => {
     ]);
     const { client } = setup();
     await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
+    fireEvent.click(await screen.findByRole("checkbox", { name: /Use tools/ }));
     mocks.listDelegableGrants.mockRejectedValue(new Error("refetch failed"));
     await client.invalidateQueries({ queryKey: ["agent-delegable-grants"] });
-    await screen.findByText(/Delegable permissions could not be loaded/);
+    await screen.findByText(/Permissions could not be loaded/);
     expect(
       client.getQueryData([
         "agent-delegable-grants",
         mocks.org,
         mocks.user,
         agent.id,
+        [{ projectId: "project_one", toolsetId: "server_one" }],
+        agent.updatedAt,
+        agent.ownerUserId,
       ]),
     ).toBeTruthy();
-    expect(screen.queryByRole("checkbox", { name: /mcp:connect/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    expect(screen.queryByRole("checkbox", { name: /Use tools/ })).toBeNull();
+    submitKey();
     expect(mocks.create).not.toHaveBeenCalled();
-  });
-  it("lets writers narrow a broad grant to one server and tool", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      {
-        ...grant,
-        selector: { resourceKind: "mcp", resourceId: "*" },
-      },
-    ]);
-    setup();
-    await openCreate();
-    const selectedGrant = await screen.findByRole("checkbox", {
-      name: /mcp:connect/,
-    });
-    expect((selectedGrant as HTMLInputElement).checked).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    expect(screen.getByRole("button", { name: "Review key" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    fireEvent.submit(screen.getByLabelText("Key name").closest("form")!);
     expect(mocks.create).not.toHaveBeenCalled();
-    fireEvent.click(selectedGrant);
-    const server = await screen.findByLabelText("Server for mcp:connect");
-    fireEvent.change(server, { target: { value: "server_one" } });
-    fireEvent.click(screen.getByRole("button", { name: "Specific tools" }));
-    fireEvent.click(await screen.findByRole("button", { name: "search" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    await screen.findByText("secret_example_once");
-    expect(
-      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
-    ).toEqual([
-      {
-        effect: "allow",
-        scope: "mcp:connect",
-        selector: {
-          resourceKind: "mcp",
-          resourceId: "server_one",
-          tool: "search",
-        },
-      },
-    ]);
-  });
-  it("keeps a policy-pinned dimension out of the editor", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      {
-        ...grant,
-        scope: "mcp:write",
-        selector: {
-          resourceKind: "mcp",
-          resourceId: "server_one",
-          tool: "search",
-        },
-      },
-    ]);
-    setup();
-    await openCreate();
-    fireEvent.click(await screen.findByRole("checkbox", { name: /mcp:write/ }));
-    expect(screen.queryByLabelText("Tool for mcp:write")).toBeNull();
-    expect(screen.queryByLabelText("Server for mcp:write")).toBeNull();
-    expect(screen.getByText("tool: search")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    await screen.findByText("secret_example_once");
-    expect(
-      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
-    ).toEqual([
-      {
-        effect: "allow",
-        scope: "mcp:write",
-        selector: {
-          resourceKind: "mcp",
-          resourceId: "server_one",
-          tool: "search",
-        },
-      },
-    ]);
-  });
-  it("narrows a remote-backed server to a stored tool, scoped to its project", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      {
-        ...grant,
-        selector: { resourceKind: "mcp", resourceId: "*" },
-      },
-    ]);
-    mocks.toolsets.mockResolvedValue({ toolsets: [] });
-    mocks.mcpServers.mockResolvedValue({
-      mcpServers: [
-        {
-          id: "server_remote",
-          projectId: "project_one",
-          name: "Remote server",
-          slug: "remote-server",
-          remoteMcpServerId: "remote_one",
-        },
-      ],
-    });
-    setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    fireEvent.change(await screen.findByLabelText("Server for mcp:connect"), {
-      target: { value: "server_remote" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Specific tools" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "remote_search" }),
-    );
-    expect(mocks.toolMetadata).toHaveBeenCalledWith({
-      mcpServerId: "server_remote",
-      gramProject: "project-one",
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    await screen.findByText("secret_example_once");
-    expect(
-      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
-    ).toEqual([
-      {
-        effect: "allow",
-        scope: "mcp:connect",
-        selector: {
-          resourceKind: "mcp",
-          resourceId: "server_remote",
-          tool: "remote_search",
-        },
-      },
-    ]);
-  });
-  it("offers no tool choice when remote tool metadata fails, and can retry", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      {
-        ...grant,
-        selector: { resourceKind: "mcp", resourceId: "server_remote" },
-      },
-    ]);
-    mocks.toolsets.mockResolvedValue({ toolsets: [] });
-    mocks.mcpServers.mockResolvedValue({
-      mcpServers: [
-        {
-          id: "server_remote",
-          projectId: "project_one",
-          name: "Remote server",
-          slug: "remote-server",
-          remoteMcpServerId: "remote_one",
-        },
-      ],
-    });
-    mocks.toolMetadata.mockRejectedValue(new Error("forbidden"));
-    setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    await screen.findByText(/Couldn't load this server/);
-    expect(screen.queryByLabelText("Tool for mcp:connect")).toBeNull();
-    mocks.toolMetadata.mockResolvedValue({
-      tools: [{ toolName: "remote_search" }],
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "remote_search" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    await screen.findByText("secret_example_once");
-    expect(
-      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
-    ).toEqual([
-      {
-        effect: "allow",
-        scope: "mcp:connect",
-        selector: {
-          resourceKind: "mcp",
-          resourceId: "server_remote",
-          tool: "remote_search",
-        },
-      },
-    ]);
-  });
-  it("explains that a tunneled server cannot be narrowed to one tool", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      {
-        ...grant,
-        selector: { resourceKind: "mcp", resourceId: "server_tunneled" },
-      },
-    ]);
-    mocks.toolsets.mockResolvedValue({ toolsets: [] });
-    mocks.mcpServers.mockResolvedValue({
-      mcpServers: [
-        {
-          id: "server_tunneled",
-          projectId: "project_one",
-          name: "Tunneled server",
-          slug: "tunneled-server",
-        },
-      ],
-    });
-    setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    await screen.findByText(/Tools are discovered at runtime/);
-    expect(screen.queryByLabelText("Tool for mcp:connect")).toBeNull();
-    expect(mocks.toolMetadata).not.toHaveBeenCalled();
-  });
-  it.each([
-    ["toolsets", "mcpServers"],
-    ["mcpServers", "toolsets"],
-  ])(
-    "withholds narrowing when the %s half of the inventory fails",
-    async (failing, succeeding) => {
-      mocks.listDelegableGrants.mockResolvedValue([
-        { ...grant, selector: { resourceKind: "mcp", resourceId: "*" } },
-      ]);
-      mocks.projects = twoProjects;
-      // One half resolves with real rows; publishing them alone would let the
-      // picker narrow against an inventory it cannot see all of.
-      mocks[succeeding as "toolsets"].mockResolvedValue(
-        succeeding === "toolsets"
-          ? { toolsets: twoServers }
-          : { mcpServers: [] },
-      );
-      mocks[failing as "toolsets"].mockRejectedValue(new Error("forbidden"));
-      setup();
-      await openCreate();
-      fireEvent.click(
-        await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-      );
-      await screen.findByText(/Could not load this organization/);
-      // Server and tool choices come from the withheld inventory.
-      expect(screen.queryByLabelText("Server for mcp:connect")).toBeNull();
-      expect(screen.queryByLabelText("Tool for mcp:connect")).toBeNull();
-      expect(screen.queryByLabelText("Project for mcp:connect")).toBeNull();
-      // The candidate is still delegable exactly as discovered.
-      fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-      await screen.findByText("secret_example_once");
-      expect(
-        mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
-      ).toEqual([
-        {
-          effect: "allow",
-          scope: "mcp:connect",
-          selector: { resourceKind: "mcp", resourceId: "*" },
-        },
-      ]);
-    },
-  );
-  it("does not read the MCP inventory for a candidate that has no MCP grant", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      {
-        effect: "allow",
-        scope: "project:read",
-        selector: { resourceKind: "project", resourceId: "*" },
-      },
-    ]);
-    mocks.toolsets.mockRejectedValue(new Error("forbidden"));
-    mocks.mcpServers.mockRejectedValue(new Error("forbidden"));
-    setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /project:read/ }),
-    );
-    // Nothing here needs the server inventory, so it is never read and its
-    // failure is never surfaced.
-    expect(mocks.toolsets).not.toHaveBeenCalled();
-    expect(mocks.mcpServers).not.toHaveBeenCalled();
-    expect(screen.queryByText(/Could not load this organization/)).toBeNull();
-    expect(screen.queryByRole("button", { name: "Retry servers" })).toBeNull();
-  });
-  it("does not resolve a pinned server from a half-loaded inventory", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      { ...grant, selector: { resourceKind: "mcp", resourceId: "server_one" } },
-    ]);
-    mocks.projects = twoProjects;
-    // The toolset half alone knows server_one; without the other half the
-    // inventory is incomplete, so its tools must not drive narrowing.
-    mocks.toolsets.mockResolvedValue({ toolsets: twoServers });
-    mocks.mcpServers.mockRejectedValue(new Error("forbidden"));
-    setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    await screen.findByText(/Could not load this organization/);
-    expect(screen.queryByLabelText("Tool for mcp:connect")).toBeNull();
-    expect(screen.queryByLabelText("Project for mcp:connect")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    await screen.findByText("secret_example_once");
-    expect(
-      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
-    ).toEqual([
-      {
-        effect: "allow",
-        scope: "mcp:connect",
-        selector: { resourceKind: "mcp", resourceId: "server_one" },
-      },
-    ]);
-  });
-  it("withholds the project choice too when a pinned server cannot be resolved", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      {
-        ...grant,
-        selector: { resourceKind: "mcp", resourceId: "server_two" },
-      },
-    ]);
-    mocks.projects = twoProjects;
-    mocks.toolsets.mockRejectedValue(new Error("forbidden"));
-    setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    await screen.findByText(/Could not load this organization/);
-    // The candidate names one server, and no project can be shown to be
-    // compatible with it while the inventory is unavailable.
-    expect(screen.queryByLabelText("Project for mcp:connect")).toBeNull();
-    expect(screen.queryByLabelText("Server for mcp:connect")).toBeNull();
-  });
-  it("withdraws a loaded inventory when a later refetch of one half fails", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      { ...grant, selector: { resourceKind: "mcp", resourceId: "*" } },
-    ]);
-    mocks.projects = twoProjects;
-    mocks.toolsets.mockResolvedValue({ toolsets: twoServers });
-    const { client } = setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    expect(
-      optionText(await screen.findByLabelText("Server for mcp:connect")),
-    ).toContain("Server one");
-    mocks.mcpServers.mockRejectedValue(new Error("forbidden"));
-    void client.invalidateQueries({ queryKey: ["org-mcp-servers"] });
-    await screen.findByText(/Could not load this organization/);
-    expect(screen.queryByLabelText("Server for mcp:connect")).toBeNull();
-    // Recovering restores the complete inventory.
-    mocks.mcpServers.mockResolvedValue({ mcpServers: [] });
-    fireEvent.click(screen.getByRole("button", { name: "Retry servers" }));
-    expect(
-      optionText(await screen.findByLabelText("Server for mcp:connect")),
-    ).toContain("Server one");
-  });
-  it("hides the server choice until the org inventory resolves", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      {
-        ...grant,
-        selector: { resourceKind: "mcp", resourceId: "*" },
-      },
-    ]);
-    mocks.toolsets.mockRejectedValue(new Error("forbidden"));
-    setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    await waitFor(() => expect(mocks.toolsets).toHaveBeenCalled());
-    expect(screen.queryByLabelText("Server for mcp:connect")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    await screen.findByText("secret_example_once");
-    expect(
-      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
-    ).toEqual([
-      {
-        effect: "allow",
-        scope: "mcp:connect",
-        selector: { resourceKind: "mcp", resourceId: "*" },
-      },
-    ]);
   });
   it("discovers separately for each authorizer and resets the dialog on user change", async () => {
     mocks.listDelegableGrants.mockResolvedValue([grant]);
     const { change, client } = setup();
     await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
+    fireEvent.click(await screen.findByRole("checkbox", { name: /Use tools/ }));
     mocks.user = "user_other";
     change();
     // The dialog belonged to the previous authorizer; nothing of it survives.
@@ -1185,179 +875,16 @@ describe("Agent API keys", () => {
         mocks.org,
         "user_other",
         agent.id,
+        [{ projectId: "project_one", toolsetId: "server_one" }],
+        agent.updatedAt,
+        agent.ownerUserId,
       ]),
     ).toBeUndefined();
     await openCreate();
     const reopened = await screen.findByRole("checkbox", {
-      name: /mcp:connect/,
+      name: /Use tools/,
     });
-    expect((reopened as HTMLInputElement).checked).toBe(false);
-  });
-  it("omits toolsets with MCP explicitly disabled from the server choices", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      { ...grant, selector: { resourceKind: "mcp", resourceId: "*" } },
-    ]);
-    mocks.toolsets.mockResolvedValue({
-      toolsets: [
-        {
-          id: "server_one",
-          name: "Server one",
-          slug: "server-one",
-          projectId: "project_one",
-          mcpEnabled: true,
-          tools: [{ id: "tool_one", name: "search", type: "http" }],
-        },
-        {
-          id: "server_off",
-          name: "Server off",
-          slug: "server-off",
-          projectId: "project_one",
-          mcpEnabled: false,
-          tools: [{ id: "tool_two", name: "lookup", type: "http" }],
-        },
-      ],
-    });
-    setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    const options = optionText(
-      await screen.findByLabelText("Server for mcp:connect"),
-    );
-    expect(options).toContain("Server one");
-    expect(options).not.toContain("Server off");
-  });
-  it("omits a disabled toolset that also has an MCP servers row", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      { ...grant, selector: { resourceKind: "mcp", resourceId: "*" } },
-    ]);
-    mocks.toolsets.mockResolvedValue({
-      toolsets: [
-        {
-          id: "server_one",
-          name: "Server one",
-          slug: "server-one",
-          projectId: "project_one",
-          tools: [{ id: "tool_one", name: "search", type: "http" }],
-        },
-        {
-          id: "server_off",
-          name: "Server off",
-          slug: "server-off",
-          projectId: "project_one",
-          mcpEnabled: false,
-          tools: [{ id: "tool_two", name: "lookup", type: "http" }],
-        },
-      ],
-    });
-    // The same disabled toolset also appears as an mcp_servers row, which the
-    // merge would otherwise re-add under its toolset id.
-    mocks.mcpServers.mockResolvedValue({
-      mcpServers: [
-        {
-          id: "mcp_row_off",
-          projectId: "project_one",
-          name: "Server off",
-          slug: "server-off",
-          toolsetId: "server_off",
-        },
-      ],
-    });
-    setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    const server = await screen.findByLabelText("Server for mcp:connect");
-    expect(optionText(server)).toContain("Server one");
-    expect(optionText(server)).not.toContain("Server off");
-    expect(server.querySelector('option[value="server_off"]')).toBeNull();
-    expect(server.querySelector('option[value="mcp_row_off"]')).toBeNull();
-  });
-  it("withholds the project choice for a server missing from the inventory", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      {
-        ...grant,
-        selector: { resourceKind: "mcp", resourceId: "server_unlisted" },
-      },
-    ]);
-    mocks.projects = twoProjects;
-    mocks.toolsets.mockResolvedValue({ toolsets: twoServers });
-    setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    // The candidate names a server this caller's inventory does not contain,
-    // so no project can be known to be compatible with it.
-    expect(screen.queryByLabelText("Project for mcp:connect")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    await screen.findByText("secret_example_once");
-    expect(
-      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
-    ).toEqual([
-      {
-        effect: "allow",
-        scope: "mcp:connect",
-        selector: { resourceKind: "mcp", resourceId: "server_unlisted" },
-      },
-    ]);
-  });
-  it("does not offer project narrowing after selecting a server", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      { ...grant, selector: { resourceKind: "mcp", resourceId: "*" } },
-    ]);
-    mocks.projects = twoProjects;
-    mocks.toolsets.mockResolvedValue({ toolsets: twoServers });
-    setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    fireEvent.change(await screen.findByLabelText("Server for mcp:connect"), {
-      target: { value: "server_two" },
-    });
-    expect(screen.queryByLabelText("Project for mcp:connect")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
-    await screen.findByText("secret_example_once");
-    expect(
-      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
-    ).toEqual([
-      {
-        effect: "allow",
-        scope: "mcp:connect",
-        selector: {
-          resourceKind: "mcp",
-          resourceId: "server_two",
-        },
-      },
-    ]);
-  });
-  it("offers only the pinned project's servers when a candidate fixes the project", async () => {
-    mocks.listDelegableGrants.mockResolvedValue([
-      {
-        ...grant,
-        selector: {
-          resourceKind: "mcp",
-          resourceId: "*",
-          projectId: "project_two",
-        },
-      },
-    ]);
-    mocks.projects = twoProjects;
-    mocks.toolsets.mockResolvedValue({ toolsets: twoServers });
-    setup();
-    await openCreate();
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: /mcp:connect/ }),
-    );
-    const options = optionText(
-      await screen.findByLabelText("Server for mcp:connect"),
-    );
-    expect(options).toContain("Server two");
-    expect(options).not.toContain("Server one");
-    expect(screen.queryByLabelText("Project for mcp:connect")).toBeNull();
+    expect(reopened.getAttribute("aria-checked")).toBe("false");
   });
   it("shows a future expiry as an absolute date, never as elapsed time", async () => {
     const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
@@ -1373,4 +900,160 @@ describe("Agent API keys", () => {
     expect(screen.getByText("Loading API keys…")).toBeTruthy();
     expect(screen.queryByText("No API keys yet")).toBeNull();
   });
+  it("requests inventory-scoped candidates and issues only selected MCP connect grants", async () => {
+    mocks.serverScoping = true;
+    mocks.listDelegableGrants.mockResolvedValue([
+      creationGrant,
+      { ...creationGrant, scope: "mcp:read" },
+      {
+        ...creationGrant,
+        selector: { ...creationGrant.selector, resourceId: "other" },
+      },
+    ]);
+    setup();
+    await openCreate();
+    expect(mocks.listDelegableGrants).toHaveBeenCalledWith(
+      {
+        agentId: agent.id,
+        toolsetId: "server_one",
+      },
+      undefined,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    submitKey();
+    await screen.findByText("secret_example_once");
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
+    ).toEqual([creationGrant]);
+  });
+  it("withdraws reviewed permissions during refetch and requires reselection", async () => {
+    const { client } = setup();
+    await openCreate();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Review key" }));
+    let resolve!: (grants: unknown[]) => void;
+    mocks.listDelegableGrants.mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    void client.invalidateQueries({ queryKey: ["agent-delegable-grants"] });
+    await screen.findByText("Loading delegable permissions…");
+    expect(screen.queryByRole("button", { name: "Create key" })).toBeNull();
+    resolve([creationGrant]);
+    const permission = await screen.findByRole("checkbox", {
+      name: /Use tools/,
+    });
+    expect(permission).toHaveProperty("checked", false);
+    expect(screen.getByRole("button", { name: "Review key" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("clears review and refetches when returning to permissions", async () => {
+    setup();
+    await openCreate();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Review key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() =>
+      expect(mocks.listDelegableGrants).toHaveBeenCalledTimes(2),
+    );
+    expect(
+      await screen.findByRole("checkbox", { name: /Use tools/ }),
+    ).toHaveProperty("checked", false);
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it.each(["loading", "error", "empty"])(
+    "fails closed on %s discovery",
+    async (state) => {
+      if (state === "loading")
+        mocks.listDelegableGrants.mockImplementation(
+          () => new Promise(() => {}),
+        );
+      if (state === "error")
+        mocks.listDelegableGrants.mockRejectedValue(new Error("unavailable"));
+      if (state === "empty") mocks.listDelegableGrants.mockResolvedValue([]);
+      setup();
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Create API key" }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Choose fixture server" }),
+      );
+      await waitFor(() => expect(mocks.listDelegableGrants).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(
+          screen
+            .getByRole("button", { name: "Choose fixture server" })
+            .getAttribute("data-discovery-state"),
+        ).toBe(state),
+      );
+      expect(screen.queryByRole("checkbox", { name: /Use tools/ })).toBeNull();
+      expect(mocks.create).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Continue" })).toHaveProperty(
+        "disabled",
+        true,
+      );
+    },
+  );
+  it("hides cached key rows and dialogs on rollout loss", async () => {
+    const { change } = setup();
+    await screen.findByText("Example key");
+    mocks.flag = "disabled";
+    change();
+    expect(screen.queryByText("Example key")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Create API key" })).toBeNull();
+    expect(mocks.listDelegableGrants).not.toHaveBeenCalled();
+  });
+  it.each([403, 500])(
+    "withdraws reviewed permissions and refetches after issuance fails with %s",
+    async (statusCode) => {
+      mocks.create.mockRejectedValue(
+        Object.assign(new Error("issuance failed"), { statusCode }),
+      );
+      setup();
+      await openCreate();
+      fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Review key" }));
+      let resolve!: (grants: unknown[]) => void;
+      mocks.listDelegableGrants.mockImplementation(
+        () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+      await screen.findByText(/Could not create API key/);
+      expect(mocks.listDelegableGrants).toHaveBeenCalledTimes(2);
+      expect(screen.queryByRole("button", { name: "Create key" })).toBeNull();
+      expect(screen.queryByRole("checkbox", { name: /Use tools/ })).toBeNull();
+      expect(screen.getByRole("button", { name: "Review key" })).toHaveProperty(
+        "disabled",
+        true,
+      );
+      resolve(statusCode === 403 ? [] : [creationGrant]);
+      await waitFor(() =>
+        expect(screen.queryByText("Loading delegable permissions…")).toBeNull(),
+      );
+      if (statusCode === 500)
+        expect(
+          screen.getByRole("checkbox", { name: /Use tools/ }),
+        ).toHaveProperty("checked", false);
+      else
+        expect(
+          screen.queryByRole("checkbox", { name: /Use tools/ }),
+        ).toBeNull();
+      expect(screen.getByRole("button", { name: "Review key" })).toHaveProperty(
+        "disabled",
+        true,
+      );
+      submitKey();
+      expect(mocks.create).toHaveBeenCalledTimes(1);
+    },
+  );
 });

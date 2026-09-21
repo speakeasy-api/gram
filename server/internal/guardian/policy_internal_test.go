@@ -1,11 +1,23 @@
 package guardian
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestWithCheckRedirect(t *testing.T) {
+	t.Parallel()
+
+	var opts httpClientOptions
+	require.Nil(t, opts.checkRedirect, "unset must keep net/http's default redirect policy")
+
+	WithCheckRedirect(func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse })(&opts)
+	require.NotNil(t, opts.checkRedirect)
+	require.ErrorIs(t, opts.checkRedirect(nil, nil), http.ErrUseLastResponse)
+}
 
 func TestWithDialTimeout(t *testing.T) {
 	t.Parallel()

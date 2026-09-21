@@ -29,8 +29,6 @@ type TransactionalID string
 const (
 	TemplateKeyTeamInvite                TemplateKey = "team_invite"
 	TemplateKeyEnterpriseAdminOnboarding TemplateKey = "enterprise_admin_onboarding"
-	TemplateKeyTumUsageThreshold         TemplateKey = "tum_usage_threshold"
-	TemplateKeyTumUsageOverage           TemplateKey = "tum_usage_overage"
 	TemplateKeyOpenRouterChatCredits     TemplateKey = "openrouter_chat_credits_threshold"
 	TemplateKeyOpenRouterInternalCredits TemplateKey = "openrouter_internal_credits_threshold"
 	TemplateKeyCustomDomainUnhealthy     TemplateKey = "custom_domain_unhealthy"
@@ -117,12 +115,10 @@ type Template interface {
 var RegisteredTemplates = []Template{
 	TeamInvite{InviteLink: "", InviterName: "", InviterEmail: "", OrganizationName: ""},
 	EnterpriseAdminOnboarding{SetupLink: ""},
-	TumUsageThreshold{OrganizationName: "", ThresholdPercent: "", UsageTokens: "", TokenLimit: "", CycleStart: "", CycleEnd: ""},
-	TumUsageOverage{OrganizationName: "", ThresholdPercent: "", UsageTokens: "", TokenLimit: "", OverageTokens: "", CycleStart: "", CycleEnd: ""},
 	OpenRouterChatCreditsThreshold{OrganizationName: "", ThresholdPercent: "", Exhausted: false},
 	OpenRouterInternalCreditsThreshold{OrganizationName: "", ThresholdPercent: "", Exhausted: false},
 	CustomDomainUnhealthy{Email: "", Domain: "", IssueMessage: "", DomainLink: ""},
-	WeeklyUsageSummary{OrganizationName: "", CycleEndDate: "", DaysRemaining: "", CycleElapsedPercent: "", TotalTokens: "", PreviousTotalTokens: "", TotalChangePercent: "", ViewUsageURL: ""},
+	WeeklyUsageSummary{OrganizationName: "", CycleEndDate: "", DaysRemaining: "", UsageThroughDate: "", StorageTokens: "", StorageChangePercent: "", ScanningTokens: "", ScanningChangePercent: "", EgressGib: "", EgressChangePercent: "", ShowEstimatedSpend: "", StorageCostUSD: "", ScanningCostUSD: "", EgressCostUSD: "", TotalCostUSD: "", ViewUsageURL: ""},
 	AccessRequest{RequesterName: "", OrganizationName: "", ManageAccessLink: ""},
 	TrialEndingSoon{OrganizationName: "", TrialEndDate: "", ActionURL: ""},
 	AccessPaused{OrganizationName: "", ActionURL: ""},

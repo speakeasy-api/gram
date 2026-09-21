@@ -698,33 +698,6 @@ func (q *Queries) ListBillingProjectIDsByOrganization(ctx context.Context, organ
 	return items, nil
 }
 
-const listFinalizedBillingCycleStarts = `-- name: ListFinalizedBillingCycleStarts :many
-SELECT cycle_start
-FROM billing_cycle_usage
-WHERE organization_id = $1::text
-  AND finalized_at IS NOT NULL
-`
-
-func (q *Queries) ListFinalizedBillingCycleStarts(ctx context.Context, organizationID string) ([]pgtype.Timestamptz, error) {
-	rows, err := q.db.Query(ctx, listFinalizedBillingCycleStarts, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []pgtype.Timestamptz
-	for rows.Next() {
-		var cycle_start pgtype.Timestamptz
-		if err := rows.Scan(&cycle_start); err != nil {
-			return nil, err
-		}
-		items = append(items, cycle_start)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listMaterializedOpenRouterInferenceKeys = `-- name: ListMaterializedOpenRouterInferenceKeys :many
 SELECT key_type
   , monthly_credits
@@ -1308,49 +1281,6 @@ func (q *Queries) TryInsertStripeWebhookReceipt(ctx context.Context, arg TryInse
 	var inserted bool
 	err := row.Scan(&inserted)
 	return inserted, err
-}
-
-const upsertBillingCycleUsage = `-- name: UpsertBillingCycleUsage :exec
-INSERT INTO billing_cycle_usage (
-    organization_id
-  , cycle_start
-  , cycle_end
-  , tum_tokens
-  , finalized_at
-) VALUES (
-    $1::text
-  , $2
-  , $3
-  , $4
-  , $5
-)
-ON CONFLICT (organization_id, cycle_start) DO UPDATE SET
-    cycle_end = EXCLUDED.cycle_end
-  , tum_tokens = EXCLUDED.tum_tokens
-  , finalized_at = EXCLUDED.finalized_at
-  , updated_at = clock_timestamp()
-WHERE billing_cycle_usage.finalized_at IS NULL
-`
-
-type UpsertBillingCycleUsageParams struct {
-	OrganizationID string
-	CycleStart     pgtype.Timestamptz
-	CycleEnd       pgtype.Timestamptz
-	TumTokens      int64
-	FinalizedAt    pgtype.Timestamptz
-}
-
-// Finalized rows are the permanent billing record and must never be
-// overwritten by later refreshes.
-func (q *Queries) UpsertBillingCycleUsage(ctx context.Context, arg UpsertBillingCycleUsageParams) error {
-	_, err := q.db.Exec(ctx, upsertBillingCycleUsage,
-		arg.OrganizationID,
-		arg.CycleStart,
-		arg.CycleEnd,
-		arg.TumTokens,
-		arg.FinalizedAt,
-	)
-	return err
 }
 
 const upsertBillingEmail = `-- name: UpsertBillingEmail :one

@@ -109,20 +109,22 @@ type WorkerOptions struct {
 	MCPRegistryClient   *externalmcp.RegistryClient
 	TelemetryLogger     *telemetry.Logger
 	ClickhouseConn      clickhouse.Conn
-	TelemetryRepo       *telemetryrepo.Queries
-	TriggersApp         *bgtriggers.App
-	AssistantsCore      *assistants.ServiceCore
-	TemporalEnv         *tenv.Environment
-	PIIScanner          risk_analysis.PIIScanner
-	PIScanner           *promptinjection.Scanner
-	CustomRuleScanner   *customruleanalyzer.Scanner
-	BuiltinPresets      *presetlib.Library
-	ShadowMCPClient     *shadowmcp.Client
-	AuditLogger         *audit.Logger
-	WorkOSClient        activities.WorkOSClient
-	ProductFeatures     *productfeatures.Client
-	PluginPublisher     *plugins.Service
-	Publishers          *Publishers
+	// MeterReadConn uses the least-privilege ClickHouse reader for billing summaries.
+	MeterReadConn     clickhouse.Conn
+	TelemetryRepo     *telemetryrepo.Queries
+	TriggersApp       *bgtriggers.App
+	AssistantsCore    *assistants.ServiceCore
+	TemporalEnv       *tenv.Environment
+	PIIScanner        risk_analysis.PIIScanner
+	PIScanner         *promptinjection.Scanner
+	CustomRuleScanner *customruleanalyzer.Scanner
+	BuiltinPresets    *presetlib.Library
+	ShadowMCPClient   *shadowmcp.Client
+	AuditLogger       *audit.Logger
+	WorkOSClient      activities.WorkOSClient
+	ProductFeatures   *productfeatures.Client
+	PluginPublisher   *plugins.Service
+	Publishers        *Publishers
 
 	// IssuerMetadataRefresher is optional. Share it with every in-process producer;
 	// the constructing caller owns it and must call Wait after those producers stop.
@@ -144,6 +146,12 @@ type WorkerOptions struct {
 	// retroactive exclusion changes into ClickHouse: the reconcile activity
 	// gets no ClickHouse repo and degrades to its Postgres phases.
 	DisableRiskRetroReconcile bool
+
+	// LLMAnalyzerEnabled reports whether the streams process has a fine-tuned
+	// risk model configured (GRAM_RISK_LLM_URL). When false, batch scans for
+	// organizations on the LLM analyzer flag fall back to the legacy engines
+	// instead of publishing requests nobody evaluates.
+	LLMAnalyzerEnabled bool
 }
 
 // defaultFingerprinter merges WorkerOptions fingerprinters: the override wins
@@ -195,6 +203,7 @@ func ForDeploymentProcessing(
 		RedisClient:                  nil,
 		PosthogClient:                nil,
 		TelemetryLogger:              nil,
+		MeterReadConn:                nil,
 		TelemetryRepo:                nil,
 		TriggersApp:                  nil,
 		CacheAdapter:                 nil,
@@ -217,6 +226,7 @@ func ForDeploymentProcessing(
 			PromptInjectionAnalysis: gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
 			PromptPolicyAnalysis:    gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
+			LLMAnalysis:             gcp.NewNoopPublisher[*riskv1.LLMAnalysis](),
 			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
 			MeterReadings:           gcp.NewNoopPublisher[*meteringv1.MeterReading](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
@@ -228,6 +238,7 @@ func ForDeploymentProcessing(
 		TrialEmailsService:        nil,
 		RiskFingerprinter:         risk.Fingerprinter{},
 		DisableRiskRetroReconcile: false,
+		LLMAnalyzerEnabled:        false,
 	}
 }
 
@@ -282,6 +293,7 @@ func NewTemporalWorker(
 		RagService:                   nil,
 		MCPRegistryClient:            nil,
 		TelemetryLogger:              nil,
+		MeterReadConn:                nil,
 		TelemetryRepo:                nil,
 		TriggersApp:                  nil,
 		CacheAdapter:                 nil,
@@ -304,6 +316,7 @@ func NewTemporalWorker(
 		TrialEmailsService:           nil,
 		RiskFingerprinter:            risk.Fingerprinter{},
 		DisableRiskRetroReconcile:    false,
+		LLMAnalyzerEnabled:           false,
 	}
 
 	for _, o := range options {
@@ -334,6 +347,7 @@ func NewTemporalWorker(
 			RagService:                   conv.Default(o.RagService, opts.RagService),
 			MCPRegistryClient:            conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
 			TelemetryLogger:              conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
+			MeterReadConn:                conv.Default(o.MeterReadConn, opts.MeterReadConn),
 			TelemetryRepo:                conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
 			TriggersApp:                  conv.Default(o.TriggersApp, opts.TriggersApp),
 			CacheAdapter:                 conv.Default(o.CacheAdapter, opts.CacheAdapter),
@@ -356,6 +370,7 @@ func NewTemporalWorker(
 			TrialEmailsService:           conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
 			RiskFingerprinter:            defaultFingerprinter(o.RiskFingerprinter, opts.RiskFingerprinter),
 			DisableRiskRetroReconcile:    conv.Default(o.DisableRiskRetroReconcile, opts.DisableRiskRetroReconcile),
+			LLMAnalyzerEnabled:           conv.Default(o.LLMAnalyzerEnabled, opts.LLMAnalyzerEnabled),
 		}
 	}
 
@@ -437,6 +452,7 @@ func NewTemporalWorker(
 		opts.TemporalEnv,
 		opts.TelemetryLogger,
 		opts.ClickhouseConn,
+		opts.MeterReadConn,
 		opts.TelemetryRepo,
 		opts.TriggersApp,
 		opts.CacheAdapter,
@@ -459,6 +475,7 @@ func NewTemporalWorker(
 		opts.GitHubEvidenceToken,
 		opts.RiskFingerprinter,
 		opts.DisableRiskRetroReconcile,
+		opts.LLMAnalyzerEnabled,
 		idTokenVerifier,
 		opts.IssuerMetadataRefresher,
 		remoteSessionEnricher,
@@ -497,12 +514,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
 	temporalWorker.RegisterActivity(activities.GetDeviceIntegrationSyncCandidates)
 	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
-	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
-	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
+	temporalWorker.RegisterActivity(activities.GetOktaApplicationSyncCandidates)
+	temporalWorker.RegisterActivity(activities.RunOktaApplicationSync)
+	temporalWorker.RegisterActivity(activities.FinalizeOktaApplicationSync)
 	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
 	temporalWorker.RegisterActivity(activities.SendWeeklyUsageSummary)
-	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)
-	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 	temporalWorker.RegisterActivity(activities.ListProjectsForToolsetIndexing)
@@ -630,8 +646,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncWorkflow)
+	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
-	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetSweepWorkflow)
@@ -754,6 +771,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		}
 	}
 
+	if err := AddOktaApplicationSyncCoordinatorSchedule(ctx, env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(ctx, "failed to add okta application sync schedule", attr.SlogError(err))
+		}
+	}
+
 	if err := AddAIUsagePollerCoordinatorSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add ai integration usage polling schedule", attr.SlogError(err))
@@ -763,12 +786,6 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	if err := AddWeeklyUsageSummarySchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add weekly usage summary schedule", attr.SlogError(err))
-		}
-	}
-
-	if err := AddRefreshBillingUsageSchedule(ctx, env); err != nil {
-		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(ctx, "failed to add refresh billing usage schedule", attr.SlogError(err))
 		}
 	}
 

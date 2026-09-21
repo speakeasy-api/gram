@@ -17766,8 +17766,8 @@ func ValidateToolUsageUserFilterRequestBody(body *ToolUsageUserFilterRequestBody
 		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "email" || *body.Kind == "external_user_id" || *body.Kind == "user_id" || *body.Kind == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"email", "external_user_id", "user_id", "unknown"}))
+		if !(*body.Kind == "email" || *body.Kind == "external_user_id" || *body.Kind == "user_id" || *body.Kind == "agent_id" || *body.Kind == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"email", "external_user_id", "user_id", "agent_id", "unknown"}))
 		}
 	}
 	return

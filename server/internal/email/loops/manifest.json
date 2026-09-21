@@ -91,51 +91,29 @@
       "source": "trial_ending_soon.lmx",
       "variables": ["organization_name", "trial_end_date", "action_url"]
     },
-    "tum_usage_overage": {
-      "managed_name": "gram.transactional.v2.tum_usage_overage",
-      "subject": "{data.organization_name} has exceeded its token allowance",
-      "preview_text": "Usage is at {data.threshold_percent}% for the current billing cycle.",
-      "source": "tum_usage_overage.lmx",
-      "variables": [
-        "organization_name",
-        "threshold_percent",
-        "usage_tokens",
-        "token_limit",
-        "overage_tokens",
-        "cycle_start",
-        "cycle_end"
-      ]
-    },
-    "tum_usage_threshold": {
-      "managed_name": "gram.transactional.v2.tum_usage_threshold",
-      "subject": "{data.organization_name} is at {data.threshold_percent}% of its token allowance",
-      "preview_text": "Review current tokens-under-management usage.",
-      "source": "tum_usage_threshold.lmx",
-      "variables": [
-        "organization_name",
-        "threshold_percent",
-        "usage_tokens",
-        "token_limit",
-        "cycle_start",
-        "cycle_end"
-      ]
-    },
     "weekly_usage_summary": {
       "managed_name": "gram.transactional.v2.weekly_usage_summary",
       "subject": "Weekly usage for {data.organization_name}",
-      "preview_text": "{data.total_tokens} tokens under management this cycle.",
+      "preview_text": "Usage through {data.usage_through_date} across storage, scanning, and egress.",
       "source": "weekly_usage_summary.lmx",
       "variables": [
         "organization_name",
         "cycle_end_date",
         "days_remaining",
-        "cycle_elapsed_percent",
-        "total_tokens",
-        "previous_total_tokens",
-        "total_change_percent",
+        "usage_through_date",
+        "storage_tokens",
+        "storage_change_percent",
+        "scanning_tokens",
+        "scanning_change_percent",
+        "egress_gib",
+        "egress_change_percent",
+        "show_estimated_spend",
+        "storage_cost_usd",
+        "scanning_cost_usd",
+        "egress_cost_usd",
+        "total_cost_usd",
         "view_usage_url"
-      ],
-      "unused_variables": ["cycle_elapsed_percent"]
+      ]
     }
   }
 }

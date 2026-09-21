@@ -4009,6 +4009,7 @@ const (
 	toolUsageTargetKindLocalTools = "local_tools"
 	toolUsageTargetKindSkill      = "skill"
 
+	toolUsageUserKindAgentID        = "agent_id"
 	toolUsageUserKindEmail          = "email"
 	toolUsageUserKindExternalUserID = "external_user_id"
 	toolUsageUserKindUserID         = "user_id"
@@ -5569,6 +5570,11 @@ func appendMetaMCPTargetBranch(typeArgs, kindArgs, idArgs, labelArgs *[]string, 
 	*labelArgs = append(*labelArgs, condition, "arrayElement(?, meta_mcp_match_index)")
 }
 
+// Only the authenticated managed-agent actor is an agent identity; owners and
+// approving humans are credential provenance, never the caller. Keep in sync
+// with trace_summaries_mv.agent_id. Client-supplied hook attributes are untrusted.
+const toolUsageAgentIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')"
+
 // The gateway an event belongs to: the target itself, else the gateway that dispatched it.
 const toolUsageGatewayIDExpr = "if(target_type = '" + ToolUsageTargetTypeMetaMCP + "', target_id, meta_mcp_server_id)"
 
@@ -5592,6 +5598,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		"any(user_email) AS g_user_email",
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
+		"max(agent_id) AS g_agent_id",
 		"any(hook_source) AS g_hook_source",
 		"any(event_source) AS g_event_source",
 		"max(mcp_match) AS g_mcp_match",
@@ -5738,8 +5745,10 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		)
 	}
 
-	userKey := chFirstNonEmpty("g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
+	userKey := chFirstNonEmpty("g_agent_id", "g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
+	userLabel := chMultiIf("g_agent_id != ''", "concat('agent:', g_agent_id)", userKey)
 	userKind := chMultiIf(
+		"g_agent_id != ''", "'"+toolUsageUserKindAgentID+"'",
 		"g_user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"g_external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
 		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",
@@ -5783,7 +5792,7 @@ FROM (%s)`,
 		targetID,
 		targetLabel,
 		userKey,
-		userKey,
+		userLabel,
 		userKind,
 		hookStatus,
 		clientKey,
@@ -5854,6 +5863,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"user_email",
 		"external_user_id",
 		"user_id",
+		toolUsageAgentIDExpr+" AS agent_id",
 		"account_type",
 		"meta_mcp_server_id",
 		"mcp_client_name",
@@ -5945,13 +5955,6 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		sourceArgs = append(sourceArgs, rawArgs...)
 	}
 
-	userKind := chMultiIf(
-		"user_email != ''", "'"+toolUsageUserKindEmail+"'",
-		"external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
-		"user_id != ''", "'"+toolUsageUserKindUserID+"'",
-		"'"+toolUsageUserKindUnknown+"'",
-	)
-	userKey := chFirstNonEmpty("user_email", "external_user_id", "user_id", "'Unknown'")
 	logGroupKind := chMultiIf(
 		"trace_id != ''", "'trace_id'",
 		"trigger_correlation_id != ''", "'correlation_id'",
@@ -5964,6 +5967,18 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"trigger_event_id != ''", "trigger_event_id",
 		"toString(log_id)",
 	)
+	// Reuse the existing trace/log-group window so sparse actor attributes win
+	// before user identity enters GROUP BY, without another scan or join.
+	traceAgentID := "max(agent_id) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
+	userKind := chMultiIf(
+		traceAgentID+" != ''", "'"+toolUsageUserKindAgentID+"'",
+		"user_email != ''", "'"+toolUsageUserKindEmail+"'",
+		"external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
+		"user_id != ''", "'"+toolUsageUserKindUserID+"'",
+		"'"+toolUsageUserKindUnknown+"'",
+	)
+	userKey := chFirstNonEmpty(traceAgentID, "user_email", "external_user_id", "user_id", "'Unknown'")
+	userLabel := chMultiIf(traceAgentID+" != ''", "concat('agent:', "+traceAgentID+")", userKey)
 	eventSkillName := chFirstNonEmpty("skill_name", "JSONExtractString(tool_call_arguments, 'skill')")
 	skillName := "anyIf(" + eventSkillName + ", " + eventSkillName + " != '') OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
 	// Spans without a name inherit one from their trace before grouping. Keep
@@ -6080,7 +6095,7 @@ SELECT
 	meta_mcp_server_id,
 	mcp_client_name,
 	mcp_client_version
-FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, resolvedToolName), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
+FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, resolvedToolName), targetType, targetKind, targetID, targetLabel, userKey, userLabel, userKind, sourceSQL)
 
 	normalizedArgs := make([]any, 0, 7+len(sourceArgs))
 	if len(mcpSourceIDs) > 0 {
@@ -6250,12 +6265,14 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	// aggregate, which nests any()/sum() and fails with ILLEGAL_AGGREGATION once a
 	// caller (uniqExact(tool_name), sum(success), ...) aggregates over normalized_events.
 	userKind := chMultiIf(
+		"g_agent_id != ''", "'"+toolUsageUserKindAgentID+"'",
 		"g_user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"g_external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
 		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",
 		"'"+toolUsageUserKindUnknown+"'",
 	)
-	userKey := chFirstNonEmpty("g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
+	userKey := chFirstNonEmpty("g_agent_id", "g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
+	userLabel := chMultiIf("g_agent_id != ''", "concat('agent:', g_agent_id)", userKey)
 
 	// The MCP client is self-reported at the initialize handshake, so it is only
 	// present on traffic Gram terminated as an MCP server. Hook-observed calls,
@@ -6275,6 +6292,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"any(user_email) AS g_user_email",
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
+		"max(agent_id) AS g_agent_id",
 		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
 		"max(account_type) AS g_account_type",
 		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
@@ -6298,6 +6316,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"any(user_email) AS g_user_email",
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
+		"max(agent_id) AS g_agent_id",
 		"any(skill_name) AS g_skill_name",
 		"max(mcp_match) AS g_mcp_match",
 		"max(mcp_server_url) AS g_mcp_server_url",
@@ -6401,7 +6420,7 @@ FROM (%s)`,
 		directTargetLabel,
 		chFirstNonEmpty("g_tool_name", "g_gram_urn"),
 		userKey,
-		userKey,
+		userLabel,
 		userKind,
 		clientKey,
 		clientLabel,
@@ -6529,7 +6548,7 @@ SELECT
 	%s AS client_key,
 	%s AS client_label,
 	g_mcp_client_version AS client_version
-FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userKey, userKind, clientKey, clientLabel, hookSourceSQL)
+FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userLabel, userKind, clientKey, clientLabel, hookSourceSQL)
 
 	directArgs := make([]any, 0, 3+len(directSourceArgs))
 	if len(mcpSourceIDs) > 0 {

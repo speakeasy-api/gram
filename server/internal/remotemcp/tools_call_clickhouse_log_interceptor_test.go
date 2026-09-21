@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestToolsCallClickHouseLogInterceptor_Name(t *testing.T) {
@@ -31,6 +32,12 @@ func TestToolsCallClickHouseLogInterceptor_Name(t *testing.T) {
 
 func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 	t.Parallel()
+	t.Run("legacy", func(t *testing.T) { t.Parallel(); testToolsCallClickHouseEmission(t, false) })
+	t.Run("managed agent", func(t *testing.T) { t.Parallel(); testToolsCallClickHouseEmission(t, true) })
+}
+
+func testToolsCallClickHouseEmission(t *testing.T, managedAgent bool) {
+	t.Helper()
 
 	logger := testenv.NewLogger(t)
 	chConn, err := infra.NewClickhouseClient(t)
@@ -49,6 +56,16 @@ func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 		APIKeyID:             "key-456",
 		ProjectID:            &projectID,
 	})
+
+	agentID := uuid.NewString()
+	if managedAgent {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		ctx = contextvalues.WithPrincipalAPIKeyAuthorization(ctx, authCtx,
+			urn.NewPrincipal(urn.PrincipalTypeAgent, agentID),
+			contextvalues.PrincipalCredential{AuthorizerUserID: "approver-id"})
+		ctx = contextvalues.WithPrincipalCredentialOwner(ctx, "owner-id")
+	}
 
 	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, proxy.ServerIdentity{
 		RemoteMCPServerID:   serverID,
@@ -127,6 +144,27 @@ func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 	}, 5*time.Second, 50*time.Millisecond, "telemetry_logs row did not appear")
 	require.JSONEq(t, `{"q":"hi"}`, gotArgs)
 	require.JSONEq(t, `{"ok":true}`, gotResult)
+	if managedAgent {
+		var actorType, actorID, authorizerID string
+		err := chConn.QueryRow(t.Context(), `SELECT
+    toString(attributes.gram.authorization.actor.type),
+    toString(attributes.gram.authorization.actor.id),
+    toString(attributes.gram.authorization.authorizer_user_id)
+   FROM telemetry_logs WHERE gram_project_id = ? AND gram_urn = ? LIMIT 1`,
+			projectID.String(), expectedURN).Scan(&actorType, &actorID, &authorizerID)
+		require.NoError(t, err)
+		require.Equal(t, "agent", actorType)
+		require.Equal(t, agentID, actorID)
+		require.Equal(t, "approver-id", authorizerID)
+		// Raw rows can become visible before their materialized-view projection.
+		require.Eventually(t, func() bool {
+			var summarizedAgentID string
+			err := chConn.QueryRow(t.Context(),
+				"SELECT max(agent_id) FROM trace_summaries WHERE gram_project_id = ?", projectID.String()).Scan(&summarizedAgentID)
+			return err == nil && summarizedAgentID == agentID
+		}, 5*time.Second, 50*time.Millisecond, "trusted agent attribution did not reach trace_summaries")
+	}
+
 }
 
 func TestToolsCallClickHouseLogInterceptor_DurationMissingSentinel(t *testing.T) {

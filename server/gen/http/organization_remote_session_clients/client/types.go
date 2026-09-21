@@ -3182,7 +3182,7 @@ func NewGetClientRemoteSessionClientOK(body *GetClientResponseBody) *types.Remot
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
-		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
 		UpstreamRejectedAt:              body.UpstreamRejectedAt,
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
@@ -3722,7 +3722,7 @@ func NewCreateClientRemoteSessionClientOK(body *CreateClientResponseBody) *types
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
-		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
 		UpstreamRejectedAt:              body.UpstreamRejectedAt,
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
@@ -3907,7 +3907,7 @@ func NewCreateCimdClientRemoteSessionClientOK(body *CreateCimdClientResponseBody
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
-		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
 		UpstreamRejectedAt:              body.UpstreamRejectedAt,
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
@@ -4094,7 +4094,7 @@ func NewUpdateClientRemoteSessionClientOK(body *UpdateClientResponseBody) *types
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
-		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
 		UpstreamRejectedAt:              body.UpstreamRejectedAt,
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
@@ -4279,7 +4279,7 @@ func NewAttachClientKeySetRemoteSessionClientOK(body *AttachClientKeySetResponse
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
-		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
 		UpstreamRejectedAt:              body.UpstreamRejectedAt,
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
@@ -4482,7 +4482,7 @@ func NewDetachClientKeySetRemoteSessionClientOK(body *DetachClientKeySetResponse
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
-		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
 		UpstreamRejectedAt:              body.UpstreamRejectedAt,
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
@@ -4685,7 +4685,7 @@ func NewRotateClientRemoteSessionClientOK(body *RotateClientResponseBody) *types
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
-		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
 		UpstreamRejectedAt:              body.UpstreamRejectedAt,
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
@@ -5206,9 +5206,6 @@ func ValidateGetClientResponseBody(body *GetClientResponseBody) (err error) {
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5322,9 +5319,6 @@ func ValidateCreateClientResponseBody(body *CreateClientResponseBody) (err error
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5391,9 +5385,6 @@ func ValidateCreateCimdClientResponseBody(body *CreateCimdClientResponseBody) (e
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
-	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -5462,9 +5453,6 @@ func ValidateUpdateClientResponseBody(body *UpdateClientResponseBody) (err error
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5531,9 +5519,6 @@ func ValidateAttachClientKeySetResponseBody(body *AttachClientKeySetResponseBody
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
-	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -5602,9 +5587,6 @@ func ValidateDetachClientKeySetResponseBody(body *DetachClientKeySetResponseBody
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5671,9 +5653,6 @@ func ValidateRotateClientResponseBody(body *RotateClientResponseBody) (err error
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
-	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -8693,9 +8672,6 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
-	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

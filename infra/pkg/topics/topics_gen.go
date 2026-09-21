@@ -54,6 +54,10 @@ const (
 	GramRiskV1GitleaksAnalysis Topic = "gram.risk.v1.GitleaksAnalysis"
 	// GramRiskV1GitleaksEnforcement publishes to gram-risk-v1-gitleaks-enforcement.
 	GramRiskV1GitleaksEnforcement Topic = "gram.risk.v1.GitleaksEnforcement"
+	// GramRiskV1LLMAnalysis publishes to gram-risk-v1-llm-analysis.
+	GramRiskV1LLMAnalysis Topic = "gram.risk.v1.LLMAnalysis"
+	// GramRiskV1LLMEnforcement publishes to gram-risk-v1-llm-enforcement.
+	GramRiskV1LLMEnforcement Topic = "gram.risk.v1.LLMEnforcement"
 	// GramRiskV1PresidioAnalysis publishes to gram-risk-v1-presidio-analysis.
 	GramRiskV1PresidioAnalysis Topic = "gram.risk.v1.PresidioAnalysis"
 	// GramRiskV1PresidioEnforcement publishes to gram-risk-v1-presidio-enforcement.
@@ -85,6 +89,8 @@ func All() []Topic {
 		GramRiskV1Finding,
 		GramRiskV1GitleaksAnalysis,
 		GramRiskV1GitleaksEnforcement,
+		GramRiskV1LLMAnalysis,
+		GramRiskV1LLMEnforcement,
 		GramRiskV1PresidioAnalysis,
 		GramRiskV1PresidioEnforcement,
 		GramRiskV1PromptInjectionAnalysis,
@@ -125,6 +131,10 @@ func Lookup(name string) (Topic, bool) {
 		return GramRiskV1GitleaksAnalysis, true
 	case GramRiskV1GitleaksEnforcement:
 		return GramRiskV1GitleaksEnforcement, true
+	case GramRiskV1LLMAnalysis:
+		return GramRiskV1LLMAnalysis, true
+	case GramRiskV1LLMEnforcement:
+		return GramRiskV1LLMEnforcement, true
 	case GramRiskV1PresidioAnalysis:
 		return GramRiskV1PresidioAnalysis, true
 	case GramRiskV1PresidioEnforcement:
@@ -176,6 +186,10 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.GitleaksAnalysis{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1GitleaksEnforcement:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.GitleaksEnforcement{}, gcp.WithEncodedPublishSettings(settings))
+	case GramRiskV1LLMAnalysis:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.LLMAnalysis{}, gcp.WithEncodedPublishSettings(settings))
+	case GramRiskV1LLMEnforcement:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.LLMEnforcement{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1PresidioAnalysis:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.PresidioAnalysis{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1PresidioEnforcement:

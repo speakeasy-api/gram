@@ -1,4 +1,6 @@
+import { sessionAccountIdentity } from "@/components/sessions/session-account-identity";
 import { useEffect, useRef, useState } from "react";
+import { Check } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -6,7 +8,6 @@ import { useFeatureFlag, type FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { SettingsSection } from "@/components/page-templates";
 import { Button } from "@/components/ui/Button";
-import { SimpleTooltip, TooltipProvider } from "@/components/ui/Tooltip";
 import {
   Select,
   SelectContent,
@@ -14,6 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { AgentKeyReview, type KeyReviewAccount } from "./AgentKeyReview";
+import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
+import type { ListBindingsResponseBody } from "@gram/client/models/components/listbindingsresponsebody.js";
+import { queryKeyRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { queryKeyRemoteSessions } from "@gram/client/react-query/remoteSessions.js";
+import { queryKeyRemoteSessionsListBindings } from "@gram/client/react-query/remoteSessionsListBindings.js";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
@@ -31,14 +39,44 @@ import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 
+import { AgentKeyServers, type KeyServer } from "./AgentKeyServers";
+
+import { narrowGrantsToServers } from "./agent-key-server-grants";
+import { discoverKeyServerGrants } from "./agent-key-discovery";
+
 const security = { sessionHeaderGramSession: "" };
 
-export function AgentAPIKeys({ agent }: { agent: ManagedAgent }): JSX.Element {
+export function AgentAPIKeys({
+  agent,
+  creation = false,
+  onCreate,
+  onDone,
+  onBusy,
+}: {
+  agent: ManagedAgent;
+  creation?: boolean;
+  onCreate?: () => void;
+  onDone?: () => void;
+  onBusy?: (busy: boolean) => void;
+}): JSX.Element {
   const organization = useOrganization();
   // Delegable candidates are specific to the authorizer, and the signed-in
   // user can change without the organization changing.
   const { user } = useSession();
   const flag = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
+  if (creation)
+    return (
+      <AgentAPIKeysContent
+        key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.authorize}`}
+        agent={agent}
+        organizationId={organization.id}
+        userId={user.id}
+        flag={flag}
+        creation
+        onDone={onDone}
+        onBusy={onBusy}
+      />
+    );
   return (
     <SettingsSection>
       <SettingsSection.Header>
@@ -56,6 +94,7 @@ export function AgentAPIKeys({ agent }: { agent: ManagedAgent }): JSX.Element {
             organizationId={organization.id}
             userId={user.id}
             flag={flag}
+            onCreate={onCreate}
           />
         </SettingsSection.Body>
       </SettingsSection.Panel>
@@ -68,11 +107,19 @@ function AgentAPIKeysContent({
   organizationId,
   userId,
   flag,
+  creation = false,
+  onCreate,
+  onDone,
+  onBusy,
 }: {
   agent: ManagedAgent;
   organizationId: string;
   userId: string;
   flag: FeatureFlagResult;
+  creation?: boolean;
+  onCreate?: () => void;
+  onDone?: () => void;
+  onBusy?: (busy: boolean) => void;
 }) {
   const sdk = useSdkClient();
   const queryClient = useQueryClient();
@@ -84,11 +131,19 @@ function AgentAPIKeysContent({
     canManage &&
     agent.lifecycle === "active" &&
     !agent.ownerReassignmentRequiredAt;
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(creation);
+  const [step, setStep] = useState(0);
+  const [inventory, setInventory] = useState<KeyServer[]>([]);
+  const [servers, setServers] = useState<KeyServer[]>([]);
+  const [accountsReady, setAccountsReady] = useState(false);
+  const [serversBusy, setServersBusy] = useState(false);
   const [name, setName] = useState("");
   const [narrowings, setNarrowings] = useState<GrantNarrowings>({});
   const [expiryDays, setExpiryDays] = useState("90");
   const [customExpiry, setCustomExpiry] = useState("");
+  const [issued, setIssued] = useState(false);
+  const [reviewGrants, setReviewGrants] = useState<AgentPolicyGrantForm[]>([]);
+  const [reviewAccounts, setReviewAccounts] = useState<KeyReviewAccount[]>([]);
   const [secret, setSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,13 +156,23 @@ function AgentAPIKeysContent({
   });
   // Discovery is authorize-gated and already intersects the live agent, owner
   // and caller, so credential issuance never depends on reading agent policy.
+  const resources = inventory.map((server) => ({
+    projectId: server.projectId,
+    toolsetId: server.resourceId,
+  }));
   const delegable = useQuery({
-    queryKey: ["agent-delegable-grants", organizationId, userId, agent.id],
+    queryKey: [
+      "agent-delegable-grants",
+      organizationId,
+      userId,
+      agent.id,
+      resources,
+      agent.updatedAt,
+      agent.ownerUserId,
+    ],
     queryFn: ({ signal }) =>
-      sdk.agents.listDelegableGrants({ agentId: agent.id }, undefined, {
-        signal,
-      }),
-    enabled: open && canIssue,
+      discoverKeyServerGrants(sdk.agents, agent.id, inventory, signal),
+    enabled: open && canIssue && resources.length > 0,
     retry: false,
     throwOnError: false,
   });
@@ -120,17 +185,54 @@ function AgentAPIKeysContent({
     delegable.isSuccess &&
     !delegable.isFetching &&
     Array.isArray(delegable.data);
+  const scopedGrants = narrowGrantsToServers(
+    discoveryComplete ? delegable.data : [],
+    servers,
+  );
+  let hasSelections = false;
+  try {
+    hasSelections =
+      buildRequestedGrants(
+        scopedGrants
+          .filter((grant) => narrowings[delegableGrantKey(grant)] !== undefined)
+          .map((grant) => ({
+            grant,
+            narrowing: narrowings[delegableGrantKey(grant)] ?? {},
+          })),
+      ).length > 0;
+  } catch {
+    // An empty tool selection is not permission to use every tool.
+  }
+  // Never carry a reviewed ceiling across a live read, even when the server
+  // returns equivalent grants. Explicit reselection confirms the new policy.
+  useEffect(() => {
+    setNarrowings({});
+    setReviewGrants([]);
+    setReviewAccounts([]);
+    setStep((current) => (current === 3 ? 2 : current));
+  }, [discoveryComplete, delegable.dataUpdatedAt]);
   const create = useCreateAPIKeyMutation({ gcTime: 0, retry: false });
+  // Resetting mutation state after issuance must not unlock header navigation
+  // while the post-issue inventory refresh is still in flight.
+  const navigationBusy = create.isPending || (issued && keys.isFetching);
+  useEffect(() => {
+    onBusy?.(navigationBusy);
+  }, [navigationBusy, onBusy]);
   const resetCreation = create.reset;
   useEffect(() => {
     rolloutEnabled.current = enabled;
     if (!enabled) {
+      setIssued(false);
       setOpen(false);
       setSecret(null);
       setCopied(false);
       resetCreation();
+      if (creation && flag.status !== "loading") onDone?.();
     }
-  }, [enabled, resetCreation]);
+    return () => {
+      rolloutEnabled.current = false;
+    };
+  }, [enabled, resetCreation, creation, flag.status, onDone]);
   const [revokedIds, setRevokedIds] = useState<string[]>([]);
   const knownKeys = keys.data?.keys.filter(
     (key) => !revokedIds.includes(key.id),
@@ -149,47 +251,15 @@ function AgentAPIKeysContent({
     setOpen(false);
     setSecret(null);
     setCopied(false);
+    setIssued(false);
     setName("");
     setNarrowings({});
     setExpiryDays("90");
     setCustomExpiry("");
     setError(null);
     create.reset();
+    onDone?.();
   };
-  const disablingReasons: string[] = [];
-  if (!canIssue)
-    disablingReasons.push(
-      "Issuance requires an active agent with a valid owner and credential authorization.",
-    );
-  if (create.isPending) disablingReasons.push("An API key is being created.");
-  if (delegable.isFetching)
-    disablingReasons.push("Delegable permissions are still loading.");
-  else if (!discoveryComplete)
-    disablingReasons.push(
-      "Delegable permissions could not be loaded. Retry permissions.",
-    );
-  let validatedName = "";
-  try {
-    validatedName = validateAgentAPIKeyName(name);
-  } catch (error) {
-    disablingReasons.push(
-      error instanceof Error ? error.message : "Enter a valid key name.",
-    );
-  }
-  let requestedGrants: AgentPolicyGrantForm[] = [];
-  try {
-    const selections = (discoveryComplete ? (delegable.data ?? []) : [])
-      .map((grant) => ({ grant, key: delegableGrantKey(grant) }))
-      .filter(({ key }) => narrowings[key] !== undefined)
-      .map(({ grant, key }) => ({ grant, narrowing: narrowings[key] ?? {} }));
-    requestedGrants = buildRequestedGrants(selections);
-  } catch (error) {
-    disablingReasons.push(
-      error instanceof Error ? error.message : "Select valid permissions.",
-    );
-  }
-  if (!requestedGrants.length)
-    disablingReasons.push("Select at least one valid permission.");
   const expiryValidation = (now: number) => {
     // Leave five minutes below the server limit for modest browser clock skew.
     const maxLifetime = 365 * 86_400_000 - 5 * 60_000;
@@ -211,16 +281,156 @@ function AgentAPIKeysContent({
     return { expiresAt, reason };
   };
   const expiryReason = expiryValidation(Date.now()).reason;
-  if (expiryReason) disablingReasons.push(expiryReason);
-  const issue = () => {
-    if (disablingReasons.length) return;
-    // Recheck at submission in case the form stayed open past midnight.
+  const returnToStep = (next: number) => {
+    setStep(next);
+    setNarrowings({});
+    setReviewGrants([]);
+    setReviewAccounts([]);
+    setError(null);
+    void delegable.refetch();
+  };
+  const issue = (review = false) => {
+    if (
+      !canIssue ||
+      create.isPending ||
+      issued ||
+      !accountsReady ||
+      !servers.length ||
+      (!review && step !== 3)
+    )
+      return;
+    let validatedName: string;
+    try {
+      validatedName = validateAgentAPIKeyName(name);
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Enter a valid key name.",
+      );
+      return;
+    }
+    if (!discoveryComplete) {
+      setError("Load available permissions before continuing.");
+      return;
+    }
+    let requestedGrants;
+    try {
+      // Only candidates discovery actually returned can be requested, so a
+      // failed read yields no permissions rather than a hand-written request.
+      const selections = scopedGrants
+        .map((grant) => ({ grant, key: delegableGrantKey(grant) }))
+        .filter(({ key }) => narrowings[key] !== undefined)
+        .map(({ grant, key }) => ({ grant, narrowing: narrowings[key] ?? {} }));
+      requestedGrants = buildRequestedGrants(selections);
+      if (!requestedGrants.length)
+        throw new Error("Select at least one permission to continue.");
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Select at least one permission to continue.",
+      );
+      return;
+    }
     const { expiresAt, reason } = expiryValidation(Date.now());
     if (reason) {
       setError(reason);
       return;
     }
     setError(null);
+    if (review) {
+      setReviewGrants(requestedGrants);
+      // Account requirements were verified on the previous step. Reuse that
+      // exact inventory, without fetching identities from the dashboard login.
+      const required = [
+        ...new Map(
+          servers
+            .filter((server) => server.issuerId)
+            .map((server) => [
+              `${server.projectId}:${server.issuerId}`,
+              server,
+            ]),
+        ).values(),
+      ];
+      const ownerScope = { organizationId, userId };
+      const accountRows = required.map((server) => {
+        const request = {
+          gramProject: server.projectSlug,
+          principalId: agent.id,
+          userSessionIssuerId: server.issuerId!,
+        };
+        return {
+          server,
+          clients: queryClient.getQueryData<unknown[]>([
+            ...queryKeyRemoteSessionClients({
+              gramProject: server.projectSlug,
+              userSessionIssuerId: server.issuerId!,
+            }),
+            ownerScope,
+            "all-pages",
+          ]),
+          candidates:
+            queryClient.getQueryData<RemoteSession[]>([
+              ...queryKeyRemoteSessions(request),
+              ownerScope,
+              "all-pages",
+            ]) ?? [],
+          bindings:
+            queryClient.getQueryData<ListBindingsResponseBody>([
+              ...queryKeyRemoteSessionsListBindings(request),
+              ownerScope,
+            ])?.items ?? [],
+        };
+      });
+      setReviewAccounts(
+        (accountRows ?? []).flatMap<KeyReviewAccount>((row) =>
+          row.clients?.length === 0
+            ? servers
+                .filter(
+                  (server) =>
+                    server.projectId === row.server.projectId &&
+                    server.issuerId === row.server.issuerId,
+                )
+                .map((server) => ({
+                  resourceId: server.resourceId,
+                  projectId: server.projectId,
+                  status: "not-required" as const,
+                }))
+            : row.bindings
+                .filter(
+                  (binding) =>
+                    binding.remoteSession !== undefined &&
+                    row.candidates.some(
+                      (candidate) => candidate.id === binding.remoteSessionId,
+                    ),
+                )
+                .flatMap((binding) => {
+                  // Several selected servers can share an issuer. Carry the same
+                  // authorized identity into each server's review, not only the first.
+                  return servers
+                    .filter(
+                      (server) =>
+                        server.projectId === row.server.projectId &&
+                        server.issuerId === row.server.issuerId,
+                    )
+                    .map((server) => ({
+                      resourceId: server.resourceId,
+                      projectId: server.projectId,
+                      status: "connected" as const,
+                      ...sessionAccountIdentity(binding.remoteSession),
+                    }));
+                }),
+        ),
+      );
+      setStep(3);
+      return;
+    }
+    if (JSON.stringify(requestedGrants) !== JSON.stringify(reviewGrants)) {
+      setError(
+        "Available permissions changed. Review your selections again before creating the key.",
+      );
+      setStep(2);
+      return;
+    }
     create.mutate(
       {
         security,
@@ -237,11 +447,21 @@ function AgentAPIKeysContent({
       },
       {
         onSuccess: (key) => {
-          if (rolloutEnabled.current) setSecret(key.key ?? null);
+          if (rolloutEnabled.current) {
+            setIssued(true);
+            setSecret(key.key ?? null);
+          }
           create.reset();
           refresh();
         },
         onError: () => {
+          // A failed issuance may reflect a live policy change. Withdraw the
+          // reviewed ceiling even when the error does not identify its cause.
+          setNarrowings({});
+          setReviewGrants([]);
+          setReviewAccounts([]);
+          setStep(2);
+          if (rolloutEnabled.current) void delegable.refetch();
           setError(
             "Could not create API key. Check that the requested grants are allowed by the agent policy, the owner's live permissions and your own, and that the agent is active with a valid owner.",
           );
@@ -290,6 +510,7 @@ function AgentAPIKeysContent({
       ),
     },
   ];
+  if (!enabled) return <Text muted>Agent API keys are unavailable.</Text>;
   if (!canManage)
     return (
       <Text muted>
@@ -298,71 +519,125 @@ function AgentAPIKeysContent({
     );
   return (
     <>
-      {!enabled && (
-        <Text muted>
-          {flag.status === "loading"
-            ? "Checking API key availability…"
-            : flag.status === "disabled"
-              ? "Agent API keys are disabled for this organization."
-              : "Agent API key availability could not be determined."}
-        </Text>
-      )}
-      {enabled && keys.isLoading ? (
-        <Text muted>Loading API keys…</Text>
-      ) : enabled && keys.isError ? (
-        <div role="alert">
-          <Text>
-            {unavailable
-              ? "Agent API keys are unavailable. The credential feature may be disabled."
-              : "Could not load API keys."}
-          </Text>
-          <Button variant="secondary" onClick={() => void keys.refetch()}>
-            Retry API keys
+      {!creation && (
+        <>
+          {enabled && keys.isLoading ? (
+            <Text muted>Loading API keys…</Text>
+          ) : enabled && keys.isError ? (
+            <div role="alert">
+              <Text>
+                {unavailable
+                  ? "Agent API keys are unavailable. The credential feature may be disabled."
+                  : "Could not load API keys."}
+              </Text>
+              <Button variant="secondary" onClick={() => void keys.refetch()}>
+                Retry API keys
+              </Button>
+            </div>
+          ) : null}
+          {knownKeys?.length ? (
+            <Table
+              data={knownKeys}
+              columns={columns}
+              rowKey={(key) => key.id}
+            />
+          ) : keys.data ? (
+            <Text muted>No API keys yet</Text>
+          ) : null}
+          {!canIssue && (
+            <Text muted>
+              Issuance requires an active agent with a valid owner and
+              credential authorization. Existing keys can still be revoked.
+            </Text>
+          )}
+          <Button
+            disabled={!canIssue || unavailable}
+            onClick={() => {
+              onCreate?.();
+            }}
+          >
+            Create API key
           </Button>
-        </div>
-      ) : null}
-      {knownKeys?.length ? (
-        <Table data={knownKeys} columns={columns} rowKey={(key) => key.id} />
-      ) : keys.data ? (
-        <Text muted>No API keys yet</Text>
-      ) : null}
-      {!canIssue && (
-        <Text muted>
-          Issuance requires an active agent with a valid owner and credential
-          authorization. Existing keys can still be revoked.
-        </Text>
+        </>
       )}
-      <Button
-        disabled={!canIssue || unavailable}
-        onClick={() => {
-          setError(null);
-          setOpen(true);
-        }}
-      >
-        Create API key
-      </Button>
-      <Dialog
-        open={open && enabled}
-        onOpenChange={(value) => {
-          if (!value && !create.isPending) close();
-        }}
-      >
-        <Dialog.Content>
-          <Dialog.Header>
-            <Dialog.Title>
-              {secret ? "Save your API key" : "Create agent API key"}
-            </Dialog.Title>
-            <Dialog.Description>
-              {secret
-                ? "This key is shown only once. Copy it now and store it securely."
-                : "Choose an expiry for this key. Effective access remains limited by the agent policy, the owner's live permissions and your own; validation can reject grants outside that ceiling."}
-            </Dialog.Description>
-          </Dialog.Header>
-          {secret ? (
+      {creation && open && enabled && (
+        <div className="space-y-6">
+          <Text muted>
+            {issued
+              ? "This key is shown only once. Copy it now and store it securely."
+              : "Choose where this key can connect and what it can do. Choose an expiration of up to 365 days."}
+          </Text>
+          {!issued && (
+            <ol
+              aria-label="Creation steps"
+              className="flex flex-wrap gap-4 text-sm"
+            >
+              {["MCP servers", "Accounts", "Permissions", "Review"].map(
+                (label, index) => (
+                  <li key={label} className="min-w-32 flex-1">
+                    <button
+                      type="button"
+                      aria-current={step === index ? "step" : undefined}
+                      disabled={index >= step || create.isPending}
+                      onClick={() => {
+                        returnToStep(index);
+                        setError(null);
+                      }}
+                      className={`flex w-full items-center gap-3 border-b-2 px-1 py-3 text-left ${step === index ? "border-primary font-medium" : "border-border text-muted-foreground"}`}
+                    >
+                      <span
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs ${index < step ? "border-primary bg-primary text-primary-foreground" : ""}`}
+                      >
+                        {index < step ? (
+                          <Check className="h-3 w-3" />
+                        ) : (
+                          index + 1
+                        )}
+                      </span>
+                      {label}
+                    </button>
+                  </li>
+                ),
+              )}
+            </ol>
+          )}
+          {!issued && step < 2 && (
+            <AgentKeyServers
+              agent={agent}
+              grants={discoveryComplete ? delegable.data : []}
+              discoveryComplete={discoveryComplete}
+              discoveryError={delegable.isError}
+              onRetryDiscovery={() => void delegable.refetch()}
+              onInventory={setInventory}
+              step={step}
+              selected={servers}
+              onChange={(next) => {
+                setServers(next);
+                setAccountsReady(false);
+                setNarrowings({});
+                setReviewGrants([]);
+                setError(null);
+              }}
+              onReady={setAccountsReady}
+              onBusy={setServersBusy}
+            />
+          )}
+          {issued ? (
             <div className="space-y-4">
-              <code className="block break-all">{secret}</code>
+              <h2 className="text-lg font-semibold">Save your API key</h2>
+              {secret ? (
+                <code className="block break-all">{secret}</code>
+              ) : (
+                <Text role="alert">
+                  The key was created but its secret was not returned. Revoke it
+                  from the agent page before creating another.
+                </Text>
+              )}
+              <ServerEndpoints servers={servers} />
               <Button
+                disabled={!secret}
                 onClick={() => {
+                  if (!secret) return;
                   void navigator.clipboard.writeText(secret).then(
                     () => setCopied(true),
                     () => setError("Could not copy API key. Copy it manually."),
@@ -375,104 +650,145 @@ function AgentAPIKeysContent({
                 Done
               </Button>
             </div>
-          ) : (
+          ) : step >= 2 ? (
             <form
               className="space-y-4"
               onSubmit={(event) => {
                 event.preventDefault();
-                issue();
+                issue(step === 2);
               }}
             >
-              <label className="block space-y-2">
-                Key name
-                <Input required value={name} onChange={setName} />
-              </label>
-              <DelegableGrantSection
-                isFetching={delegable.isFetching}
-                isComplete={discoveryComplete}
-                grants={delegable.data ?? []}
-                narrowings={narrowings}
-                onChangeNarrowings={setNarrowings}
-                disabled={create.isPending}
-                onRetry={() => void delegable.refetch()}
-              />
-              <div className="space-y-2">
-                <label
-                  htmlFor="agent-key-expiry"
-                  className="text-sm font-medium"
-                >
-                  Expiration
-                </label>
-                <Select
-                  value={expiryDays}
-                  onValueChange={setExpiryDays}
-                  disabled={create.isPending}
-                >
-                  <SelectTrigger id="agent-key-expiry">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[7, 30, 90, 180, 365].map((days) => (
-                      <SelectItem key={days} value={String(days)}>
-                        {days} days
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="custom">Custom date</SelectItem>
-                  </SelectContent>
-                </Select>
-                {expiryDays === "custom" && (
-                  <label className="block space-y-2 text-sm font-medium">
-                    Expiration date
-                    <Input
-                      type="date"
-                      value={customExpiry}
-                      onChange={setCustomExpiry}
-                      disabled={create.isPending}
-                    />
+              {step === 2 ? (
+                <>
+                  <h2 className="text-lg font-semibold">Choose permissions</h2>
+                  <label className="block space-y-2">
+                    Key name
+                    <Input required value={name} onChange={setName} />
                   </label>
-                )}
-                <Text small muted>
-                  Keys expire within 365 days. Custom dates use midnight in your
-                  local time zone.
-                </Text>
-              </div>
-              <TooltipProvider>
-                <SimpleTooltip
-                  tooltip={
-                    disablingReasons.length ? (
-                      <ul className="list-disc pl-4">
-                        {disablingReasons.map((reason) => (
-                          <li key={reason}>{reason}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      "Create this API key"
-                    )
-                  }
-                >
-                  <span
-                    className="inline-flex"
-                    tabIndex={disablingReasons.length ? 0 : undefined}
-                    aria-label={
-                      disablingReasons.length
-                        ? disablingReasons.join(" ")
-                        : undefined
-                    }
-                  >
-                    <Button
-                      type="submit"
-                      disabled={disablingReasons.length > 0}
+                  <Text small muted>
+                    Select access for your servers, then choose the tools this
+                    key can use.
+                  </Text>
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="agent-key-expiry"
+                      className="text-sm font-medium"
                     >
-                      {create.isPending ? "Creating…" : "Create key"}
-                    </Button>
-                  </span>
-                </SimpleTooltip>
-              </TooltipProvider>
+                      Expiration
+                    </label>
+                    <Select
+                      value={expiryDays}
+                      onValueChange={setExpiryDays}
+                      disabled={create.isPending}
+                    >
+                      <SelectTrigger id="agent-key-expiry">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[7, 30, 90, 180, 365].map((days) => (
+                          <SelectItem key={days} value={String(days)}>
+                            {days} days
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="custom">Custom date</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {expiryDays === "custom" && (
+                      <label className="block space-y-2 text-sm font-medium">
+                        Expiration date
+                        <Input
+                          type="date"
+                          value={customExpiry}
+                          onChange={setCustomExpiry}
+                          disabled={create.isPending}
+                        />
+                      </label>
+                    )}
+                    <Text small muted>
+                      Keys expire within 365 days. Custom dates use midnight in
+                      your local time zone.
+                    </Text>
+                  </div>
+                  <DelegableGrantSection
+                    isFetching={delegable.isFetching}
+                    isComplete={discoveryComplete}
+                    grants={scopedGrants}
+                    narrowings={narrowings}
+                    onChangeNarrowings={setNarrowings}
+                    disabled={create.isPending}
+                    onRetry={() => void delegable.refetch()}
+                  />
+                </>
+              ) : (
+                <AgentKeyReview
+                  name={name}
+                  servers={servers}
+                  grants={reviewGrants}
+                  accounts={reviewAccounts}
+                  onEditServers={() => returnToStep(0)}
+                  onEditAccounts={() => returnToStep(1)}
+                  onEditAccess={() => returnToStep(2)}
+                  disabled={create.isPending}
+                />
+              )}
             </form>
+          ) : null}
+          {!issued && (
+            <div className="flex items-center justify-between border-t pt-5">
+              <div className="flex gap-2">
+                {step > 0 && (
+                  <Button
+                    variant="secondary"
+                    disabled={create.isPending}
+                    onClick={() => {
+                      returnToStep(step - 1);
+                      setError(null);
+                    }}
+                  >
+                    Back
+                  </Button>
+                )}
+                <Button
+                  variant="tertiary"
+                  disabled={create.isPending}
+                  onClick={close}
+                >
+                  Cancel
+                </Button>
+              </div>
+              <Button
+                title={expiryReason}
+                disabled={
+                  !canIssue ||
+                  create.isPending ||
+                  serversBusy ||
+                  !discoveryComplete ||
+                  !servers.length ||
+                  scopedGrants.length === 0 ||
+                  (step >= 1 && !accountsReady) ||
+                  (step >= 2 &&
+                    (!discoveryComplete ||
+                      !hasSelections ||
+                      !name.trim() ||
+                      !!expiryReason))
+                }
+                onClick={() =>
+                  step < 2 ? setStep(step + 1) : issue(step === 2)
+                }
+              >
+                {create.isPending
+                  ? "Creating…"
+                  : step < 2
+                    ? "Continue"
+                    : step === 2
+                      ? "Review key"
+                      : "Create key"}
+              </Button>
+            </div>
           )}
           {error && <p role="alert">{error}</p>}
-        </Dialog.Content>
-      </Dialog>
+        </div>
+      )}
       <Dialog
         open={revoke !== null}
         onOpenChange={(value) => {
@@ -562,13 +878,43 @@ function DelegableGrantSection({
     );
   return (
     <div className="space-y-2">
-      <Text muted>
-        Delegable permissions could not be loaded, so none can be delegated.
-        Retry to select permissions before creating a key.
-      </Text>
+      <Text muted>Permissions could not be loaded. Retry to continue.</Text>
       <Button type="button" variant="secondary" onClick={onRetry}>
         Retry permissions
       </Button>
+    </div>
+  );
+}
+
+function ServerEndpoints({ servers }: { servers: KeyServer[] }) {
+  return (
+    <div className="space-y-3">
+      {servers.map((server) => (
+        <div key={server.id}>
+          <Text className="font-medium">{server.name}</Text>
+          {server.endpoints?.length ? (
+            server.endpoints.map((url) => (
+              <div
+                key={url}
+                className="flex items-center gap-2 rounded-md border p-3"
+              >
+                <code className="min-w-0 flex-1 break-all text-sm">{url}</code>
+                <CopyButton text={url} tooltip="Copy server URL" />
+              </div>
+            ))
+          ) : (
+            <Text small muted>
+              {server.kind === "Unproxied"
+                ? "Unproxied servers require their own upstream connection and do not accept this Gram key."
+                : "No connection URL is available. Open this server’s settings to configure its endpoint."}
+            </Text>
+          )}
+        </div>
+      ))}
+      <Text small muted>
+        Use the key as a Bearer token only with Gram endpoints. Do not send it
+        to an upstream server.
+      </Text>
     </div>
   );
 }

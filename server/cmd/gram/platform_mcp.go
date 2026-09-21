@@ -227,9 +227,13 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	budgets := platformmcp.OperationBudgets{
 		Catalog:      newBudget(platformmcp.CatalogConnectionLimitName, platformmcp.CatalogOrganizationLimitName),
 		Registration: newBudget(platformmcp.RegistrationConnectionLimitName, platformmcp.RegistrationOrganizationLimitName),
-		Handoff:      newBudget(platformmcp.HandoffConnectionLimitName, platformmcp.HandoffOrganizationLimitName),
-		SetupStart:   newBudget(platformmcp.SetupConnectionLimitName, platformmcp.SetupOrganizationLimitName),
-		Repair:       newBudget(platformmcp.RepairConnectionLimitName, platformmcp.RepairOrganizationLimitName),
+		ReviewRequests: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.ReviewRequestConnectionLimitName, ratelimit.PerMinute(platformmcp.ReviewRequestsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.ReviewRequestOrganizationLimitName, ratelimit.PerMinute(platformmcp.ReviewRequestsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+		Handoff:    newBudget(platformmcp.HandoffConnectionLimitName, platformmcp.HandoffOrganizationLimitName),
+		SetupStart: newBudget(platformmcp.SetupConnectionLimitName, platformmcp.SetupOrganizationLimitName),
+		Repair:     newBudget(platformmcp.RepairConnectionLimitName, platformmcp.RepairOrganizationLimitName),
 		// Documentation search is metered on its own allowances rather than the
 		// shared five-per-minute budget: retrieval is in-process and reading is
 		// what the corpus is for, so a caller researching a setup should not
@@ -369,6 +373,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithAuthorization(config.Authz).
+		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
@@ -652,9 +657,13 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	budgets := platformmcp.OperationBudgets{
 		Catalog:      newBudget(platformmcp.CatalogConnectionLimitName, platformmcp.CatalogOrganizationLimitName),
 		Registration: newBudget(platformmcp.RegistrationConnectionLimitName, platformmcp.RegistrationOrganizationLimitName),
-		Handoff:      newBudget(platformmcp.HandoffConnectionLimitName, platformmcp.HandoffOrganizationLimitName),
-		SetupStart:   newBudget(platformmcp.SetupConnectionLimitName, platformmcp.SetupOrganizationLimitName),
-		Repair:       newBudget(platformmcp.RepairConnectionLimitName, platformmcp.RepairOrganizationLimitName),
+		ReviewRequests: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.ReviewRequestConnectionLimitName, ratelimit.PerMinute(platformmcp.ReviewRequestsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.ReviewRequestOrganizationLimitName, ratelimit.PerMinute(platformmcp.ReviewRequestsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+		Handoff:    newBudget(platformmcp.HandoffConnectionLimitName, platformmcp.HandoffOrganizationLimitName),
+		SetupStart: newBudget(platformmcp.SetupConnectionLimitName, platformmcp.SetupOrganizationLimitName),
+		Repair:     newBudget(platformmcp.RepairConnectionLimitName, platformmcp.RepairOrganizationLimitName),
 		// Documentation search is metered on its own allowances rather than the
 		// shared five-per-minute budget: retrieval is in-process and reading is
 		// what the corpus is for, so a caller researching a setup should not
@@ -783,6 +792,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithAuthorization(config.Authz).
+		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).

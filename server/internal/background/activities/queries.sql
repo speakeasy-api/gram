@@ -37,18 +37,6 @@ SELECT
 FROM toolset_metrics tm
 FULL OUTER JOIN tool_metrics tlm ON tm.organization_id = tlm.organization_id;
 
--- name: GetAllOrganizationsWithToolsets :many
-SELECT
-    organization_metadata.id,
-    organization_metadata.name,
-    organization_metadata.slug,
-    gram_account_type
-FROM organization_metadata
-JOIN toolsets ON organization_metadata.id = toolsets.organization_id
-WHERE toolsets.deleted = false
-GROUP BY organization_metadata.id
-HAVING COUNT(toolsets.id) > 0;
-
 -- name: AcquireOpenRouterKeyBillingLock :exec
 -- A session lock lets the reconciler serialize a billing projection read and
 -- its upstream PATCH without holding a database transaction across the
@@ -748,11 +736,11 @@ WHERE om.id = ANY(@organization_ids::text[])
   );
 
 -- name: ListWeeklyUsageSummaryTargets :many
--- Organizations that receive the weekly tokens-under-management usage
--- summary email: enabled enterprise organizations with an explicit billing
--- alert email and enabled PAYG organizations (whose fallback audience is
--- resolved by the activity). The anchor day determines the billing cycle
--- window; the slug builds the billing page link.
+-- Organizations that receive the weekly metered usage summary email: enabled
+-- enterprise organizations with an explicit billing alert email and enabled
+-- PAYG organizations (whose fallback audience is resolved by the activity).
+-- The anchor day determines the billing-cycle windows; the slug builds the
+-- billing page link.
 SELECT
     om.id AS organization_id,
     om.name AS organization_name,

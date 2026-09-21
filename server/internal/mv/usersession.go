@@ -130,8 +130,8 @@ func buildWorkloadView(subject urn.SessionSubject, workloads map[WorkloadKey]*ty
 
 // UpstreamKey identifies the (subject, issuer) pair that joins a user_session
 // to the remote_sessions Gram holds on that subject's behalf. Both tables carry
-// the pair, so it is the whole join — the inbound and outbound legs of one
-// brokered connection meet here and nowhere else.
+// the pair for direct grants; agent grants resolve through a live attachment
+// and retain the requesting agent subject in this key.
 type UpstreamKey struct {
 	SubjectURN          string
 	UserSessionIssuerID uuid.UUID
@@ -144,7 +144,7 @@ func BuildUserSessionUpstreamIndex(rows []repo.ListRemoteSessionUpstreamsForSubj
 	index := make(map[UpstreamKey][]*types.UserSessionUpstream, len(rows))
 	for _, row := range rows {
 		key := UpstreamKey{
-			SubjectURN:          row.SubjectUrn.String(),
+			SubjectURN:          row.SubjectUrn,
 			UserSessionIssuerID: row.UserSessionIssuerID,
 		}
 		index[key] = append(index[key], buildUserSessionUpstreamView(row))

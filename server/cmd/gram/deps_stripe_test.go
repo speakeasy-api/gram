@@ -79,6 +79,8 @@ func TestNewStripeClientRealClientUsesCatalog(t *testing.T) {
 		"stripe-api-key":                 "sk_test_placeholder",
 		"stripe-webhook-secret":          "whsec_placeholder",
 		"stripe-price-id-tum":            "price_placeholder",
+		"stripe-price-id-mcp-egress":     "price_mcp_egress",
+		"stripe-price-id-risk-scans":     "price_risk_scans",
 		"stripe-portal-configuration-id": "bpc_placeholder",
 	})
 
@@ -92,6 +94,8 @@ func TestNewStripeClientRealClientUsesCatalog(t *testing.T) {
 	require.NotNil(t, client)
 	require.Equal(t, stripeclient.Catalog{
 		PriceIDTUM:            "price_placeholder",
+		PriceIDMCPEgress:      "price_mcp_egress",
+		PriceIDRiskScans:      "price_risk_scans",
 		PortalConfigurationID: "bpc_placeholder",
 	}, client.Catalog())
 }
@@ -270,6 +274,7 @@ func TestNewStripeCatalogLeavesRiskMetersUnmappedWithoutNames(t *testing.T) {
 		metering.RiskGitleaks(), metering.RiskPresidio(),
 		metering.RiskPromptInjection(), metering.RiskPromptPolicy(),
 		metering.RiskCustomRules(), metering.RiskCLIDestructive(),
+		metering.RiskLLMAnalyzer(),
 	} {
 		eventName, err := catalog.MeterEventName(definition)
 		require.NoError(t, err)
@@ -287,11 +292,13 @@ func TestNewStripeCatalogLeavesPlaceholderRiskMetersUnmapped(t *testing.T) {
 		"stripe-meter-event-name-risk-prompt-policy":    "unset",
 		"stripe-meter-event-name-risk-custom-rules":     "unset",
 		"stripe-meter-event-name-risk-cli-destructive":  "unset",
+		"stripe-meter-event-name-risk-llm-analyzer":     "unset",
 	}))
 	for _, definition := range []metering.Definition{
 		metering.RiskGitleaks(), metering.RiskPresidio(),
 		metering.RiskPromptInjection(), metering.RiskPromptPolicy(),
 		metering.RiskCustomRules(), metering.RiskCLIDestructive(),
+		metering.RiskLLMAnalyzer(),
 	} {
 		eventName, err := catalog.MeterEventName(definition)
 		require.NoError(t, err)
@@ -309,6 +316,7 @@ func TestNewStripeCatalogRiskMetersRequireExportOptIn(t *testing.T) {
 		metering.RiskPromptPolicy():    "billing_prompt_policy",
 		metering.RiskCustomRules():     "billing_custom_rules",
 		metering.RiskCLIDestructive():  "billing_cli_destructive",
+		metering.RiskLLMAnalyzer():     "billing_llm_analyzer",
 	}
 	args := []string{
 		"gram",
@@ -318,6 +326,7 @@ func TestNewStripeCatalogRiskMetersRequireExportOptIn(t *testing.T) {
 		"--stripe-meter-event-name-risk-prompt-policy=billing_prompt_policy",
 		"--stripe-meter-event-name-risk-custom-rules=billing_custom_rules",
 		"--stripe-meter-event-name-risk-cli-destructive=billing_cli_destructive",
+		"--stripe-meter-event-name-risk-llm-analyzer=billing_llm_analyzer",
 	}
 	for _, enabled := range []string{"false", "true"} {
 		app := cli.NewApp()
@@ -406,6 +415,8 @@ func newStripeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	set.String("stripe-api-key", "", "")
 	set.String("stripe-webhook-secret", "", "")
 	set.String("stripe-price-id-tum", "", "")
+	set.String("stripe-price-id-mcp-egress", "", "")
+	set.String("stripe-price-id-risk-scans", "", "")
 	set.String("stripe-meter-event-name", "", "")
 	set.String("stripe-meter-event-name-mcp-bandwidth-ingress", "", "")
 	set.String("stripe-meter-event-name-mcp-bandwidth-egress", "", "")
@@ -415,6 +426,7 @@ func newStripeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	set.String("stripe-meter-event-name-risk-prompt-policy", "", "")
 	set.String("stripe-meter-event-name-risk-custom-rules", "", "")
 	set.String("stripe-meter-event-name-risk-cli-destructive", "", "")
+	set.String("stripe-meter-event-name-risk-llm-analyzer", "", "")
 	set.String("stripe-portal-configuration-id", "", "")
 	set.Bool(stripeMeterEventExportFlagName, false, "")
 	set.String("polar-api-key", "", "")

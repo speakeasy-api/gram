@@ -71,6 +71,7 @@ type Server struct {
 	StartTrial                            http.Handler
 	ChangeTrialEndDate                    http.Handler
 	GetMeterUsage                         http.Handler
+	GetSpendBreakdown                     http.Handler
 	GetSupportMatrix                      http.Handler
 	UpdateSupportMatrix                   http.Handler
 }
@@ -152,6 +153,7 @@ func New(
 			{"StartTrial", "POST", "/admin/trial.start"},
 			{"ChangeTrialEndDate", "POST", "/admin/trial.changeEndDate"},
 			{"GetMeterUsage", "GET", "/admin/organizations.getMeterUsage"},
+			{"GetSpendBreakdown", "GET", "/admin/organization.spendBreakdown"},
 			{"GetSupportMatrix", "GET", "/admin/supportMatrix.get"},
 			{"UpdateSupportMatrix", "POST", "/admin/supportMatrix.update"},
 		},
@@ -205,6 +207,7 @@ func New(
 		StartTrial:                            NewStartTrialHandler(e.StartTrial, mux, decoder, encoder, errhandler, formatter),
 		ChangeTrialEndDate:                    NewChangeTrialEndDateHandler(e.ChangeTrialEndDate, mux, decoder, encoder, errhandler, formatter),
 		GetMeterUsage:                         NewGetMeterUsageHandler(e.GetMeterUsage, mux, decoder, encoder, errhandler, formatter),
+		GetSpendBreakdown:                     NewGetSpendBreakdownHandler(e.GetSpendBreakdown, mux, decoder, encoder, errhandler, formatter),
 		GetSupportMatrix:                      NewGetSupportMatrixHandler(e.GetSupportMatrix, mux, decoder, encoder, errhandler, formatter),
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixHandler(e.UpdateSupportMatrix, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -265,6 +268,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.StartTrial = m(s.StartTrial)
 	s.ChangeTrialEndDate = m(s.ChangeTrialEndDate)
 	s.GetMeterUsage = m(s.GetMeterUsage)
+	s.GetSpendBreakdown = m(s.GetSpendBreakdown)
 	s.GetSupportMatrix = m(s.GetSupportMatrix)
 	s.UpdateSupportMatrix = m(s.UpdateSupportMatrix)
 }
@@ -324,6 +328,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountStartTrialHandler(mux, h.StartTrial)
 	MountChangeTrialEndDateHandler(mux, h.ChangeTrialEndDate)
 	MountGetMeterUsageHandler(mux, h.GetMeterUsage)
+	MountGetSpendBreakdownHandler(mux, h.GetSpendBreakdown)
 	MountGetSupportMatrixHandler(mux, h.GetSupportMatrix)
 	MountUpdateSupportMatrixHandler(mux, h.UpdateSupportMatrix)
 }
@@ -3014,6 +3019,59 @@ func NewGetMeterUsageHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getMeterUsage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSpendBreakdownHandler configures the mux to serve the "admin"
+// service "getSpendBreakdown" endpoint.
+func MountGetSpendBreakdownHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.spendBreakdown", f)
+}
+
+// NewGetSpendBreakdownHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getSpendBreakdown" endpoint.
+func NewGetSpendBreakdownHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSpendBreakdownRequest(mux, decoder)
+		encodeResponse = EncodeGetSpendBreakdownResponse(encoder)
+		encodeError    = EncodeGetSpendBreakdownError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSpendBreakdown")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

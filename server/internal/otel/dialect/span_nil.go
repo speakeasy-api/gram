@@ -34,3 +34,27 @@ func (e NilSpan) ExternalUserID(span *otelv1.InboundSpan) (key string, val strin
 func (e NilSpan) ResponseID(span *otelv1.InboundSpan) (key string, val string, err error) {
 	return
 }
+
+func (NilSpan) Provider(*otelv1.InboundSpan) (string, string, error)        { return "", "", nil }
+func (NilSpan) Surface(*otelv1.InboundSpan) (string, string, error)         { return "", "", nil }
+func (NilSpan) EventName(*otelv1.InboundSpan) (string, string, error)       { return "", "", nil }
+func (NilSpan) EventType(*otelv1.InboundSpan) (string, string, error)       { return "", "", nil }
+func (NilSpan) SubjectID(*otelv1.InboundSpan) (string, string, error)       { return "", "", nil }
+func (NilSpan) TurnID(*otelv1.InboundSpan) (string, string, error)          { return "", "", nil }
+func (NilSpan) Model(*otelv1.InboundSpan) (string, string, error)           { return "", "", nil }
+func (NilSpan) ToolName(*otelv1.InboundSpan) (string, string, error)        { return "", "", nil }
+func (NilSpan) Outcome(*otelv1.InboundSpan) (string, string, error)         { return "", "", nil }
+func (NilSpan) OutcomeMessage(*otelv1.InboundSpan) (string, string, error)  { return "", "", nil }
+func (NilSpan) Text(*otelv1.InboundSpan) (string, string, error)            { return "", "", nil }
+func (NilSpan) QuerySource(*otelv1.InboundSpan) (string, string, error)     { return "", "", nil }
+func (NilSpan) SkillName(*otelv1.InboundSpan) (string, string, error)       { return "", "", nil }
+func (NilSpan) AgentName(*otelv1.InboundSpan) (string, string, error)       { return "", "", nil }
+func (NilSpan) MCPServerName(*otelv1.InboundSpan) (string, string, error)   { return "", "", nil }
+func (NilSpan) MCPToolName(*otelv1.InboundSpan) (string, string, error)     { return "", "", nil }
+func (NilSpan) ExternalOrgID(*otelv1.InboundSpan) (string, string, error)   { return "", "", nil }
+func (NilSpan) DurationNano(*otelv1.InboundSpan) (string, int64, error)     { return "", 0, nil }
+func (NilSpan) InputTokens(*otelv1.InboundSpan) (string, int64, error)      { return "", 0, nil }
+func (NilSpan) OutputTokens(*otelv1.InboundSpan) (string, int64, error)     { return "", 0, nil }
+func (NilSpan) CacheReadTokens(*otelv1.InboundSpan) (string, int64, error)  { return "", 0, nil }
+func (NilSpan) CacheWriteTokens(*otelv1.InboundSpan) (string, int64, error) { return "", 0, nil }
+func (NilSpan) CostUSD(*otelv1.InboundSpan) (string, float64, error)        { return "", 0, nil }

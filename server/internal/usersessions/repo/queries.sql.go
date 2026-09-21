@@ -1671,7 +1671,7 @@ func (q *Queries) ListOrganizationUserSessionIssuers(ctx context.Context, arg Li
 
 const listRemoteSessionUpstreamsForSubjects = `-- name: ListRemoteSessionUpstreamsForSubjects :many
 SELECT rs.id,
-       rs.subject_urn,
+       pair.subject_urn::text AS subject_urn,
        usi.id AS user_session_issuer_id,
        rs.remote_session_client_id,
        rc.remote_session_issuer_id,
@@ -1690,7 +1690,46 @@ JOIN (
        SELECT unnest($1::text[]) AS subject_urn,
               unnest($2::uuid[]) AS issuer_id
      ) AS pair
-  ON rs.subject_urn = pair.subject_urn
+  ON (
+    (pair.subject_urn NOT LIKE 'agent:%' AND rs.subject_urn = pair.subject_urn)
+    OR EXISTS (
+      SELECT 1
+      FROM principal_remote_session_bindings AS b
+      JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+        AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
+        AND a.owner_reassignment_required_at IS NULL
+      JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
+      JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
+        AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
+      JOIN remote_sessions AS s ON s.id = b.remote_session_id
+        AND s.subject_urn = 'user:' || a.owner_user_id
+        AND b.attached_by_subject_id = s.subject_urn
+        AND s.grant_generation = b.grant_generation
+        AND s.remote_session_client_id = b.remote_session_client_id
+      JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+      JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
+      JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id
+      JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+      JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = target.id
+      JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
+      WHERE b.project_id = $3::uuid
+        AND b.organization_id = $4::text
+        AND 'agent:' || b.principal_id::text = pair.subject_urn
+        AND b.user_session_issuer_id = pair.issuer_id
+        AND b.remote_session_client_id = rs.remote_session_client_id
+        AND b.revoked_at IS NULL
+        AND s.deleted IS FALSE
+        AND c.deleted IS FALSE
+        AND target.deleted IS FALSE
+        AND provenance.deleted IS FALSE
+        AND issuer.deleted IS FALSE
+        AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
+        AND (provenance.project_id = $3::uuid OR (provenance.project_id IS NULL AND provenance.organization_id = $4::text))
+        AND (target.project_id = $3::uuid OR (target.project_id IS NULL AND target.organization_id = $4::text))
+        AND (c.project_id = $3::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
+        AND s.id = rs.id
+    )
+  )
 JOIN user_session_issuers AS usi ON usi.id = pair.issuer_id
 JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
 JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
@@ -1720,7 +1759,7 @@ type ListRemoteSessionUpstreamsForSubjectsParams struct {
 
 type ListRemoteSessionUpstreamsForSubjectsRow struct {
 	ID                     uuid.UUID
-	SubjectUrn             urn.SessionSubject
+	SubjectUrn             string
 	UserSessionIssuerID    uuid.UUID
 	RemoteSessionClientID  uuid.UUID
 	RemoteSessionIssuerID  uuid.UUID
@@ -1744,6 +1783,14 @@ type ListRemoteSessionUpstreamsForSubjectsRow struct {
 // client was since detached from it: those tokens are still live upstream and
 // SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer still destroys them,
 // so hiding them would show an empty page for a revoke that is not a no-op.
+// Agents instead use the exact live owner attachment relationship from
+// GetPrincipalRemoteSessionBinding: no direct subject match or provenance-only
+// fallback, and no credential-specific attachment. Keep its authority, tenant,
+// client and grant-generation predicates aligned with that canonical lookup.
+// Expiry is deliberately not filtered: refreshable grants retain lineage and
+// the existing view computes status without fetching or refreshing tokens.
+// Only the requesting actor is projected, never the attached owner identity.
+// EXISTS prevents duplicate rows for the same actor and upstream grant.
 // The projected user_session_issuer_id is the requesting issuer, which is the
 // key the caller indexes by.
 // Takes the page's pairs as parallel arrays rather than two independent IN

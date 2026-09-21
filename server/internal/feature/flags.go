@@ -25,14 +25,10 @@ const (
 	// FlagAgentManagement gates the first-class agent management API. It is
 	// evaluated per organization and fails closed unless explicitly on.
 	FlagAgentManagement Flag = "agent-management"
-	// FlagAgentIdentityCredentials gates agent credential issuance and management.
+	// FlagAgentIdentityCredentials gates agent credential issuance, management,
+	// and agent identity selection in MCP OAuth authorization.
 	// It is evaluated per organization and fails closed unless explicitly on.
 	FlagAgentIdentityCredentials Flag = "agent-identity-credentials"
-
-	// FlagAgentMCPAuthorizationM2 gates selecting an existing agent in the MCP
-	// authorization challenge. It remains independently default-off until the M2
-	// credential and authorization safety gate is promoted.
-	FlagAgentMCPAuthorizationM2 Flag = "gram-agent-mcp-authorization-m2"
 
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
@@ -94,6 +90,17 @@ const (
 	// Key matches the dashboard's page-level flag so a single PostHog flag
 	// controls both the UI and the API surface.
 	FlagRiskWatchdog Flag = "gram-risk-watchdog"
+	// FlagRiskLLMAnalyzer routes an organization's secret, PII, prompt
+	// injection and destructive tool call detection through the fine-tuned
+	// risk model instead of the gitleaks, Presidio, prompt-injection and
+	// destructive-tool analyzers, on both the realtime enforcement lane and
+	// the batch flag lane. Policies keep their configured sources; the flag
+	// swaps the engine behind them. Targeted by PostHog organization group
+	// (org slug), like FlagBudgets. Fails closed to the legacy analyzers when
+	// the flag is off, absent or the provider errors. Removed at GA, or
+	// promoted to a productfeatures entitlement if the analyzer becomes a
+	// sold capability.
+	FlagRiskLLMAnalyzer Flag = "gram-risk-llm-analyzer"
 
 	// FlagCanonicalIdentityFold serves cost analytics (telemetry.query /
 	// telemetry.listSessions) email filters and group-bys through the
@@ -162,6 +169,9 @@ const (
 	// plugins.canaryHooksOrgSlugs), independent of this flag, so a PostHog outage
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
+
+	// FlagOktaConnections gates creating Okta connections while the integration is dogfooded.
+	FlagOktaConnections Flag = "okta-connections"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

@@ -1,0 +1,25 @@
+edition = "2024";
+
+package gram.telemetry.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1;telemetryv1";
+
+// ToolCallLogRelay forwards tool call records to the OTLP destination a
+// project configured for the tool_call_logs data export. Retention matches
+// the other export relays so a destination that is down over a weekend can be
+// caught up rather than losing the window.
+message ToolCallLogRelay {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.telemetry.v1.LogRecord"
+    ack_deadline: {seconds: 60}
+    retention: {seconds: 604800} /* 7 days */
+    retain_acked_messages: true
+    retry_policy: {
+      minimum_backoff: {seconds: 10}
+      maximum_backoff: {seconds: 60}
+    }
+    dead_letter: {max_delivery_attempts: 10}
+  };
+}

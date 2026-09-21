@@ -15,6 +15,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
@@ -30,7 +31,13 @@ const (
 	// DefaultWaitTimeout prevents deadline-free callers from retaining waiters.
 	DefaultWaitTimeout = 30 * time.Second
 
-	// MaxContentBytes bounds enforcement scan cost below Pub/Sub's transport limit.
+	// DefaultLLMAnalyzerWaitTimeout is the LLM analyzer lane's wait budget: the
+	// consumer's 15 s model timeout plus slack for transport retries. It stays
+	// below the LLMEnforcer subscription's 30 s ack deadline.
+	DefaultLLMAnalyzerWaitTimeout = 20 * time.Second
+
+	// MaxContentBytes bounds enforcement scan cost below Pub/Sub's transport
+	// limit. It applies independently to Content and to the LLM lane's Body.
 	MaxContentBytes = 1 * 1024 * 1024
 )
 
@@ -57,8 +64,26 @@ func (l *typedEnforcementLane[Req]) Request(ctx context.Context, req proto.Messa
 
 // DispatcherConfig controls bounded request publication and reply waiting.
 type DispatcherConfig struct {
-	// WaitTimeout caps each lane's publication and reply wait.
+	// WaitTimeout caps each lane's publication and reply wait unless
+	// LaneWaitTimeout overrides it for that lane's scanner.
 	WaitTimeout time.Duration
+
+	// LaneWaitTimeout overrides WaitTimeout per scanner. Scanners without an
+	// entry, or with a non-positive entry, use WaitTimeout.
+	LaneWaitTimeout map[riskv1.EnforcementScanner]time.Duration
+}
+
+// ToolCall is one tool invocation carried to the LLM analyzer lane.
+type ToolCall struct {
+	// ID is the harness-assigned tool call id, or a synthetic one when the
+	// harness supplied none.
+	ID string
+
+	// Name is the tool the agent invoked.
+	Name string
+
+	// Arguments is the serialized tool input, typically JSON.
+	Arguments string
 }
 
 // DispatchRequest contains tenant context, content, and requested lanes.
@@ -66,11 +91,29 @@ type DispatchRequest struct {
 	// OrganizationID is the tenant used for fingerprint isolation.
 	OrganizationID string
 
+	// OrganizationSlug is carried by the LLM lane for telemetry dimensions only.
+	OrganizationSlug string
+
 	// ProjectID identifies the project whose policy configuration applies.
 	ProjectID string
 
 	// Content is the raw text scanned by each lane.
 	Content string
+
+	// Body is the message text the LLM lane renders into its prompt. It is
+	// truncated to MaxContentBytes independently of Content.
+	Body string
+
+	// ToolName is the tool the LLM lane attributes the message to. When empty,
+	// the lane falls back to the origin's ToolName.
+	ToolName string
+
+	// MessageType is the message kind the LLM lane evaluates. When empty, the
+	// lane falls back to the origin's MessageType.
+	MessageType string
+
+	// ToolCalls are the tool invocations the LLM lane evaluates alongside Body.
+	ToolCalls []ToolCall
 
 	// PresidioEntities is an optional scanner superset; empty requests all entities.
 	PresidioEntities []string
@@ -90,10 +133,13 @@ type DispatchRequest struct {
 type Dispatcher struct {
 	gitleaks    EnforcementLane
 	presidio    EnforcementLane
+	llm         EnforcementLane
 	close       func(context.Context) error
 	waitTimeout time.Duration
-	logger      *slog.Logger
-	truncations metric.Int64Counter
+	// laneWaitTimeout overrides waitTimeout for the scanners it names.
+	laneWaitTimeout map[riskv1.EnforcementScanner]time.Duration
+	logger          *slog.Logger
+	truncations     metric.Int64Counter
 	// stokenCodec counts prepared Presidio input before dispatch.
 	stokenCodec *stokens.Codec
 }
@@ -117,17 +163,27 @@ func NewDispatcher(ctx context.Context, logger *slog.Logger, meterProvider metri
 		_ = gitleaksPub.Stop(stopCtx)
 		return nil, fmt.Errorf("create presidio enforcement publisher: %w", err)
 	}
+	llmPub, err := gcp.PubSubPublisherForMessage(ctx, broker, &riskv1.LLMEnforcement{})
+	if err != nil {
+		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = gitleaksPub.Stop(stopCtx)
+		_ = presidioPub.Stop(stopCtx)
+		return nil, fmt.Errorf("create llm enforcement publisher: %w", err)
+	}
 	gitleaksReq := redisinbox.NewRequestBroker(inbox, gitleaksPub)
 	presidioReq := redisinbox.NewRequestBroker(inbox, presidioPub)
+	llmReq := redisinbox.NewRequestBroker(inbox, llmPub)
 	return &Dispatcher{
 		gitleaks: &typedEnforcementLane[*riskv1.GitleaksEnforcement]{broker: gitleaksReq},
 		presidio: &typedEnforcementLane[*riskv1.PresidioEnforcement]{broker: presidioReq},
+		llm:      &typedEnforcementLane[*riskv1.LLMEnforcement]{broker: llmReq},
 		close: func(ctx context.Context) error {
 			// Stop the lanes concurrently so each flush gets the full shutdown
 			// budget instead of whatever the previous lane left of it.
-			var gitleaksErr, presidioErr error
+			var gitleaksErr, presidioErr, llmErr error
 			var wg sync.WaitGroup
-			wg.Add(2)
+			wg.Add(3)
 			go func() {
 				defer wg.Done()
 				gitleaksErr = gitleaksReq.Close(ctx)
@@ -135,6 +191,10 @@ func NewDispatcher(ctx context.Context, logger *slog.Logger, meterProvider metri
 			go func() {
 				defer wg.Done()
 				presidioErr = presidioReq.Close(ctx)
+			}()
+			go func() {
+				defer wg.Done()
+				llmErr = llmReq.Close(ctx)
 			}()
 			wg.Wait()
 			var closeErrs []error
@@ -144,12 +204,16 @@ func NewDispatcher(ctx context.Context, logger *slog.Logger, meterProvider metri
 			if presidioErr != nil {
 				closeErrs = append(closeErrs, fmt.Errorf("close presidio enforcement lane: %w", presidioErr))
 			}
+			if llmErr != nil {
+				closeErrs = append(closeErrs, fmt.Errorf("close llm enforcement lane: %w", llmErr))
+			}
 			return errors.Join(closeErrs...)
 		},
-		waitTimeout: cfg.WaitTimeout,
-		logger:      logger,
-		truncations: newTruncationCounter(meterProvider),
-		stokenCodec: stokens.NewCodec(),
+		waitTimeout:     cfg.WaitTimeout,
+		laneWaitTimeout: cfg.LaneWaitTimeout,
+		logger:          logger,
+		truncations:     newTruncationCounter(meterProvider),
+		stokenCodec:     stokens.NewCodec(),
 	}, nil
 }
 
@@ -178,9 +242,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 		request.Content = truncateAtRuneBoundary(request.Content, MaxContentBytes)
 		truncated = true
 		d.logger.WarnContext(ctx, "truncating oversized enforcement content", attr.SlogRiskScanTextSize(originalSize))
-		if d.truncations != nil {
-			d.truncations.Add(ctx, 1)
-		}
+	}
+	if originalSize := len(request.Body); originalSize > MaxContentBytes {
+		request.Body = truncateAtRuneBoundary(request.Body, MaxContentBytes)
+		truncated = true
+		d.logger.WarnContext(ctx, "truncating oversized enforcement body", attr.SlogRiskScanTextSize(originalSize))
+	}
+	if truncated && d.truncations != nil {
+		d.truncations.Add(ctx, 1)
 	}
 	seen := make(map[Lane]struct{}, len(request.Lanes))
 	for _, lane := range request.Lanes {
@@ -192,7 +261,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 			return Outcome{}, fmt.Errorf("missing enforcement origin for lane %s", lane.String())
 		}
 		supported := lane.Scanner == riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS ||
-			lane.Scanner == riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO
+			lane.Scanner == riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO ||
+			lane.Scanner == riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER
 		if !supported || lane.PolicyID != "" {
 			return Outcome{}, fmt.Errorf("unsupported enforcement lane %s", lane.String())
 		}
@@ -211,11 +281,51 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	group, groupCtx := errgroup.WithContext(ctx)
 	for _, lane := range request.Lanes {
 		group.Go(func() error {
-			laneCtx, cancel := context.WithTimeout(groupCtx, d.waitTimeout)
+			waitTimeout := d.waitTimeout
+			if override := d.laneWaitTimeout[lane.Scanner]; override > 0 {
+				waitTimeout = override
+			}
+			laneCtx, cancel := context.WithTimeout(groupCtx, waitTimeout)
 			defer cancel()
 			var laneBroker EnforcementLane
 			var enforcement proto.Message
 			switch lane.Scanner {
+			case riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER:
+				laneBroker = d.llm
+				origin := request.Origins[lane]
+				toolCalls := make([]*riskv1.LLMEnforcement_ToolCall, 0, len(request.ToolCalls))
+				for _, call := range request.ToolCalls {
+					toolCalls = append(toolCalls, riskv1.LLMEnforcement_ToolCall_builder{
+						Id:        new(call.ID),
+						Name:      new(call.Name),
+						Arguments: new(call.Arguments),
+					}.Build())
+				}
+				enforcement = riskv1.LLMEnforcement_builder{
+					RequestId:               new(requestID),
+					ChatMessageId:           stringPointer(origin.ChatMessageID),
+					ProjectId:               new(request.ProjectID),
+					OrganizationId:          new(request.OrganizationID),
+					OrganizationSlug:        new(request.OrganizationSlug),
+					CreatedAt:               new(createdAtText),
+					Content:                 new(request.Content),
+					Body:                    new(request.Body),
+					ToolCalls:               toolCalls,
+					ContentPartId:           stringPointer(origin.ContentPartID),
+					ChatId:                  stringPointer(origin.ChatID),
+					ExternalConversationId:  new(origin.ExternalConversationID),
+					OriginRiskPolicyId:      stringPointer(origin.RiskPolicyID),
+					OriginRiskPolicyVersion: new(origin.RiskPolicyVersion),
+					MessageLinkReason:       new(origin.MessageLinkReason),
+					PolicyLinkReason:        new(origin.PolicyLinkReason),
+					ExecutionPath:           new(origin.ExecutionPath),
+					ToolCallId:              new(origin.ToolCallID),
+					ToolName:                new(conv.Default(request.ToolName, origin.ToolName)),
+					HookSource:              new(origin.HookSource),
+					UserId:                  new(origin.UserID),
+					MessageType:             new(conv.Default(request.MessageType, origin.MessageType)),
+					ContentTruncated:        new(truncated),
+				}.Build()
 			case riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO:
 				laneBroker = d.presidio
 				origin := request.Origins[lane]
@@ -328,4 +438,7 @@ func (d *Dispatcher) Close(ctx context.Context) error {
 	return nil
 }
 
-var _ EnforcementLane = (*typedEnforcementLane[*riskv1.GitleaksEnforcement])(nil)
+var (
+	_ EnforcementLane = (*typedEnforcementLane[*riskv1.GitleaksEnforcement])(nil)
+	_ EnforcementLane = (*typedEnforcementLane[*riskv1.LLMEnforcement])(nil)
+)
