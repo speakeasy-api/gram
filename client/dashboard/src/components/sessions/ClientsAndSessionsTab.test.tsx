@@ -71,8 +71,8 @@ vi.mock("@/components/ui/MoreActions", () => ({
 }));
 
 vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ agents: { href: () => "/agent-management" } }),
   useRoutes: () => ({
+    agents: { href: () => "/org/projects/project/agent-management" },
     identities: {
       href: () => "/identities",
       detail: {
@@ -431,7 +431,9 @@ describe("ClientsAndSessionsTab", () => {
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
     const link = await screen.findByRole("link", { name: "Release assistant" });
-    expect(link.getAttribute("href")).toBe("/agent-management?id=agent-1");
+    expect(link.getAttribute("href")).toBe(
+      "/org/projects/project/agent-management?id=agent-1",
+    );
     expect(listAgents).toHaveBeenCalledTimes(1);
     fireEvent.click(
       screen.getByRole("button", { name: "Expand Release assistant" }),

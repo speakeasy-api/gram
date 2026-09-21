@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Bot } from "lucide-react";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
 
 export function AgentIcon(): JSX.Element {
@@ -27,11 +27,11 @@ export function AgentLink({
   children: ReactNode;
   className?: string;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   if (!agentId) return <span className={className}>{children}</span>;
   return (
     <Link
-      to={`${orgRoutes.agents.href()}?id=${encodeURIComponent(agentId)}`}
+      to={`${routes.agents.href()}?id=${encodeURIComponent(agentId)}`}
       onClick={(event) => event.stopPropagation()}
       className={cn(
         "decoration-foreground/30 hover:decoration-foreground underline decoration-dotted underline-offset-4",
