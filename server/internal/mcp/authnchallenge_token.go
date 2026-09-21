@@ -219,8 +219,7 @@ type tokenGrant struct {
 // The JWT bearer grant has two callers. One presenting any client
 // authentication is an ID-JAG exchange and is always fully authenticated, so
 // a client_id on that grant never yields a clientless session. One presenting
-// none takes the clientless branch, which refuses the request until a
-// clientless assertion grant is accepted there.
+// none takes the clientless branch.
 func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds presentedClientCredentials) (tokenGrant, bool) {
 	switch grantType {
 	// Authorization-code and refresh grants continue an authorization that
@@ -304,8 +303,7 @@ func (s *Service) serveTokenGrant(
 }
 
 // refuseClientlessTokenGrant answers a JWT bearer request that presents no
-// client authentication with the response a missing client_id produces,
-// since no clientless grant is accepted yet.
+// client authentication with the response a missing client_id produces.
 func refuseClientlessTokenGrant(
 	ctx context.Context,
 	w http.ResponseWriter,
