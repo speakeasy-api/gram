@@ -263,7 +263,7 @@ func restoreLocalPluginRepositories(
 
 			if _, err := pluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{
 				ProjectID:       candidate.ProjectID,
-				CreatedByUserID: candidate.CreatedByUserID,
+				CreatedByUserID: "",
 				CommitMessage:   "Restore local plugin marketplace",
 				SkipIfUnchanged: false,
 			}); err != nil {
