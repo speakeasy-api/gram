@@ -348,6 +348,8 @@ type PostgresReader struct {
 	shadowInventory     *ShadowInventoryService
 	shadowDecisions     *ShadowDecisionService
 	shadowAI            *ShadowAIService
+	reviewRequests      MCPReviewRequestService
+	reviewRequestBudget OperationBudget
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -368,12 +370,50 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		shadowInventory:     nil,
 		shadowDecisions:     nil,
 		shadowAI:            nil,
+		reviewRequests:      nil,
+		reviewRequestBudget: OperationBudget{Connection: nil, Organization: nil},
 	}
 }
 
 func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {
 	if r != nil {
 		r.authz = engine
+	}
+	return r
+}
+
+// ResolveReviewProject preserves the existing approval-intake policy: asking
+// needs no admin or MCP-specific grant, but the explicit project must be one the
+// member may read. A failed organization or project boundary is deliberately
+// indistinguishable from a missing project.
+func (r *PostgresReader) ResolveReviewProject(ctx context.Context, principal Principal, rawProjectID string) (ResolvedProject, error) {
+	if r == nil || r.reader == nil || r.authz == nil || principal.OrganizationID == "" {
+		return ResolvedProject{}, ErrUnavailable
+	}
+	projectID, err := uuid.Parse(rawProjectID)
+	if err != nil {
+		return ResolvedProject{}, oops.E(oops.CodeBadRequest, err, "project_id must be a UUID")
+	}
+	project, err := r.reader.GetProject(ctx, projectID, principal.OrganizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ResolvedProject{}, oops.E(oops.CodeNotFound, err, "project not found")
+	}
+	if err != nil {
+		return ResolvedProject{}, fmt.Errorf("resolve platform MCP review project: %w", err)
+	}
+	if err := r.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+		if isAuthorizationDenied(err) {
+			return ResolvedProject{}, oops.E(oops.CodeNotFound, err, "project not found")
+		}
+		return ResolvedProject{}, err
+	}
+	return ResolvedProject{ID: project.ID, Name: project.Name, Slug: project.Slug}, nil
+}
+
+func (r *PostgresReader) WithReviewRequests(service MCPReviewRequestService, budget OperationBudget) *PostgresReader {
+	if r != nil && service != nil && budget.valid() {
+		r.reviewRequests = service
+		r.reviewRequestBudget = budget
 	}
 	return r
 }
