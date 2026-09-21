@@ -51,3 +51,35 @@ func TestDelegationStatusTimestamps(t *testing.T) {
 	require.Nil(t, delegationStatusTimestamp(pgtype.Timestamptz{}))
 	require.Nil(t, delegationStatusTimestamp(pgtype.Timestamptz{Valid: true, InfinityModifier: pgtype.Infinity}))
 }
+
+func TestDelegationRegistrationUsable(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	for _, tc := range []struct {
+		name, method string
+		secret       pgtype.Text
+		expiry       pgtype.Timestamptz
+		clientID     string
+		want         bool
+	}{
+		{name: "legacy confidential", clientID: "client", secret: pgtype.Text{String: "not-ciphertext", Valid: true}, want: true},
+		{name: "basic", clientID: "client", method: "client_secret_basic", secret: pgtype.Text{String: "not-ciphertext", Valid: true}, want: true},
+		{name: "post future expiry", clientID: "client", method: "client_secret_post", secret: pgtype.Text{String: "not-ciphertext", Valid: true}, expiry: pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true}, want: true},
+		{name: "private key checked separately", clientID: "client", method: "private_key_jwt", want: true},
+		{name: "basic missing secret", clientID: "client", method: "client_secret_basic"},
+		{name: "post empty secret", clientID: "client", method: "client_secret_post", secret: pgtype.Text{Valid: true}},
+		{name: "invalid secret field", clientID: "client", method: "client_secret_basic", secret: pgtype.Text{String: "ignored"}},
+		{name: "public implicit", clientID: "client"},
+		{name: "public explicit", clientID: "client", method: "none", secret: pgtype.Text{String: "not-ciphertext", Valid: true}},
+		{name: "unsupported method", clientID: "client", method: "unsupported"},
+		{name: "missing client id", method: "private_key_jwt"},
+		{name: "expired secret", clientID: "client", method: "client_secret_basic", secret: pgtype.Text{String: "not-ciphertext", Valid: true}, expiry: pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true}},
+		{name: "expiry boundary", clientID: "client", method: "client_secret_basic", secret: pgtype.Text{String: "not-ciphertext", Valid: true}, expiry: pgtype.Timestamptz{Time: now, Valid: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := delegationRegistrationUsable(repo.RemoteSessionClient{ClientID: tc.clientID, TokenEndpointAuthMethod: pgtype.Text{String: tc.method, Valid: true}, ClientSecretEncrypted: tc.secret, ClientSecretExpiresAt: tc.expiry}, now)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}

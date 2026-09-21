@@ -50,7 +50,7 @@ func TestGetClientDelegationStatusUnknownAndTenantIsolated(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "delegation-status-platform")
-	create := newCreateClientPayload(platformID.String(), nil, nil)
+	create := newCreateClientPayload(platformID.String(), nil, conv.PtrEmpty("test-secret"))
 	create.Scope = []string{"openid", "email"}
 	own, err := ti.service.CreateClient(ctx, create)
 	require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestGetClientDelegationStatusCurrentObservationsOnly(t *testing.T) {
 	org := authCtx.ActiveOrganizationID
 	issuerID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "delegation-observations")
 	clientID := seedOrgLevelRemoteClient(t, ctx, ti.conn, org, issuerID, "delegation-observations")
-	_, err := repo.New(ti.conn).UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{ID: clientID, OrganizationID: conv.ToPGText(org), Scope: []string{"openid", "email"}})
+	_, err := repo.New(ti.conn).UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{ID: clientID, OrganizationID: conv.ToPGText(org), Scope: []string{"openid", "email"}, ClientSecretEncrypted: conv.ToPGText("must-not-decrypt-client-secret")})
 	require.NoError(t, err)
 	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "delegation-observations", issuerID, clientID)
 	q := repo.New(ti.conn)
@@ -148,6 +148,18 @@ func TestGetClientDelegationStatusCurrentObservationsOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(wire), "must-not-decrypt")
 	require.NotContains(t, string(wire), "user:")
+	// Known expiration overrides retained observations without decrypting secrets.
+	_, err = q.ForceRemoteSessionClientRegistrationFixture(ctx, repo.ForceRemoteSessionClientRegistrationFixtureParams{
+		ID: clientID, ClientSecretExpiresAt: delegationTestTimestamp(now.Add(-time.Hour)),
+	})
+	require.NoError(t, err)
+	got, err = ti.service.GetClientDelegationStatus(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "configuration_failure", got.Status)
+	require.NotNil(t, got.Observations)
+	require.Empty(t, got.Observations)
+	_, err = q.ForceRemoteSessionClientRegistrationFixture(ctx, repo.ForceRemoteSessionClientRegistrationFixtureParams{ID: clientID})
+	require.NoError(t, err)
 	_, err = repo.New(ti.conn).UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{ID: clientID, OrganizationID: conv.ToPGText(org), Scope: []string{"openid", "email", "offline_access"}})
 	require.NoError(t, err)
 	got, err = ti.service.GetClientDelegationStatus(ctx, payload)

@@ -80861,7 +80861,7 @@ components:
                     format: date-time
                 status:
                     type: string
-                    description: Observed delegation outcome.
+                    description: Observed per-human delegation outcome, present only when the top-level status is observed. A configuration_failure count records past per-human failures for the current configuration; it is distinct from top-level configuration_failure, which reports a currently invalid configuration and returns no observations.
                     enum:
                         - durable_credential_present
                         - assertion_only

@@ -158,7 +158,7 @@ var OrganizationClientDelegationStatus = Type("OrganizationClientDelegationStatu
 
 var DelegationStatusCount = Type("DelegationStatusCount", func() {
 	Description("Sanitized count of the latest observation per human, not a history of token requests.")
-	Attribute("status", String, "Observed delegation outcome.", func() {
+	Attribute("status", String, "Observed per-human delegation outcome, present only when the top-level status is observed. A configuration_failure count records past per-human failures for the current configuration; it is distinct from top-level configuration_failure, which reports a currently invalid configuration and returns no observations.", func() {
 		Enum("durable_credential_present", "assertion_only", "offline_unsupported", "offline_not_requested", "refused", "reauthentication_required", "temporary_failure", "configuration_failure")
 	})
 	Attribute("count", Int64, "Number of humans with this latest outcome.", func() { Minimum(0) })

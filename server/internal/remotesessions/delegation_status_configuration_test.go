@@ -55,6 +55,7 @@ func TestGetClientDelegationStatusSigningKeyLifecycle(t *testing.T) {
 			require.NoError(t, err)
 			attached, err := ti.service.GetClient(ctx, &orgclientsgen.GetClientPayload{ID: client.ID})
 			require.NoError(t, err)
+			require.NotNil(t, attached.JSONWebKeySetID)
 			require.Equal(t, setID.String(), *attached.JSONWebKeySetID)
 			after, err := ti.service.GetClientDelegationStatus(ctx, payload)
 			require.NoError(t, err)

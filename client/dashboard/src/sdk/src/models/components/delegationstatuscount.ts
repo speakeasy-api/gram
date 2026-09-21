@@ -10,7 +10,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Observed delegation outcome.
+ * Observed per-human delegation outcome, present only when the top-level status is observed. A configuration_failure count records past per-human failures for the current configuration; it is distinct from top-level configuration_failure, which reports a currently invalid configuration and returns no observations.
  */
 export const DelegationStatusCountStatus = {
   DurableCredentialPresent: "durable_credential_present",
@@ -23,7 +23,7 @@ export const DelegationStatusCountStatus = {
   ConfigurationFailure: "configuration_failure",
 } as const;
 /**
- * Observed delegation outcome.
+ * Observed per-human delegation outcome, present only when the top-level status is observed. A configuration_failure count records past per-human failures for the current configuration; it is distinct from top-level configuration_failure, which reports a currently invalid configuration and returns no observations.
  */
 export type DelegationStatusCountStatus = ClosedEnum<
   typeof DelegationStatusCountStatus
@@ -50,7 +50,7 @@ export type DelegationStatusCount = {
    */
   lastRefreshSucceededAt?: Date | undefined;
   /**
-   * Observed delegation outcome.
+   * Observed per-human delegation outcome, present only when the top-level status is observed. A configuration_failure count records past per-human failures for the current configuration; it is distinct from top-level configuration_failure, which reports a currently invalid configuration and returns no observations.
    */
   status: DelegationStatusCountStatus;
 };

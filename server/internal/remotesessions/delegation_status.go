@@ -55,6 +55,10 @@ func (s *Service) GetClientDelegationStatus(ctx context.Context, payload *orgcli
 	}
 	since := time.Now().UTC().Add(-30 * 24 * time.Hour)
 	result := &orgclientsgen.OrganizationClientDelegationStatus{Status: "unknown", WindowStart: since.Format(time.RFC3339Nano), Observations: []*orgclientsgen.DelegationStatusCount{}}
+	if !delegationRegistrationUsable(row.RemoteSessionClient, time.Now()) {
+		result.Status = "configuration_failure"
+		return result, nil
+	}
 	keyRevision, err := federatedSigningKeyRevision(ctx, s.db, authCtx.ActiveOrganizationID, row.RemoteSessionClient)
 	if err != nil {
 		if errors.Is(err, ErrFederatedConfiguration) {
@@ -109,4 +113,18 @@ func delegationStatusCounts(rows []repo.CountTrustedDelegationObservationsRow) [
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Status < result[j].Status })
 	return result
+}
+
+// delegationRegistrationUsable checks only known stored registration failures.
+// Secret presence is sufficient here: this is not a credential health probe.
+func delegationRegistrationUsable(client repo.RemoteSessionClient, now time.Time) bool {
+	if client.ClientID == "" || (client.ClientSecretExpiresAt.Valid && !client.ClientSecretExpiresAt.Time.After(now)) {
+		return false
+	}
+	secret := ""
+	if client.ClientSecretEncrypted.Valid && client.ClientSecretEncrypted.String != "" {
+		secret = "present"
+	}
+	method, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, secret)
+	return err == nil && method != TokenEndpointAuthMethodNone
 }

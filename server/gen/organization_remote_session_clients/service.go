@@ -181,7 +181,11 @@ type CreateClientPayload struct {
 // Sanitized count of the latest observation per human, not a history of token
 // requests.
 type DelegationStatusCount struct {
-	// Observed delegation outcome.
+	// Observed per-human delegation outcome, present only when the top-level
+	// status is observed. A configuration_failure count records past per-human
+	// failures for the current configuration; it is distinct from top-level
+	// configuration_failure, which reports a currently invalid configuration and
+	// returns no observations.
 	Status string
 	// Number of humans with this latest outcome.
 	Count int64
