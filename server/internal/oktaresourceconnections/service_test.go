@@ -231,6 +231,28 @@ func TestConfirm_ConcurrentCallsForOneUpstreamKeepOneRow(t *testing.T) {
 	require.Equal(t, "connected", rowFor(t, list(t, ctx, si, true), f.serverID).State)
 }
 
+func TestConfirm_RejectsServersWithoutOneClient(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	recordAgent(t, ctx, si, "wlp1")
+	projectID := createProject(t, ctx, si, si.orgID, "proj-"+uuid.NewString()[:8])
+
+	missing := createServer(t, ctx, si, projectID, createResourceIssuer(t, ctx, si, si.orgID, projectID, true), "Missing")
+	_, err := confirm(t, ctx, si, audience, nil, missing)
+	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+
+	issuerID := createResourceIssuer(t, ctx, si, si.orgID, projectID, true)
+	addClient(t, ctx, si, issuerID, uuid.NullUUID{UUID: projectID, Valid: true}, "0oafirstclient")
+	addClient(t, ctx, si, issuerID, uuid.NullUUID{UUID: projectID, Valid: true}, "0oasecondclient")
+	ambiguous := createServer(t, ctx, si, projectID, issuerID, "Ambiguous")
+	_, err = confirm(t, ctx, si, audience, nil, ambiguous)
+	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+
+	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
 func TestConfirm_RejectsServersWithoutIDJAG(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
