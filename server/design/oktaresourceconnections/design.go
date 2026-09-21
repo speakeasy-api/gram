@@ -83,9 +83,16 @@ var _ = Service("oktaResourceConnections", func() {
 	Description("Okta resource connections per MCP server: what the organization administrator still has to do in the identity provider console, what they confirmed, and what the exchange path observed. Advisory only; the exchange path never consults it.")
 
 	shared.DeclareErrorResponses()
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
 	Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
 	HTTP(func() {
 		shared.DeclareHTTPErrorResponses()
+		Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+			ContentType("application/json")
+		})
 		Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
 			ContentType("application/json")
 		})

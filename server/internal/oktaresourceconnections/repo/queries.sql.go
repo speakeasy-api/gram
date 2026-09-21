@@ -101,6 +101,32 @@ func (q *Queries) CreateOktaApplicationFixture(ctx context.Context, arg CreateOk
 	return id, err
 }
 
+const createReadinessUserSessionIssuerFixture = `-- name: CreateReadinessUserSessionIssuerFixture :one
+INSERT INTO user_session_issuers (project_id, organization_id, slug, authn_challenge_mode, session_duration, deleted_at)
+VALUES ($1::uuid, $2::text, $3, 'interactive', interval '1 hour', $4::timestamptz)
+RETURNING id
+`
+
+type CreateReadinessUserSessionIssuerFixtureParams struct {
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	Slug           string
+	DeletedAt      pgtype.Timestamptz
+}
+
+// Test fixture: login issuers at each supported attachment scope.
+func (q *Queries) CreateReadinessUserSessionIssuerFixture(ctx context.Context, arg CreateReadinessUserSessionIssuerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createReadinessUserSessionIssuerFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Slug,
+		arg.DeletedAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createRemoteBackendFixture = `-- name: CreateRemoteBackendFixture :one
 INSERT INTO remote_mcp_servers (project_id, name, slug, transport_type, url)
 VALUES ($1, $2, $3, 'streamable_http', $4)
@@ -247,7 +273,7 @@ const getEligibleServer = `-- name: GetEligibleServer :one
 SELECT
     ms.id
   , ms.project_id
-  , ms.user_session_issuer_id
+  , usi.id AS user_session_issuer_id
   , p.slug AS project_slug
   , ms.name
   , ms.slug
@@ -270,6 +296,14 @@ JOIN remote_session_issuers AS i
    i.project_id = ms.project_id
    OR (i.project_id IS NULL AND i.organization_id = $1)
    OR (i.project_id IS NULL AND i.organization_id IS NULL)
+ )
+LEFT JOIN user_session_issuers AS usi
+  ON usi.id = ms.user_session_issuer_id
+ AND usi.deleted IS FALSE
+ AND (
+   usi.project_id = ms.project_id
+   OR (usi.project_id IS NULL AND usi.organization_id = $1)
+   OR (usi.project_id IS NULL AND usi.organization_id IS NULL)
  )
 LEFT JOIN tunneled_mcp_servers AS t
   ON t.id = ms.tunneled_mcp_server_id
@@ -361,6 +395,7 @@ SELECT
   , c.status
   , o.org_url
   , o.agent_id
+  , o.agent_app_id
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -372,10 +407,11 @@ WHERE c.organization_id = $1
 `
 
 type GetLiveConnectionRow struct {
-	ID      uuid.UUID
-	Status  string
-	OrgUrl  string
-	AgentID pgtype.Text
+	ID         uuid.UUID
+	Status     string
+	OrgUrl     string
+	AgentID    pgtype.Text
+	AgentAppID pgtype.Text
 }
 
 // The organization's live Okta connection with the display fields readiness
@@ -388,6 +424,7 @@ func (q *Queries) GetLiveConnection(ctx context.Context, organizationID string) 
 		&i.Status,
 		&i.OrgUrl,
 		&i.AgentID,
+		&i.AgentAppID,
 	)
 	return i, err
 }
@@ -534,7 +571,7 @@ const listEligibleServers = `-- name: ListEligibleServers :many
 SELECT
     ms.id
   , ms.project_id
-  , ms.user_session_issuer_id
+  , usi.id AS user_session_issuer_id
   , p.slug AS project_slug
   , ms.name
   , ms.slug
@@ -557,6 +594,14 @@ JOIN remote_session_issuers AS i
    i.project_id = ms.project_id
    OR (i.project_id IS NULL AND i.organization_id = $1)
    OR (i.project_id IS NULL AND i.organization_id IS NULL)
+ )
+LEFT JOIN user_session_issuers AS usi
+  ON usi.id = ms.user_session_issuer_id
+ AND usi.deleted IS FALSE
+ AND (
+   usi.project_id = ms.project_id
+   OR (usi.project_id IS NULL AND usi.organization_id = $1)
+   OR (usi.project_id IS NULL AND usi.organization_id IS NULL)
  )
 LEFT JOIN tunneled_mcp_servers AS t
   ON t.id = ms.tunneled_mcp_server_id
