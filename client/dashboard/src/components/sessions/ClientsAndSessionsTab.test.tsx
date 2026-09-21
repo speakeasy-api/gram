@@ -11,12 +11,14 @@ const {
   invalidateAllUserSessionClients,
   revokeSessionMutate,
   batchBadgesMutate,
+  listAgents,
 } = vi.hoisted(() => ({
   useUserSessionClientsInfinite: vi.fn(),
   useUserSessionsInfinite: vi.fn(),
   invalidateAllUserSessionClients: vi.fn(),
   revokeSessionMutate: vi.fn(),
   batchBadgesMutate: vi.fn(),
+  listAgents: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/userSessionClients.js", () => ({
@@ -69,8 +71,8 @@ vi.mock("@/components/ui/MoreActions", () => ({
 }));
 
 vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({}),
   useRoutes: () => ({
+    agents: { href: () => "/org/projects/project/agent-management" },
     identities: {
       href: () => "/identities",
       detail: {
@@ -129,10 +131,18 @@ vi.mock("./RevokeClientDialog", () => ({
   }) => (open ? <button onClick={onRevoked}>Confirm revoke</button> : null),
 }));
 
+// Keep the real session-agent query/resolution hooks; stub only their API boundary.
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({ agents: { list: listAgents } }),
+  useProjectSlugForRequests: () => "project-1",
+}));
+
 vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-1" }),
   useProject: () => ({ id: "project-1", slug: "project-1" }),
   useSession: () => ({
     session: "session-1",
+    user: { id: "user-1" },
     organization: { id: "org-1" },
   }),
 }));
@@ -192,7 +202,7 @@ function queryResult(
 // provider to the component.
 function wrap(ui: React.ReactElement, initialEntries: string[] = ["/"]) {
   // The tab invalidates session queries after a revoke, so it needs a real
-  // QueryClient even though every data hook is mocked.
+  // QueryClient; readable-agent queries also exercise this real cache.
   return (
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter initialEntries={initialEntries}>
@@ -208,6 +218,7 @@ function renderTab(ui: React.ReactElement, initialEntries?: string[]) {
 
 describe("ClientsAndSessionsTab", () => {
   beforeEach(() => {
+    listAgents.mockResolvedValue([]);
     useUserSessionsInfinite.mockReturnValue(queryResult([]));
     useUserSessionClientsInfinite.mockReturnValue(queryResult([]));
     batchBadgesMutate.mockResolvedValue({
@@ -405,6 +416,31 @@ describe("ClientsAndSessionsTab", () => {
         killswitchBatchUserBadgesRequest: { userIds: ["u1"] },
       },
     });
+  });
+
+  it("resolves readable managed agents without losing row expansion", async () => {
+    listAgents.mockResolvedValue([
+      { id: "agent-1", name: "Release assistant" },
+    ]);
+    useUserSessionsInfinite.mockReturnValue(
+      queryResult([
+        session({ subjectType: "agent", subjectUrn: "agent:agent-1" }),
+      ]),
+    );
+
+    renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
+
+    const link = await screen.findByRole("link", { name: "Release assistant" });
+    expect(link.getAttribute("href")).toBe(
+      "/org/projects/project/agent-management?id=agent-1",
+    );
+    expect(listAgents).toHaveBeenCalledTimes(1);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Expand Release assistant" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Collapse Release assistant" }),
+    ).toBeDefined();
   });
 
   it("no longer offers the client drill-down that filtered the table above", () => {

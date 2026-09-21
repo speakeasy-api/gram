@@ -35,8 +35,10 @@ export function ClientsAndSessionsTab({
   issuerId,
   originatingMcpServerId,
   authTabPath = "settings",
+  attachedSessions,
 }: {
   issuerId: string | undefined;
+  attachedSessions?: React.ReactNode;
   /** Canonical mcp_servers.id only; never an issuer, toolset, or gateway id. */
   originatingMcpServerId?: string;
   /**
@@ -140,6 +142,7 @@ export function ClientsAndSessionsTab({
 
   return (
     <Stack gap={6}>
+      {attachedSessions}
       <StatTileGroup>
         <StatTile
           title="Active sessions"
