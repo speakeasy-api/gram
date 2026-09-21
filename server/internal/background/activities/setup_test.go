@@ -8,15 +8,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/require"
-
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 )
@@ -73,40 +64,4 @@ func (c *captureLoopsClient) FailNext(n int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.failNext = n
-}
-
-func setupSnapshotBillingCycleUsageTest(t *testing.T, dbName string) (act *activities.SnapshotBillingCycleUsage, conn *pgxpool.Pool, chConn clickhouse.Conn, orgID string, projectID uuid.UUID) {
-	t.Helper()
-	ctx := t.Context()
-
-	conn, err := infra.CloneTestDatabase(t, dbName)
-	require.NoError(t, err)
-
-	chConn, err = infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	orgID = "org-" + uuid.NewString()[:8]
-	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
-		ID:          orgID,
-		Name:        "Test Org",
-		Slug:        orgID,
-		WorkosID:    pgtype.Text{},
-		Whitelisted: pgtype.Bool{},
-	})
-	require.NoError(t, err)
-
-	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
-		Name:           "Test Project",
-		Slug:           "proj-" + uuid.NewString()[:8],
-		OrganizationID: orgID,
-	})
-	require.NoError(t, err)
-
-	act = activities.NewSnapshotBillingCycleUsage(
-		testenv.NewLogger(t),
-		conn,
-		chConn,
-	)
-
-	return act, conn, chConn, orgID, project.ID
 }
