@@ -189,6 +189,16 @@ func TestConfirmAndReset(t *testing.T) {
 	unknown := "0oaunknown0000000000"
 	_, err = confirm(t, ctx, si, audience, &unknown, a.serverID)
 	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	// A later item that fails at write time takes the earlier, valid write with it.
+	first := capableServer(t, ctx, si, "First")
+	second := capableServer(t, ctx, si, "Second")
+	_, err = si.svc.Confirm(ctx, &gen.ConfirmPayload{SessionToken: nil, Connections: []*gen.OktaResourceConnectionConfirmation{
+		{McpServerID: first.serverID.String(), Audience: audience, OktaApplicationID: nil},
+		{McpServerID: second.serverID.String(), Audience: audience, OktaApplicationID: &unknown},
+	}})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Equal(t, "needs_connection", rowFor(t, list(t, ctx, si, true), first.serverID).State)
 	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "a refused confirmation rolls back the whole batch")
