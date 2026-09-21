@@ -30,7 +30,6 @@ import { AGENT_SECTION_ID, oktaViewHref } from "../../tabs";
 import { useClearedConfirmations } from "./useClearedConfirmations";
 import { useXaaConfirm } from "./useXaaConfirm";
 import { XaaBulkConfirmBar } from "./XaaBulkConfirmBar";
-import { XaaExportButtons } from "./XaaExportButtons";
 import type { XaaConfirmValues } from "./XaaConfirmFields";
 import { XaaReadinessTable } from "./XaaReadinessTable";
 import { XaaReviewPanel } from "./XaaReviewPanel";
@@ -203,10 +202,7 @@ function ReadinessChecklist({
           confirmation here. Not confirmed means Speakeasy has no saved
           confirmation; the connection may already exist in Okta.
         </Text>
-        <div className="flex flex-wrap items-center gap-2">
-          <XaaExportButtons includeAll={includeAll} />
-          <OpenOktaButton deepLink={data.deepLink} />
-        </div>
+        <OpenOktaButton deepLink={data.deepLink} />
       </div>
 
       <StatRow
