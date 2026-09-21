@@ -13,6 +13,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
+func TestMCPScopeAppliesToDirectServerAndCurrentGatewayMembership(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.New()
+	gatewayID := uuid.New()
+	otherID := uuid.New()
+	scope := &MCPScope{Servers: []MCPServerScope{
+		{MCPServerID: serverID, Tools: []string{"search"}},
+		{MCPServerID: gatewayID},
+	}}
+
+	require.True(t, (*MCPScope)(nil).Applies(serverID, "anything", nil))
+	require.True(t, scope.Applies(serverID, "search", nil))
+	require.False(t, scope.Applies(serverID, "write", nil))
+	require.True(t, scope.Applies(serverID, "", nil), "omitted tool filters only at server level")
+	require.True(t, scope.Applies(otherID, "anything", []uuid.UUID{gatewayID}))
+	require.False(t, scope.Applies(otherID, "anything", nil))
+}
+
 func TestProjectPreservesPolicyReadSemantics(t *testing.T) {
 	t.Parallel()
 

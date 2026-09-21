@@ -48,6 +48,7 @@ var _ = Service("risk", func() {
 				Default("everyone")
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. For audience_type=everyone, the server stores user:all.")
+			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit or send an empty server list to apply the policy to every MCP server.")
 			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.", func() {
 				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
 			})
@@ -108,6 +109,38 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicies"}`)
+	})
+
+	Method("listRiskPoliciesForMcpServer", func() {
+		Description("List enabled risk policies that apply to an MCP server and optional tool.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("mcp_server_id", String, "The MCP server ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("tool_name", String, "Optional tool name used to apply per-server tool selections.")
+			Required("mcp_server_id")
+		})
+
+		Result(ListRiskPoliciesResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listRiskPoliciesForMcpServer")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("mcp_server_id")
+			Param("tool_name")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskPoliciesForMcpServer")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "listForMcpServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPoliciesForMcpServer"}`)
 	})
 
 	Method("listBuiltinExclusions", func() {
@@ -195,6 +228,7 @@ var _ = Service("risk", func() {
 				shared.RiskPolicyAudienceTypeEnum()
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. Omit to preserve the current target principals.")
+			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit to preserve; send an empty server list to clear and apply the policy to every MCP server.")
 			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.", func() {
 				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
 			})

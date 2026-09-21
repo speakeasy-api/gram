@@ -90,6 +90,10 @@ import {
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
+import {
+  PolicyMCPScopePicker,
+  type PolicyMCPScopeValue,
+} from "./PolicyMCPScopePicker";
 
 import {
   DETECTION_RULES,
@@ -757,6 +761,9 @@ function PromptPolicyEditor({
   const [scopeOverrides, setScopeOverrides] = useState<
     Map<string, ScopeOverride>
   >(() => scopeOverridesFromPolicy(policy?.detectionScopes));
+  const [mcpScope, setMcpScope] = useState<PolicyMCPScopeValue>(
+    policy?.mcpScope ?? null,
+  );
   const [action, setAction] = useState<PolicyAction>(policy?.action ?? "flag");
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
@@ -783,6 +790,7 @@ function PromptPolicyEditor({
         scopeOverrides,
         scopeOverridesFromPolicy(policy.detectionScopes),
       ) ||
+      !sameMCPScope(mcpScope, policy.mcpScope ?? null) ||
       action !== (policy.action ?? "flag") ||
       userMessage !== (policy.userMessage ?? "") ||
       score !== (policy.score ?? 5) ||
@@ -843,6 +851,7 @@ function PromptPolicyEditor({
     () => new Set<RuleCategory>(["prompt_policy"]),
     [],
   );
+  const mcpScopeValid = mcpScope === null || mcpScope.servers.length > 0;
   const detectionScopesPayloadForPrompt = () =>
     detectionScopesPayload(promptPolicyCategories, scopeOverrides);
 
@@ -859,6 +868,7 @@ function PromptPolicyEditor({
             failOpen,
           },
           detectionScopes: detectionScopesPayloadForPrompt(),
+          mcpScope: mcpScope ?? { servers: [] },
           ...actionPayload(),
           userMessage,
           score,
@@ -879,6 +889,7 @@ function PromptPolicyEditor({
           prompt,
           modelConfig: { temperature, failOpen },
           ...(detectionScopes.length > 0 ? { detectionScopes } : {}),
+          ...(mcpScope === null ? {} : { mcpScope }),
           ...actionPayload(),
           ...(userMessage.trim() ? { userMessage } : {}),
           score,
@@ -888,7 +899,7 @@ function PromptPolicyEditor({
     });
   };
 
-  const canCreate = prompt.trim().length > 0;
+  const canCreate = prompt.trim().length > 0 && mcpScopeValid;
 
   // Stable guardrail snapshot for eval query keys. The replay uses the
   // prompt_policy category's effective detection scope (the override when
@@ -927,7 +938,7 @@ function PromptPolicyEditor({
       onNameChange={setName}
       dirty={dirty}
       saving={saving}
-      actionDisabled={isCreate ? !canCreate : false}
+      actionDisabled={!mcpScopeValid || (isCreate && !canCreate)}
       onSubmit={() => save()}
       onCreate={create}
       nameGenerating={nameGenerating}
@@ -959,6 +970,9 @@ function PromptPolicyEditor({
           selectedCategories={promptPolicyCategories}
           scopeOverrides={scopeOverrides}
           setScopeOverrides={setScopeOverrides}
+          mcpScope={mcpScope}
+          setMcpScope={setMcpScope}
+          action={action}
         />
       )}
 
@@ -1127,20 +1141,45 @@ function ScopeStep({
   selectedCategories,
   scopeOverrides,
   setScopeOverrides,
+  mcpScope,
+  setMcpScope,
+  action,
 }: {
   description: string;
   selectedCategories: Set<RuleCategory>;
   scopeOverrides: Map<string, ScopeOverride>;
   setScopeOverrides: (next: Map<string, ScopeOverride>) => void;
+  mcpScope: PolicyMCPScopeValue;
+  setMcpScope: (next: PolicyMCPScopeValue) => void;
+  action: PolicyAction;
 }): JSX.Element {
   return (
     <Card>
       <SectionHeader description={description} />
       <Stack gap={5}>
+        <PolicyMCPScopePicker value={mcpScope} onChange={setMcpScope} />
+        {mcpScope !== null && mcpScope.servers.length === 0 ? (
+          <Text small className="text-destructive">
+            Select at least one MCP server or apply the policy to all servers.
+          </Text>
+        ) : null}
+        {mcpScope !== null && selectedCategories.has("account_identity") ? (
+          <Text small className="text-destructive">
+            Session-scoped account identity detection cannot be limited to MCP
+            tool traffic.
+          </Text>
+        ) : null}
+        {mcpScope !== null && action !== "flag" ? (
+          <Text small muted>
+            This action gates each matching MCP call synchronously and incurs
+            the configured detector cost.
+          </Text>
+        ) : null}
         <RecommendedScopesPanel
           selectedCategories={selectedCategories}
           scopeOverrides={scopeOverrides}
           setScopeOverrides={setScopeOverrides}
+          mcpScoped={mcpScope !== null}
         />
       </Stack>
     </Card>
@@ -1151,10 +1190,12 @@ function RecommendedScopesPanel({
   selectedCategories,
   scopeOverrides,
   setScopeOverrides,
+  mcpScoped,
 }: {
   selectedCategories: Set<RuleCategory>;
   scopeOverrides: Map<string, ScopeOverride>;
   setScopeOverrides: (next: Map<string, ScopeOverride>) => void;
+  mcpScoped: boolean;
 }): JSX.Element | null {
   // Handled inline (retry below) instead of the route error boundary.
   const categoriesQuery = useRiskCategories(undefined, undefined, {
@@ -1171,6 +1212,52 @@ function RecommendedScopesPanel({
         hasDisplayableScope(category, scopeOverrides.get(category.key)),
       );
   }, [categoriesQuery.data?.categories, selectedCategories, scopeOverrides]);
+
+  useEffect(() => {
+    if (!mcpScoped || !categoriesQuery.data?.categories) return;
+    const next = new Map(scopeOverrides);
+    let changed = false;
+    for (const category of categoriesQuery.data.categories) {
+      if (
+        !selectedCategories.has(category.key as RuleCategory) ||
+        !category.recommendedScopeApplicable
+      ) {
+        continue;
+      }
+      const active = next.get(category.key) ?? {
+        scopeInclude: category.recommendedScopeInclude,
+        scopeExempt: category.recommendedScopeExempt,
+      };
+      const surfaces = surfacesFromScope(
+        active.scopeInclude,
+        active.scopeExempt,
+      );
+      const toolSurfaces = new Set<ScopeSurfaceKind>(
+        (surfaces ? [...surfaces] : ALL_SURFACE_KINDS).filter(
+          (kind) => kind === "tool_request" || kind === "tool_response",
+        ),
+      );
+      if (toolSurfaces.size === 0) {
+        toolSurfaces.add("tool_request");
+        toolSurfaces.add("tool_response");
+      }
+      const toolOnly = scopeFromSurfaces(toolSurfaces);
+      if (
+        active.scopeInclude !== toolOnly.scopeInclude ||
+        active.scopeExempt !== toolOnly.scopeExempt
+      ) {
+        next.set(category.key, toolOnly);
+        changed = true;
+      }
+    }
+    if (changed) setScopeOverrides(next);
+  }, [
+    categoriesQuery.data?.categories,
+    mcpScoped,
+    scopeOverrides,
+    selectedCategories,
+    setScopeOverrides,
+  ]);
 
   if (categoriesQuery.isLoading) {
     return (
@@ -1224,6 +1311,7 @@ function RecommendedScopesPanel({
               else next.set(category.key, override);
               setScopeOverrides(next);
             }}
+            mcpScoped={mcpScoped}
           />
         ))}
       </div>
@@ -1386,10 +1474,12 @@ function RecommendedScopeRow({
   category,
   override,
   onOverrideChange,
+  mcpScoped,
 }: {
   category: RiskCategoryDefinition;
   override: ScopeOverride | undefined;
   onOverrideChange: (override: ScopeOverride | null) => void;
+  mcpScoped: boolean;
 }): JSX.Element {
   const [celOpen, setCelOpen] = useState(false);
   const engineState = useCelEngine();
@@ -1421,6 +1511,12 @@ function RecommendedScopeRow({
   const editorsOpen = celOpen && override !== undefined;
 
   const toggleSurface = (kind: ScopeSurfaceKind) => {
+    if (
+      mcpScoped &&
+      (kind === "user_message" || kind === "assistant_message")
+    ) {
+      return;
+    }
     if (!activeSurfaces) return;
     const next = new Set(activeSurfaces);
     if (next.has(kind)) {
@@ -1445,7 +1541,7 @@ function RecommendedScopeRow({
           <Badge variant="neutral">
             {override === undefined ? "Recommended" : "Custom"}
           </Badge>
-          {override !== undefined && (
+          {override !== undefined && !mcpScoped && (
             <button
               type="button"
               onClick={() => {
@@ -1470,8 +1566,18 @@ function RecommendedScopeRow({
                 type="button"
                 onClick={() => toggleSurface(kind)}
                 aria-pressed={active}
+                disabled={
+                  mcpScoped &&
+                  (kind === "user_message" || kind === "assistant_message")
+                }
+                title={
+                  mcpScoped &&
+                  (kind === "user_message" || kind === "assistant_message")
+                    ? "MCP-scoped policies inspect tool traffic only"
+                    : undefined
+                }
                 className={cn(
-                  "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                  "rounded-full border px-2.5 py-0.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                   active
                     ? "border-foreground bg-foreground text-background"
                     : "border-border text-muted-foreground hover:text-foreground",
@@ -1481,25 +1587,27 @@ function RecommendedScopeRow({
               </button>
             );
           })}
-          <SimpleTooltip tooltip="Switch to CEL expressions for granular scoping: match on tool names, servers, or message content instead of whole surfaces.">
-            <button
-              type="button"
-              onClick={() => {
-                if (override === undefined) {
-                  onOverrideChange({ ...activeScope });
-                }
-                setCelOpen(true);
-              }}
-              className="border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 ml-1 flex items-center gap-1 rounded-full border border-dashed px-2.5 py-0.5 text-xs transition-colors"
-            >
-              <Code className="h-3 w-3" />
-              Granular scope
-            </button>
-          </SimpleTooltip>
+          {!mcpScoped && (
+            <SimpleTooltip tooltip="Switch to CEL expressions for granular scoping: match on tool names, servers, or message content instead of whole surfaces.">
+              <button
+                type="button"
+                onClick={() => {
+                  if (override === undefined) {
+                    onOverrideChange({ ...activeScope });
+                  }
+                  setCelOpen(true);
+                }}
+                className="border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 ml-1 flex items-center gap-1 rounded-full border border-dashed px-2.5 py-0.5 text-xs transition-colors"
+              >
+                <Code className="h-3 w-3" />
+                Granular scope
+              </button>
+            </SimpleTooltip>
+          )}
         </div>
       )}
 
-      {granularChips && (
+      {granularChips && !mcpScoped && (
         <GranularRecommendationChips
           engine={engine}
           scope={activeScope}
@@ -1515,7 +1623,7 @@ function RecommendedScopeRow({
         />
       )}
 
-      {editorsOpen && override !== undefined && (
+      {editorsOpen && !mcpScoped && override !== undefined && (
         <div className="mt-3 space-y-4">
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">
@@ -3472,6 +3580,7 @@ export function StandardPolicyEditor({
       userMessage: policy.userMessage ?? "",
       disabledRules: new Set(policy.disabledRules ?? []),
       scopeOverrides: scopeOverridesFromPolicy(policy.detectionScopes),
+      mcpScope: policy.mcpScope ?? null,
       customRuleIds: new Set(policy.customRuleIds ?? []),
       categories: cats,
       approvedDomains: (policy.approvedEmailDomains ?? []).join(", "),
@@ -3507,6 +3616,9 @@ export function StandardPolicyEditor({
   const [scopeOverrides, setScopeOverrides] = useState<
     Map<string, ScopeOverride>
   >(() => scopeOverridesFromPolicy(policy?.detectionScopes));
+  const [mcpScope, setMcpScope] = useState<PolicyMCPScopeValue>(
+    policy?.mcpScope ?? null,
+  );
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
   >(() => new Set(policy?.customRuleIds ?? []));
@@ -3637,10 +3749,16 @@ export function StandardPolicyEditor({
     initializedInventoryForPolicy,
     editorIdentity,
   );
+  const mcpScopeMissingServers =
+    mcpScope !== null && mcpScope.servers.length === 0;
+  const mcpScopeIncompatible =
+    mcpScope !== null && selectedCategories.has("account_identity");
   const saveBlocked =
     !hasEnabledDetector ||
     audienceMissing ||
     shadowMCPInventoryUnavailable ||
+    mcpScopeMissingServers ||
+    mcpScopeIncompatible ||
     !shadowMCPSelectionInitialized;
 
   const shadowMCPSelectionDirty = shadowMCPSelectionIsDirty(
@@ -3657,6 +3775,7 @@ export function StandardPolicyEditor({
       audienceType !== orig.audienceType ||
       !sameSet(disabledRules, orig.disabledRules) ||
       !sameScopeOverrides(scopeOverrides, orig.scopeOverrides) ||
+      !sameMCPScope(mcpScope, orig.mcpScope) ||
       !sameSet(selectedCustomRuleIds, orig.customRuleIds) ||
       !sameSet(selectedCategories, orig.categories) ||
       approvedDomains !== orig.approvedDomains ||
@@ -3822,6 +3941,7 @@ export function StandardPolicyEditor({
             presidioEntities: updatePresidioEntities,
             promptInjectionRules,
             detectionScopes,
+            mcpScope: mcpScope ?? { servers: [] },
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
             action: resolvedAction,
@@ -3861,6 +3981,7 @@ export function StandardPolicyEditor({
             presidioEntities,
             promptInjectionRules,
             ...(detectionScopes.length > 0 ? { detectionScopes } : {}),
+            ...(mcpScope === null ? {} : { mcpScope }),
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
             action: resolvedAction,
@@ -3994,6 +4115,9 @@ export function StandardPolicyEditor({
             selectedCategories={selectedCategories}
             scopeOverrides={scopeOverrides}
             setScopeOverrides={setScopeOverrides}
+            mcpScope={mcpScope}
+            setMcpScope={setMcpScope}
+            action={action}
           />
         )}
 
@@ -4202,6 +4326,19 @@ function SummaryRow({
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
+
+function sameMCPScope(a: PolicyMCPScopeValue, b: PolicyMCPScopeValue): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.servers.length !== b.servers.length) return false;
+  const normalize = (scope: PolicyMCPScopeValue) =>
+    scope?.servers
+      .map((server) => ({
+        id: server.mcpServerId,
+        tools: [...(server.tools ?? [])].sort(),
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)) ?? [];
+  return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
+}
 
 function sameSet<T>(a: Set<T>, b: Set<T>): boolean {
   if (a.size !== b.size) return false;

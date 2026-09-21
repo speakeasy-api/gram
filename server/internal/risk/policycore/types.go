@@ -13,6 +13,36 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
+// MCPScope restricts a policy to selected MCP servers or gateways. A nil
+// *MCPScope means every MCP server.
+type MCPScope struct {
+	Servers []MCPServerScope `json:"servers"`
+}
+
+// MCPServerScope selects one MCP server or gateway and optionally individual
+// tools. An empty Tools slice selects every tool.
+type MCPServerScope struct {
+	MCPServerID uuid.UUID `json:"mcp_server_id"`
+	Tools       []string  `json:"tools,omitempty"`
+}
+
+// Applies reports whether a policy scope applies to a concrete MCP server and
+// tool. gatewaysContaining must be resolved from current gateway membership.
+func (s *MCPScope) Applies(serverID uuid.UUID, toolName string, gatewaysContaining []uuid.UUID) bool {
+	if s == nil {
+		return true
+	}
+	for _, server := range s.Servers {
+		if server.MCPServerID != serverID && !slices.Contains(gatewaysContaining, server.MCPServerID) {
+			continue
+		}
+		if toolName == "" || len(server.Tools) == 0 || slices.Contains(server.Tools, toolName) {
+			return true
+		}
+	}
+	return false
+}
+
 // Policy is the transport-neutral representation of a persisted risk policy.
 type Policy struct {
 	ID                     uuid.UUID
@@ -32,6 +62,7 @@ type Policy struct {
 	Action                 string
 	AudienceType           string
 	AudiencePrincipalURNs  []string
+	MCPScope               *MCPScope
 	ShadowMCPDisposition   *string
 	AutoName               bool
 	UserMessage            *string
@@ -108,6 +139,7 @@ func Project(row repo.RiskPolicy, audiencePrincipalURNs []string, progress *Prog
 		AutoName:               row.AutoName,
 		UserMessage:            conv.FromPGText[string](row.UserMessage),
 		Prompt:                 conv.FromPGText[string](row.Prompt),
+		MCPScope:               unmarshalMCPScope(row.McpScope),
 		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
 		Score:                  row.Score,
 		Version:                row.Version,
@@ -140,6 +172,21 @@ func shadowMCPDisposition(row repo.RiskPolicy) *string {
 		return nil
 	}
 	return &disposition
+}
+
+func unmarshalMCPScope(raw []byte) *MCPScope {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var scope MCPScope
+	if err := json.Unmarshal(raw, &scope); err != nil {
+		// Persisted policy scope must never fail open.
+		return &MCPScope{Servers: []MCPServerScope{}}
+	}
+	if scope.Servers == nil {
+		scope.Servers = []MCPServerScope{}
+	}
+	return &scope
 }
 
 func unmarshalModelConfig(raw []byte) *ModelConfig {

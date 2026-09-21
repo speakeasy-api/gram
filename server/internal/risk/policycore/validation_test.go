@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -12,6 +13,74 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
+
+func TestNormalizeAndValidateMCPScope(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.New()
+	scope, err := NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{{
+		MCPServerID: serverID.String(),
+		Tools:       []string{" write ", "read", "read"},
+	}}})
+	require.NoError(t, err)
+	require.Equal(t, []MCPServerScope{{
+		MCPServerID: serverID,
+		Tools:       []string{"read", "write"},
+	}}, scope.Servers)
+	require.NoError(t, ValidateMCPScopeOwnership(scope, []uuid.UUID{serverID}))
+	require.Error(t, ValidateMCPScopeOwnership(scope, nil))
+
+	cleared, err := NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{}})
+	require.NoError(t, err)
+	require.Nil(t, cleared)
+
+	_, err = NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{
+		{MCPServerID: serverID.String()},
+		{MCPServerID: serverID.String()},
+	}})
+	require.Error(t, err)
+}
+
+func TestValidateMCPScopeDetectionSurfaces(t *testing.T) {
+	t.Parallel()
+
+	eng, err := celenv.New()
+	require.NoError(t, err)
+	scope := &MCPScope{Servers: []MCPServerScope{{MCPServerID: uuid.New()}}}
+
+	err = ValidateMCPScopeDetectionSurfaces(
+		eng,
+		scope,
+		ra.PolicyTypeStandard,
+		[]string{ra.SourceGitleaks},
+		false,
+		nil,
+	)
+	require.ErrorContains(t, err, "must only inspect tool traffic")
+
+	toolOnly := []ra.DetectionScopeConfig{{
+		Category:     string(categories.CategorySecrets),
+		ScopeInclude: `kind in ["tool_request","tool_response"]`,
+	}}
+	require.NoError(t, ValidateMCPScopeDetectionSurfaces(
+		eng,
+		scope,
+		ra.PolicyTypeStandard,
+		[]string{ra.SourceGitleaks},
+		false,
+		toolOnly,
+	))
+
+	err = ValidateMCPScopeDetectionSurfaces(
+		eng,
+		scope,
+		ra.PolicyTypeStandard,
+		[]string{ra.SourceAccountIdentity},
+		false,
+		nil,
+	)
+	require.ErrorContains(t, err, "cannot be used")
+}
 
 func TestValidateActionAndSourceCompatibility(t *testing.T) {
 	t.Parallel()

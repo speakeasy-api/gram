@@ -28,6 +28,18 @@ func policyToGoa(policy policycore.Policy) *types.RiskPolicy {
 		}
 	}
 
+	var mcpScope *types.RiskMCPScope
+	if policy.MCPScope != nil {
+		servers := make([]*types.RiskMCPServerScope, 0, len(policy.MCPScope.Servers))
+		for _, server := range policy.MCPScope.Servers {
+			servers = append(servers, &types.RiskMCPServerScope{
+				McpServerID: server.MCPServerID.String(),
+				Tools:       server.Tools,
+			})
+		}
+		mcpScope = &types.RiskMCPScope{Servers: servers}
+	}
+
 	return &types.RiskPolicy{
 		ID:                     policy.ID.String(),
 		ProjectID:              policy.ProjectID.String(),
@@ -45,6 +57,7 @@ func policyToGoa(policy policycore.Policy) *types.RiskPolicy {
 		Action:                 policy.Action,
 		AudienceType:           policy.AudienceType,
 		AudiencePrincipalUrns:  policy.AudiencePrincipalURNs,
+		McpScope:               mcpScope,
 		ShadowMcpDisposition:   policy.ShadowMCPDisposition,
 		AutoName:               policy.AutoName,
 		UserMessage:            policy.UserMessage,

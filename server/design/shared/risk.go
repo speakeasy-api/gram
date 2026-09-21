@@ -129,6 +129,25 @@ var RiskDetectionScope = Type("RiskDetectionScope", func() {
 	Required("category")
 })
 
+var RiskMCPServerScope = Type("RiskMCPServerScope", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("mcp_server_id", String, "The selected MCP server or gateway ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("tools", ArrayOf(String), "Selected tool names. Empty or omitted selects every tool on the server.")
+
+	Required("mcp_server_id")
+})
+
+var RiskMCPScope = Type("RiskMCPScope", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("servers", ArrayOf(RiskMCPServerScope), "Selected MCP servers and gateways. An empty list clears the restriction and applies the policy to every MCP server.")
+
+	Required("servers")
+})
+
 var RiskPolicy = Type("RiskPolicy", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -165,6 +184,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		Default("everyone")
 	})
 	Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs the policy applies to. Contains user:all when audience_type is everyone.")
+	Attribute("mcp_scope", RiskMCPScope, "Optional MCP server and tool restriction. Null applies the policy to every MCP server.")
 	Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.", func() {
 		RiskPolicyShadowMCPDispositionEnum()
 	})

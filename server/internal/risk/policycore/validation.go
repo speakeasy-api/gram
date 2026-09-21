@@ -6,7 +6,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
@@ -39,6 +41,160 @@ type DetectionScopeInput struct {
 	Category     string
 	ScopeInclude *string
 	ScopeExempt  *string
+}
+
+// MCPScopeInput preserves transport strings until UUID and tool validation.
+type MCPScopeInput struct {
+	Servers []*MCPServerScopeInput
+}
+
+// MCPServerScopeInput is one server or gateway selection.
+type MCPServerScopeInput struct {
+	MCPServerID string
+	Tools       []string
+}
+
+// NormalizeMCPScope validates and canonicalizes an MCP policy scope. An
+// explicit empty server list clears the restriction and therefore returns nil.
+func NormalizeMCPScope(input *MCPScopeInput) (*MCPScope, error) {
+	if input == nil || len(input.Servers) == 0 {
+		return nil, nil
+	}
+
+	scope := &MCPScope{Servers: make([]MCPServerScope, 0, len(input.Servers))}
+	seenServers := make(map[uuid.UUID]struct{}, len(input.Servers))
+	for _, server := range input.Servers {
+		if server == nil {
+			return nil, fmt.Errorf("MCP server scope must not be null")
+		}
+		serverID, err := uuid.Parse(server.MCPServerID)
+		if err != nil {
+			return nil, fmt.Errorf("MCP server id %q is not a valid UUID", server.MCPServerID)
+		}
+		if _, ok := seenServers[serverID]; ok {
+			return nil, fmt.Errorf("MCP server %q specified more than once", server.MCPServerID)
+		}
+		seenServers[serverID] = struct{}{}
+
+		tools := make([]string, 0, len(server.Tools))
+		seenTools := make(map[string]struct{}, len(server.Tools))
+		for _, rawTool := range server.Tools {
+			tool := strings.TrimSpace(rawTool)
+			if tool == "" {
+				return nil, fmt.Errorf("MCP tool name must not be empty")
+			}
+			if _, ok := seenTools[tool]; ok {
+				continue
+			}
+			seenTools[tool] = struct{}{}
+			tools = append(tools, tool)
+		}
+		slices.Sort(tools)
+		scope.Servers = append(scope.Servers, MCPServerScope{
+			MCPServerID: serverID,
+			Tools:       tools,
+		})
+	}
+	slices.SortFunc(scope.Servers, func(a, b MCPServerScope) int {
+		return strings.Compare(a.MCPServerID.String(), b.MCPServerID.String())
+	})
+	return scope, nil
+}
+
+// ValidateMCPScopeOwnership requires every selected server or gateway to
+// belong to the policy's project.
+func ValidateMCPScopeOwnership(scope *MCPScope, projectServerIDs []uuid.UUID) error {
+	if scope == nil {
+		return nil
+	}
+	owned := make(map[uuid.UUID]struct{}, len(projectServerIDs))
+	for _, id := range projectServerIDs {
+		owned[id] = struct{}{}
+	}
+	for _, server := range scope.Servers {
+		if _, ok := owned[server.MCPServerID]; !ok {
+			return fmt.Errorf("MCP server %q does not belong to the project", server.MCPServerID)
+		}
+	}
+	return nil
+}
+
+// ValidateMCPScopeDetectionSurfaces enforces that an MCP-scoped policy only
+// scans tool traffic after category defaults and explicit overrides compose.
+func ValidateMCPScopeDetectionSurfaces(
+	eng *celenv.Engine,
+	scope *MCPScope,
+	policyType string,
+	sources []string,
+	hasCustomRules bool,
+	specs []ra.DetectionScopeConfig,
+) error {
+	if scope == nil {
+		return nil
+	}
+
+	selectedCategories := make(map[categories.Category]struct{})
+	for _, source := range sources {
+		for _, category := range ra.SourceCategories(source) {
+			selectedCategories[category] = struct{}{}
+		}
+		if source == ra.SourceAccountIdentity {
+			selectedCategories[categories.CategoryAccountIdentity] = struct{}{}
+		}
+	}
+	if policyType == ra.PolicyTypePromptBased {
+		selectedCategories[categories.CategoryPromptPolicy] = struct{}{}
+	}
+	if hasCustomRules {
+		selectedCategories[categories.CategoryCustom] = struct{}{}
+	}
+
+	specified := make(map[categories.Category]ra.DetectionScopeConfig, len(specs))
+	for _, spec := range specs {
+		specified[categories.Category(spec.Category)] = spec
+	}
+
+	nonToolViews := []ra.MessageView{
+		{Content: "", Type: message.User, Tools: nil},
+		{Content: "", Type: message.Assistant, Tools: nil},
+		{Content: "", Type: message.PromptAttachment, Tools: nil},
+	}
+	for category := range selectedCategories {
+		spec, ok := specified[category]
+		if !ok {
+			recommendation, found := recommendedscopes.For(category)
+			if found && !recommendation.Applicable {
+				return fmt.Errorf("category %q cannot be used by an MCP-scoped policy", category)
+			}
+			if found {
+				spec = ra.DetectionScopeConfig{
+					Category:     string(category),
+					ScopeInclude: recommendation.ScopeInclude,
+					ScopeExempt:  recommendation.ScopeExempt,
+				}
+			}
+		}
+		compiled, err := ra.CompileScope(eng, spec.ScopeInclude, spec.ScopeExempt)
+		if err != nil {
+			return &ValidationError{
+				Message: fmt.Sprintf("detection scope for %q does not compile", category),
+				Cause:   err,
+			}
+		}
+		for _, view := range nonToolViews {
+			inScope, err := compiled.InScope(view)
+			if err != nil {
+				return &ValidationError{
+					Message: fmt.Sprintf("detection scope for %q could not be evaluated", category),
+					Cause:   err,
+				}
+			}
+			if inScope {
+				return fmt.Errorf("MCP-scoped policy category %q must only inspect tool traffic", category)
+			}
+		}
+	}
+	return nil
 }
 
 func ValidateAction(action string) error {

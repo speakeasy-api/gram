@@ -2,7 +2,13 @@ import { useSdkClient } from "@/contexts/Sdk";
 import type { RiskCategoryDefinition } from "@gram/client/models/components/riskcategorydefinition.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -55,6 +61,45 @@ vi.mock("@gram/client/react-query/riskPoliciesUpdate.js", () => ({
   useRiskPoliciesUpdateMutation: () => ({ isPending: false, mutate: vi.fn() }),
 }));
 
+vi.mock("@gram/client/react-query/mcpServers.js", () => ({
+  useMcpServers: () => ({
+    data: {
+      mcpServers: [
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          name: "Support MCP",
+        },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
+  useMetaMcpServers: () => ({
+    data: { metaMcpServers: [] },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/listToolsets.js", () => ({
+  useListToolsets: () => ({
+    data: { toolsets: [] },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
+vi.mock("@/hooks/useToolMetadata", () => ({
+  useToolMetadata: () => ({
+    metadataByTool: {},
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("@gram/client/react-query/riskCategories.js", () => ({
   useRiskCategories: () => ({
     data: { categories: CATEGORIES },
@@ -202,5 +247,48 @@ describe("StandardPolicyEditor scope rows", () => {
 
     expect(screen.queryByText("Shadow MCP")).toBeNull();
     expect(screen.queryByText("Custom rules")).toBeNull();
+  });
+
+  it("disables user and assistant surfaces for selected MCP servers", async () => {
+    renderEditor(policy());
+
+    fireEvent.click(screen.getByLabelText("Selected servers"));
+    fireEvent.click(screen.getByText("Support MCP"));
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getAllByRole("button", { name: "User" })
+          .every((button) => button.hasAttribute("disabled")),
+      ).toBe(true);
+    });
+    expect(
+      screen
+        .getAllByRole("button", { name: "Assistant" })
+        .every((button) => button.hasAttribute("disabled")),
+    ).toBe(true);
+    expect(
+      screen
+        .getAllByRole("button", { name: "Tool requests" })
+        .some((button) => button.hasAttribute("disabled")),
+    ).toBe(false);
+    expect(
+      screen
+        .getAllByRole("button", { name: "Tool responses" })
+        .some((button) => button.hasAttribute("disabled")),
+    ).toBe(false);
+  });
+
+  it("shows synchronous detector cost for a scoped gating action", () => {
+    renderEditor(policy({ action: "block" }));
+
+    fireEvent.click(screen.getByLabelText("Selected servers"));
+    fireEvent.click(screen.getByText("Support MCP"));
+
+    expect(
+      screen.getByText(
+        "This action gates each matching MCP call synchronously and incurs the configured detector cost.",
+      ),
+    ).toBeTruthy();
   });
 });

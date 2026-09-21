@@ -6,6 +6,7 @@ import { riskPoliciesCreate } from "../funcs/riskPoliciesCreate.js";
 import { riskPoliciesDelete } from "../funcs/riskPoliciesDelete.js";
 import { riskPoliciesGet } from "../funcs/riskPoliciesGet.js";
 import { riskPoliciesList } from "../funcs/riskPoliciesList.js";
+import { riskPoliciesListForMcpServer } from "../funcs/riskPoliciesListForMcpServer.js";
 import { riskPoliciesStatus } from "../funcs/riskPoliciesStatus.js";
 import { riskPoliciesTrigger } from "../funcs/riskPoliciesTrigger.js";
 import { riskPoliciesUpdate } from "../funcs/riskPoliciesUpdate.js";
@@ -33,6 +34,10 @@ import {
   ListRiskPoliciesRequest,
   ListRiskPoliciesSecurity,
 } from "../models/operations/listriskpolicies.js";
+import {
+  ListRiskPoliciesForMcpServerRequest,
+  ListRiskPoliciesForMcpServerSecurity,
+} from "../models/operations/listriskpoliciesformcpserver.js";
 import {
   TriggerRiskAnalysisRequest,
   TriggerRiskAnalysisSecurity,
@@ -132,6 +137,25 @@ export class Policies extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListRiskPoliciesResult> {
     return unwrapAsync(riskPoliciesList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listRiskPoliciesForMcpServer risk
+   *
+   * @remarks
+   * List enabled risk policies that apply to an MCP server and optional tool.
+   */
+  async listForMcpServer(
+    request: ListRiskPoliciesForMcpServerRequest,
+    security?: ListRiskPoliciesForMcpServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListRiskPoliciesResult> {
+    return unwrapAsync(riskPoliciesListForMcpServer(
       this,
       request,
       security,

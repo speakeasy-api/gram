@@ -11,6 +11,7 @@ INSERT INTO risk_policies (
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
+  , mcp_scope
   , enabled
   , action
   , audience_type
@@ -34,6 +35,7 @@ VALUES (
   , @prompt_injection_rules
   , @disabled_rules
   , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+  , sqlc.narg(mcp_scope)::jsonb
   , @enabled
   , @action
   , @audience_type
@@ -127,6 +129,35 @@ WHERE project_id = @project_id
   AND enabled IS TRUE
   AND deleted IS FALSE;
 
+-- name: ListRiskPolicyMCPScopeServerIDs :many
+SELECT server.id
+FROM mcp_servers AS server
+WHERE server.project_id = @project_id
+  AND server.id = ANY(@mcp_server_ids::uuid[])
+  AND server.deleted IS FALSE
+UNION
+SELECT gateway.id
+FROM meta_mcp_servers AS gateway
+WHERE gateway.project_id = @project_id
+  AND gateway.id = ANY(@mcp_server_ids::uuid[])
+  AND gateway.deleted IS FALSE;
+
+-- name: ListMetaMCPServerIDsContainingMCPServer :many
+SELECT gateway.id
+FROM meta_mcp_server_members AS member
+JOIN meta_mcp_servers AS gateway
+  ON gateway.project_id = member.project_id
+ AND gateway.id = member.meta_mcp_server_id
+ AND gateway.deleted IS FALSE
+JOIN mcp_servers AS concrete
+  ON concrete.project_id = member.project_id
+ AND concrete.id = member.mcp_server_id
+ AND concrete.deleted IS FALSE
+WHERE member.project_id = @project_id
+  AND member.mcp_server_id = @mcp_server_id
+  AND member.deleted IS FALSE
+ORDER BY gateway.id;
+
 -- name: UpdateRiskPolicy :one
 UPDATE risk_policies
 SET name = @name
@@ -136,6 +167,7 @@ SET name = @name
   , prompt_injection_rules = @prompt_injection_rules
   , disabled_rules = @disabled_rules
   , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+  , mcp_scope = sqlc.narg(mcp_scope)::jsonb
   , enabled = @enabled
   , action = @action
   , audience_type = @audience_type
@@ -152,6 +184,7 @@ SET name = @name
         OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
         OR disabled_rules IS DISTINCT FROM @disabled_rules
         OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+        OR mcp_scope IS DISTINCT FROM sqlc.narg(mcp_scope)::jsonb
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
         OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text
