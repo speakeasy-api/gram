@@ -612,6 +612,9 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 		if resource == "" {
 			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server has no resource indicator")
 		}
+		if _, _, binding := resolveClient(server, resource, snap.clients[server.IssuerID], snap.bindings[server.IssuerID]); binding == ClientBindingMissing || binding == ClientBindingAmbiguous {
+			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server has no single client registered at its authorization server")
+		}
 		key := upstreamKey{issuerID: server.IssuerID, resource: resource}
 		if previous, ok := byUpstream[key]; ok && (previous.audience != item.audience || previous.appID != item.appID) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "conflicting confirmations for the same resource")
