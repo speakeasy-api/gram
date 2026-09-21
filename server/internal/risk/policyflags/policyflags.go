@@ -3,6 +3,7 @@ package policyflags
 import (
 	"context"
 	"log/slog"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -10,6 +11,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
+
+type memoKey struct{}
+
+type flagState struct {
+	enabled bool
+	orgSlug string
+}
+
+// requestMemo remembers each project flag resolved while serving one request.
+type requestMemo struct {
+	mu     sync.Mutex
+	states map[string]flagState
+}
+
+// WithRequestMemo makes every ProjectFlagState lookup under ctx resolve each
+// project flag once. Evaluating one transcript scans many inputs, and each
+// scan would otherwise repeat the group query and the remote flag check.
+// A flag change takes effect on the next request.
+func WithRequestMemo(ctx context.Context) context.Context {
+	return context.WithValue(ctx, memoKey{}, &requestMemo{mu: sync.Mutex{}, states: map[string]flagState{}})
+}
 
 // ProjectFlagEnabled reports whether flag is on for the project's organization
 // and project groups. Any lookup failure reads as off.
@@ -26,15 +48,41 @@ func ProjectFlagState(ctx context.Context, logger *slog.Logger, queries *repo.Qu
 	if flags == nil {
 		return false, ""
 	}
+	memo, _ := ctx.Value(memoKey{}).(*requestMemo)
+	if memo == nil {
+		state, _ := resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
+		return state.enabled, state.orgSlug
+	}
+	// The lock is held through resolution so concurrent scans that miss the
+	// same flag wait for one lookup instead of each making their own.
+	memo.mu.Lock()
+	defer memo.mu.Unlock()
+	key := projectID.String() + ":" + string(flag)
+	state, ok := memo.states[key]
+	if !ok {
+		// A failed lookup reads as off for this scan only; the next scan
+		// retries it rather than inheriting the failure.
+		var resolved bool
+		state, resolved = resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
+		if resolved {
+			memo.states[key] = state
+		}
+	}
+	return state.enabled, state.orgSlug
+}
+
+// resolveProjectFlag reports false as its second result when the lookup
+// failed and the returned state is the fail-safe default.
+func resolveProjectFlag(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) (flagState, bool) {
 	groups, err := queries.GetProjectFlagGroups(ctx, projectID)
 	if err != nil {
 		logger.WarnContext(ctx, "resolve project flag groups failed", attr.SlogError(err), attr.SlogOrganizationID(orgID), attr.SlogProjectID(projectID.String()))
-		return false, ""
+		return flagState{enabled: false, orgSlug: ""}, false
 	}
 	on, err := flags.IsFlagEnabled(ctx, flag, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug))
 	if err != nil {
 		logger.WarnContext(ctx, "project flag check failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
-		return false, ""
+		return flagState{enabled: false, orgSlug: ""}, false
 	}
-	return on, groups.OrganizationSlug
+	return flagState{enabled: on, orgSlug: groups.OrganizationSlug}, true
 }

@@ -7,6 +7,7 @@ import (
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,7 +16,7 @@ func TestServiceArchivesBeforeCheckpointLoadFailure(t *testing.T) {
 	loadErr := errors.New("checkpoint unavailable")
 	store := &memoryStore{loadErr: loadErr}
 	scanner := &recordingScanner{}
-	service := &Service{store: store, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
 	_, err := service.Process(t.Context(), Config{}, exampleFrame())
 	require.ErrorIs(t, err, loadErr)
 	require.Len(t, store.saved, 1)
@@ -27,7 +28,7 @@ func TestServiceOperationIDsStableAcrossAcceptedMultiBlockHistory(t *testing.T) 
 	t.Parallel()
 	store := &memoryStore{}
 	scanner := &recordingScanner{}
-	service := &Service{store: store, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
 	frame := exampleFrame()
 	frame.Messages = []Message{
 		{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"first"},{"type":"text","text":"second"}]`)},
@@ -38,7 +39,7 @@ func TestServiceOperationIDsStableAcrossAcceptedMultiBlockHistory(t *testing.T) 
 	require.NoError(t, err)
 	require.Len(t, scanner.operationIDs, 4)
 	original := scanner.operationIDs[3]
-	scanner.operationIDs = nil
+	scanner.reset()
 	_, err = service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
 	require.Equal(t, []string{original}, scanner.operationIDs)
