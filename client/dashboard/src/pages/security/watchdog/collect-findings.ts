@@ -8,6 +8,53 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 export const SIGNAL_DISMISS_CAP = 2000;
 const PAGE_SIZE = 200;
 
+type RiskResultsFilter = Omit<
+  Parameters<ReturnType<typeof useSdkClient>["risk"]["results"]["list"]>[0],
+  "cursor" | "limit"
+>;
+
+/**
+ * Pages `risk.listResults` for one filter until the list ends or `done` says
+ * enough has been collected. `complete` is false when it stopped early, so a
+ * caller that needs the whole set can tell a partial one apart.
+ */
+export async function pageRiskResults(
+  client: ReturnType<typeof useSdkClient>,
+  filter: RiskResultsFilter,
+  done: (collected: RiskResult[]) => boolean,
+): Promise<{ results: RiskResult[]; complete: boolean }> {
+  const results: RiskResult[] = [];
+  let cursor: string | undefined = undefined;
+  do {
+    const page = await client.risk.results.list({
+      ...filter,
+      cursor,
+      limit: PAGE_SIZE,
+    });
+    results.push(...page.results);
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor && !done(results));
+  return { results, complete: !cursor };
+}
+
+// Masking a message needs every finding in its chat; a chat past this many is
+// treated as uncollectable rather than masked from a partial set.
+const CHAT_FINDINGS_CAP = 5000;
+
+/** Every finding in one chat, or null when the chat has more than the cap, so
+ * the caller can refuse to render rather than mask from a partial set. */
+export async function collectChatFindings(
+  client: ReturnType<typeof useSdkClient>,
+  chatId: string,
+): Promise<RiskResult[] | null> {
+  const { results, complete } = await pageRiskResults(
+    client,
+    { chatId },
+    (collected) => collected.length >= CHAT_FINDINGS_CAP,
+  );
+  return complete ? results : null;
+}
+
 /**
  * Pages `risk.listResults` for each rule and returns their findings, capped at
  * `cap` overall. The list endpoint's rule filter is substring-match, so an id
@@ -23,18 +70,13 @@ export async function collectFindingsForRules(
 ): Promise<RiskResult[]> {
   const all: RiskResult[] = [];
   for (const ruleId of ruleIds) {
-    let cursor: string | undefined = undefined;
-    do {
-      const page = await client.risk.results.list({
-        cursor,
-        limit: PAGE_SIZE,
-        ruleId,
-        from: window.from,
-        to: window.to,
-      });
-      all.push(...page.results.filter((result) => result.ruleId === ruleId));
-      cursor = page.nextCursor ?? undefined;
-    } while (cursor && all.length < cap);
+    const matches = (result: RiskResult) => result.ruleId === ruleId;
+    const { results } = await pageRiskResults(
+      client,
+      { ruleId, from: window.from, to: window.to },
+      (collected) => all.length + collected.filter(matches).length >= cap,
+    );
+    all.push(...results.filter(matches));
     if (all.length >= cap) break;
   }
   return all.slice(0, cap);

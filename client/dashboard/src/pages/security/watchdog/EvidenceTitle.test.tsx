@@ -1,12 +1,16 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EvidenceTitle } from "./EvidenceTitle";
 
 const hasScope = vi.fn<(scope: string, resourceId?: string) => boolean>();
-const loadChat = vi.fn<() => Promise<unknown>>();
+const loadChat = vi.fn<(req: unknown) => Promise<unknown>>();
 const listFindings = vi.fn<(req: { cursor?: string }) => Promise<unknown>>();
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -15,9 +19,21 @@ vi.mock("@/hooks/useRBAC", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
-    chat: { load: loadChat },
     risk: { results: { list: listFindings } },
   }),
+}));
+
+vi.mock("@gram/client/react-query/loadChat.js", () => ({
+  useLoadChat: (
+    request: unknown,
+    _security: unknown,
+    options: { enabled: boolean },
+  ) =>
+    useQuery({
+      queryKey: ["loadChat", request],
+      queryFn: () => loadChat(request),
+      enabled: options.enabled,
+    }),
 }));
 
 vi.mock("@/routes", () => ({
@@ -131,6 +147,63 @@ describe("EvidenceTitle", () => {
 
     const mark = await screen.findByText("printenv");
     expect(mark.tagName).toBe("MARK");
+  });
+
+  it("shows a flagged tool call's arguments beside its text, masking an escaped secret", async () => {
+    hasScope.mockReturnValue(true);
+    const secret = 'hun"ter\\2';
+    loadChat.mockResolvedValue({
+      messages: [
+        {
+          id: "msg-flagged",
+          role: "assistant",
+          content: "Logging in now.",
+          toolCalls: JSON.stringify([
+            {
+              id: "call-1",
+              function: {
+                name: "login",
+                arguments: JSON.stringify({ password: secret }),
+              },
+            },
+          ]),
+        },
+      ],
+    });
+    listFindings.mockResolvedValue({
+      results: [{ source: "gitleaks", match: secret }],
+    });
+    renderTitle("chat-1");
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Show flagged message" }));
+
+    const mark = await screen.findByText(/^•+$/);
+    expect(mark.tagName).toBe("MARK");
+    const message = screen.getByRole("button", { name: /Logging in now/ });
+    expect(message.textContent).toContain("login");
+    expect(message.textContent).not.toContain("hun");
+  });
+
+  it("drops the chevron, keeping the session link, when the message can't be shown", async () => {
+    hasScope.mockReturnValue(true);
+    loadChat.mockResolvedValue({
+      messages: [{ id: "msg-other", role: "user", content: "Elsewhere." }],
+    });
+    renderTitle("chat-1");
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Show flagged message" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /message/ })).toBeNull(),
+    );
+    expect(screen.getByRole("button", { name: TITLE })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Open session in Agent Sessions" }),
+    ).toBeTruthy();
   });
 
   it("stays plain text for findings with no chat", () => {
