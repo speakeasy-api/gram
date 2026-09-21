@@ -40,10 +40,15 @@ func foldTestContext(t *testing.T) (context.Context, *testInstance, string) {
 
 	ctx, ti := newTestLogsService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 	return ctx, ti, authCtx.ActiveOrganizationID
 }
 

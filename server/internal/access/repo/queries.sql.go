@@ -1250,6 +1250,128 @@ func (q *Queries) ListActiveRoleIDsByWorkosUser(ctx context.Context, arg ListAct
 	return items, nil
 }
 
+const listActorScopeIdentities = `-- name: ListActorScopeIdentities :many
+SELECT
+  users.id AS user_id,
+  LOWER(users.email)::text AS email,
+  LOWER(COALESCE(du.attributes ->> 'department_name', ''))::text AS department,
+  COALESCE(dg_names.group_names, '{}'::text[])::text[] AS group_names,
+  COALESCE(assigned_roles.role_slugs, '{}'::text[])::text[] AS role_slugs
+FROM organization_user_relationships AS our
+JOIN users
+  ON users.id = our.user_id
+LEFT JOIN LATERAL (
+  -- The member's directory profile, resolved exactly as ListAccessMembers
+  -- does so the Access page and log scoping never disagree about which
+  -- profile is current.
+  SELECT d.id, d.attributes
+  FROM directory_users d
+  WHERE d.organization_id = our.organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = users.id OR LOWER(d.email) = LOWER(users.email))
+  ORDER BY (d.user_id = users.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+) du ON TRUE
+LEFT JOIN LATERAL (
+  SELECT ARRAY_AGG(DISTINCT LOWER(dg.name)) AS group_names
+  FROM directory_user_group_memberships m
+  INNER JOIN directory_groups dg
+    ON dg.id = m.directory_group_id
+    AND dg.organization_id = our.organization_id
+    AND dg.deleted IS FALSE
+    AND dg.workos_deleted IS FALSE
+  WHERE m.directory_user_id = du.id
+    AND m.deleted IS FALSE
+) dg_names ON TRUE
+LEFT JOIN LATERAL (
+  SELECT ARRAY_AGG(DISTINCT LOWER(COALESCE(organization_roles.workos_slug, global_roles.workos_slug))) AS role_slugs
+  FROM organization_role_assignments AS ora
+  LEFT JOIN organization_roles
+    ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+    AND organization_roles.organization_id = ora.organization_id
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+  LEFT JOIN global_roles
+    ON ora.role_urn = 'role:global:' || global_roles.id::text
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+  WHERE ora.organization_id = our.organization_id
+    AND (ora.user_id = users.id OR ora.workos_user_id = users.workos_id)
+    AND ora.deleted_at IS NULL
+    AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+) assigned_roles ON TRUE
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
+  AND users.email <> ''
+  AND (
+    LOWER(COALESCE(du.attributes ->> 'department_name', '')) = ANY($2::text[])
+    OR EXISTS (
+      SELECT 1
+      FROM unnest(COALESCE(dg_names.group_names, '{}'::text[])) AS group_name
+      WHERE group_name = ANY($3::text[])
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM unnest(COALESCE(assigned_roles.role_slugs, '{}'::text[])) AS role_slug
+      WHERE role_slug = ANY($4::text[])
+    )
+  )
+ORDER BY email, user_id
+`
+
+type ListActorScopeIdentitiesParams struct {
+	OrganizationID string
+	Departments    []string
+	GroupNames     []string
+	RoleSlugs      []string
+}
+
+type ListActorScopeIdentitiesRow struct {
+	UserID     string
+	Email      string
+	Department string
+	GroupNames []string
+	RoleSlugs  []string
+}
+
+// Members whose identity-provider profile matches any of the requested
+// departments, directory groups, or role slugs. Backs the actor dimensions of
+// a logs:read grant: the caller intersects the dimensions of a single grant
+// itself, so every row reports which values it matched on. Comparisons are
+// case-insensitive because the values are provider-controlled.
+func (q *Queries) ListActorScopeIdentities(ctx context.Context, arg ListActorScopeIdentitiesParams) ([]ListActorScopeIdentitiesRow, error) {
+	rows, err := q.db.Query(ctx, listActorScopeIdentities,
+		arg.OrganizationID,
+		arg.Departments,
+		arg.GroupNames,
+		arg.RoleSlugs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActorScopeIdentitiesRow
+	for rows.Next() {
+		var i ListActorScopeIdentitiesRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Email,
+			&i.Department,
+			&i.GroupNames,
+			&i.RoleSlugs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgentNames = `-- name: ListAgentNames :many
 SELECT id, name
 FROM agents
@@ -2072,6 +2194,56 @@ func (q *Queries) ListPrincipalGrantsByResourceIDs(ctx context.Context, arg List
 	for rows.Next() {
 		var i ListPrincipalGrantsByResourceIDsRow
 		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPrincipalsMissingScope = `-- name: ListPrincipalsMissingScope :many
+SELECT DISTINCT held.organization_id, held.principal_urn
+FROM principal_grants AS held
+WHERE COALESCE(held.effect, 'allow') = 'allow'
+  AND held.scope = ANY($1::text[])
+  AND NOT EXISTS (
+    SELECT 1
+    FROM principal_grants AS target
+    WHERE target.organization_id = held.organization_id
+      AND target.principal_urn = held.principal_urn
+      AND target.scope = $2
+      AND COALESCE(target.effect, 'allow') = 'allow'
+  )
+ORDER BY held.organization_id, held.principal_urn
+`
+
+type ListPrincipalsMissingScopeParams struct {
+	HeldScopes  []string
+	TargetScope string
+}
+
+type ListPrincipalsMissingScopeRow struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+}
+
+// Principals that hold at least one of the given scopes but not the target
+// scope. Backs the offline logs:read grant backfill, which hands every
+// principal that can already read observability data an unrestricted grant for
+// the new scope so enforcing it changes nobody's access.
+func (q *Queries) ListPrincipalsMissingScope(ctx context.Context, arg ListPrincipalsMissingScopeParams) ([]ListPrincipalsMissingScopeRow, error) {
+	rows, err := q.db.Query(ctx, listPrincipalsMissingScope, arg.HeldScopes, arg.TargetScope)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPrincipalsMissingScopeRow
+	for rows.Next() {
+		var i ListPrincipalsMissingScopeRow
+		if err := rows.Scan(&i.OrganizationID, &i.PrincipalUrn); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

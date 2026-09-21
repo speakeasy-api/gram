@@ -839,6 +839,15 @@ type Selector struct {
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.
 	ServerURL *string
+	// Directory department of the people whose activity this grant covers (logs
+	// scopes only).
+	ActorDepartment *string
+	// Directory group name of the people whose activity this grant covers (logs
+	// scopes only).
+	ActorGroup *string
+	// Identity-provider role slug of the people whose activity this grant covers
+	// (logs scopes only).
+	ActorRole *string
 }
 
 // SetAIToolDecisionPayload is the payload type of the access service

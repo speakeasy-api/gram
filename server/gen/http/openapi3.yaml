@@ -86689,6 +86689,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - logs:read
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -86730,6 +86731,7 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
+                            - logs:read
                             - agent:read
                             - agent:write
                             - agent:authorize
@@ -92395,6 +92397,7 @@ components:
                         - risk_policy:bypass
                         - chat:read
                         - chat:write
+                        - logs:read
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -94163,6 +94166,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - logs:read
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -94383,6 +94387,7 @@ components:
                         - risk_policy
                         - chat
                         - agent
+                        - logs
                 slug:
                     type: string
                     description: Unique scope identifier.
@@ -94414,6 +94419,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - logs:read
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -94878,6 +94884,15 @@ components:
         Selector:
             type: object
             properties:
+                actor_department:
+                    type: string
+                    description: Directory department of the people whose activity this grant covers (logs scopes only).
+                actor_group:
+                    type: string
+                    description: Directory group name of the people whose activity this grant covers (logs scopes only).
+                actor_role:
+                    type: string
+                    description: Identity-provider role slug of the people whose activity this grant covers (logs scopes only).
                 disposition:
                     type: string
                     description: Tool disposition filter (MCP scopes only).
@@ -94904,6 +94919,7 @@ components:
                         - risk_policy
                         - chat
                         - agent
+                        - logs
                         - '*'
                 server_url:
                     type: string

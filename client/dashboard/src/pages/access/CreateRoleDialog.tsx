@@ -1,6 +1,7 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
 
 import { Checkbox } from "@/components/ui/Checkbox";
 import {
@@ -53,6 +54,7 @@ import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
 import {
+  actorScopeSummaries,
   isProjectSelectableResourceType,
   isUnrestrictedResourceType,
 } from "./types";
@@ -249,6 +251,12 @@ export function CreateRoleDialog({
         label: "Agents",
         resourceType: "agent",
         description: "Agents available within the organization.",
+      },
+      {
+        label: "Observability",
+        resourceType: "logs",
+        description:
+          "Logs, traces, and sessions across the organization's projects.",
       },
     ];
     return groupOrder.map((g) => ({
@@ -740,7 +748,21 @@ export function CreateRoleDialog({
                 // list you pick from — carry no control at all: an "All" chip
                 // that cannot be changed is noise.
                 if (isUnrestrictedResourceType(scopeDef.resourceType)) {
-                  return null;
+                  // Except when the grant is narrowed to an actor population.
+                  // That narrowing is authored through the access API, so the
+                  // editor states it read-only rather than rendering nothing,
+                  // which would read as unrestricted access.
+                  const summaries = grant.rules.flatMap((rule) =>
+                    rule.effect === "allow"
+                      ? actorScopeSummaries(rule.selectors)
+                      : [],
+                  );
+                  if (summaries.length === 0) return null;
+                  return summaries.map((summary) => (
+                    <Badge key={summary} variant="neutral" size="sm">
+                      {`Only ${summary}`}
+                    </Badge>
+                  ));
                 }
                 // A permission can hold more than one allow rule — selectors
                 // at different levels do not merge — so each one gets its own

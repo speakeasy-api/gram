@@ -39,10 +39,15 @@ func TestListSessions_SummaryPathMatchesRawPath(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Now().UTC()
 	claudeChatID := uuid.NewString()
@@ -202,10 +207,15 @@ func TestListSessions_SummaryPathFilters(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Now().UTC()
 	engChatID := uuid.NewString()
@@ -368,10 +378,15 @@ func TestListSessions_SummaryPathDropsPhantomBoundarySessions(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	// Anchor the window end mid-hour so the trailing bucket is admitted by
 	// the bucket bound: the in-window chat sits before `to`, the phantom chat
@@ -432,10 +447,15 @@ func TestListSessions_ArrayUnsetFilterAlignedAcrossPaths(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Now().UTC()
 	mixedChatID := uuid.NewString()
@@ -511,10 +531,15 @@ func TestListSessions_SummaryPathCursorPagination(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeOrgRead,
+			Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		},
+		// Unrestricted logs:read: these assertions cover organization-wide
+		// totals, which a narrowed or absent grant deliberately scopes down.
+		authz.NewGrant(authz.ScopeLogsRead, authz.WildcardResource),
+	)
 
 	now := time.Now().UTC()
 	chatIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString()}

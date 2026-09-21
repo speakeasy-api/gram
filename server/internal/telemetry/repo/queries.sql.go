@@ -2049,6 +2049,7 @@ type ListTelemetryLogsParams struct {
 	ExternalUserID         string
 	EventSource            string
 	AttributeFilters       []AttributeFilter
+	ActorScope             *ActorScope
 	SortOrder              string
 	Cursor                 string
 	Limit                  int
@@ -2127,6 +2128,8 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
 	}
+
+	sb = withActorScope(sb, arg.ActorScope, "user_email", "user_id", "")
 
 	// Arbitrary attribute filters
 	for _, f := range arg.AttributeFilters {
@@ -2897,6 +2900,7 @@ type ListChatsParams struct {
 	GramURN          string
 	UserID           string
 	ExternalUserID   string
+	ActorScope       *ActorScope
 	SortOrder        string
 	Cursor           string // gram_chat_id to paginate from
 	Limit            int
@@ -2951,7 +2955,14 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
 	}
 
+	// A chat is one actor's conversation, but the identity only appears on a
+	// subset of its rows, so the scope has to be applied to the group rather
+	// than row by row.
 	sb = sb.GroupBy("gram_chat_id")
+	sb, err := withActorScopeHaving(sb, arg.ActorScope, "user_email", "user_id", "")
+	if err != nil {
+		return nil, fmt.Errorf("building list chats actor scope: %w", err)
+	}
 
 	// HAVING clause for cursor pagination with tuple comparison for tie-breaking
 	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, "gram_chat_id", "min(time_unix_nano)", "", nil)
@@ -4095,6 +4106,7 @@ type ListToolUsageTracesParams struct {
 	Statuses           []string // Optional trace-outcome filter: error, success, blocked, pending. Empty means all.
 	Query              string
 	Filters            []AttributeFilter
+	ActorScope         *ActorScope
 	SortOrder          string
 	CursorTimeUnixNano int64
 	CursorID           string
@@ -4530,6 +4542,8 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		}
 		sb = sb.Where(userFilters)
 	}
+
+	sb = withActorScopeTypedUser(sb, arg.ActorScope)
 
 	// http.response.status_code filters are applied here, against the aggregated
 	// per-trace http_status_code column, instead of being pushed down to raw rows in
@@ -7198,6 +7212,7 @@ type ListHooksTracesParams struct {
 	TimeEnd        int64
 	Filters        []AttributeFilter
 	TypesToInclude []string // Hook types to include: "mcp", "local", "skill"
+	ActorScope     *ActorScope
 	SortOrder      string
 	Cursor         string // trace_id to paginate from
 	Limit          int
@@ -7309,6 +7324,12 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 			sb = sb.Where(fmt.Sprintf("(%s)", strings.Join(typeConditions, " OR ")))
 		}
 	}
+
+	// user_email keys the group, so scoping on it removes whole traces rather
+	// than slicing rows out of one. user_id is deliberately not used here: it
+	// is not part of the group key, and filtering on it pre-aggregation could
+	// leave a trace with partial counts.
+	sb = withActorScope(sb, arg.ActorScope, "user_email", "", orgLit)
 
 	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source", "user_email", "hook_source", "skill_name") //nolint:glint // fold-neutral: trace_id keys the group (one trace = one email) and the trace list deliberately displays the literal email; the drill filters above fold
 

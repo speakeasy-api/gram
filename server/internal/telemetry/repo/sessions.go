@@ -206,6 +206,7 @@ type ListSessionsParams struct {
 	TimeStart        int64
 	TimeEnd          int64
 	Filters          []AttributeMetricsFilter
+	ActorScope       *ActorScope
 	SortBy           string
 	CursorSortValue  *float64
 	CursorGramChatID string
@@ -419,6 +420,11 @@ func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]S
 	if len(arg.ProjectIDs) == 0 {
 		return nil, nil
 	}
+	filters, inScope := actorScopeEmailFilter(arg.Filters, arg.ActorScope)
+	if !inScope {
+		return nil, nil
+	}
+	arg.Filters = filters
 	if arg.UsesSummaryPath() {
 		return q.listSessionsFromSummaries(ctx, arg)
 	}

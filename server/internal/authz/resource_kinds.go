@@ -10,4 +10,5 @@ const (
 	ResourceKindRiskPolicy  = "risk_policy"
 	ResourceKindChat        = "chat"
 	ResourceKindAgent       = "agent"
+	ResourceKindLogs        = "logs"
 )
