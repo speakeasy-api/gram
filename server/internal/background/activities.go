@@ -134,15 +134,11 @@ type Activities struct {
 	promoteStagedTelemetry           *activities.PromoteStagedTelemetry
 	listStagedTelemetryProjects      *activities.ListStagedTelemetryProjects
 	generateChatTitle                *activities.GenerateChatTitle
-	getAllOrganizations              *activities.GetAllOrganizations
 	processDeployment                *activities.ProcessDeployment
 	provisionFunctionsAccess         *activities.ProvisionFunctionsAccess
 	deployFunctionRunners            *activities.DeployFunctionRunners
 	reapFlyApps                      *activities.ReapFlyApps
-	refreshBillingUsage              *activities.RefreshBillingUsage
-	snapshotBillingCycleUsage        *activities.SnapshotBillingCycleUsage
 	weeklyUsageSummary               *activities.WeeklyUsageSummary
-	forwardTokenUsageToPostHog       *activities.ForwardTokenUsageToPostHog
 	refreshOpenRouterKey             *activities.RefreshOpenRouterKey
 	setOpenRouterSpendCap            *activities.SetOpenRouterSpendCap
 	reconcilePaygOpenRouterChatKey   *activities.ReconcilePaygOpenRouterChatKey
@@ -435,15 +431,11 @@ func NewActivities(
 		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
-		getAllOrganizations:              activities.NewGetAllOrganizations(logger, db),
 		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                      activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
-		refreshBillingUsage:              activities.NewRefreshBillingUsage(logger, db, billingRepo),
-		snapshotBillingCycleUsage:        activities.NewSnapshotBillingCycleUsage(logger, db, chConn),
 		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, meterReadConn, emailService, siteURL),
-		forwardTokenUsageToPostHog:       activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
 		refreshOpenRouterKey:             activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		setOpenRouterSpendCap:            activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, cacheAdapter),
 		reconcilePaygOpenRouterChatKey:   activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),
@@ -751,18 +743,6 @@ func (a *Activities) RunOktaApplicationSync(ctx context.Context, input string) e
 	return a.runOktaApplicationSync.Do(ctx, input)
 }
 
-func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {
-	return a.refreshBillingUsage.Do(ctx, orgIDs)
-}
-
-func (a *Activities) SnapshotBillingCycleUsage(ctx context.Context, orgIDs []string) error {
-	return a.snapshotBillingCycleUsage.Do(ctx, orgIDs)
-}
-
-func (a *Activities) ForwardTokenUsageToPostHog(ctx context.Context, orgIDs []string) error {
-	return a.forwardTokenUsageToPostHog.Do(ctx, orgIDs)
-}
-
 func (a *Activities) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]activities.WeeklyUsageSummaryTarget, error) {
 	targets, err := a.weeklyUsageSummary.ListTargets(ctx)
 	if err != nil {
@@ -776,10 +756,6 @@ func (a *Activities) SendWeeklyUsageSummary(ctx context.Context, args activities
 		return fmt.Errorf("send weekly usage summary: %w", err)
 	}
 	return nil
-}
-
-func (a *Activities) GetAllOrganizations(ctx context.Context) ([]string, error) {
-	return a.getAllOrganizations.Do(ctx)
 }
 
 func (a *Activities) ProvisionFunctionsAccess(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID) error {
