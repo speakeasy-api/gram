@@ -89,14 +89,7 @@ func (p *PluginPublisher) ListCandidates(ctx context.Context, input ListPluginPu
 
 	candidates := make([]PluginPublishCandidate, 0, len(rows))
 	for _, row := range rows {
-		actor, err := pluginsrepo.New(p.db).ResolvePluginPublishActor(ctx, pluginsrepo.ResolvePluginPublishActorParams{
-			OrganizationID:  row.OrganizationID,
-			PreferredUserID: "",
-			ProjectID:       row.ProjectID,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("resolve plugin publish actor: %w", err)
-		}
+		actor := row.CreatedByUserID
 		if !plugins.UsableAPIKeyCreatorID(actor) {
 			p.logger.WarnContext(ctx, "plugin publish candidate has no real actor",
 				attr.SlogProjectID(row.ProjectID.String()),

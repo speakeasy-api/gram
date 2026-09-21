@@ -41,6 +41,9 @@ func TestResolvePluginPublishActor(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	_, err = repo.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{OrganizationID: orgID, ProjectID: projectID})
+	require.NoError(t, err)
+
 	addUser := func(id string) {
 		require.NoError(t, fixtures.InsertUserFixture(ctx, testrepo.InsertUserFixtureParams{ID: id, Email: id + "@example.com", DisplayName: id}))
 	}
@@ -58,6 +61,18 @@ func TestResolvePluginPublishActor(t *testing.T) {
 			ProjectID:       projectID,
 		})
 		require.NoError(t, err)
+		if preferred == "" {
+			candidates, err := repo.ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{AfterProjectID: uuid.Nil, ResultLimit: 100})
+			require.NoError(t, err)
+			found := false
+			for _, candidate := range candidates {
+				if candidate.ProjectID == projectID {
+					found = true
+					require.Equal(t, actor, candidate.CreatedByUserID)
+				}
+			}
+			require.True(t, found, "sweep must retain candidates even without an actor")
+		}
 		return actor
 	}
 
@@ -106,6 +121,12 @@ func TestResolvePluginPublishActor(t *testing.T) {
 	// oldest member.
 	mintKey(newer)
 	require.Equal(t, newer, resolve(outsider))
+	require.Equal(t, newer, resolve(""))
+
+	// Multiple eligible creators pin the newest-key ordering in both paths.
+	mintKey(oldest)
+	require.Equal(t, oldest, resolve(outsider))
+	require.Equal(t, oldest, resolve(""))
 
 	// A key creator who left the organization no longer qualifies.
 	require.NoError(t, fixtures.ForceSoftDeleteOrganizationUserRelationship(ctx, testrepo.ForceSoftDeleteOrganizationUserRelationshipParams{
@@ -113,4 +134,5 @@ func TestResolvePluginPublishActor(t *testing.T) {
 		UserID:         pgtype.Text{String: newer, Valid: true},
 	}))
 	require.Equal(t, oldest, resolve(newer))
+	require.Equal(t, oldest, resolve(""))
 }

@@ -1009,15 +1009,50 @@ func (q *Queries) ListPluginEnvironmentConfigsForProject(ctx context.Context, ar
 }
 
 const listPluginPublishCandidates = `-- name: ListPluginPublishCandidates :many
-SELECT cp.project_id, p.organization_id
-FROM (
-  SELECT c.project_id FROM plugin_github_connections c WHERE c.project_id > $1
-  UNION
-  SELECT dp.project_id FROM plugins dp WHERE dp.is_default IS TRUE AND dp.deleted IS FALSE AND dp.project_id > $1
-) cp
-JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
+WITH candidate_projects AS MATERIALIZED (
+  SELECT cp.project_id, p.organization_id
+  FROM (
+    SELECT c.project_id FROM plugin_github_connections c WHERE c.project_id > $1
+    UNION
+    SELECT dp.project_id FROM plugins dp WHERE dp.is_default IS TRUE AND dp.deleted IS FALSE AND dp.project_id > $1
+  ) cp
+  JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
+  ORDER BY cp.project_id ASC
+  LIMIT $2
+)
+SELECT cp.project_id, cp.organization_id,
+  COALESCE(
+  (
+    SELECT ak.created_by_user_id
+    FROM api_keys ak
+    JOIN users u ON u.id = ak.created_by_user_id
+    JOIN organization_user_relationships our
+      ON our.user_id = ak.created_by_user_id
+     AND our.organization_id = cp.organization_id
+     AND our.deleted IS FALSE
+    WHERE ak.organization_id = cp.organization_id
+      AND ak.project_id = cp.project_id
+      AND ak.deleted IS FALSE
+      AND ak.name LIKE 'plugins-mcp-%'
+      AND u.deleted_at IS NULL
+    ORDER BY ak.created_at DESC
+    LIMIT 1
+  ),
+  (
+    SELECT our.user_id
+    FROM organization_user_relationships our
+    JOIN users u ON u.id = our.user_id
+    WHERE our.organization_id = cp.organization_id
+      AND our.deleted IS FALSE
+      AND our.user_id IS NOT NULL
+      AND u.deleted_at IS NULL
+    ORDER BY our.created_at ASC, our.user_id ASC
+    LIMIT 1
+  ),
+  ''
+)::text AS created_by_user_id
+FROM candidate_projects cp
 ORDER BY cp.project_id ASC
-LIMIT $2
 `
 
 type ListPluginPublishCandidatesParams struct {
@@ -1026,8 +1061,9 @@ type ListPluginPublishCandidatesParams struct {
 }
 
 type ListPluginPublishCandidatesRow struct {
-	ProjectID      uuid.UUID
-	OrganizationID string
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID string
 }
 
 // Lists candidates for the automated generator rollout, paginated by
@@ -1043,7 +1079,9 @@ type ListPluginPublishCandidatesRow struct {
 // instead of leaving it stuck until a human notices. Republishing an
 // unchanged project is cheap -- SkipIfUnchanged short-circuits on the
 // fingerprint check before any GitHub/key work. The publish actor for each
-// row is resolved separately with ResolvePluginPublishActor.
+// row is resolved in this query, using the same fallback order as
+// ResolvePluginPublishActor. Page before resolving actors; key lookups use
+// the existing (organization_id, project_id, id) index prefix.
 // This is a deliberate cross-project sweep, so unlike the tenant-scoped
 // queries it is not constrained to a single project_id.
 func (q *Queries) ListPluginPublishCandidates(ctx context.Context, arg ListPluginPublishCandidatesParams) ([]ListPluginPublishCandidatesRow, error) {
@@ -1055,7 +1093,7 @@ func (q *Queries) ListPluginPublishCandidates(ctx context.Context, arg ListPlugi
 	var items []ListPluginPublishCandidatesRow
 	for rows.Next() {
 		var i ListPluginPublishCandidatesRow
-		if err := rows.Scan(&i.ProjectID, &i.OrganizationID); err != nil {
+		if err := rows.Scan(&i.ProjectID, &i.OrganizationID, &i.CreatedByUserID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1709,7 +1747,8 @@ SELECT COALESCE(
       ON our.user_id = ak.created_by_user_id
      AND our.organization_id = $1
      AND our.deleted IS FALSE
-    WHERE ak.project_id = $3::uuid
+    WHERE ak.organization_id = $1
+      AND ak.project_id = $3::uuid
       AND ak.deleted IS FALSE
       AND ak.name LIKE 'plugins-mcp-%'
       AND u.deleted_at IS NULL
