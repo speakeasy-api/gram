@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EvidenceTitle } from "./EvidenceTitle";
 
-const hasScope = vi.fn<(scope: string) => boolean>();
+const hasScope = vi.fn<(scope: string, resourceId?: string) => boolean>();
 const loadChat = vi.fn<() => Promise<unknown>>();
 const listFindings = vi.fn<(req: { cursor?: string }) => Promise<unknown>>();
 
@@ -76,7 +76,7 @@ describe("EvidenceTitle", () => {
     expect(screen.getByText(TITLE)).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
-    expect(hasScope).toHaveBeenCalledWith("chat:read");
+    expect(hasScope).toHaveBeenCalledWith("chat:read", "chat-1");
     expect(loadChat).not.toHaveBeenCalled();
     expect(listFindings).not.toHaveBeenCalled();
   });

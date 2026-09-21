@@ -42,7 +42,13 @@ export function EvidenceTitle({
   // Everything chat-backed here (the transcript, the full message, the session
   // link) shows chat content, so it only exists for chat:read holders. Anyone
   // else gets the plain title, and no request for the chat is ever made.
-  const chatId = hasScope(REVEAL_SCOPE) ? findingChatId : undefined;
+  // Checked against this chat: grants are "All sessions" in the roles UI, but
+  // the API accepts a per-chat selector, and an unscoped check would pass on
+  // any chat:read grant at all.
+  const chatId =
+    findingChatId && hasScope(REVEAL_SCOPE, findingChatId)
+      ? findingChatId
+      : undefined;
   const [expanded, setExpanded] = useState(false);
   const [clipped, setClipped] = useState(false);
   const titleRef = useRef<HTMLElement>(null);
