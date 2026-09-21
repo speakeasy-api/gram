@@ -1089,7 +1089,13 @@ SELECT
   (SELECT count(*) FROM assistant_mcp_servers ams
    WHERE ams.project_id = @project_id AND ams.assistant_id = @assistant_id) AS mcp_servers;
 
--- name: SetUserSessionIssuerUseAuthenticationHostFixture :exec
-UPDATE user_session_issuers
+-- name: SetUserSessionIssuerUseAuthenticationHostFixture :execrows
+-- Project-scoped issuers carry no organization_id, so their tenancy is read
+-- through the project.
+UPDATE user_session_issuers AS issuer
 SET use_authentication_host = @use_authentication_host
-WHERE id = @id;
+WHERE issuer.id = @issuer_id
+  AND COALESCE(
+    issuer.organization_id,
+    (SELECT p.organization_id FROM projects AS p WHERE p.id = issuer.project_id)
+  ) = @organization_id::text;

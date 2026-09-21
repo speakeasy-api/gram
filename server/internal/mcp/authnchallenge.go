@@ -921,6 +921,11 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	endpoint.CIMDAdmissionModeRaw = issuer.ClientIDMetadataAdmissionMode
 	endpoint.idJAGConfigured = !issuer.ProjectID.Valid && issuer.OrganizationID.Valid && issuer.TrustedRemoteSessionIssuerID.Valid
 	endpoint.useAuthenticationHost = issuer.UseAuthenticationHost
+	// The authentication host serves only issuers that opt in to it. To any
+	// other issuer it is a host that serves nothing.
+	if OnAuthenticationHost(ctx) && !issuer.UseAuthenticationHost {
+		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+	}
 	return nil
 }
 

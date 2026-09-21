@@ -69,13 +69,16 @@ func authenticationHostTokenURL(mcpSlug string) string {
 
 // useAuthenticationHost opts an issuer in to announcing the authentication
 // host.
-func useAuthenticationHost(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID) {
+func useAuthenticationHost(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, issuerID uuid.UUID) {
 	t.Helper()
 
-	require.NoError(t, testrepo.New(ti.conn).SetUserSessionIssuerUseAuthenticationHostFixture(ctx, testrepo.SetUserSessionIssuerUseAuthenticationHostFixtureParams{
+	updated, err := testrepo.New(ti.conn).SetUserSessionIssuerUseAuthenticationHostFixture(ctx, testrepo.SetUserSessionIssuerUseAuthenticationHostFixtureParams{
 		UseAuthenticationHost: true,
-		ID:                    issuerID,
-	}))
+		IssuerID:              issuerID,
+		OrganizationID:        organizationID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), updated, "the issuer must exist in this organization")
 }
 
 func wellKnownRequest(t *testing.T, prefix, mcpSlug string) *http.Request {
@@ -108,22 +111,6 @@ func requireNotFound(t *testing.T, err error) {
 	require.Equal(t, oops.CodeNotFound, shareable.Code)
 }
 
-// fetchAdvertisedTokenEndpoint reads token_endpoint from the RFC 8414 document
-// served on the MCP host.
-func fetchAdvertisedTokenEndpoint(t *testing.T, ti *testInstance, mcpSlug string) string {
-	t.Helper()
-
-	w := httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleGetAuthorizationServer(w, wellKnownRequest(t, "/.well-known/oauth-authorization-server/mcp/", mcpSlug)))
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-
-	var meta map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &meta))
-	tokenEndpoint, ok := meta["token_endpoint"].(string)
-	require.True(t, ok, "metadata must carry a string token_endpoint: %s", w.Body.String())
-	return tokenEndpoint
-}
-
 func accessTokenClaims(t *testing.T, body []byte) map[string]any {
 	t.Helper()
 
@@ -140,37 +127,78 @@ func accessTokenClaims(t *testing.T, body []byte) map[string]any {
 	return claims
 }
 
-// For an issuer that has not opted in, a client assertion naming the token URL
-// on the authentication host authenticates a token request sent there, and
-// the session it mints carries the issuer and resource of the MCP host.
+// mcpHostRoot is the endpoint's canonical URL on the MCP host: its resource.
+func mcpHostRoot(ti *testInstance, mcpSlug string) string {
+	return strings.TrimSuffix(ti.serverURL.String(), "/") + "/mcp/" + mcpSlug
+}
+
+// For an issuer that opts in, a client assertion naming the token URL on the
+// authentication host authenticates a token request sent there, and the
+// session it mints carries the authentication host issuer and the MCP host's
+// resource.
 func TestAuthenticationHost_AuthenticationHostAudienceAccepted(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
 	signer := newAssertionSigner(t)
 	client := seedAssertionClient(t, ctx, ti, issuer.ID, signer)
-	advertisedIssuer, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
 	harness := newAuthenticationHostHarness(t, ti)
 	slug := toolset.McpSlug.String
+	authIssuer := testAuthenticationHostURL + "/mcp/" + slug
 
 	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
 	form := withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, authenticationHostTokenURL(slug)))
-	form.Set("resource", advertisedIssuer)
+	form.Set("resource", mcpHostRoot(ti, slug))
 	w := harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", form)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.False(t, *harness.passedThrough)
-
-	claims := accessTokenClaims(t, w.Body.Bytes())
-	require.Equal(t, advertisedIssuer, claims["iss"])
+	require.Equal(t, authIssuer, accessTokenClaims(t, w.Body.Bytes())["iss"])
 
 	// The issuer stays the other half of the accepted pair.
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, client)
-	w = harness.serve(t, http.MethodPost, "auth.example.com:443", "/mcp/"+slug+"/token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, advertisedIssuer)))
+	w = harness.serve(t, http.MethodPost, "auth.example.com:443", "/mcp/"+slug+"/token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, authIssuer)))
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	// Metadata advertises the MCP host's token endpoint.
-	require.Equal(t, advertisedIssuer+"/token", fetchAdvertisedTokenEndpoint(t, ti, slug))
+	// Metadata, served on the authentication host, advertises its token URL.
+	w = harness.serve(t, http.MethodGet, "auth.example.com", "/.well-known/oauth-authorization-server/mcp/"+slug, nil)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var meta map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &meta))
+	require.Equal(t, authenticationHostTokenURL(slug), meta["token_endpoint"])
+}
+
+// The authentication host serves no route for an issuer that has not opted
+// in: to that issuer it is a host that does not exist.
+func TestAuthenticationHost_IssuerNotOptedInIsNotServed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	signer := newAssertionSigner(t)
+	assertionClient := seedAssertionClient(t, ctx, ti, issuer.ID, signer)
+	harness := newAuthenticationHostHarness(t, ti)
+	slug := toolset.McpSlug.String
+
+	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, assertionClient)
+	form := withAssertion(codeGrantForm(assertionClient, code, verifier), signer.assertion(t, assertionClient.ClientID, authenticationHostTokenURL(slug)))
+	w := harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", form)
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+
+	w = harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/revoke", url.Values{"token": {"x"}, "client_id": {client.ClientID}})
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+
+	authorize := url.Values{
+		"response_type":         {"code"},
+		"client_id":             {client.ClientID},
+		"redirect_uri":          {client.RedirectUris[0]},
+		"code_challenge":        {"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"},
+		"code_challenge_method": {"S256"},
+	}
+	w = harness.serve(t, http.MethodGet, "auth.example.com", "/mcp/"+slug+"/authorize?"+authorize.Encode(), nil)
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+	require.False(t, *harness.passedThrough)
 }
 
 // On the authentication host the accepted audiences are exactly the issuer and
@@ -181,16 +209,16 @@ func TestAuthenticationHost_OtherAudiencesRefused(t *testing.T) {
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
 	signer := newAssertionSigner(t)
 	client := seedAssertionClient(t, ctx, ti, issuer.ID, signer)
-	advertisedIssuer, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
 	harness := newAuthenticationHostHarness(t, ti)
 	slug := toolset.McpSlug.String
 
 	for _, aud := range []string{
-		advertisedIssuer + "/token",
+		mcpHostRoot(ti, slug),
+		mcpHostRoot(ti, slug) + "/token",
 		testAuthenticationHostURL,
-		testAuthenticationHostURL + "/mcp/" + slug,
 		testAuthenticationHostURL + "/mcp/" + slug + "/revoke",
 		testAuthenticationHostURL + "/mcp/" + slug + "/token/",
 		authenticationHostTokenURL(slug) + "?x=1",
@@ -214,6 +242,7 @@ func TestAuthenticationHost_ResourceStaysOnMCPHost(t *testing.T) {
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
 	signer := newAssertionSigner(t)
 	client := seedAssertionClient(t, ctx, ti, issuer.ID, signer)
 	harness := newAuthenticationHostHarness(t, ti)
@@ -232,7 +261,8 @@ func TestAuthenticationHost_IDJAGExchangeRefused(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
 	harness := newAuthenticationHostHarness(t, ti)
 	slug := toolset.McpSlug.String
 
@@ -253,7 +283,8 @@ func TestAuthenticationHost_ClientlessAssertionGrantReachesClientlessBranch(t *t
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
 	harness := newAuthenticationHostHarness(t, ti)
 	slug := toolset.McpSlug.String
 
@@ -321,7 +352,7 @@ func TestAuthenticationHost_OptedInIssuerAnnouncesAuthenticationHost(t *testing.
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	useAuthenticationHost(t, ctx, ti, issuer.ID)
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
 	harness := newAuthenticationHostHarness(t, ti)
 	slug := toolset.McpSlug.String
 	authIssuer := testAuthenticationHostURL + "/mcp/" + slug
@@ -352,7 +383,7 @@ func TestAuthenticationHost_OptedInTokensCarryAuthenticationHostIssuer(t *testin
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	useAuthenticationHost(t, ctx, ti, issuer.ID)
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
 	signer := newAssertionSigner(t)
 	client := seedAssertionClient(t, ctx, ti, issuer.ID, signer)
 	harness := newAuthenticationHostHarness(t, ti)
@@ -380,7 +411,7 @@ func TestAuthenticationHost_OptedInAuthorizeRedirectsToConsentOnAuthenticationHo
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	useAuthenticationHost(t, ctx, ti, issuer.ID)
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
 	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
 		Name:                   toolset.Name,
 		Description:            toolset.Description,
@@ -429,7 +460,7 @@ func TestAuthenticationHost_OptedInConsentEmitsAuthenticationHostIss(t *testing.
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	useAuthenticationHost(t, ctx, ti, issuer.ID)
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
 	_ = newAuthenticationHostHarness(t, ti)
 	slug := toolset.McpSlug.String
 

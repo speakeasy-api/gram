@@ -238,9 +238,9 @@ func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds present
 		return tokenGrant{clientAuth: tokenClientAuthRequired, resolveMode: lookupClientOnly, authenticated: s.handleTokenRefreshTokenGrant, clientless: nil}, true
 	case oauthwire.GrantTypeJWTBearer:
 		if creds.presented() || r.Header.Get("Authorization") != "" {
-			// The authentication host serves the clientless assertion grant
-			// alone among jwt-bearer requests; the ID-JAG exchange is refused
-			// there.
+			// Of the jwt-bearer requests, only the clientless branch is
+			// dispatched on the authentication host; the ID-JAG exchange is
+			// refused there.
 			if OnAuthenticationHost(r.Context()) {
 				return tokenGrant{clientAuth: tokenClientAuthUndeclared, resolveMode: "", authenticated: nil, clientless: nil}, false
 			}
