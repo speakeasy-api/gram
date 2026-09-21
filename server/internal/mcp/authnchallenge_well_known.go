@@ -376,6 +376,11 @@ func (s *Service) serveLegacyToolsetProtectedResource(ctx context.Context, w htt
 // keys the emitted issuer / endpoint URLs onto the legacy /oauth/{slug}
 // surface.
 func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, toolset *toolsets_repo.Toolset, oauthSlug, resourceURL string) error {
+	// Legacy toolsets have no user session issuer to opt in to the
+	// authentication host, so their metadata never names it.
+	if OnAuthenticationHost(ctx) {
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+	}
 	result, err := wellknown.ResolveOAuthServerMetadataFromToolset(ctx, logger, s.db, s.oauthRepo, &s.toolsetCache, toolset, s.BaseURLForRequest(r), oauthSlug, resourceURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth server metadata").LogError(ctx, logger)
@@ -421,9 +426,13 @@ func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, s.logger)
 	}
+	issuer, err := s.issuerURL(endpoint, baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build authorization server issuer").LogError(ctx, s.logger)
+	}
 	return writeJSONMetadata(ctx, w, r, s.logger, oauthProtectedResourceMetadata{
 		Resource:               resource,
-		AuthorizationServers:   []string{resource},
+		AuthorizationServers:   []string{issuer},
 		ScopesSupported:        nil,
 		BearerMethodsSupported: supportedBearerMethods,
 	})
@@ -438,7 +447,10 @@ func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Reque
 func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	baseURL := s.BaseURLForRequest(r)
-	urls, err := endpoint.AuthorizationServerURLs(baseURL)
+	if !s.servesAuthorizationServerMetadata(ctx, endpoint, baseURL) {
+		return oops.E(oops.CodeNotFound, nil, "authorization server metadata is served on the issuer's host")
+	}
+	urls, err := endpoint.AuthorizationServerURLs(s.authorizationServerBaseURL(endpoint, baseURL))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, s.logger)
 	}

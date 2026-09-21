@@ -312,6 +312,11 @@ const probeDrainTimeout = 20 * time.Second
 
 func mcpRuntimeFlags() []cli.Flag {
 	flags := []cli.Flag{
+		&cli.StringFlag{
+			Name:    "mcp-authentication-host-url",
+			Usage:   "Base URL of an alternate host that serves the per-server MCP OAuth authorization server, kept apart from MCP traffic. Issuers opt in to announcing it. Empty disables it.",
+			EnvVars: []string{"GRAM_MCP_AUTHENTICATION_HOST_URL"},
+		},
 		&cli.BoolFlag{
 			Name:    "network-ingress-enabled",
 			Usage:   "Enable private network ingress rollout entry points",
@@ -589,11 +594,6 @@ func serverFlags() []cli.Flag {
 		&cli.StringFlag{Name: "address", Value: ":8080", Usage: "HTTP address to listen on", EnvVars: []string{"GRAM_SERVER_ADDRESS"}},
 		&cli.StringFlag{Name: "ssl-key-file", Usage: "The SSL key file path to use for the server", EnvVars: []string{"GRAM_SSL_KEY_FILE"}},
 		&cli.StringFlag{Name: "ssl-cert-file", Usage: "The SSL certificate file path to use for the server", EnvVars: []string{"GRAM_SSL_CERT_FILE"}},
-		&cli.StringFlag{
-			Name:    "mcp-token-host-url",
-			Usage:   "Base URL of a host that serves only the per-server MCP token endpoint, kept apart from MCP traffic. Empty disables it.",
-			EnvVars: []string{"GRAM_MCP_TOKEN_HOST_URL"},
-		},
 		&cli.StringFlag{Name: "github-evidence-token", Usage: "GitHub API token for MCP evidence repository lookups", EnvVars: []string{"GRAM_GITHUB_EVIDENCE_TOKEN"}},
 		&cli.StringFlag{
 			Name:     "loops-api-key",
@@ -829,9 +829,9 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("invalid server url: %w", err)
 			}
 
-			mcpTokenHost, err := mcp.NewTokenHost(c.String("mcp-token-host-url"), serverURL, c.String("environment"))
+			mcpAuthenticationHost, err := mcp.NewAuthenticationHost(c.String("mcp-authentication-host-url"), serverURL, c.String("environment"))
 			if err != nil {
-				return fmt.Errorf("invalid mcp token host url: %w", err)
+				return fmt.Errorf("invalid mcp authentication host url: %w", err)
 			}
 
 			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
@@ -1311,8 +1311,8 @@ func newStartCommand() *cli.Command {
 			}
 			mux.Use(mcpSecurity)
 			// Must stay above customdomains.Middleware, which refuses hosts it
-			// does not know and would otherwise reject the token host.
-			mux.Use(mcpTokenHost.Middleware)
+			// does not know and would otherwise reject the authentication host.
+			mux.Use(mcpAuthenticationHost.Middleware)
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 			// Ordering invariant: recovery and context-enrichment middleware stay
 			// outside bandwidth metering so panics and pre-handler rejections are
@@ -1619,6 +1619,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("build MCP server runtime: %w", err)
 			}
 			xmcp.Attach(mux, mcpRuntime.XMCP, mcpRuntime.Metadata)
+			xmcp.AttachAuthenticationHost(mcpAuthenticationHost, mcpRuntime.XMCP)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
@@ -1713,7 +1714,7 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 			mcp.Attach(mux, mcpRuntime.MCP, mcpRuntime.Metadata)
-			mcp.AttachTokenHost(mcpTokenHost, mcpRuntime.MCP)
+			mcp.AttachAuthenticationHost(mcpAuthenticationHost, mcpRuntime.MCP)
 
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))

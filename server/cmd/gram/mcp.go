@@ -197,6 +197,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err := validateServerURL(serverURL, serviceEnv); err != nil {
 		return fmt.Errorf("invalid server url: %w", err)
 	}
+	authenticationHost, err := mcp.NewAuthenticationHost(c.String("mcp-authentication-host-url"), serverURL, serviceEnv)
+	if err != nil {
+		return fmt.Errorf("invalid mcp authentication host url: %w", err)
+	}
 
 	enc, err := encryption.New(c.String("encryption-key"))
 	if err != nil {
@@ -315,12 +319,14 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("build MCP server runtime: %w", err)
 	}
 
-	mux, err := newMCPServerMux(c, logger, db, serverURL, chatSessions, publishers)
+	mux, err := newMCPServerMux(c, logger, db, serverURL, authenticationHost, chatSessions, publishers)
 	if err != nil {
 		return err
 	}
 	mcp.Attach(mux, runtime.MCP, runtime.Metadata)
 	xmcp.Attach(mux, runtime.XMCP, runtime.Metadata)
+	mcp.AttachAuthenticationHost(authenticationHost, runtime.MCP)
+	xmcp.AttachAuthenticationHost(authenticationHost, runtime.XMCP)
 	usersessions.AttachRetiredProxy(mux, logger)
 
 	srv := &http.Server{
@@ -394,7 +400,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 // newMCPServerMux builds the public listener middleware chain for the MCP
 // tier. It mirrors the public-route portion of the `gram start` chain and
 // omits the marketplace, hooks, and management-API layers.
-func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, chatSessions middleware.ChatSessionValidator, publishers *background.Publishers) (goahttp.Muxer, error) {
+func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, authenticationHost *mcp.AuthenticationHost, chatSessions middleware.ChatSessionValidator, publishers *background.Publishers) (goahttp.Muxer, error) {
 	mux := goahttp.NewMuxer()
 	mux.Use(middleware.NetworkServingPolicyVersion)
 	mux.Use(middleware.StripPrivateIngressHeaders)
@@ -424,6 +430,9 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 		return nil, fmt.Errorf("configure mcp security middleware: %w", err)
 	}
 	mux.Use(mcpSecurity)
+	// Must stay above customdomains.Middleware, which refuses hosts it does not
+	// know and would otherwise reject the authentication host.
+	mux.Use(authenticationHost.Middleware)
 	mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 	mux.Use(metering.NewMCPBandwidthMiddleware(logger, publishers.MeterReadings))
 	mux.Use(middleware.SessionMiddleware)
