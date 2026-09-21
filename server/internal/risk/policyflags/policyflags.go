@@ -50,7 +50,7 @@ func ProjectFlagState(ctx context.Context, logger *slog.Logger, queries *repo.Qu
 	}
 	memo, _ := ctx.Value(memoKey{}).(*requestMemo)
 	if memo == nil {
-		state := resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
+		state, _ := resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
 		return state.enabled, state.orgSlug
 	}
 	// The lock is held through resolution so concurrent scans that miss the
@@ -60,22 +60,29 @@ func ProjectFlagState(ctx context.Context, logger *slog.Logger, queries *repo.Qu
 	key := projectID.String() + ":" + string(flag)
 	state, ok := memo.states[key]
 	if !ok {
-		state = resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
-		memo.states[key] = state
+		// A failed lookup reads as off for this scan only; the next scan
+		// retries it rather than inheriting the failure.
+		var resolved bool
+		state, resolved = resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
+		if resolved {
+			memo.states[key] = state
+		}
 	}
 	return state.enabled, state.orgSlug
 }
 
-func resolveProjectFlag(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) flagState {
+// resolveProjectFlag reports false as its second result when the lookup
+// failed and the returned state is the fail-safe default.
+func resolveProjectFlag(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) (flagState, bool) {
 	groups, err := queries.GetProjectFlagGroups(ctx, projectID)
 	if err != nil {
 		logger.WarnContext(ctx, "resolve project flag groups failed", attr.SlogError(err), attr.SlogOrganizationID(orgID), attr.SlogProjectID(projectID.String()))
-		return flagState{enabled: false, orgSlug: ""}
+		return flagState{enabled: false, orgSlug: ""}, false
 	}
 	on, err := flags.IsFlagEnabled(ctx, flag, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug))
 	if err != nil {
 		logger.WarnContext(ctx, "project flag check failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
-		return flagState{enabled: false, orgSlug: ""}
+		return flagState{enabled: false, orgSlug: ""}, false
 	}
-	return flagState{enabled: on, orgSlug: groups.OrganizationSlug}
+	return flagState{enabled: on, orgSlug: groups.OrganizationSlug}, true
 }

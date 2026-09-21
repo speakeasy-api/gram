@@ -306,22 +306,25 @@ func TestServiceAcceptsCleanPrefixWhenBudgetExhausted(t *testing.T) {
 		frame := exampleFrame()
 		frame.Messages = []Message{textMessage("user", "first"), textMessage("assistant", "reply"), textMessage("user", "stall"), textMessage("user", "last")}
 		store := &memoryStore{}
-		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &stallingScanner{stallOn: "stall"}}
+		scanner := &stallingScanner{stallOn: "stall"}
+		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
 		start := time.Now()
 		verdict, err := service.Process(t.Context(), Config{}, frame)
 		require.NoError(t, err)
 		require.Equal(t, verdictBudget, time.Since(start))
+		// Every input was attempted; only the stalled one was cut off.
+		require.EqualValues(t, len(frame.Messages), scanner.calls.Load())
 		require.Equal(t, Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}, verdict)
 		require.Equal(t, transcriptHashes(frame.Messages[:2]), store.accepted)
 
 		// The redelivery picks up where the budget ran out.
-		scanner := &recordingScanner{}
-		service.scanner = scanner
+		retry := &recordingScanner{}
+		service.scanner = retry
 		verdict, err = service.Process(t.Context(), Config{}, frame)
 		require.NoError(t, err)
 		require.Equal(t, "allow", verdict.Action)
-		require.Len(t, scanner.inputs, 2)
-		require.Equal(t, "stall", scanner.inputs[0].text)
+		require.Len(t, retry.inputs, 2)
+		require.Equal(t, "stall", retry.inputs[0].text)
 		require.Equal(t, transcriptHashes(frame.Messages), store.accepted)
 	})
 }

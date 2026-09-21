@@ -264,8 +264,8 @@ func TestAttachBoundsLongTranscriptScanning(t *testing.T) {
 		require.Equal(t, verdictBudget, time.Since(start))
 		require.Equal(t, http.StatusOK, response.Code)
 		require.JSONEq(t, fallbackVerdictJSON, response.Body.String())
-		// Scans may start at the budget deadline before timer cancellation is
-		// scheduled; they must immediately stop once the shared context is canceled.
-		require.LessOrEqual(t, int(scanner.calls.Load()), 5*scanConcurrency)
+		// Each worker completes at most one scan per second of budget and may
+		// start one more right at the deadline before cancellation lands.
+		require.LessOrEqual(t, int(scanner.calls.Load()), scanConcurrency*(int(verdictBudget/time.Second)+1))
 	})
 }

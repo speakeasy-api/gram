@@ -36,6 +36,8 @@ const (
 	// scanConcurrency bounds how many inputs of one transcript are evaluated
 	// at once.
 	scanConcurrency = 4
+	// checkpointBudget bounds the marker write that follows scanning.
+	checkpointBudget = 500 * time.Millisecond
 	// unavailableDenyReason is the fail-closed copy for a request that could
 	// not be evaluated in full.
 	unavailableDenyReason = "Speakeasy could not evaluate this request. Please try again."
@@ -179,15 +181,24 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 		verdict = Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}
 	}
 	if cleanThrough > matched || cleanThrough == len(messages) {
-		if err := session.Accept(ctx, hashes[:cleanThrough]); err != nil {
-			if contextErr := ctx.Err(); contextErr != nil {
-				return Verdict{}, fmt.Errorf("accept inference checkpoint context: %w", contextErr)
-			}
+		// The scan budget may already be spent; the marker gets its own short
+		// window so a slow write cannot push the verdict past the provider's.
+		acceptCtx, cancelAccept := context.WithTimeout(ctx, checkpointBudget)
+		defer cancelAccept()
+		err := session.Accept(acceptCtx, hashes[:cleanThrough])
+		switch {
+		case err == nil:
+		case ctx.Err() != nil:
+			return Verdict{}, fmt.Errorf("accept inference checkpoint context: %w", ctx.Err())
+		case errors.Is(err, errCheckpointConflict):
 			// Another fully scanned delivery won. Keep its marker, without
 			// turning this optimization into an artificial denial.
-			if !errors.Is(err, errCheckpointConflict) {
-				return Verdict{}, fmt.Errorf("accept inference checkpoint: %w", err)
-			}
+		case verdict.Action == "deny":
+			// The verdict already fails closed; the marker only makes the
+			// redelivery incremental.
+			s.logger.WarnContext(ctx, "accept partial inference checkpoint", attr.SlogError(err))
+		default:
+			return Verdict{}, fmt.Errorf("accept inference checkpoint: %w", err)
 		}
 	}
 	return verdict, nil

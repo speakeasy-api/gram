@@ -2,6 +2,7 @@ package policyflags
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -92,4 +93,17 @@ func TestProjectFlagStateResolvesEachFlagOncePerRequest(t *testing.T) {
 	}
 	group.Wait()
 	require.EqualValues(t, 2, provider.calls.Load())
+
+	// A failed lookup is not remembered; the next scan retries it.
+	failing := &countingProvider{Provider: failingProvider{}}
+	ctx = WithRequestMemo(t.Context())
+	require.False(t, ProjectFlagEnabled(ctx, logger, queries, failing, orgID, project.ID, feature.FlagRiskLLMAnalyzer))
+	require.False(t, ProjectFlagEnabled(ctx, logger, queries, failing, orgID, project.ID, feature.FlagRiskLLMAnalyzer))
+	require.EqualValues(t, 2, failing.calls.Load())
+}
+
+type failingProvider struct{ feature.Provider }
+
+func (failingProvider) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
+	return false, errors.New("flag service unavailable")
 }
