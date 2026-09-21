@@ -272,6 +272,8 @@ function canonicalArgs(args: string | object | undefined): string | undefined {
   try {
     return argsToString(JSON.parse(args));
   } catch {
+    // Printed as written, a secret flagged elsewhere in the chat could sit here
+    // in an escaping no finding matches, and show unmasked.
     return "(arguments can't be parsed, so they aren't shown)";
   }
 }
