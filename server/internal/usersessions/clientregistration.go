@@ -5,9 +5,12 @@
 // *oauthwire.Error.
 //
 // The mcp package's HandleRegister handler wraps this with HTTP plumbing
-// (Content-Type sniffing, body cap, response writing). The supported sets
-// declared here are advertised verbatim in the AS metadata document so
-// registered clients can only request what the AS will accept.
+// (Content-Type sniffing, body cap, response writing). The response types,
+// auth methods and code challenge methods declared here are advertised
+// verbatim in the AS metadata document, so registered clients can only
+// request what the AS will accept. Grant types are the exception: the grants
+// a client may claim at registration deliberately differ from the grants the
+// metadata advertises, which it builds per endpoint.
 
 package usersessions
 
@@ -119,8 +122,9 @@ func (r *RegistrationRequest) SetDefaults() {
 // supportedGrantTypes and supportedAuthMethods are the caller's accepted sets
 // rather than package-level policy, because several authorization servers
 // share this request type while supporting different token endpoints. Pass
-// the same slices the server advertises so acceptance and discovery cannot
-// drift apart.
+// the auth methods the server advertises, so acceptance and discovery cannot
+// drift apart. Grant types are what a client may claim at registration, which
+// is deliberately not the per-endpoint list the server advertises.
 func (r *RegistrationRequest) Validate(supportedGrantTypes, supportedAuthMethods []string) error {
 	if r.ClientName == "" {
 		return &oauthwire.Error{Code: "invalid_client_metadata", Description: "client_name is required"}
