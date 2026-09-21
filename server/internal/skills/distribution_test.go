@@ -261,7 +261,7 @@ func TestSkillDistributionProjectIsolationAndArchiveRevocation(t *testing.T) {
 	_, err = ti.service.Distribute(assistantCtx, &gen.DistributePayload{ID: created.Skill.ID, AssistantID: new(assistant.ID.String()), PinnedVersionID: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 
-	otherCtx, _ := createProjectContext(t, ctx, ti, authz.ScopeSkillWrite)
+	otherCtx, _ := createProjectContext(t, ctx, ti, authz.ScopeSkillWrite, authz.ScopePluginWrite)
 	_, err = ti.service.Distribute(otherCtx, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(pluginA.ID.String()), PinnedVersionID: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeNotFound)
 	otherList, err := ti.service.ListDistributions(otherCtx, &gen.ListDistributionsPayload{Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
@@ -524,7 +524,7 @@ func TestAssistantSkillDistributionTargetValidationAndRBAC(t *testing.T) {
 	_, err = ti.service.Distribute(both, &gen.DistributePayload{ID: created.Skill.ID, AssistantID: new(foreign.ID.String()), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
-	// Plugin distribution remains skill:write-only.
+	// Plugin distribution uses its own write grant, separate from assistant access.
 	_, err = ti.service.Distribute(ctx, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String()), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 }
@@ -585,8 +585,8 @@ func TestSkillDistributionScopedWrite(t *testing.T) {
 		authz.SelectorKeyResourceID:   created.Skill.ID,
 	}))
 	_, err := ti.service.Distribute(scoped, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
-	require.NoError(t, err)
-	require.NoError(t, ti.service.Undistribute(scoped, &gen.UndistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())}))
+	requireOopsCode(t, err, oops.CodeForbidden)
+	requireOopsCode(t, ti.service.Undistribute(scoped, &gen.UndistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())}), oops.CodeForbidden)
 }
 
 func TestSkillScopedReads(t *testing.T) {
@@ -633,7 +633,16 @@ func TestSkillDistributionScopedAuthorizationBoundaries(t *testing.T) {
 		grants      []authz.Grant
 		read, write bool
 	}{
-		{name: "project write", grants: []authz.Grant{authz.NewGrant(authz.ScopeSkillWrite, ti.projectID.String())}, read: true, write: true},
+		{name: "skill write alone", grants: []authz.Grant{authz.NewGrant(authz.ScopeSkillWrite, ti.projectID.String())}, read: true},
+		{name: "plugin write alone", grants: []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String())}},
+		{name: "plugin write and skill read", grants: []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String()), grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true, write: true},
+		{name: "other project plugin write", grants: []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, uuid.NewString()), grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true},
+		{name: "admin and skill read", grants: []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, ti.authContext.ActiveOrganizationID), grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true, write: true},
+		{name: "plugin blocked overrides admin", grants: []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, ti.authContext.ActiveOrganizationID), authz.NewGrant(authz.ScopePluginBlockedWrite, ti.projectID.String()), grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true},
+		{name: "plugin blocked overrides plugin write", grants: []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String()), authz.NewGrant(authz.ScopePluginBlockedWrite, ti.projectID.String()), grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true},
+		{name: "admin blocked overrides plugin write", grants: []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String()), authz.NewGrant(authz.ScopeOrgBlockedAdmin, ti.authContext.ActiveOrganizationID), grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true},
+		{name: "skill read blocked", grants: []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String()), authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String()), grant(authz.ScopeSkillBlockedRead, created.Skill.ID)}},
+		{name: "skill write blocked does not block distribution", grants: []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String()), grant(authz.ScopeSkillRead, created.Skill.ID), grant(authz.ScopeSkillBlockedWrite, created.Skill.ID)}, read: true, write: true},
 		{name: "project read only", grants: []authz.Grant{authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String())}, read: true},
 		{name: "resource read only", grants: []authz.Grant{grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true},
 		{name: "other skill", grants: []authz.Grant{grant(authz.ScopeSkillWrite, other.Skill.ID)}},
@@ -797,7 +806,7 @@ func TestSkillScopedGrantCannotCrossProjectLookup(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	local := createSkill(t, ctx, ti, "local-scoped-skill", "Local skill.")
-	otherCtx, otherProjectID := createProjectContext(t, ctx, ti, authz.ScopeSkillWrite)
+	otherCtx, otherProjectID := createProjectContext(t, ctx, ti, authz.ScopeSkillWrite, authz.ScopePluginWrite)
 	foreign := createSkill(t, otherCtx, ti, "foreign-scoped-skill", "Foreign skill.")
 	foreignPlugin := createPlugin(t, otherCtx, ti, otherProjectID, "foreign-scoped-target")
 	_, err := ti.service.Distribute(otherCtx, &gen.DistributePayload{ID: foreign.Skill.ID, PluginID: new(foreignPlugin.ID.String())})
@@ -805,8 +814,9 @@ func TestSkillScopedGrantCannotCrossProjectLookup(t *testing.T) {
 	plugin := createPlugin(t, ctx, ti, ti.projectID, "local-scoped-target")
 	// Even a valid exact grant to a foreign skill cannot bypass the project lookup.
 	scoped := authztest.WithExactGrants(t, ctx,
-		authz.NewGrant(authz.ScopeSkillWrite, local.Skill.ID),
-		authz.NewGrant(authz.ScopeSkillWrite, foreign.Skill.ID),
+		authz.NewGrant(authz.ScopeSkillRead, local.Skill.ID),
+		authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String()),
+		authz.NewGrant(authz.ScopeSkillRead, foreign.Skill.ID),
 	)
 	_, err = ti.service.Get(scoped, &gen.GetPayload{ID: local.Skill.ID})
 	require.NoError(t, err)

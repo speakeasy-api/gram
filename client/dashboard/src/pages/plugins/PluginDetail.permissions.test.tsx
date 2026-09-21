@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -9,9 +9,14 @@ import PluginDetail from "./PluginDetail";
 const state = vi.hoisted(() => ({
   loading: false,
   orgRead: false,
+  pluginWrite: false,
   orgAdmin: false,
   canReadServers: false,
 }));
+vi.mock("@/hooks/usePluginWriteAccess", () => ({
+  usePluginWriteAccess: () => state.orgAdmin || state.pluginWrite,
+}));
+const publish = vi.hoisted(() => vi.fn());
 const adminQuery = vi.hoisted(() => vi.fn());
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -38,7 +43,19 @@ vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-a" }),
 }));
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
-vi.mock("@/routes", () => ({ useRoutes: () => ({}) }));
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    plugins: {
+      detail: {
+        overview: { href: (id: string) => `/plugins/${id}/overview` },
+        servers: { href: (id: string) => `/plugins/${id}/servers` },
+        skills: { href: (id: string) => `/plugins/${id}/skills` },
+        assignments: { href: (id: string) => `/plugins/${id}/assignments` },
+        settings: { href: (id: string) => `/plugins/${id}/settings` },
+      },
+    },
+  }),
+}));
 vi.mock("@/components/command-palette/recentlyVisited", () => ({
   useRecentLabelOverride: () => {},
 }));
@@ -80,10 +97,10 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => ({}),
 }));
 vi.mock("@gram/client/react-query/publishStatus", () => ({
-  usePublishStatus: () => ({}),
+  usePublishStatus: () => ({ data: { connected: true, configured: true } }),
 }));
 vi.mock("@gram/client/react-query/publishPlugins", () => ({
-  usePublishPluginsMutation: () => ({ mutate: vi.fn() }),
+  usePublishPluginsMutation: () => ({ mutate: publish }),
 }));
 vi.mock("@gram/client/react-query/updatePlugin", () => ({
   useUpdatePluginMutation: () => ({ mutate: vi.fn() }),
@@ -97,7 +114,7 @@ vi.mock("@gram/client/react-query/addPluginServer", () => ({
 vi.mock("@gram/client/react-query/removePluginServer", () => ({
   useRemovePluginServerMutation: () => ({ mutate: vi.fn() }),
 }));
-function renderAdmin() {
+function renderAdmin(section = "servers") {
   adminQuery.mockReturnValue({
     data: {
       name: "Example plugin",
@@ -115,10 +132,10 @@ function renderAdmin() {
   return render(
     <TooltipProvider>
       <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter initialEntries={["/plugins/plugin-a/servers"]}>
+        <MemoryRouter initialEntries={[`/plugins/plugin-a/${section}`]}>
           <Routes>
             <Route
-              path="/plugins/:pluginId/servers"
+              path="/plugins/:pluginId/:section"
               element={<PluginDetail />}
             />
           </Routes>
@@ -131,6 +148,7 @@ afterEach(cleanup);
 beforeEach(() => {
   state.loading = false;
   state.orgRead = false;
+  state.pluginWrite = false;
   state.orgAdmin = false;
   state.canReadServers = false;
   vi.clearAllMocks();
@@ -160,6 +178,35 @@ describe("plugin detail permission boundary", () => {
     expect(screen.queryByText("Toolset missing")).toBeNull();
     for (const query of Object.values(assignments))
       expect(query).not.toHaveBeenCalled();
+  });
+  it("allows plugin writers to manage references without assignment queries", () => {
+    state.orgRead = true;
+    state.pluginWrite = true;
+    renderAdmin();
+    expect(screen.getByRole("button", { name: "Add Server" })).toBeTruthy();
+    for (const query of Object.values(assignments))
+      expect(query).not.toHaveBeenCalled();
+  });
+  it("does not elevate plugin writers into full editor reads", () => {
+    state.pluginWrite = true;
+    render(<PluginDetail />);
+    expect(screen.getByText("Distribution-only skills")).toBeTruthy();
+    expect(adminQuery).not.toHaveBeenCalled();
+  });
+  it("allows publishing with plugin write without granting admin queries", () => {
+    state.orgRead = true;
+    state.pluginWrite = true;
+    renderAdmin("overview");
+    fireEvent.click(screen.getByRole("button", { name: "Sync" }));
+    expect(publish).toHaveBeenCalled();
+    for (const query of Object.values(assignments))
+      expect(query).not.toHaveBeenCalled();
+  });
+  it("hides publishing from read-only full-editor users", () => {
+    state.orgRead = true;
+    renderAdmin("overview");
+    expect(screen.queryByRole("button", { name: "Sync" })).toBeNull();
+    expect(publish).not.toHaveBeenCalled();
   });
   it("retains assignment queries for org admins", () => {
     state.orgRead = true;

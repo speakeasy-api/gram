@@ -134,11 +134,8 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	// These handlers enforce skill permissions themselves. Keep authentication
 	// and tenant resolution, without also demanding unrelated project:read.
 	switch ctx.Value(goa.MethodKey) {
-	case "create", "addVersion", "restoreVersion", "update", "list", "listTags",
-		"listSuggestions", "listFeedback", "triggerSuggestion", "approveSuggestion",
-		"dismissSuggestion", "listSuggestionFeedback", "approveAllSuggestions", "get",
-		"listUnknownActivations", "listVersions", "archive", "distribute", "undistribute",
-		"share", "unshare", "listDistributions":
+	case "list", "listTags", "listSuggestions", "listFeedback", "listSuggestionFeedback",
+		"get", "listUnknownActivations", "listVersions", "distribute", "undistribute", "listDistributions":
 		return s.auth.AuthorizeWithHandlerProjectAccess(ctx, key, schema)
 	default:
 		return s.auth.Authorize(ctx, key, schema)
@@ -146,7 +143,33 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) requireAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
-	return s.requireSkillAccess(ctx, scope, "")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, s.logger, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{
+		Scope:        scope,
+		ResourceKind: "",
+		ResourceID:   authCtx.ProjectID.String(),
+		Dimensions:   nil,
+	}); err != nil {
+		return nil, s.logger, err
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSkills)
+	if err != nil {
+		return nil, logger, oops.E(oops.CodeUnexpected, err, "check skills feature").LogError(ctx, logger)
+	}
+	if !enabled {
+		return nil, logger, oops.E(oops.CodeForbidden, nil, "skills are not enabled for this organization")
+	}
+
+	return authCtx, logger, nil
 }
 
 // requireSkillAccess accepts project-wide grants or grants for one skill. An empty
@@ -372,7 +395,7 @@ type distributionTarget struct {
 
 func (t distributionTarget) mutationScope() authz.Scope {
 	if t.channel == "plugin" {
-		return authz.ScopeSkillWrite
+		return authz.ScopePluginWrite
 	}
 	return authz.ScopeProjectWrite
 }
@@ -1517,8 +1540,8 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		return nil, err
 	}
 	var mutationErr error
-	if target.mutationScope() == authz.ScopeSkillWrite {
-		mutationErr = s.requireSkillGrant(ctx, authz.ScopeSkillWrite, authCtx.ProjectID.String(), payload.ID)
+	if target.mutationScope() == authz.ScopePluginWrite {
+		mutationErr = s.authz.RequirePluginWrite(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 	} else {
 		mutationErr = s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
 	}
@@ -1697,8 +1720,8 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 		return err
 	}
 	var mutationErr error
-	if target.mutationScope() == authz.ScopeSkillWrite {
-		mutationErr = s.requireSkillGrant(ctx, authz.ScopeSkillWrite, authCtx.ProjectID.String(), payload.ID)
+	if target.mutationScope() == authz.ScopePluginWrite {
+		mutationErr = s.authz.RequirePluginWrite(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 	} else {
 		mutationErr = s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
 	}

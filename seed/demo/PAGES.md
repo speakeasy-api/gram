@@ -187,3 +187,5 @@ Anthropic inference hooks on AI Integrations shows **Finish setup** with a pendi
 Claude Tag: Agent Sessions includes “Claude Tag in #demo-releases”. Open it to see the demo-releases channel, human message, and assistant reply. Raw view reveals the wake envelope and Slack reply tool call.
 
 - `[~]` Trial end-date changes: org-scoped audit example records a shortened trial with previous/new dates; browser verification pending.
+
+The Collaborator role includes project-selected `plugin:write` for plugin references and publishing, separately from its unchanged skill authoring grants.

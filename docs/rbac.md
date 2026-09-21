@@ -91,6 +91,7 @@ const (
 	ScopeEnvironmentWrite   Scope = "environment:write"
 	ScopeSkillRead          Scope = "skill:read"
 	ScopeSkillWrite         Scope = "skill:write"
+	ScopePluginWrite        Scope = "plugin:write"
 	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass   Scope = "risk_policy:bypass"
 	ScopeRiskPolicyBlock    Scope = "risk_policy:block"
@@ -512,6 +513,7 @@ environment:read
 environment:write
 skill:read
 skill:write
+plugin:write
 ```
 
 `member` receives read and connect access by default:
@@ -525,6 +527,8 @@ skill:read
 ```
 
 `member` intentionally does not receive `environment:read` (environment values include secrets, so viewing them must be granted explicitly through a custom role; admins keep `environment:read`/`environment:write`). Skills use an independent project-selectable scope family: members receive `skill:read`, while admins receive both `skill:read` and `skill:write`; `project:*` does not imply either skill scope. These Skills defaults are provisioned when the org-level `skills` product feature is enabled. Repeated provisioning intentionally does not restore customized or removed system-role grants. Disabling Skills does not remove grants. Most Observe pages remain `org:admin`-only, while the Identities roster uses the member role's default `project:read` grant; members also receive `org:read`, which opens identity detail pages.
+
+`plugin:write` is a separate project-selected capability for plugin CRUD, skill and MCP references, and publishing. It does not imply `skill:write`, `mcp:write`, or any read scope; skill authoring permissions and defaults are unchanged. Skill distribution additionally requires `skill:read` for the referenced skill. Full plugin reads retain `org:read` (and normal project admission); minimal skill distribution discovery retains `skill:read`. Audience assignments and marketplace settings remain `org:admin`-only. Admin defaults include `plugin:write`; existing `org:admin` grants remain an explicit alternative, without rewriting customized roles. `plugin:blocked_write` excludes plugin mutations even when an admin alternative is available. Members do not receive plugin write access by default.
 
 System roles are seeded when an organization is provisioned, and the first user is assigned the Admin role. WorkOS organization reconciliation also seeds the defaults as an idempotent backstop. System roles are not meant to be edited like custom roles. Changing their default grants is a product behavior change and should be treated carefully, especially for existing organizations.
 

@@ -10,6 +10,9 @@ const state = vi.hoisted(() => ({
   roles: vi.fn(),
   members: vi.fn(),
 }));
+vi.mock("@/hooks/usePluginWriteAccess", () => ({
+  usePluginWriteAccess: () => state.canAdmin,
+}));
 const queries = [
   state.plugin,
   state.publishStatus,

@@ -1,3 +1,4 @@
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { MemberFacepile } from "@/components/member-facepile";
@@ -89,6 +90,7 @@ function DistributionPluginSidebarNav(): React.JSX.Element | null {
 function OrganizationPluginSidebarNav(): React.JSX.Element | null {
   const { hasScope } = useRBAC();
   const organization = useOrganization();
+  const canWritePlugin = usePluginWriteAccess();
   const canAdmin = hasScope("org:admin", organization.id);
   const routes = useRoutes();
   const location = useLocation();
@@ -146,7 +148,7 @@ function OrganizationPluginSidebarNav(): React.JSX.Element | null {
     ...(showAssignments
       ? [sectionItem(PLUGIN_ASSIGNMENTS_SECTION_ID, "Assignments", Users)]
       : []),
-    ...(canAdmin
+    ...(canWritePlugin
       ? [sectionItem(PLUGIN_SETTINGS_SECTION_ID, "Settings", SettingsIcon)]
       : []),
   ];

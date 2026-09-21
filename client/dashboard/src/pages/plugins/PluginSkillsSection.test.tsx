@@ -1,6 +1,5 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { MemoryRouter } from "react-router";
-import type { ReactNode } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
@@ -8,16 +7,16 @@ const state = vi.hoisted(() => ({
     scope: string;
     selectors: Array<Record<string, string>>;
   }>,
-  writableSkills: [] as string[],
   mutate: vi.fn(),
   query: vi.fn(),
 }));
-vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project-a" }) }));
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: "project-a" }),
+  useOrganization: () => ({ id: "org-a" }),
+}));
 vi.mock("@/hooks/useRBAC", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/useRBAC")>()),
   useRBAC: () => ({
-    hasScope: (scope: string, resourceId: string) =>
-      scope === "skill:write" && state.writableSkills.includes(resourceId),
     grants: state.grants,
   }),
 }));
@@ -25,20 +24,6 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({
     skills: { detail: { href: (id: string) => `/skills/${id}` } },
   }),
-}));
-vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({
-    children,
-    scope,
-    resourceId,
-  }: {
-    children: ReactNode;
-    scope: string;
-    resourceId: string;
-  }) =>
-    scope === "skill:write" && state.writableSkills.includes(resourceId) ? (
-      <>{children}</>
-    ) : null,
 }));
 vi.mock("@/components/ui/ViewToggle/use-view-mode", () => ({
   useViewMode: () => ["grid", vi.fn()],
@@ -66,7 +51,6 @@ beforeEach(() => {
       selectors: [{ projectId: "project-a", resourceId: "skill-a" }],
     },
   ];
-  state.writableSkills = [];
   state.mutate.mockReset();
   state.query.mockReset().mockReturnValue({
     data: { pages: [{ result: { distributions: [] } }] },
@@ -75,7 +59,10 @@ beforeEach(() => {
 });
 describe("plugin membership authorization", () => {
   it("invokes undistribute from the card remove control without card navigation", () => {
-    state.writableSkills = ["skill-a"];
+    state.grants.push({
+      scope: "plugin:write",
+      selectors: [{ resourceKind: "project", resourceId: "project-a" }],
+    });
     state.query.mockReturnValue({
       data: {
         pages: [
@@ -120,8 +107,11 @@ describe("plugin membership authorization", () => {
       expect.any(Object),
     );
   });
-  it("hides removal for a writer of a different skill", () => {
-    state.writableSkills = ["skill-b"];
+  it("hides removal for skill writers without plugin write", () => {
+    state.grants.push({
+      scope: "skill:write",
+      selectors: [{ resourceKind: "skill", resourceId: "skill-a" }],
+    });
     state.query.mockReturnValue({
       data: {
         pages: [

@@ -1,6 +1,7 @@
 import { useRoutes } from "@/routes";
 import { Link } from "react-router";
-import { RequireScope } from "@/components/require-scope";
+import { RequirePluginWrite } from "@/components/require-plugin-write";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import {
   StatusBanner,
   type StatusBannerTone,
@@ -84,6 +85,7 @@ export function SkillPluginBanner({
   const skillId = skill.id;
   const routes = useRoutes();
   const queryClient = useQueryClient();
+  const canWritePlugin = usePluginWriteAccess();
   const { data: pluginsData } = useDistributionPlugins({ skillId }, undefined, {
     throwOnError: false,
   });
@@ -154,6 +156,7 @@ export function SkillPluginBanner({
   };
 
   const handleSave = async () => {
+    if (!canWritePlugin) return;
     const toAdd = selectedPluginIds.filter((id) => !memberIdSet.has(id));
     const toRemove = distributions.filter(
       (distribution) => !selectedIdSet.has(distribution.pluginId),
@@ -273,11 +276,7 @@ export function SkillPluginBanner({
             </div>
           )}
           {!isBlocked && plugins.length > 0 && (
-            <RequireScope
-              scope="skill:write"
-              resourceId={skillId}
-              level="component"
-            >
+            <RequirePluginWrite>
               <div className="flex items-center gap-2">
                 <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
                   <PopoverTrigger asChild>
@@ -340,7 +339,7 @@ export function SkillPluginBanner({
                   </Button.Text>
                 </Button>
               </div>
-            </RequireScope>
+            </RequirePluginWrite>
           )}
         </div>
         <ClientIconFan />

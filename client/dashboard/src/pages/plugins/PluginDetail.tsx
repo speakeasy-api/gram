@@ -1,3 +1,4 @@
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginServerQueries } from "./usePluginServerQueries";
 import { useRBAC } from "@/hooks/useRBAC";
 import { PluginDistributionDetail } from "./PluginDistributionDetail";
@@ -192,7 +193,8 @@ function PluginDetailContent({
   const { pluginId } = useParams<{ pluginId: string }>();
   const { hasScope } = useRBAC();
   const organization = useOrganization();
-  const canPublish = hasScope("org:admin", organization.id);
+  const canAdmin = hasScope("org:admin", organization.id);
+  const canPublish = usePluginWriteAccess();
   const location = useLocation();
   const project = useProject();
   const queryClient = useQueryClient();
@@ -292,7 +294,7 @@ function PluginDetailContent({
   );
 
   const assignmentsVisible = usePluginAssignmentsVisible();
-  const showAssignments = canPublish && assignmentsVisible;
+  const showAssignments = canAdmin && assignmentsVisible;
   const { data: productFeatures } = useProductFeatures({
     organizationId: organization.id,
   });
@@ -433,6 +435,7 @@ function PluginDetailContent({
   });
 
   const handleRemoveServer = (server: PluginServer) => {
+    if (!canPublish) return;
     removeServerMutation.mutate({
       security: { sessionHeaderGramSession: "" },
       request: { id: server.id, pluginId: pluginId! },
@@ -441,6 +444,7 @@ function PluginDetailContent({
 
   const handleUpdate: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
+    if (!canPublish) return;
     const fd = new FormData(e.currentTarget);
     updateMutation.mutate({
       security: { sessionHeaderGramSession: "" },
@@ -456,6 +460,7 @@ function PluginDetailContent({
   };
 
   const handleDelete = () => {
+    if (!canPublish) return;
     deleteMutation.mutate({
       security: { sessionHeaderGramSession: "" },
       request: { id: pluginId! },
@@ -464,6 +469,7 @@ function PluginDetailContent({
 
   const handleAddServer: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
+    if (!canPublish) return;
     const fd = new FormData(e.currentTarget);
     const key = fd.get("serverKey") as string;
     if (!key) return;
@@ -810,7 +816,7 @@ function PluginDetailContent({
               productFeatures before doing so, since the visibility flag reads
               false while it loads. */}
           {section === PLUGIN_ASSIGNMENTS_SECTION_ID &&
-            canPublish &&
+            canAdmin &&
             !showAssignments &&
             !!productFeatures && (
               <SettingsSection>

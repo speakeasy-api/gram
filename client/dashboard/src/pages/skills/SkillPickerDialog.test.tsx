@@ -20,9 +20,17 @@ const state = vi.hoisted(() => ({
 const grant = (scope: string, resourceId: string, effect = "allow") => ({
   scope,
   effect,
-  selectors: [{ resourceKind: "skill", resourceId }],
+  selectors: [
+    {
+      resourceKind: scope.startsWith("plugin:") ? "project" : "skill",
+      resourceId,
+    },
+  ],
 });
-vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project-a" }) }));
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: "project-a" }),
+  useOrganization: () => ({ id: "org-a" }),
+}));
 vi.mock("@/hooks/useRBAC", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/useRBAC")>()),
   useRBAC: () => ({ grants: state.grants }),
@@ -81,16 +89,16 @@ const picker = () => (
 );
 afterEach(cleanup);
 beforeEach(() => {
-  state.grants = [grant("skill:write", "skill-a")];
+  state.grants = [grant("plugin:write", "project-a")];
   state.mutateAsync.mockReset().mockResolvedValue({});
   state.complete.mockReset();
 });
-describe("skill picker resource authorization", () => {
-  it("lists and distributes the concrete writable skill, not another skill", async () => {
+describe("plugin skill picker authorization", () => {
+  it("distributes readable skills with plugin write and no skill write", async () => {
     render(picker());
     expect(screen.getByText("First skill")).toBeTruthy();
-    expect(screen.queryByText("Second skill")).toBeNull();
-    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.getByText("Second skill")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("checkbox")[0]!);
     fireEvent.click(screen.getByRole("button", { name: "Distribute" }));
     await waitFor(() =>
       expect(state.mutateAsync).toHaveBeenCalledWith({
@@ -99,67 +107,31 @@ describe("skill picker resource authorization", () => {
         },
       }),
     );
-    await waitFor(() =>
-      expect(state.complete).toHaveBeenCalledWith({
-        addedCount: 1,
-        failedCount: 0,
-      }),
-    );
   });
-  it("accepts a project resource-ID grant for listing and submission", async () => {
-    state.grants = [grant("skill:write", "project-a")];
-    render(picker());
-    expect(screen.getByText("First skill")).toBeTruthy();
-    expect(screen.getByText("Second skill")).toBeTruthy();
-    fireEvent.click(screen.getAllByRole("checkbox")[0]!);
-    fireEvent.click(screen.getByRole("button", { name: "Distribute" }));
-    await waitFor(() => expect(state.mutateAsync).toHaveBeenCalled());
-  });
-  it.each(["skill:blocked_read", "skill:blocked_write", "legacy deny"])(
-    "does not bypass %s on a skill with a project allow",
+  it.each(["skill:write", "skill:read"])(
+    "does not grant distribution from %s",
     (scope) => {
-      state.grants = [
-        grant("skill:write", "project-a"),
-        grant(
-          scope === "legacy deny" ? "skill:write" : scope,
-          "skill-a",
-          scope === "legacy deny" ? "deny" : "allow",
-        ),
-      ];
+      state.grants = [grant(scope, "project-a")];
       render(picker());
-      expect(screen.queryByText("First skill")).toBeNull();
-      expect(screen.getByText("Second skill")).toBeTruthy();
+      expect(screen.queryByRole("checkbox")).toBeNull();
     },
   );
-  it("does not bypass a project exclusion with a concrete skill allow", () => {
-    state.grants = [
-      grant("skill:write", "skill-a"),
-      grant("skill:blocked_write", "project-a"),
-    ];
+  it("rejects plugin write in another project", () => {
+    state.grants = [grant("plugin:write", "project-b")];
     render(picker());
     expect(screen.queryByRole("checkbox")).toBeNull();
   });
-  it("rejects grants for another project", () => {
-    state.grants = [grant("skill:write", "project-b")];
+  it("retains distribution when underlying skill edits are blocked", () => {
+    state.grants.push(grant("skill:blocked_write", "skill-a"));
     render(picker());
-    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByText("First skill")).toBeTruthy();
   });
-  it("rechecks exclusions added after selection despite a project allow", () => {
-    state.grants = [grant("skill:write", "project-a")];
+  it("rechecks permission after selection", () => {
     const view = render(picker());
     fireEvent.click(screen.getAllByRole("checkbox")[0]!);
-    state.grants = [...state.grants, grant("skill:blocked_read", "skill-a")];
+    state.grants.push(grant("plugin:blocked_write", "project-a"));
     view.rerender(picker());
     fireEvent.click(screen.getByRole("button", { name: "Distribute" }));
     expect(state.mutateAsync).not.toHaveBeenCalled();
-  });
-  it("rechecks the selected skill before submitting after its write grant changes", () => {
-    const view = render(picker());
-    fireEvent.click(screen.getByRole("checkbox"));
-    state.grants = [grant("skill:write", "skill-b")];
-    view.rerender(picker());
-    fireEvent.click(screen.getByRole("button", { name: "Distribute" }));
-    expect(state.mutateAsync).not.toHaveBeenCalled();
-    expect(state.complete).not.toHaveBeenCalled();
   });
 });

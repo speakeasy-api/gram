@@ -8,7 +8,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * Mirrors the server-side ResourceKindForScope in authz/selector.go.
  */
 export function resourceKindForScope(scope: string): string {
-  if (scope.startsWith("project:")) return "project";
+  if (scope.startsWith("project:") || scope.startsWith("plugin:"))
+    return "project";
   if (scope.startsWith("remote-mcp:") || scope.startsWith("mcp:")) return "mcp";
   if (scope.startsWith("org:")) return "org";
   if (scope.startsWith("environment:")) return "environment";
@@ -71,6 +72,7 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
     "environment:blocked_write",
     "environment:blocked_read",
   ],
+  "plugin:write": ["plugin:blocked_write"],
   "skill:read": ["skill:blocked_read"],
   "skill:write": ["skill:blocked_write", "skill:blocked_read"],
   "risk_policy:evaluate": ["risk_policy:bypass"],
@@ -155,6 +157,22 @@ export function hasScopeInGrants(
   }
 
   return hasAllow;
+}
+
+/** Any allow is sufficient, but an exclusion on any alternative wins. */
+export function hasAnyUnblockedScopeInGrants(
+  grants: EffectiveGrant[],
+  checks: readonly { scope: Scope; resourceId: string; projectId?: string }[],
+): boolean {
+  return (
+    checks.every(({ scope, resourceId, projectId }) =>
+      // A synthetic allow probes only exclusions; real allows are checked below.
+      hasScopeInGrants([...grants, { scope }], scope, resourceId, projectId),
+    ) &&
+    checks.some(({ scope, resourceId, projectId }) =>
+      hasScopeInGrants(grants, scope, resourceId, projectId),
+    )
+  );
 }
 
 export function hasScopeInProject(

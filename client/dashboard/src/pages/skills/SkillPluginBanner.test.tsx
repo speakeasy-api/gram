@@ -20,12 +20,8 @@ const permissions = vi.hoisted(() => ({
   hasScope: vi.fn(),
   distributions: true,
 }));
-vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({
-    isLoading: false,
-    hasAnyScope: (scopes: string[], resourceId?: string) =>
-      scopes.some((scope) => permissions.hasScope(scope, resourceId)),
-  }),
+vi.mock("@/hooks/usePluginWriteAccess", () => ({
+  usePluginWriteAccess: () => permissions.hasScope("plugin:write", "project-a"),
 }));
 vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
   ClientIconFan: () => null,
@@ -74,7 +70,7 @@ beforeEach(() => {
     .mockReset()
     .mockImplementation(
       (scope, resourceId) =>
-        scope === "skill:write" && resourceId === "scoped-skill",
+        scope === "plugin:write" && resourceId === "project-a",
     );
   permissions.distributions = true;
 });
@@ -103,7 +99,7 @@ describe("SkillPluginBanner", () => {
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
   });
-  it("blocks the picker for a read-only skill using the real scope gate", () => {
+  it("hides distribution controls without plugin write", () => {
     permissions.hasScope.mockReturnValue(false);
     render(
       <TooltipProvider>
@@ -120,12 +116,10 @@ describe("SkillPluginBanner", () => {
         </MemoryRouter>
       </TooltipProvider>,
     );
-    // Component-level scope gates keep controls visible but intercept interaction.
-    fireEvent.click(screen.getByRole("button", { name: "Example plugin" }));
-    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Example plugin" })).toBeNull();
     expect(permissions.hasScope).toHaveBeenCalledWith(
-      "skill:write",
-      "scoped-skill",
+      "plugin:write",
+      "project-a",
     );
     expect(
       screen.getByRole("link", { name: "View Example plugin" }),

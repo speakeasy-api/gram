@@ -1,3 +1,4 @@
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { CreateResourceCard } from "@/components/create-resource-card";
 import { type FilterValue, useFilterState } from "@/components/filters";
 import { InputField } from "@/components/moon/input-field";
@@ -83,6 +84,7 @@ export default function Plugins(): JSX.Element {
   );
   const { data: marketplaceSettings } = useMarketplaceSettingsSuspense();
   const { hasScope } = useRBAC();
+  const canWritePlugin = usePluginWriteAccess();
   const canManageMarketplace = hasScope("org:admin");
   const { fetch: authFetch } = useFetcher();
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
@@ -177,6 +179,7 @@ export default function Plugins(): JSX.Element {
 
   const handleCreate: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
+    if (!canWritePlugin) return;
     const formData = new FormData(e.currentTarget);
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
@@ -199,6 +202,7 @@ export default function Plugins(): JSX.Element {
   const { mutate: publishMutate } = publishMutation;
   const handlePublish = useCallback(
     (githubUsernames: string[]) => {
+      if (!canWritePlugin) return;
       publishModeRef.current = "publish";
       publishMutate({
         security: { sessionHeaderGramSession: "" },
@@ -207,10 +211,11 @@ export default function Plugins(): JSX.Element {
         },
       });
     },
-    [publishMutate],
+    [canWritePlugin, publishMutate],
   );
   const handleAddCollaborators = useCallback(
     (githubUsernames: string[]) => {
+      if (!canManageMarketplace) return;
       publishModeRef.current = "manage";
       publishMutate({
         security: { sessionHeaderGramSession: "" },
@@ -219,7 +224,7 @@ export default function Plugins(): JSX.Element {
         },
       });
     },
-    [publishMutate],
+    [canManageMarketplace, publishMutate],
   );
 
   const [marketplaceNameInput, setMarketplaceNameInput] = useState(
@@ -252,6 +257,7 @@ export default function Plugins(): JSX.Element {
     trimmedMarketplaceName !== currentMarketplaceName.trim();
 
   const handleOpenMarketplaceSettings = () => {
+    if (!canManageMarketplace) return;
     // Reset the input to the persisted value so reopening discards unsaved
     // edits. Falls back to the computed default name (not "") when unset —
     // otherwise the field shows only ghost placeholder text with nothing to
@@ -268,6 +274,7 @@ export default function Plugins(): JSX.Element {
   };
 
   const handleSaveMarketplaceName = () => {
+    if (!canManageMarketplace) return;
     updateMarketplaceSettingsMutation.mutate(
       {
         security: { sessionHeaderGramSession: "" },
@@ -331,13 +338,13 @@ export default function Plugins(): JSX.Element {
     );
   };
 
-  const createCard = (
+  const createCard = canWritePlugin ? (
     <CreateResourceCard
       title="New Plugin"
       description="Bundle MCP servers and hooks for distribution to supported coding agents."
       onClick={() => setIsCreateDialogOpen(true)}
     />
-  );
+  ) : null;
 
   return (
     <>
@@ -379,9 +386,13 @@ export default function Plugins(): JSX.Element {
                       marketplaceSettings.marketplaceName ??
                       marketplaceSettings.defaultName
                     }
-                    onSetup={handleStartSetup}
-                    onAddCollaborators={() =>
-                      setIsManageCollaboratorsOpen(true)
+                    onSetup={
+                      canManageMarketplace ? handleStartSetup : undefined
+                    }
+                    onAddCollaborators={
+                      canManageMarketplace
+                        ? () => setIsManageCollaboratorsOpen(true)
+                        : undefined
                     }
                     observabilityEnabled={
                       marketplaceSettings.observabilityEnabled
@@ -393,11 +404,19 @@ export default function Plugins(): JSX.Element {
                 <>
                   <MarketplaceCard
                     publishStatus={publishStatus}
-                    onManageCollaborators={() =>
-                      setIsManageCollaboratorsOpen(true)
+                    onManageCollaborators={
+                      canManageMarketplace
+                        ? () => setIsManageCollaboratorsOpen(true)
+                        : undefined
                     }
-                    onRename={handleOpenMarketplaceSettings}
-                    onSync={() => handlePublish([])}
+                    onRename={
+                      canManageMarketplace
+                        ? handleOpenMarketplaceSettings
+                        : undefined
+                    }
+                    onSync={
+                      canWritePlugin ? () => handlePublish([]) : undefined
+                    }
                     isSyncing={publishMutation.isPending}
                     observabilityEnabled={
                       marketplaceSettings.observabilityEnabled
@@ -414,8 +433,12 @@ export default function Plugins(): JSX.Element {
                     marketplaceSettings.marketplaceName ??
                     marketplaceSettings.defaultName
                   }
-                  onSetup={handleStartSetup}
-                  onAddCollaborators={() => setIsManageCollaboratorsOpen(true)}
+                  onSetup={canManageMarketplace ? handleStartSetup : undefined}
+                  onAddCollaborators={
+                    canManageMarketplace
+                      ? () => setIsManageCollaboratorsOpen(true)
+                      : undefined
+                  }
                   observabilityEnabled={
                     marketplaceSettings.observabilityEnabled
                   }

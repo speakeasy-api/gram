@@ -1,4 +1,5 @@
-import { RequireScope } from "@/components/require-scope";
+import { RequirePluginWrite } from "@/components/require-plugin-write";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button as UiButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -50,10 +51,10 @@ export function PluginSkillsSection({
   /** Invoked after a successful change, e.g. to offer a marketplace publish. */
   onMutated: (message: string) => void;
 }): JSX.Element {
-  const { hasScope, grants } = useRBAC();
+  const { grants } = useRBAC();
   const project = useProject();
-  // The collection endpoint checks the project resource; individual removals
-  // still require authorization on the concrete skill.
+  const canWritePlugin = usePluginWriteAccess();
+  // Reads retain skill authorization; reference changes require plugin write.
   const canReadAllSkills = hasScopeInGrants(
     grants,
     "skill:read",
@@ -121,7 +122,7 @@ export function PluginSkillsSection({
   };
 
   const handleRemoveSkill = (distribution: SkillDistribution) => {
-    if (!hasScope("skill:write", distribution.skillId)) return;
+    if (!canWritePlugin) return;
     undistribute.mutate(
       {
         request: {
@@ -234,7 +235,7 @@ export function PluginSkillsSection({
               />
             </>
           )}
-          <RequireScope scope="skill:write" level="section">
+          <RequirePluginWrite>
             <Button
               variant="secondary"
               size="sm"
@@ -246,7 +247,7 @@ export function PluginSkillsSection({
               </Button.LeftIcon>
               <Button.Text>Add Skill</Button.Text>
             </Button>
-          </RequireScope>
+          </RequirePluginWrite>
         </div>
       </div>
       {listContent}
@@ -302,11 +303,7 @@ function PluginSkillCard({
       </Text>
 
       <div className="mt-auto flex items-center justify-end gap-2 pt-2">
-        <RequireScope
-          scope="skill:write"
-          resourceId={distribution.skillId}
-          level="section"
-        >
+        <RequirePluginWrite>
           <UiButton
             type="button"
             variant="tertiary"
@@ -323,7 +320,7 @@ function PluginSkillCard({
             <Trash2 className="h-4 w-4" />
             Remove
           </UiButton>
-        </RequireScope>
+        </RequirePluginWrite>
       </div>
     </Card.Entity>
   );
@@ -366,11 +363,7 @@ function PluginSkillTableRow({
         <SkillVersionBadge distribution={distribution} />
       </td>
       <td className="px-3 py-3">
-        <RequireScope
-          scope="skill:write"
-          resourceId={distribution.skillId}
-          level="section"
-        >
+        <RequirePluginWrite>
           <div
             className="relative z-20 flex items-center justify-end"
             onClick={(event) => event.stopPropagation()}
@@ -388,7 +381,7 @@ function PluginSkillTableRow({
               <Trash2 className="h-4 w-4" />
             </UiButton>
           </div>
-        </RequireScope>
+        </RequirePluginWrite>
       </td>
     </DotRow>
   );

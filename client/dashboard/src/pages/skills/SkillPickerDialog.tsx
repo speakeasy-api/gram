@@ -1,5 +1,4 @@
-import { useProject } from "@/contexts/Auth";
-import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { Page } from "@/components/page-layout";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -50,8 +49,7 @@ export function SkillPickerDialog({
   renderSelectionNotice?: (selectedCount: number) => ReactNode;
   onBatchComplete: (result: SkillPickerResult) => void | Promise<void>;
 }): JSX.Element {
-  const { grants } = useRBAC();
-  const project = useProject();
+  const canWritePlugin = usePluginWriteAccess();
   const [search, setSearch] = useState("");
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const [isBatchAdding, setIsBatchAdding] = useState(false);
@@ -73,22 +71,14 @@ export function SkillPickerDialog({
         skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? []
       ).filter(
         (skill) =>
-          !excluded.has(skill.id) &&
-          (!target.pluginId ||
-            hasScopeInGrants(
-              grants ?? [],
-              "skill:write",
-              [project.id, skill.id],
-              project.id,
-            )),
+          !excluded.has(skill.id) && (!target.pluginId || canWritePlugin),
       ),
     );
   }, [
     excludedSkillIds,
     skillsQuery.data?.pages,
     target.pluginId,
-    grants,
-    project.id,
+    canWritePlugin,
   ]);
   const visibleSkills = useMemo(
     () => filterSkills(availableSkills, search, [], []),
@@ -125,19 +115,7 @@ export function SkillPickerDialog({
 
   const handleSubmit = async () => {
     if (selectedSkillIds.length === 0 || isBatchAdding) return;
-    if (
-      target.pluginId &&
-      selectedSkillIds.some(
-        (id) =>
-          !hasScopeInGrants(
-            grants ?? [],
-            "skill:write",
-            [project.id, id],
-            project.id,
-          ),
-      )
-    )
-      return;
+    if (target.pluginId && !canWritePlugin) return;
     setIsBatchAdding(true);
     try {
       const results = await Promise.allSettled(
