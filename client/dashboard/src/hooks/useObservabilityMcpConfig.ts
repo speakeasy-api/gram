@@ -79,16 +79,18 @@ export function useObservabilityMcpConfig({
         ? observabilityMcpEntries({
             projectSlug,
             serverURL: getServerURL(),
-            toolsetsLoading,
-            toolsets: toolsetsData?.toolsets,
-            mcpServersLoading,
-            mcpServers: mcpServersData?.mcpServers,
-            endpointsLoading,
-            endpoints: endpointsData?.mcpEndpoints,
+            toolsetsLoading: canReadServers && toolsetsLoading,
+            toolsets: canReadServers ? toolsetsData?.toolsets : [],
+            mcpServersLoading: canReadServers && mcpServersLoading,
+            mcpServers: canReadServers ? mcpServersData?.mcpServers : [],
+            endpointsLoading: canReadEndpoints && endpointsLoading,
+            endpoints: canReadEndpoints ? endpointsData?.mcpEndpoints : [],
           })
         : undefined,
     [
       projectSlug,
+      canReadServers,
+      canReadEndpoints,
       toolsetsLoading,
       toolsetsData?.toolsets,
       mcpServersLoading,
@@ -146,16 +148,19 @@ export function useNoToolsetsConfigured(projectSlug?: string): boolean {
     isError: mcpServersFailed,
   } = useMcpServers(request, undefined, { enabled });
 
-  return isNoMcpAccessConfigured({
-    projectSlug,
-    toolsetsLoading,
-    toolsetCount: settledListCount(toolsetsData, toolsetsData?.toolsets),
-    mcpServersLoading,
-    mcpServerCount: settledListCount(
-      mcpServersData,
-      mcpServersData?.mcpServers,
-    ),
-    toolsetsFailed,
-    mcpServersFailed,
-  });
+  return (
+    enabled &&
+    isNoMcpAccessConfigured({
+      projectSlug,
+      toolsetsLoading,
+      toolsetCount: settledListCount(toolsetsData, toolsetsData?.toolsets),
+      mcpServersLoading,
+      mcpServerCount: settledListCount(
+        mcpServersData,
+        mcpServersData?.mcpServers,
+      ),
+      toolsetsFailed,
+      mcpServersFailed,
+    })
+  );
 }

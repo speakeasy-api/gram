@@ -97,23 +97,33 @@ function grantSelectorsMatch(
   return grant.selectors.some((selector) => matches(selector, check));
 }
 
-/** Pure equivalent of hasScope for loaded effective grants. */
+/**
+ * Pure equivalent of hasScope for loaded effective grants. Multiple resource IDs
+ * accept any allow, but an exclusion on ANY alternative wins (RequireAnyUnblocked).
+ */
 export function hasScopeInGrants(
   grants: EffectiveGrant[],
   scope: Scope,
-  resourceId?: string,
+  resourceId?: string | readonly string[],
   projectId?: string,
 ): boolean {
-  const allowCheck: Record<string, string> = {
-    resourceKind: resourceKindForScope(scope),
-  };
-  if (resourceId) allowCheck.resourceId = resourceId;
-  if (projectId) allowCheck.projectId = projectId;
+  const resourceIds =
+    typeof resourceId === "string" || resourceId === undefined
+      ? [resourceId]
+      : resourceId;
+  const allowChecks = resourceIds.map((id) => {
+    const allowCheck: Record<string, string> = {
+      resourceKind: resourceKindForScope(scope),
+    };
+    if (id) allowCheck.resourceId = id;
+    if (projectId) allowCheck.projectId = projectId;
+    return allowCheck;
+  });
   // Unscoped allows are existential, but strict exclusions must distinguish
   // unrestricted wildcards from exclusions for one concrete resource.
-  const exclusionCheck = resourceId
-    ? allowCheck
-    : { ...allowCheck, resourceId: "*" };
+  const exclusionChecks = allowChecks.map((check) =>
+    check.resourceId ? check : { ...check, resourceId: "*" },
+  );
 
   const exclusionScopes = exclusionScopesForScope(scope);
   let hasAllow = false;
@@ -128,7 +138,7 @@ export function hasScopeInGrants(
       exclusionScopes.includes(grant.scope);
     if (
       (isLegacyDeny || isExclusion) &&
-      grantSelectorsMatch(grant, exclusionCheck, true)
+      exclusionChecks.some((check) => grantSelectorsMatch(grant, check, true))
     ) {
       return false;
     }
@@ -138,7 +148,7 @@ export function hasScopeInGrants(
     if (
       effect === "allow" &&
       scopeMatches &&
-      grantSelectorsMatch(grant, allowCheck, false)
+      allowChecks.some((check) => grantSelectorsMatch(grant, check, false))
     ) {
       hasAllow = true;
     }

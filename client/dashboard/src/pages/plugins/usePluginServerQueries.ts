@@ -5,6 +5,7 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints";
 
 export function usePluginServerQueries(): {
+  canReadServers: boolean;
   toolsetsQuery: ReturnType<typeof useListToolsets>;
   serversQuery: ReturnType<typeof useMcpServers>;
   endpointsQuery: ReturnType<typeof useMcpEndpoints>;
@@ -25,14 +26,22 @@ export function usePluginServerQueries(): {
     project.id,
     project.id,
   );
-  const toolsetsQuery = useListToolsets(undefined, undefined, {
+  const toolsetsQuery = useListToolsets(
+    { gramProject: project.id },
+    undefined,
+    {
+      enabled: canReadServers,
+    },
+  );
+  const serversQuery = useMcpServers({ gramProject: project.id }, undefined, {
     enabled: canReadServers,
   });
-  const serversQuery = useMcpServers({}, undefined, {
-    enabled: canReadServers,
-  });
-  const endpointsQuery = useMcpEndpoints({}, undefined, {
-    enabled: canReadEndpoints,
-  });
-  return { toolsetsQuery, serversQuery, endpointsQuery };
+  const endpointsQuery = useMcpEndpoints(
+    { gramProject: project.id },
+    undefined,
+    {
+      enabled: canReadEndpoints,
+    },
+  );
+  return { canReadServers, toolsetsQuery, serversQuery, endpointsQuery };
 }

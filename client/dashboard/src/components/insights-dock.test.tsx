@@ -7,6 +7,8 @@ import { GramElementsProvider } from "@/elements";
 
 const mocks = vi.hoisted(() => ({
   activeRoute: "detail" as "detail" | "new",
+  hasScope: vi.fn((_scope: string, _resourceId?: string) => false),
+  members: vi.fn(() => ({ data: undefined })),
 }));
 
 vi.mock("@/elements", async () => {
@@ -58,7 +60,7 @@ vi.mock("@gram/client/react-query/listChats.js", () => ({
   useListChats: () => ({ data: undefined }),
 }));
 vi.mock("@gram/client/react-query/members.js", () => ({
-  useMembers: () => ({ data: undefined }),
+  useMembers: mocks.members,
 }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
   useSkillsInfinite: () => ({
@@ -69,11 +71,17 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
   }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => false }),
+  useRBAC: () => ({ hasScope: mocks.hasScope }),
 }));
 vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ id: "organization" }),
+  useOrganization: () => ({
+    id: "organization",
+    projects: [{ id: "project-a", slug: "project" }],
+  }),
   useSession: () => ({ user: { id: "user", email: "user@example.com" } }),
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useProjectSlugForRequests: () => "project",
 }));
 vi.mock("@/lib/assistantEntityLinks", () => ({
   useAssistantLinkResolver: () => undefined,
@@ -118,6 +126,31 @@ function AssistantEditor(): JSX.Element {
 }
 
 describe("InsightsProvider", () => {
+  it.each([
+    ["org:read", "organization", true],
+    ["project:read", "project-a", true],
+    ["project:read", "unrelated-project", false],
+    ["skill:read", "project-a", false],
+  ] as const)(
+    "gates member lookup for %s on %s",
+    (scope, resourceId, enabled) => {
+      mocks.hasScope.mockImplementation(
+        (s, id) => s === scope && id === resourceId,
+      );
+      render(
+        <InsightsProvider
+          mcpConfig={{ projectSlug: "project" } as never}
+          title="Assistant"
+          subtitle=""
+        >
+          <AssistantEditor />
+        </InsightsProvider>,
+      );
+      expect(mocks.members).toHaveBeenLastCalledWith(undefined, undefined, {
+        enabled,
+      });
+    },
+  );
   it.each(["new", "detail"] as const)(
     "does not wrap the assistant %s route in the shared runtime",
     (activeRoute) => {

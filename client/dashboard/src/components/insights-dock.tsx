@@ -23,6 +23,7 @@ import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
 import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";
 import { useOrganization, useSession } from "@/contexts/Auth";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { emailsMatch, resolveChatOwner } from "@/lib/chat-owner";
 import {
@@ -995,8 +996,14 @@ export function InsightsProvider({
   // chat API, not `access.listMembers`).
   const organization = useOrganization();
   const { hasScope } = useRBAC();
+  const requestProjectSlug = useProjectSlugForRequests();
+  const requestProjectId = organization.projects.find(
+    (project) => project.slug === requestProjectSlug,
+  )?.id;
   const { data: membersData } = useMembers(undefined, undefined, {
-    enabled: hasScope("org:read", organization.id),
+    enabled:
+      hasScope("org:read", organization.id) ||
+      (!!requestProjectId && hasScope("project:read", requestProjectId)),
   });
   const resolveCreator = useCallback(
     ({

@@ -29,15 +29,27 @@ describe("plugin server query permissions", () => {
   it("does not request MCP APIs for org-read-only viewers", () => {
     state.grants = [{ scope: "org:read" }];
     renderHook(usePluginServerQueries);
-    expect(state.toolsets).toHaveBeenCalledWith(undefined, undefined, {
-      enabled: false,
-    });
-    expect(state.servers).toHaveBeenCalledWith({}, undefined, {
-      enabled: false,
-    });
-    expect(state.endpoints).toHaveBeenCalledWith({}, undefined, {
-      enabled: false,
-    });
+    expect(state.toolsets).toHaveBeenCalledWith(
+      { gramProject: "project-a" },
+      undefined,
+      {
+        enabled: false,
+      },
+    );
+    expect(state.servers).toHaveBeenCalledWith(
+      { gramProject: "project-a" },
+      undefined,
+      {
+        enabled: false,
+      },
+    );
+    expect(state.endpoints).toHaveBeenCalledWith(
+      { gramProject: "project-a" },
+      undefined,
+      {
+        enabled: false,
+      },
+    );
   });
   it("keeps endpoint listing disabled for one MCP resource grant", () => {
     state.grants = [
@@ -47,35 +59,74 @@ describe("plugin server query permissions", () => {
       },
     ];
     renderHook(usePluginServerQueries);
-    expect(state.servers).toHaveBeenCalledWith({}, undefined, {
-      enabled: true,
-    });
-    expect(state.endpoints).toHaveBeenCalledWith({}, undefined, {
-      enabled: false,
-    });
+    expect(state.toolsets).toHaveBeenCalledWith(
+      { gramProject: "project-a" },
+      undefined,
+      { enabled: true },
+    );
+    expect(state.servers).toHaveBeenCalledWith(
+      { gramProject: "project-a" },
+      undefined,
+      {
+        enabled: true,
+      },
+    );
+    expect(state.endpoints).toHaveBeenCalledWith(
+      { gramProject: "project-a" },
+      undefined,
+      {
+        enabled: false,
+      },
+    );
   });
   it("allows project-wide MCP discovery", () => {
     state.grants = [
       { scope: "mcp:read", selectors: [{ projectId: "project-a" }] },
     ];
     renderHook(usePluginServerQueries);
-    expect(state.toolsets).toHaveBeenCalledWith(undefined, undefined, {
-      enabled: true,
-    });
-    expect(state.endpoints).toHaveBeenCalledWith({}, undefined, {
-      enabled: true,
-    });
+    expect(state.toolsets).toHaveBeenCalledWith(
+      { gramProject: "project-a" },
+      undefined,
+      {
+        enabled: true,
+      },
+    );
+    expect(state.servers).toHaveBeenCalledWith(
+      { gramProject: "project-a" },
+      undefined,
+      { enabled: true },
+    );
+    expect(state.endpoints).toHaveBeenCalledWith(
+      { gramProject: "project-a" },
+      undefined,
+      {
+        enabled: true,
+      },
+    );
   });
   it("does not use MCP grants from another project", () => {
     state.grants = [
       { scope: "mcp:read", selectors: [{ projectId: "project-b" }] },
     ];
     renderHook(usePluginServerQueries);
-    expect(state.servers).toHaveBeenCalledWith({}, undefined, {
-      enabled: false,
-    });
-    expect(state.endpoints).toHaveBeenCalledWith({}, undefined, {
-      enabled: false,
-    });
+    expect(state.toolsets).toHaveBeenCalledWith(
+      { gramProject: "project-a" },
+      undefined,
+      { enabled: false },
+    );
+    expect(state.servers).toHaveBeenCalledWith(
+      { gramProject: "project-a" },
+      undefined,
+      {
+        enabled: false,
+      },
+    );
+    expect(state.endpoints).toHaveBeenCalledWith(
+      { gramProject: "project-a" },
+      undefined,
+      {
+        enabled: false,
+      },
+    );
   });
 });

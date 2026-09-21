@@ -188,15 +188,12 @@ func (s *Service) requireSkillAccess(ctx context.Context, scope authz.Scope, ski
 }
 
 func (s *Service) requireSkillGrant(ctx context.Context, scope authz.Scope, projectID, skillID string) error {
-	// Always constrain the resolved project, including collection/create checks:
-	// allow matching ignores dimensions absent from a check, while strict
-	// exclusion matching requires them to be present.
-	dimensions := map[string]string{authz.SelectorKeyProjectID: projectID}
-	checks := []authz.Check{{Scope: scope, ResourceKind: "", ResourceID: projectID, Dimensions: dimensions}}
+	// Skill grants select either the project resource or an individual skill.
+	checks := []authz.Check{{Scope: scope, ResourceKind: "", ResourceID: projectID, Dimensions: nil}}
 	if skillID != "" {
 		checks = append(checks, authz.Check{
 			Scope: scope, ResourceKind: authz.ResourceKindSkill,
-			ResourceID: skillID, Dimensions: dimensions,
+			ResourceID: skillID, Dimensions: nil,
 		})
 	}
 	return s.authz.RequireAnyUnblocked(ctx, checks...)

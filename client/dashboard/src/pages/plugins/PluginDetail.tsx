@@ -234,7 +234,7 @@ function PluginDetailContent({
     setIsDownloadMenuOpen,
   );
 
-  const { toolsetsQuery, serversQuery, endpointsQuery } =
+  const { canReadServers, toolsetsQuery, serversQuery, endpointsQuery } =
     usePluginServerQueries();
   const { data: toolsetsData, isLoading: isLoadingToolsets } = toolsetsQuery;
   const toolsets = useMemo(
@@ -578,6 +578,7 @@ function PluginDetailContent({
                 : undefined
             }
             isLoading={isLoadingServers}
+            metadataUnavailable={!canReadServers || !!toolsetsQuery.error}
             onRemove={canPublish ? () => handleRemoveServer(server) : undefined}
             lastPublishedAt={publishStatus?.lastPublishedAt}
           />
@@ -1353,6 +1354,7 @@ function PluginServerCard({
   toolset,
   mcpServer,
   isLoading,
+  metadataUnavailable,
   onRemove,
   lastPublishedAt,
 }: {
@@ -1360,6 +1362,7 @@ function PluginServerCard({
   toolset: ToolsetEntry | undefined;
   mcpServer: McpServer | undefined;
   isLoading: boolean;
+  metadataUnavailable: boolean;
   onRemove?: () => void;
   /** Undefined when the marketplace has never been published. */
   lastPublishedAt: Date | undefined;
@@ -1424,6 +1427,10 @@ function PluginServerCard({
               {mcpServer?.unproxiedMcpServerId
                 ? "Unproxied MCP · Not proxied"
                 : "Remote MCP"}
+            </Badge>
+          ) : metadataUnavailable ? (
+            <Badge variant="neutral" className="text-xs">
+              Server metadata unavailable
             </Badge>
           ) : toolset ? (
             <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />

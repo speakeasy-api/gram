@@ -102,9 +102,9 @@ export const SdkProvider = ({
       httpClient,
     });
 
-    // Resource queries are loaded by their permission-gated consumers. Do not
-    // prefetch before auth/grants resolve: skill-only sessions cannot read
-    // deployments or MCP toolsets, even when visiting a valid project route.
+    // ProjectResourcePrefetch warms resource queries inside ProjectProvider,
+    // after auth/grants resolve. Skill-only sessions cannot read deployments
+    // or MCP toolsets, even when visiting a valid project route.
 
     return gram;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- telemetry is stable context value; including it would recreate the SDK client unnecessarily

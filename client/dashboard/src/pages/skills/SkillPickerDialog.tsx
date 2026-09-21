@@ -1,4 +1,5 @@
-import { useRBAC } from "@/hooks/useRBAC";
+import { useProject } from "@/contexts/Auth";
+import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import { Page } from "@/components/page-layout";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -49,7 +50,8 @@ export function SkillPickerDialog({
   renderSelectionNotice?: (selectedCount: number) => ReactNode;
   onBatchComplete: (result: SkillPickerResult) => void | Promise<void>;
 }): JSX.Element {
-  const { hasScope } = useRBAC();
+  const { grants } = useRBAC();
+  const project = useProject();
   const [search, setSearch] = useState("");
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const [isBatchAdding, setIsBatchAdding] = useState(false);
@@ -72,10 +74,22 @@ export function SkillPickerDialog({
       ).filter(
         (skill) =>
           !excluded.has(skill.id) &&
-          (!target.pluginId || hasScope("skill:write", skill.id)),
+          (!target.pluginId ||
+            hasScopeInGrants(
+              grants ?? [],
+              "skill:write",
+              [project.id, skill.id],
+              project.id,
+            )),
       ),
     );
-  }, [excludedSkillIds, skillsQuery.data?.pages, target.pluginId, hasScope]);
+  }, [
+    excludedSkillIds,
+    skillsQuery.data?.pages,
+    target.pluginId,
+    grants,
+    project.id,
+  ]);
   const visibleSkills = useMemo(
     () => filterSkills(availableSkills, search, [], []),
     [availableSkills, search],
@@ -113,7 +127,15 @@ export function SkillPickerDialog({
     if (selectedSkillIds.length === 0 || isBatchAdding) return;
     if (
       target.pluginId &&
-      selectedSkillIds.some((id) => !hasScope("skill:write", id))
+      selectedSkillIds.some(
+        (id) =>
+          !hasScopeInGrants(
+            grants ?? [],
+            "skill:write",
+            [project.id, id],
+            project.id,
+          ),
+      )
     )
       return;
     setIsBatchAdding(true);

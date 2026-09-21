@@ -24,7 +24,7 @@ beforeEach(() => {
   state.grants = [
     {
       scope: "skill:read",
-      selectors: [{ resourceId: "skill-a", projectId: "project-a" }],
+      selectors: [{ resourceKind: "skill", resourceId: "skill-a" }],
     },
   ];
 });

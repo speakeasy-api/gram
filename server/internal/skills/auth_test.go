@@ -72,7 +72,7 @@ func TestSkillsAPIKeyAuthRetainsTenantScoping(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-func TestSkillsAPIKeyAuthCollectionProjectDimensions(t *testing.T) {
+func TestSkillsAPIKeyAuthCollectionProjectResources(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	_, otherProjectID := createProjectContext(t, ctx, ti, authz.ScopeSkillWrite)
@@ -90,16 +90,14 @@ func TestSkillsAPIKeyAuthCollectionProjectDimensions(t *testing.T) {
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					t.Parallel()
-					grant := authz.NewGrant(authz.ScopeSkillWrite, authz.WildcardResource)
-					grant.Selector[authz.SelectorKeyProjectID] = tc.allowProject
+					grant := authz.NewGrant(authz.ScopeSkillWrite, tc.allowProject)
 					grants := []authz.Grant{grant}
 					if tc.blockedProject != "" {
 						scope := authz.ScopeSkillBlockedRead
 						if method == "create" {
 							scope = authz.ScopeSkillBlockedWrite
 						}
-						blocked := authz.NewGrant(scope, authz.WildcardResource)
-						blocked.Selector[authz.SelectorKeyProjectID] = tc.blockedProject
+						blocked := authz.NewGrant(scope, tc.blockedProject)
 						grants = append(grants, blocked)
 					}
 					scoped := authztest.WithExactGrants(t, ctx, grants...)

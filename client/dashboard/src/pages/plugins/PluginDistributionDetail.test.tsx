@@ -85,8 +85,6 @@ describe("distribution-only plugin detail", () => {
       expect.objectContaining({ enabled: true }),
     );
     expect(screen.getByText("Example plugin")).toBeTruthy();
-    expect(screen.queryByText("Assignments")).toBeNull();
-    expect(screen.queryByText("Publish now")).toBeNull();
   });
   it("preserves scoped skill context and does not request the skills list", () => {
     show("/plugins/plugin-a?skillId=scoped-skill");

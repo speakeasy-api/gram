@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/stretchr/testify/require"
@@ -42,20 +43,20 @@ func TestDistributionPluginProjection(t *testing.T) {
 			require.Equal(t, "Safe description", fields["Description"])
 			require.Equal(t, false, fields["IsDefault"])
 			_, err = ti.service.ListPlugins(readCtx, &gen.ListPluginsPayload{})
-			require.Error(t, err)
+			requireProjectionOopsCode(t, err, oops.CodeForbidden)
 			_, err = ti.service.GetPlugin(readCtx, &gen.GetPluginPayload{ID: plugin.ID})
-			require.Error(t, err)
+			requireProjectionOopsCode(t, err, oops.CodeForbidden)
 			_, err = ti.service.PublishPlugins(readCtx, &gen.PublishPluginsPayload{})
-			require.Error(t, err)
+			requireProjectionOopsCode(t, err, oops.CodeForbidden)
 			_, err = ti.service.CreatePlugin(readCtx, &gen.CreatePluginPayload{Name: "Denied"})
-			require.Error(t, err)
+			requireProjectionOopsCode(t, err, oops.CodeForbidden)
 		})
 	}
 	denied := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillRead, uuid.NewString()))
 	_, err = ti.service.ListDistributionPlugins(denied, &gen.ListDistributionPluginsPayload{SkillID: skill.ID.String()})
-	require.Error(t, err)
+	requireProjectionOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.GetDistributionPlugin(denied, &gen.GetDistributionPluginPayload{SkillID: skill.ID.String(), ID: plugin.ID})
-	require.Error(t, err)
+	requireProjectionOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestDistributionPluginProjectionIsolationAndLazyDefault(t *testing.T) {
@@ -78,14 +79,14 @@ func TestDistributionPluginProjectionIsolationAndLazyDefault(t *testing.T) {
 	require.Len(t, repeated.Plugins, 1)
 	require.Equal(t, provisioned.Plugins[0].ID, repeated.Plugins[0].ID)
 	_, err = ti.service.GetDistributionPlugin(readCtx, &gen.GetDistributionPluginPayload{SkillID: uuid.NewString(), ID: provisioned.Plugins[0].ID})
-	require.Error(t, err, "grant for one skill does not authorize another")
+	requireProjectionOopsCode(t, err, oops.CodeForbidden)
 	otherOrg := *ac
 	otherOrg.ActiveOrganizationID = "org_projection_other"
 	mismatched := contextvalues.SetAuthContext(readCtx, &otherOrg)
 	_, err = ti.service.ListDistributionPlugins(mismatched, &gen.ListDistributionPluginsPayload{SkillID: skill.ID.String()})
-	require.Error(t, err)
+	requireProjectionOopsCode(t, err, oops.CodeNotFound)
 	_, err = ti.service.GetDistributionPlugin(mismatched, &gen.GetDistributionPluginPayload{SkillID: skill.ID.String(), ID: provisioned.Plugins[0].ID})
-	require.Error(t, err)
+	requireProjectionOopsCode(t, err, oops.CodeNotFound)
 	foreignProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Other distribution project", Slug: "other-distribution-project", OrganizationID: ac.ActiveOrganizationID})
 	require.NoError(t, err)
 	otherProject := *ac
@@ -93,10 +94,10 @@ func TestDistributionPluginProjectionIsolationAndLazyDefault(t *testing.T) {
 	foreignPlugin, err := ti.service.CreatePlugin(contextvalues.SetAuthContext(ctx, &otherProject), &gen.CreatePluginPayload{Name: "Foreign target"})
 	require.NoError(t, err)
 	_, err = ti.service.GetDistributionPlugin(readCtx, &gen.GetDistributionPluginPayload{SkillID: skill.ID.String(), ID: foreignPlugin.ID})
-	require.Error(t, err, "plugins from another project must not be disclosed")
+	requireProjectionOopsCode(t, err, oops.CodeNotFound)
 	mismatched = contextvalues.SetAuthContext(readCtx, &otherProject)
 	_, err = ti.service.ListDistributionPlugins(mismatched, &gen.ListDistributionPluginsPayload{SkillID: skill.ID.String()})
-	require.Error(t, err)
+	requireProjectionOopsCode(t, err, oops.CodeNotFound)
 }
 
 func TestDistributionPluginProjectionSkillExclusionsOverrideProjectGrant(t *testing.T) {
@@ -114,8 +115,15 @@ func TestDistributionPluginProjectionSkillExclusionsOverrideProjectGrant(t *test
 			authz.NewGrant(authz.ScopeSkillBlockedRead, blockedID),
 		)
 		_, err = ti.service.ListDistributionPlugins(restricted, &gen.ListDistributionPluginsPayload{SkillID: skill.ID.String()})
-		require.Error(t, err, "neither project nor skill allow may bypass a matching exclusion")
+		requireProjectionOopsCode(t, err, oops.CodeForbidden)
 		_, err = ti.service.GetDistributionPlugin(restricted, &gen.GetDistributionPluginPayload{SkillID: skill.ID.String(), ID: plugin.ID})
-		require.Error(t, err, "neither project nor skill allow may bypass a matching exclusion")
+		requireProjectionOopsCode(t, err, oops.CodeForbidden)
 	}
+}
+
+func requireProjectionOopsCode(t *testing.T, err error, code oops.Code) {
+	t.Helper()
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, code, shareable.Code)
 }

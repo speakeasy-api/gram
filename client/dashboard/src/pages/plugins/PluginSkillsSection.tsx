@@ -10,7 +10,7 @@ import { Text } from "@/components/ui/Text";
 import { ViewToggle } from "@/components/ui/ViewToggle";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProject } from "@/contexts/Auth";
-import { useRBAC } from "@/hooks/useRBAC";
+import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
 import type { SkillDistribution } from "@gram/client/models/components/skilldistribution.js";
@@ -50,9 +50,16 @@ export function PluginSkillsSection({
   /** Invoked after a successful change, e.g. to offer a marketplace publish. */
   onMutated: (message: string) => void;
 }): JSX.Element {
-  const { hasScope, hasAnyScopeInProject } = useRBAC();
+  const { hasScope, grants } = useRBAC();
   const project = useProject();
-  const canReadAllSkills = hasAnyScopeInProject(["skill:read"], project.id);
+  // The collection endpoint checks the project resource; individual removals
+  // still require authorization on the concrete skill.
+  const canReadAllSkills = hasScopeInGrants(
+    grants,
+    "skill:read",
+    project.id,
+    project.id,
+  );
   const queryClient = useQueryClient();
   const [isAddSkillOpen, setIsAddSkillOpen] = useState(false);
   const [search, setSearch] = useState("");

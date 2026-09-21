@@ -583,7 +583,6 @@ func TestSkillDistributionScopedWrite(t *testing.T) {
 	scoped := authztest.WithExactGrants(t, ctx, authz.NewGrantWithSelector(authz.ScopeSkillWrite, authz.Selector{
 		authz.SelectorKeyResourceKind: authz.ResourceKindSkill,
 		authz.SelectorKeyResourceID:   created.Skill.ID,
-		authz.SelectorKeyProjectID:    ti.projectID.String(),
 	}))
 	_, err := ti.service.Distribute(scoped, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
 	require.NoError(t, err)
@@ -600,7 +599,6 @@ func TestSkillScopedReads(t *testing.T) {
 	scoped := authztest.WithExactGrants(t, ctx, authz.NewGrantWithSelector(authz.ScopeSkillRead, authz.Selector{
 		authz.SelectorKeyResourceKind: authz.ResourceKindSkill,
 		authz.SelectorKeyResourceID:   created.Skill.ID,
-		authz.SelectorKeyProjectID:    ti.projectID.String(),
 	}))
 	got, err := ti.service.Get(scoped, &gen.GetPayload{ID: created.Skill.ID})
 	require.NoError(t, err)
@@ -624,11 +622,10 @@ func TestSkillDistributionScopedAuthorizationBoundaries(t *testing.T) {
 	created := createSkill(t, ctx, ti, "scoped-boundaries", "Scoped boundaries.")
 	other := createSkill(t, ctx, ti, "other-scoped-skill", "Other skill.")
 	plugin := createPlugin(t, ctx, ti, ti.projectID, "scoped-boundary-target")
-	grant := func(scope authz.Scope, resourceID, projectID string) authz.Grant {
+	grant := func(scope authz.Scope, resourceID string) authz.Grant {
 		return authz.NewGrantWithSelector(scope, authz.Selector{
 			authz.SelectorKeyResourceKind: authz.ResourceKindSkill,
 			authz.SelectorKeyResourceID:   resourceID,
-			authz.SelectorKeyProjectID:    projectID,
 		})
 	}
 	for _, tc := range []struct {
@@ -638,15 +635,15 @@ func TestSkillDistributionScopedAuthorizationBoundaries(t *testing.T) {
 	}{
 		{name: "project write", grants: []authz.Grant{authz.NewGrant(authz.ScopeSkillWrite, ti.projectID.String())}, read: true, write: true},
 		{name: "project read only", grants: []authz.Grant{authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String())}, read: true},
-		{name: "resource read only", grants: []authz.Grant{grant(authz.ScopeSkillRead, created.Skill.ID, ti.projectID.String())}, read: true},
-		{name: "other skill", grants: []authz.Grant{grant(authz.ScopeSkillWrite, other.Skill.ID, ti.projectID.String())}},
-		{name: "other skill write with project read", grants: []authz.Grant{authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String()), grant(authz.ScopeSkillWrite, other.Skill.ID, ti.projectID.String())}, read: true},
+		{name: "resource read only", grants: []authz.Grant{grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true},
+		{name: "other skill", grants: []authz.Grant{grant(authz.ScopeSkillWrite, other.Skill.ID)}},
+		{name: "other skill write with project read", grants: []authz.Grant{authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String()), grant(authz.ScopeSkillWrite, other.Skill.ID)}, read: true},
 		{name: "other project", grants: []authz.Grant{authz.NewGrant(authz.ScopeSkillWrite, uuid.NewString())}},
-		{name: "resource wrong project dimension", grants: []authz.Grant{grant(authz.ScopeSkillWrite, created.Skill.ID, uuid.NewString())}},
-		{name: "project wrong project dimension", grants: []authz.Grant{grant(authz.ScopeSkillWrite, ti.projectID.String(), uuid.NewString())}},
-		{name: "wildcard wrong project dimension", grants: []authz.Grant{grant(authz.ScopeSkillWrite, "*", uuid.NewString())}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			for _, grant := range tc.grants {
+				require.NoError(t, authz.ValidateSelector(grant.Scope, grant.Selector))
+			}
 			scoped := authztest.WithExactGrants(t, ctx, tc.grants...)
 			_, err := ti.service.Get(scoped, &gen.GetPayload{ID: created.Skill.ID})
 			if tc.read {
@@ -692,7 +689,6 @@ func TestAssistantDistributionPreservesProjectWriteAndSkillRead(t *testing.T) {
 	skillRead := authz.NewGrantWithSelector(authz.ScopeSkillRead, authz.Selector{
 		authz.SelectorKeyResourceKind: authz.ResourceKindSkill,
 		authz.SelectorKeyResourceID:   created.Skill.ID,
-		authz.SelectorKeyProjectID:    ti.projectID.String(),
 	})
 	skillWrite := skillRead
 	skillWrite.Scope = authz.ScopeSkillWrite
@@ -707,6 +703,9 @@ func TestAssistantDistributionPreservesProjectWriteAndSkillRead(t *testing.T) {
 		{name: "other project write", grants: []authz.Grant{skillRead, authz.NewGrant(authz.ScopeProjectWrite, uuid.NewString())}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			for _, grant := range tc.grants {
+				require.NoError(t, authz.ValidateSelector(grant.Scope, grant.Selector))
+			}
 			scoped := authztest.WithExactGrants(t, ctx, tc.grants...)
 			_, err := ti.service.Distribute(ctx, &gen.DistributePayload{ID: created.Skill.ID, AssistantID: new(assistant.ID.String())})
 			require.NoError(t, err)
@@ -792,4 +791,32 @@ func TestSkillScopedExclusionsOverrideProjectAllow(t *testing.T) {
 			requireOopsCode(t, err, oops.CodeForbidden)
 		})
 	}
+}
+
+func TestSkillScopedGrantCannotCrossProjectLookup(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	local := createSkill(t, ctx, ti, "local-scoped-skill", "Local skill.")
+	otherCtx, otherProjectID := createProjectContext(t, ctx, ti, authz.ScopeSkillWrite)
+	foreign := createSkill(t, otherCtx, ti, "foreign-scoped-skill", "Foreign skill.")
+	foreignPlugin := createPlugin(t, otherCtx, ti, otherProjectID, "foreign-scoped-target")
+	_, err := ti.service.Distribute(otherCtx, &gen.DistributePayload{ID: foreign.Skill.ID, PluginID: new(foreignPlugin.ID.String())})
+	require.NoError(t, err)
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "local-scoped-target")
+	// Even a valid exact grant to a foreign skill cannot bypass the project lookup.
+	scoped := authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeSkillWrite, local.Skill.ID),
+		authz.NewGrant(authz.ScopeSkillWrite, foreign.Skill.ID),
+	)
+	_, err = ti.service.Get(scoped, &gen.GetPayload{ID: local.Skill.ID})
+	require.NoError(t, err)
+	_, err = ti.service.Get(scoped, &gen.GetPayload{ID: foreign.Skill.ID})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	listed, err := ti.service.ListDistributions(scoped, &gen.ListDistributionsPayload{SkillID: &foreign.Skill.ID, Limit: 50})
+	require.NoError(t, err)
+	require.Empty(t, listed.Distributions, "project filter must hide existing foreign distributions")
+	_, err = ti.service.Distribute(scoped, &gen.DistributePayload{ID: foreign.Skill.ID, PluginID: new(plugin.ID.String())})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	err = ti.service.Undistribute(scoped, &gen.UndistributePayload{ID: foreign.Skill.ID, PluginID: new(plugin.ID.String())})
+	requireOopsCode(t, err, oops.CodeNotFound)
 }

@@ -1,7 +1,7 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Skill } from "@gram/client/models/components/skill.js";
 
 const discovery = vi.hoisted(() =>
@@ -16,8 +16,16 @@ vi.mock("@/routes", () => ({
     plugins: { detail: { href: (id: string) => `/plugins/${id}` } },
   }),
 }));
-vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
+const permissions = vi.hoisted(() => ({
+  hasScope: vi.fn(),
+  distributions: true,
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    isLoading: false,
+    hasAnyScope: (scopes: string[], resourceId?: string) =>
+      scopes.some((scope) => permissions.hasScope(scope, resourceId)),
+  }),
 }));
 vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
   ClientIconFan: () => null,
@@ -35,13 +43,15 @@ vi.mock("@gram/client/react-query/skillDistributions.js", () => ({
       pages: [
         {
           result: {
-            distributions: [
-              {
-                id: "distribution-a",
-                pluginId: "plugin-a",
-                pluginName: "Example plugin",
-              },
-            ],
+            distributions: permissions.distributions
+              ? [
+                  {
+                    id: "distribution-a",
+                    pluginId: "plugin-a",
+                    pluginName: "Example plugin",
+                  },
+                ]
+              : [],
           },
         },
       ],
@@ -59,21 +69,87 @@ vi.mock("@gram/client/react-query/undistributeSkill.js", () => ({
 import { SkillPluginBanner } from "./SkillPluginBanner";
 
 afterEach(cleanup);
+beforeEach(() => {
+  permissions.hasScope
+    .mockReset()
+    .mockImplementation(
+      (scope, resourceId) =>
+        scope === "skill:write" && resourceId === "scoped-skill",
+    );
+  permissions.distributions = true;
+});
 describe("SkillPluginBanner", () => {
+  it("shows the blocked state without distribution controls or links", () => {
+    permissions.distributions = false;
+    render(
+      <TooltipProvider>
+        <MemoryRouter>
+          <SkillPluginBanner
+            skill={
+              {
+                id: "scoped-skill",
+                hasValidVersion: false,
+                versionCount: 1,
+              } as Skill
+            }
+          />
+        </MemoryRouter>
+      </TooltipProvider>,
+    );
+    expect(screen.getByText("Distribution blocked")).toBeTruthy();
+    expect(
+      screen.getByText(/None of this skill's versions pass validation/),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+  it("blocks the picker for a read-only skill using the real scope gate", () => {
+    permissions.hasScope.mockReturnValue(false);
+    render(
+      <TooltipProvider>
+        <MemoryRouter>
+          <SkillPluginBanner
+            skill={
+              {
+                id: "scoped-skill",
+                hasValidVersion: true,
+                versionCount: 1,
+              } as Skill
+            }
+          />
+        </MemoryRouter>
+      </TooltipProvider>,
+    );
+    // Component-level scope gates keep controls visible but intercept interaction.
+    fireEvent.click(screen.getByRole("button", { name: "Example plugin" }));
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(permissions.hasScope).toHaveBeenCalledWith(
+      "skill:write",
+      "scoped-skill",
+    );
+    expect(
+      screen.getByRole("link", { name: "View Example plugin" }),
+    ).toBeTruthy();
+  });
+
   it("uses narrow discovery and exposes a link preserving the authorized skill", () => {
     render(
-      <MemoryRouter>
-        <SkillPluginBanner
-          skill={
-            {
-              id: "scoped-skill",
-              hasValidVersion: true,
-              versionCount: 1,
-            } as Skill
-          }
-        />
-      </MemoryRouter>,
+      <TooltipProvider>
+        <MemoryRouter>
+          <SkillPluginBanner
+            skill={
+              {
+                id: "scoped-skill",
+                hasValidVersion: true,
+                versionCount: 1,
+              } as Skill
+            }
+          />
+        </MemoryRouter>
+      </TooltipProvider>,
     );
+    fireEvent.click(screen.getByRole("button", { name: "Example plugin" }));
+    expect(screen.getByRole("checkbox")).toBeTruthy();
     expect(discovery).toHaveBeenCalledWith(
       { skillId: "scoped-skill" },
       undefined,

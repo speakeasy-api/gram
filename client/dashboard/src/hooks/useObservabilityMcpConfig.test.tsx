@@ -36,8 +36,54 @@ import {
   useNoToolsetsConfigured,
   useObservabilityMcpConfig,
 } from "./useObservabilityMcpConfig";
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  state.toolsets.mockReturnValue({});
+  state.servers.mockReturnValue({});
+  state.endpoints.mockReturnValue({});
+});
 describe("shared insights MCP requests", () => {
+  it("removes cached entries when discovery access is revoked", () => {
+    state.grants = [{ scope: "mcp:read" }];
+    state.toolsets.mockReturnValue({
+      data: { toolsets: [{ slug: "tools", mcpSlug: "tools" }] },
+    });
+    state.servers.mockReturnValue({ data: { mcpServers: [] } });
+    state.endpoints.mockReturnValue({ data: { mcpEndpoints: [] } });
+    const { result, rerender } = renderHook(() =>
+      useObservabilityMcpConfig({ toolsToInclude: () => true }),
+    );
+    expect(result.current.mcps).toHaveLength(1);
+    state.grants = [];
+    rerender();
+    expect(result.current.mcps).toEqual([]);
+  });
+
+  it("drops cached endpoints but retains readable toolsets for a server-specific grant", () => {
+    state.grants = [{ scope: "mcp:read" }];
+    state.toolsets.mockReturnValue({
+      data: { toolsets: [{ slug: "tools", mcpSlug: "tools" }] },
+    });
+    state.servers.mockReturnValue({
+      data: { mcpServers: [{ id: "server-a", slug: "server" }] },
+    });
+    state.endpoints.mockReturnValue({
+      data: { mcpEndpoints: [{ slug: "endpoint", mcpServerId: "server-a" }] },
+    });
+    const { result, rerender } = renderHook(() =>
+      useObservabilityMcpConfig({ toolsToInclude: () => true }),
+    );
+    expect(result.current.mcps).toHaveLength(2);
+    state.grants = [
+      {
+        scope: "mcp:read",
+        selectors: [{ resourceId: "server-a", projectId: "project-a" }],
+      },
+    ];
+    rerender();
+    expect(result.current.mcps).toHaveLength(1);
+    expect(result.current.mcps?.[0]?.name).toBe("tools");
+  });
   it("disables every MCP request for skill-only viewers", () => {
     state.grants = [{ scope: "skill:read" }, { scope: "skill:write" }];
     renderHook(() => useObservabilityMcpConfig({ toolsToInclude: () => true }));
