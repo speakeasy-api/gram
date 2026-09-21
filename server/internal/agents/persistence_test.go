@@ -181,6 +181,7 @@ func TestAgentSchemaStoresOnlyAuthoritativeFields(t *testing.T) {
 		"id",
 		"organization_id",
 		"owner_user_id",
+		"project_id",
 		"name",
 		"suspended_at",
 		"revoked_at",

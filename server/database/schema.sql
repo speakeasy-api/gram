@@ -4746,6 +4746,14 @@ CREATE TABLE IF NOT EXISTS agents (
   organization_id TEXT NOT NULL,
   owner_user_id TEXT NOT NULL,
 
+  -- Project the agent belongs to. Agents predate project scoping, so this is
+  -- the expand phase: existing rows carry NULL until they are assigned a
+  -- project, and application code must treat NULL as "not yet scoped" rather
+  -- than assume a project. The composite foreign key pins the project to the
+  -- agent's own organization, so an agent can never name another tenant's
+  -- project.
+  project_id uuid,
+
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 120),
 
   suspended_at timestamptz,
@@ -4765,6 +4773,7 @@ CREATE TABLE IF NOT EXISTS agents (
   CONSTRAINT agents_pkey PRIMARY KEY (id),
   CONSTRAINT agents_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT agents_owner_tenant_fkey FOREIGN KEY (organization_id, owner_user_id) REFERENCES organization_user_relationships (organization_id, user_id) ON DELETE RESTRICT,
+  CONSTRAINT agents_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT agents_lifecycle_state_check CHECK (revoked_at IS NULL OR suspended_at IS NULL),
   CONSTRAINT agents_owner_reassignment_state_check CHECK ((owner_reassignment_required_at IS NULL) = (owner_reassignment_reason IS NULL))
 );
@@ -4786,6 +4795,12 @@ WHERE deleted IS FALSE;
 -- Supports foreign-key checks for every agent, including deleted agents.
 CREATE INDEX IF NOT EXISTS agents_organization_owner_all_idx
 ON agents (organization_id, owner_user_id);
+
+-- Supports project-scoped agent listing, and the project-side foreign-key
+-- check. Unfiltered so a project delete does not sequential-scan agents to
+-- find soft-deleted rows.
+CREATE INDEX IF NOT EXISTS agents_project_id_idx
+ON agents (project_id);
 
 -- Supports owner-loss latching across every organization, including deleted agents.
 CREATE INDEX IF NOT EXISTS agents_owner_all_idx
