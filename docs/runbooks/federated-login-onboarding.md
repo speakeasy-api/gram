@@ -39,6 +39,8 @@ rejected before login begins. An ID token must target only the configured Gram
 client; additional, untrusted audiences are rejected even when `azp` matches.
 RSA ID-token signing keys must be at least 2048 bits.
 
-Shared signing-key algorithm binding for JWKs without `alg` remains an explicit
-[open review discussion](https://github.com/speakeasy-api/gram/pull/6571#discussion_r4050791228).
-This document does not claim that the follow-up is implemented.
+ID-token signature verification uses an asymmetric algorithm allowlist, narrowed
+by the trusted provider's advertised signing algorithms when present. An explicit
+JWK `alg` must match the signature algorithm. When `alg` is omitted, the key must
+have a compatible type and curve. This policy can allow the same key to verify
+multiple compatible allowed algorithms; it does not pin each key to one algorithm.

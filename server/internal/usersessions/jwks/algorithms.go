@@ -13,7 +13,7 @@ import (
 // signing key — a verifier holding it could forge the assertions it exists to
 // check. Per-client or per-issuer algorithm pinning is deliberately not
 // stored anywhere. This family allowlist does not establish one algorithm per
-// key; the binding-policy discussion remains open in PR #6571.
+// key.
 var allowedSignatureAlgorithms = []jose.SignatureAlgorithm{
 	jose.RS256,
 	jose.RS384,
