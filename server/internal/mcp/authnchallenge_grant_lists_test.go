@@ -12,8 +12,8 @@ import (
 // The grants an endpoint advertises and the grants a self-registering client
 // may claim are separate lists. jwt-bearer is claimable because the ID-JAG
 // exchange authenticates a registered client, yet an endpoint without ID-JAG
-// must not advertise it. If the metadata ever read the registration list
-// again, this endpoint would start advertising a grant it cannot serve.
+// must not advertise it. Were the metadata built from the registration list,
+// this endpoint would advertise a grant it cannot serve.
 func TestAuthorizationServerMetadata_AdvertisesIndependentlyOfRegistrableGrants(t *testing.T) {
 	t.Parallel()
 

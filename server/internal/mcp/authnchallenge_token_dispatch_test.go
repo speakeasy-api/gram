@@ -13,7 +13,7 @@ import (
 
 const missingClientIDResponse = `{"error":"invalid_client","error_description":"client_id is required"}`
 
-// The client-bound grants still demand a client before looking at anything
+// The client-bound grants demand a client before looking at anything
 // else in the request.
 func TestHandleToken_ClientBoundGrantsWithoutClientAreInvalidClient(t *testing.T) {
 	t.Parallel()
@@ -41,8 +41,8 @@ func TestHandleToken_ClientBoundGrantsWithoutClientAreInvalidClient(t *testing.T
 }
 
 // A JWT bearer request carrying no client authentication reaches the
-// clientless branch, which refuses it with the same response a missing
-// client_id has always produced.
+// clientless branch, which refuses it with the response a missing client_id
+// produces.
 func TestHandleToken_JWTBearerWithoutClientIsRefused(t *testing.T) {
 	t.Parallel()
 

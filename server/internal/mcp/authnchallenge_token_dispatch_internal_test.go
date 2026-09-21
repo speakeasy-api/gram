@@ -195,7 +195,7 @@ func TestServeTokenGrantClientlessSkipsClientResolution(t *testing.T) {
 
 // Requests refused before any client authentication keep the credential
 // event vocabulary: an unsupported grant logs unsupported_grant_type, and a
-// clientless JWT bearer request logs missing_client_id as it always has.
+// clientless JWT bearer request logs missing_client_id.
 func TestServeTokenRefusalsBeforeClientAuthenticationLogReasons(t *testing.T) {
 	t.Parallel()
 
