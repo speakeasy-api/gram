@@ -48,6 +48,7 @@ vi.mock("@/contexts/Auth", () => ({
     projects: [{ id: "project-1", name: "Project One", slug: "project-one" }],
   }),
   useSession: () => ({
+    user: { id: "user-1", email: "viewer@example.test", isAdmin: false },
     rawGramAccountType: "enterprise",
     hasActiveSubscription: true,
     trial: null,

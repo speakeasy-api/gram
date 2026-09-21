@@ -121,6 +121,8 @@ SELECT
   concat(
     '{"gram.tool.urn":"tools:http:acme:', tool_name, '"',
     ',"gram.tool.name":"', tool_name, '"',
+    -- Managed-agent calls retain the approving human email too: the actor must win.
+    if(i % 4 = 0, concat(',"gram.event.source":"tool_call","gram.authorization.actor.type":"agent","gram.authorization.actor.id":"', managed_agent_id, '"'), ''),
     ',"gram.toolset.slug":"', if(i % 5 = 0, 'acme-ops', 'acme-support-tools'), '"',
     ',"http.response.status_code":', toString(if(failed, 500, 200)),
     ',"http.server.request.duration":', toString(round(0.05 + (cityHash64(i, k) % 200) / 100, 3)),
@@ -173,6 +175,9 @@ FROM (
     arrayElement([3, 3, 3, 3, 3, 1, 1, 1, 1, 4, 4, 4, 2, 2, 5, 6],
                  1 + reinterpretAsUInt8(unhex(substring(h, 13, 2))) % 16) AS uidx,
     lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS h,
+    lower(hex(MD5(concat('gram-demo-managed-agent-', toString(1 + i % 3))))) AS agent_h,
+    concat(substring(agent_h, 1, 8), '-', substring(agent_h, 9, 4), '-5', substring(agent_h, 14, 3), '-8',
+           substring(agent_h, 18, 3), '-', substring(agent_h, 21, 12)) AS managed_agent_id,
     concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
            substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
     toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
