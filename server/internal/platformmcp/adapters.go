@@ -501,14 +501,8 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 	projectID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	var cursorProject ResolvedProject
 	if input.ProjectID != "" || input.ProjectSlug != "" || query == "" {
-		cursorProject, err = r.resolveInventoryProject(ctx, principal.OrganizationID, input)
+		cursorProject, err = r.ResolveProjectRead(ctx, principal, input)
 		if err != nil {
-			return FindMCPOutput{}, err
-		}
-		if err := r.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: cursorProject.ID.String(), Dimensions: nil}); err != nil {
-			if isAuthorizationDenied(err) {
-				return FindMCPOutput{}, ErrForbidden
-			}
 			return FindMCPOutput{}, err
 		}
 		projectID = uuid.NullUUID{UUID: cursorProject.ID, Valid: true}
@@ -586,7 +580,7 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 }
 
 func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error) {
-	if r.reader == nil || r.inventory == nil || r.authz == nil {
+	if r == nil || r.reader == nil || r.inventory == nil || r.authz == nil {
 		return MCP{}, ErrUnavailable
 	}
 	projectID, err := uuid.Parse(input.ProjectID)
@@ -602,6 +596,29 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 			return MCP{}, ErrForbidden
 		}
 		return MCP{}, err
+	}
+	return r.getMCPInventory(ctx, principal, projectID, mcpID)
+}
+
+// GetMCPForDiagnostics reads one MCP after project:read has been enforced. The
+// diagnostics projection is project-operational data rather than the MCP's
+// configuration, so it deliberately does not require the narrower mcp:read
+// grant used by get_mcp.
+func (r *PostgresReader) GetMCPForDiagnostics(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error) {
+	project, err := r.ResolveProjectRead(ctx, principal, FindMCPInput{ProjectID: input.ProjectID, ProjectSlug: "", Query: "", Cursor: "", Limit: 0, Readiness: ""})
+	if err != nil {
+		return MCP{}, err
+	}
+	mcpID, err := uuid.Parse(input.MCPID)
+	if err != nil {
+		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
+	}
+	return r.getMCPInventory(ctx, principal, project.ID, mcpID)
+}
+
+func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principal, projectID, mcpID uuid.UUID) (MCP, error) {
+	if r == nil || r.inventory == nil {
+		return MCP{}, ErrUnavailable
 	}
 	connectionID, generation, err := inventoryConnection(principal)
 	if err != nil {
@@ -687,6 +704,26 @@ func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID strin
 		}
 	}
 	return ids, nil
+}
+
+// ResolveProjectRead resolves one exact project under the principal's
+// organization and enforces the existing project:read scope before callers read
+// project-operational data.
+func (r *PostgresReader) ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
+	if r == nil || r.reader == nil || r.authz == nil {
+		return ResolvedProject{}, ErrUnavailable
+	}
+	project, err := r.resolveInventoryProject(ctx, principal.OrganizationID, input)
+	if err != nil {
+		return ResolvedProject{}, err
+	}
+	if err := r.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
+		if isAuthorizationDenied(err) {
+			return ResolvedProject{}, ErrForbidden
+		}
+		return ResolvedProject{}, err
+	}
+	return project, nil
 }
 
 func (r *PostgresReader) resolveInventoryProject(ctx context.Context, organizationID string, input FindMCPInput) (ResolvedProject, error) {
