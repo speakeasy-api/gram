@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   QueryClient,
@@ -315,7 +315,10 @@ describe("EvidenceTitle", () => {
       .click(screen.getByRole("button", { name: "Show flagged message" }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("earlier version of the session");
+    expect(alert.textContent).toContain("no longer available");
+    expect(
+      within(alert).getByRole("link", { name: "View the full session" }),
+    ).toBeTruthy();
     expect(screen.queryByText(/Elsewhere/)).toBeNull();
     expect(screen.getByRole("button", { name: TITLE })).toBeTruthy();
     expect(

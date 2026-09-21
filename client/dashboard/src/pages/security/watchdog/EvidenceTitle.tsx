@@ -146,6 +146,19 @@ export function EvidenceTitle({
             )}
           >
             {flaggedMessage.problem.text}
+            {flaggedMessage.problem.linkToSession && chatId && (
+              <>
+                {" "}
+                <Link
+                  to={agentSessionHref(routes.agentSessions.href(), chatId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2"
+                >
+                  View the full session
+                </Link>
+              </>
+            )}
           </p>
         )}
       </div>
@@ -159,7 +172,8 @@ export function EvidenceTitle({
 /**
  * The flagged message, loaded once the header is expanded. Secrets stay masked:
  * revealing one is an audited action this preview must not bypass. `problem`
- * says why a message can't be shown; `failed` marks a request error.
+ * says why a message can't be shown; `failed` marks a request error, and
+ * `linkToSession` follows the text with a link to the session.
  */
 function useFlaggedMessage(
   chatId: string | undefined,
@@ -168,7 +182,7 @@ function useFlaggedMessage(
 ): {
   content: React.ReactNode;
   loading: boolean;
-  problem: { text: string; failed: boolean } | null;
+  problem: { text: string; failed: boolean; linkToSession?: boolean } | null;
 } {
   const client = useSdkClient();
   const active = enabled && Boolean(chatId) && Boolean(chatMessageId);
@@ -216,11 +230,13 @@ function useFlaggedMessage(
     return {
       ...none,
       problem: {
+        // A finding carries no generation, so an older one can't be requested.
         text:
           messageQuery.data.maxGeneration > 0
-            ? "This message is from an earlier version of the session, before it was compacted or edited, and can't be shown here."
+            ? "This message is no longer available."
             : "This message is no longer flagged in the session, so it can't be shown here.",
         failed: false,
+        linkToSession: messageQuery.data.maxGeneration > 0,
       },
     };
   }
