@@ -49,6 +49,7 @@ func TestList_DerivesStatesAndValues(t *testing.T) {
 	require.Equal(t, 3, res.TotalCount, "hosted servers, undiscovered issuers, and dead backends are not eligible")
 	require.Equal(t, 1, res.UndiscoveredCount)
 	require.Len(t, res.Servers, 2)
+	require.Equal(t, []string{fronted.String(), capable.serverID.String()}, []string{res.Servers[0].McpServerID, res.Servers[1].McpServerID})
 	require.Nil(t, res.DeepLink)
 	row := rowFor(t, res, capable.serverID)
 	require.Equal(t, "needs_agent", row.State)
@@ -64,6 +65,8 @@ func TestList_DerivesStatesAndValues(t *testing.T) {
 
 	all := list(t, ctx, si, true)
 	require.Len(t, all.Servers, 3)
+	// Pending rows precede Legacy even though its name sorts before Notion.
+	require.Equal(t, []string{fronted.String(), capable.serverID.String(), incapable.String()}, []string{all.Servers[0].McpServerID, all.Servers[1].McpServerID, all.Servers[2].McpServerID})
 	require.Equal(t, "not_applicable", rowFor(t, all, incapable).State)
 	require.Equal(t, "no_idjag", conv.PtrValOr(rowFor(t, all, incapable).NotApplicableReason, ""))
 	require.Nil(t, rowFor(t, all, capable.serverID).NotApplicableReason)
@@ -473,4 +476,58 @@ func TestDeleteForConnection(t *testing.T) {
 	rows, err = si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
 	require.NoError(t, err)
 	require.Empty(t, rows)
+}
+
+func TestReadinessQueries_ValidateUserSessionIssuerScope(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	projectID := createProject(t, ctx, si, si.orgID, "readiness-scope")
+	otherProjectID := createProject(t, ctx, si, si.orgID, "other-project")
+	otherOrgID := createOrganization(t, ctx, si.conn)
+	foreignProjectID := createProject(t, ctx, si, otherOrgID, "foreign-project")
+	issuerID := createResourceIssuer(t, ctx, si, si.orgID, projectID, true)
+
+	for _, tc := range []struct {
+		name           string
+		projectID      uuid.NullUUID
+		organizationID pgtype.Text
+		deleted        bool
+		valid          bool
+	}{
+		{name: "project", projectID: uuid.NullUUID{UUID: projectID, Valid: true}, organizationID: conv.ToPGText(si.orgID), valid: true},
+		{name: "organization", organizationID: conv.ToPGText(si.orgID), valid: true},
+		{name: "global", valid: true},
+		{name: "other-project", projectID: uuid.NullUUID{UUID: otherProjectID, Valid: true}, organizationID: conv.ToPGText(si.orgID)},
+		{name: "foreign-project", projectID: uuid.NullUUID{UUID: foreignProjectID, Valid: true}, organizationID: conv.ToPGText(otherOrgID)},
+		{name: "foreign-organization", organizationID: conv.ToPGText(otherOrgID)},
+		{name: "deleted", organizationID: conv.ToPGText(si.orgID), deleted: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			loginID, err := si.q.CreateReadinessUserSessionIssuerFixture(ctx, repo.CreateReadinessUserSessionIssuerFixtureParams{
+				ProjectID:      tc.projectID,
+				OrganizationID: tc.organizationID,
+				Slug:           "login-" + uuid.NewString(),
+				DeletedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: tc.deleted},
+			})
+			require.NoError(t, err)
+			serverID, _ := createServerWithBackend(t, ctx, si, projectID, issuerID, uuid.NullUUID{UUID: loginID, Valid: true}, tc.name)
+			want := uuid.NullUUID{}
+			if tc.valid {
+				want = uuid.NullUUID{UUID: loginID, Valid: true}
+			}
+			got, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: serverID})
+			require.NoError(t, err)
+			require.Equal(t, want, got.UserSessionIssuerID)
+			rows, err := si.q.ListEligibleServers(ctx, si.orgID)
+			require.NoError(t, err)
+			found := false
+			for _, row := range rows {
+				if row.ID == serverID {
+					found = true
+					require.Equal(t, want, row.UserSessionIssuerID)
+				}
+			}
+			require.True(t, found, "login issuer validity must not hide the upstream server")
+		})
+	}
 }

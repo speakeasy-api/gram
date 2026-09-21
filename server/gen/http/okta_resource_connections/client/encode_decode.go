@@ -67,6 +67,7 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - error: internal error
 func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -246,6 +247,20 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 				return nil, goahttp.ErrValidationError("oktaResourceConnections", "list", err)
 			}
 			return nil, NewListGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ListUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("oktaResourceConnections", "list", err)
+			}
+			err = ValidateListUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("oktaResourceConnections", "list", err)
+			}
+			return nil, NewListUnavailable(&body)
 		case http.StatusPreconditionFailed:
 			var (
 				body ListFailedPreconditionResponseBody
@@ -316,6 +331,7 @@ func EncodeConfirmRequest(encoder func(*http.Request) goahttp.Encoder) func(*htt
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - error: internal error
 func DecodeConfirmResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -495,6 +511,20 @@ func DecodeConfirmResponse(decoder func(*http.Response) goahttp.Decoder, restore
 				return nil, goahttp.ErrValidationError("oktaResourceConnections", "confirm", err)
 			}
 			return nil, NewConfirmGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ConfirmUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("oktaResourceConnections", "confirm", err)
+			}
+			err = ValidateConfirmUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("oktaResourceConnections", "confirm", err)
+			}
+			return nil, NewConfirmUnavailable(&body)
 		case http.StatusPreconditionFailed:
 			var (
 				body ConfirmFailedPreconditionResponseBody
@@ -565,6 +595,7 @@ func EncodeResetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - error: internal error
 func DecodeResetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -744,6 +775,20 @@ func DecodeResetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 				return nil, goahttp.ErrValidationError("oktaResourceConnections", "reset", err)
 			}
 			return nil, NewResetGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ResetUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("oktaResourceConnections", "reset", err)
+			}
+			err = ValidateResetUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("oktaResourceConnections", "reset", err)
+			}
+			return nil, NewResetUnavailable(&body)
 		case http.StatusPreconditionFailed:
 			var (
 				body ResetFailedPreconditionResponseBody
