@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 )
 
 // newFormRequest builds a form-encoded POST carrying the given fields.
@@ -42,8 +42,8 @@ func TestExtractClientCredentials_Labels(t *testing.T) {
 		{name: "public", form: map[string]string{"client_id": "c"}, method: "none", id: "c"},
 		{name: "post", form: map[string]string{"client_id": "c", "client_secret": "s"}, method: "client_secret_post", id: "c"},
 		{name: "basic", basic: [2]string{"c", "s"}, method: "client_secret_basic", id: "c"},
-		{name: "assertion", form: map[string]string{"client_id": "c", "client_assertion": assertion, "client_assertion_type": clientauth.AssertionType}, method: "private_key_jwt", id: "c"},
-		{name: "assertion without client_id", form: map[string]string{"client_assertion": assertion, "client_assertion_type": clientauth.AssertionType}, method: "private_key_jwt", id: ""},
+		{name: "assertion", form: map[string]string{"client_id": "c", "client_assertion": assertion, "client_assertion_type": privatekeyjwt.AssertionType}, method: "private_key_jwt", id: "c"},
+		{name: "assertion without client_id", form: map[string]string{"client_assertion": assertion, "client_assertion_type": privatekeyjwt.AssertionType}, method: "private_key_jwt", id: ""},
 		{name: "assertion plus secret", form: map[string]string{"client_id": "c", "client_secret": "s", "client_assertion": assertion}, method: "multiple", id: "c"},
 		{name: "basic plus assertion", basic: [2]string{"c", "s"}, form: map[string]string{"client_assertion": assertion}, method: "multiple", id: "c"},
 		{name: "basic plus form", basic: [2]string{"c", "s"}, form: map[string]string{"client_id": "other"}, method: "multiple", id: "c"},

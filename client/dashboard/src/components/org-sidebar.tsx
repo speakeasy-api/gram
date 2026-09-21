@@ -11,11 +11,12 @@ import {
 } from "@/components/ui/Sidebar";
 import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
 
-import { SidebarBrandHeader } from "./sidebar-brand-header";
 import { Icon } from "@/components/ui/Icon";
 import { RequireScope } from "@/components/require-scope";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
+import { SidebarBrandHeader } from "./sidebar-brand-header";
+import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
@@ -69,19 +70,14 @@ export function OrgSidebar({
     },
   );
   const isPlatformAdmin = useIsPlatformAdmin();
-  const { adminRolloutEnabled: showNetworkAccess } = useNetworkIngressRollout();
+  const { status: networkIngressRolloutStatus, canManageIngress } =
+    useNetworkIngressRollout();
+  const showNetworkAccess =
+    canManageIngress && networkIngressRolloutStatus !== "disabled";
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
-  const isUserSessionsEnabled =
-    telemetry.isFeatureEnabled("user-sessions-dashboard") ?? false;
 
   const settingsActive = [
-    orgRoutes.team,
-    orgRoutes.access,
-    // The role editor is a sibling route, so the group would otherwise lose
-    // its highlight while a role is open.
-    orgRoutes.createRole,
-    orgRoutes.editRole,
     orgRoutes.billing,
     orgRoutes.apiKeys,
     orgRoutes.domains,
@@ -93,6 +89,16 @@ export function OrgSidebar({
     orgRoutes.encryptionKeys,
   ].some((r) => r.active);
 
+  const teamActive = [
+    orgRoutes.team,
+    orgRoutes.access,
+    // The role editor is a sibling route, so the group would otherwise lose
+    // its highlight while a role is open.
+    orgRoutes.createRole,
+    orgRoutes.editRole,
+    orgRoutes.identity,
+  ].some((route) => route.active);
+
   const dataActive = [orgRoutes.data, orgRoutes.dataExports].some(
     (route) => route.active,
   );
@@ -100,13 +106,6 @@ export function OrgSidebar({
   const secureActive = [orgRoutes.auditLogs, orgRoutes.deviceAgent].some(
     (r) => r.active,
   );
-
-  const identityActive = [
-    orgRoutes.agents,
-    orgRoutes.mcpSessions,
-    orgRoutes.identity,
-    orgRoutes.remoteIdentityProviders,
-  ].some((r) => r.active);
 
   const platformAdminActive = [
     orgRoutes.platformAdminOverview,
@@ -117,9 +116,9 @@ export function OrgSidebar({
 
   const groupActivations: Array<[string, boolean]> = [
     ["Settings", settingsActive],
+    ["Team", teamActive],
     ["Data", dataActive],
     ["Secure", secureActive],
-    ["Identity", identityActive],
     ["Platform Admin", platformAdminActive],
   ];
   const activeGroup = groupActivations.find(([, active]) => active)?.[0];
@@ -140,11 +139,8 @@ export function OrgSidebar({
     orgRoutes.dataExports,
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
-    orgRoutes.agents,
     orgRoutes.access,
-    orgRoutes.mcpSessions,
     orgRoutes.identity,
-    orgRoutes.remoteIdentityProviders,
     orgRoutes.platformAdminOverview,
     orgRoutes.platformAdminRbac,
     orgRoutes.platformAdminOnboarding,
@@ -174,10 +170,6 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="settings" />}
                 items={[
                   { item: orgRoutes.billing, scope: orgReadOrAdmin },
-                  // Who is in the organization, and what they can do: the two
-                  // halves of one question, so they sit together.
-                  { item: orgRoutes.team, scope: orgReadOrAdmin },
-                  { item: orgRoutes.access, scope: orgReadOrAdmin },
                   { item: orgRoutes.apiKeys, scope: "org:admin" },
                   ...(productFeatures?.customerManagedEncryptionKeysEnabled ===
                   true
@@ -204,6 +196,21 @@ export function OrgSidebar({
                 ]}
               />
 
+              {/* Team group */}
+              <ScopeGatedNavGroup
+                label="Team"
+                Icon={(p) => <Icon {...p} name="users" />}
+                items={[
+                  {
+                    item: orgRoutes.team,
+                    scope: orgReadOrAdmin,
+                    label: "Members",
+                  },
+                  { item: orgRoutes.access, scope: orgReadOrAdmin },
+                  { item: orgRoutes.identity, scope: orgReadOrAdmin },
+                ]}
+              />
+
               {/* Data group — org-level access to ingested events and
                   project-scoped export configuration. */}
               <ScopeGatedNavGroup
@@ -224,25 +231,6 @@ export function OrgSidebar({
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),
-                ]}
-              />
-
-              {/* Identity group */}
-              <ScopeGatedNavGroup
-                label="Identity"
-                Icon={(p) => <Icon {...p} name="fingerprint" />}
-                items={[
-                  // Owners can manage their agents without an RBAC agent grant.
-                  // The API limits the inventory to readable agents.
-                  { item: orgRoutes.agents },
-                  ...(isUserSessionsEnabled
-                    ? [{ item: orgRoutes.mcpSessions, scope: orgReadOrAdmin }]
-                    : []),
-                  { item: orgRoutes.identity, scope: orgReadOrAdmin },
-                  {
-                    item: orgRoutes.remoteIdentityProviders,
-                    scope: orgReadOrAdmin,
-                  },
                 ]}
               />
 
@@ -315,6 +303,7 @@ export function OrgSidebar({
             labelClassName="mode-shimmer"
           />
         )}
+        {DevSidebarSlot && <DevSidebarSlot />}
         <SidebarUserMenu />
       </SidebarFooter>
     </Sidebar>

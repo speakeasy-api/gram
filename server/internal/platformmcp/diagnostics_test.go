@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"context"
 	"encoding/json"
 	"sort"
 	"testing"
@@ -38,6 +39,29 @@ func decodeKeys(t *testing.T, value any) []string {
 	var decoded any
 	require.NoError(t, json.Unmarshal(encoded, &decoded))
 	return jsonKeys(decoded)
+}
+
+func TestDelegatedDiagnosticsToolsRequireProjectReadDiscovery(t *testing.T) {
+	t.Parallel()
+
+	registrars := []*Registrar{}
+	_, unavailable := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	registrars = append(registrars, unavailable)
+	live := newRegistrar(newTestMCPServer())
+	registerDiagnosticsTools(live, nil)
+	registerRecentToolCallTools(live, nil)
+	registrars = append(registrars, live)
+
+	for _, registrar := range registrars {
+		for _, name := range []string{"get_project_overview", "get_mcp_diagnostics", "list_recent_tool_calls"} {
+			descriptor := descriptorByName(t, registrar, name)
+			require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
+			require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
+			require.Equal(t, discoveryProjectRead, descriptor.Meta.DiscoveryScopes)
+			require.NotNil(t, descriptor.Annotations)
+			require.True(t, descriptor.Annotations.ReadOnlyHint)
+		}
+	}
 }
 
 // TestGetProjectOverviewOutput_ProjectsOnlyAllowlistedFields pins the overview's
@@ -117,6 +141,44 @@ func TestGetMCPDiagnosticsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"clients_truncated",
 		"attribution", "fault", "reason", "readiness_exonerates", "scope",
 	}, decodeKeys(t, output))
+}
+
+type diagnosticsProjectReader struct {
+	output ListProjectsOutput
+}
+
+func (r diagnosticsProjectReader) ListProjects(context.Context, Principal, ListProjectsInput) (ListProjectsOutput, error) {
+	return r.output, nil
+}
+
+func (diagnosticsProjectReader) FindMCP(context.Context, Principal, FindMCPInput) (FindMCPOutput, error) {
+	return FindMCPOutput{}, nil
+}
+
+func (diagnosticsProjectReader) GetMCP(context.Context, Principal, GetMCPInput) (MCP, error) {
+	return MCP{}, nil
+}
+
+func (diagnosticsProjectReader) ResolveProjectRead(context.Context, Principal, FindMCPInput) (ResolvedProject, error) {
+	return ResolvedProject{}, nil
+}
+
+func (diagnosticsProjectReader) GetMCPForDiagnostics(context.Context, Principal, GetMCPInput) (MCP, error) {
+	return MCP{}, nil
+}
+
+func TestOrganizationProjectIDsReportsPermissionFilteredScopeAsPartial(t *testing.T) {
+	t.Parallel()
+
+	service := &DiagnosticsService{reader: diagnosticsProjectReader{output: ListProjectsOutput{
+		Projects:              []Project{{ID: "visible-project"}},
+		authorizationFiltered: true,
+	}}}
+
+	ids, partial, err := service.organizationProjectIDs(t.Context(), Principal{})
+	require.NoError(t, err)
+	require.Equal(t, []string{"visible-project"}, ids)
+	require.True(t, partial)
 }
 
 func TestDiagnosticsReadinessKeepsUnmanagedMCPUnsupportedWithoutRetry(t *testing.T) {

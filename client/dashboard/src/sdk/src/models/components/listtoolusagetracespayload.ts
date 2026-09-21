@@ -33,7 +33,7 @@ export type ListToolUsageTracesPayloadSort = ClosedEnum<
 /**
  * Tool usage trace outcome
  */
-export const Statuses = {
+export const ListToolUsageTracesPayloadStatuses = {
   Error: "error",
   Success: "success",
   Blocked: "blocked",
@@ -42,7 +42,9 @@ export const Statuses = {
 /**
  * Tool usage trace outcome
  */
-export type Statuses = ClosedEnum<typeof Statuses>;
+export type ListToolUsageTracesPayloadStatuses = ClosedEnum<
+  typeof ListToolUsageTracesPayloadStatuses
+>;
 
 /**
  * Tool usage target type
@@ -70,6 +72,10 @@ export type ListToolUsageTracesPayload = {
    * Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.
    */
   accountType?: string | undefined;
+  /**
+   * MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include
+   */
+  clientKeys?: Array<string> | undefined;
   /**
    * Cursor for pagination
    */
@@ -113,7 +119,7 @@ export type ListToolUsageTracesPayload = {
   /**
    * Trace outcomes to include (error, success, blocked, pending). Empty means all.
    */
-  statuses?: Array<Statuses> | undefined;
+  statuses?: Array<ListToolUsageTracesPayloadStatuses> | undefined;
   /**
    * Target types to include. Empty means all target types.
    */
@@ -134,9 +140,9 @@ export const ListToolUsageTracesPayloadSort$outboundSchema: z.ZodMiniEnum<
 > = z.enum(ListToolUsageTracesPayloadSort);
 
 /** @internal */
-export const Statuses$outboundSchema: z.ZodMiniEnum<typeof Statuses> = z.enum(
-  Statuses,
-);
+export const ListToolUsageTracesPayloadStatuses$outboundSchema: z.ZodMiniEnum<
+  typeof ListToolUsageTracesPayloadStatuses
+> = z.enum(ListToolUsageTracesPayloadStatuses);
 
 /** @internal */
 export const ListToolUsageTracesPayloadTargetTypes$outboundSchema:
@@ -147,6 +153,7 @@ export const ListToolUsageTracesPayloadTargetTypes$outboundSchema:
 /** @internal */
 export type ListToolUsageTracesPayload$Outbound = {
   account_type?: string | undefined;
+  client_keys?: Array<string> | undefined;
   cursor?: string | undefined;
   filters?: Array<LogFilter$Outbound> | undefined;
   from: string;
@@ -170,6 +177,7 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     accountType: z.optional(z.string()),
+    clientKeys: z.optional(z.array(z.string())),
     cursor: z.optional(z.string()),
     filters: z.optional(z.array(LogFilter$outboundSchema)),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
@@ -180,7 +188,9 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
     query: z.optional(z.string()),
     shadowServerNames: z.optional(z.array(z.string())),
     sort: z._default(ListToolUsageTracesPayloadSort$outboundSchema, "desc"),
-    statuses: z.optional(z.array(Statuses$outboundSchema)),
+    statuses: z.optional(
+      z.array(ListToolUsageTracesPayloadStatuses$outboundSchema),
+    ),
     targetTypes: z.optional(
       z.array(ListToolUsageTracesPayloadTargetTypes$outboundSchema),
     ),
@@ -190,6 +200,7 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       accountType: "account_type",
+      clientKeys: "client_keys",
       hookSources: "hook_sources",
       hostedToolsetSlugs: "hosted_toolset_slugs",
       metaMcpServerIds: "meta_mcp_server_ids",

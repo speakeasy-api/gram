@@ -1,6 +1,7 @@
 package metamcp_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	srv "github.com/speakeasy-api/gram/server/gen/http/meta_mcp/server"
 	gen "github.com/speakeasy-api/gram/server/gen/meta_mcp"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -408,4 +410,147 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, 1, boundCount(thirdIssuerID),
 		"each issuer change must re-wire member provider clients")
+}
+
+// Instructions follow omit-preserves / blank-clears: an update that does not
+// mention them leaves the stored value alone, and a blank submission restores
+// the built-in gateway instructions (NULL) rather than serving an empty
+// handshake.
+func TestUpdateMetaMcpServer_Instructions(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "instructed gateway",
+		UserSessionIssuerID: nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, created.Instructions)
+
+	updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                created.Name,
+		UserSessionIssuerID: nil,
+		Instructions:        conv.PtrEmpty("  Call list_servers before anything else.  "),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Instructions)
+	require.Equal(t, "Call list_servers before anything else.", *updated.Instructions)
+
+	fetchedWithInstructions, err := ti.service.GetMetaMcpServer(ctx, &gen.GetMetaMcpServerPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, updated.Instructions, fetchedWithInstructions.Instructions)
+	listed, err := ti.service.ListMetaMcpServers(ctx, &gen.ListMetaMcpServersPayload{})
+	require.NoError(t, err)
+	require.Len(t, listed.MetaMcpServers, 1)
+	require.Equal(t, updated.Instructions, listed.MetaMcpServers[0].Instructions)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMetaMcpServerUpdate)
+	require.NoError(t, err)
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, "Call list_servers before anything else.", afterSnapshot["Instructions"])
+
+	preserved, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                "renamed gateway",
+		UserSessionIssuerID: nil,
+		Instructions:        nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, preserved.Instructions)
+	require.Equal(t, "Call list_servers before anything else.", *preserved.Instructions)
+
+	cleared, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                "renamed gateway",
+		UserSessionIssuerID: nil,
+		Instructions:        conv.PtrEmpty("   "),
+	})
+	require.NoError(t, err)
+	require.Nil(t, cleared.Instructions)
+
+	fetched, err := ti.service.GetMetaMcpServer(ctx, &gen.GetMetaMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+	})
+	require.NoError(t, err)
+	require.Nil(t, fetched.Instructions)
+}
+
+// Goa accepts a JSON \u0000 but Postgres text rejects NUL, so the handler
+// strips it instead of surfacing a storage error.
+func TestUpdateMetaMcpServer_InstructionsStripNUL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "nul gateway",
+		UserSessionIssuerID: nil,
+	})
+	require.NoError(t, err)
+
+	updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                created.Name,
+		UserSessionIssuerID: nil,
+		Instructions:        conv.PtrEmpty("Call list_servers\x00 first."),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Instructions)
+	require.Equal(t, "Call list_servers first.", *updated.Instructions)
+}
+
+func TestUpdateMetaMcpServer_InstructionsNormalizedLength(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{Name: "length gateway"})
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name, input, want string
+		invalid           bool
+	}{
+		{name: "unicode at limit with padding", input: " \t" + strings.Repeat("界", 10000) + "\x00\n", want: strings.Repeat("界", 10000)},
+		{name: "over limit", input: strings.Repeat("界", 10001), invalid: true},
+		{name: "blank over raw limit", input: strings.Repeat(" \x00", 10001)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			body := &srv.UpdateMetaMcpServerRequestBody{ID: &created.ID, Name: &created.Name, Instructions: &tc.input}
+			require.NoError(t, srv.ValidateUpdateMetaMcpServerRequestBody(body))
+			updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{ID: created.ID, Name: created.Name, Instructions: &tc.input})
+			if tc.invalid {
+				require.ErrorContains(t, err, "instructions must not exceed 10000")
+				return
+			}
+			require.NoError(t, err)
+			if tc.want == "" {
+				require.Nil(t, updated.Instructions)
+			} else {
+				require.Equal(t, &tc.want, updated.Instructions)
+			}
+		})
+	}
 }

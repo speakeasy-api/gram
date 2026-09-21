@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 
@@ -25,15 +26,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -89,6 +94,7 @@ type userSessionRefreshReplayPayload struct {
 }
 
 type mintSessionParams struct {
+	Audience               string
 	AuthorizationExpiresAt *time.Time
 	AuthorizerUserID       pgtype.Text
 	BaseURL                string
@@ -96,6 +102,7 @@ type mintSessionParams struct {
 	DelegatedGrantsVersion pgtype.Int4
 	DesiredSessionDuration *time.Duration
 	Replayable             bool
+	Policy                 sessionIssuancePolicy
 	Subject                urn.SessionSubject
 	ToolSelection          []byte
 }
@@ -109,6 +116,15 @@ type mintedSession struct {
 	Response               tokenResponse
 	Subject                urn.SessionSubject
 }
+
+type sessionIssuancePolicy string
+
+const (
+	sessionIssuancePolicyIssuerScoped   sessionIssuancePolicy = "issuer_scoped"
+	sessionIssuancePolicyResourceScoped sessionIssuancePolicy = "resource_scoped"
+)
+
+const idJAGRefreshTokenHashPrefix = "id-jag:"
 
 type mintUserSessionAccessTokenParams struct {
 	AccessExpiresAt time.Time
@@ -176,11 +192,28 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	// Computed before client authentication because an assertion's aud is
 	// checked against URLs derived from it.
 	baseURL := s.BaseURLForRequest(r)
-	// lookupClientOnly: any CIMD row was persisted at authorize time, and
-	// mid-flow token legs must keep working even if the issuer's admission
-	// policy changes between legs.
-	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, lookupClientOnly)
+	// Authorization-code and refresh grants continue an authorization that
+	// already passed admission. An assertion grant starts a new authorization
+	// at the token endpoint, so it applies current CIMD admission and resolves
+	// current client metadata before authenticating the client.
+	resolveMode := lookupClientOnly
+	if grantType == oauthwire.GrantTypeJWTBearer {
+		resolveMode = resolveClientCIMD
+	}
+	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, resolveMode)
 	if err != nil {
+		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_denied")
+			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", admissionErr.Description())
+		}
+		if _, ok := errors.AsType[*oauthwire.Error](err); ok {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_metadata_invalid")
+			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+		}
+		if errors.Is(err, errCIMDFetchFailed) {
+			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
+			return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "unknown_client_id")
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
@@ -227,15 +260,143 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authenticated", clientID, presentedAuthMethod, grantType, "")
 
+	// Shadow AI blocking DOES enforce here, unlike `presets` admission above,
+	// and for the opposite reason: it is a decision an administrator of this
+	// organization made about this tool, not implicit membership Gram can
+	// change under them. An admin who blocks a tool expects its outstanding
+	// refresh tokens to stop working rather than to keep it connected until
+	// they happen to expire.
+	//
+	// Access tokens already minted stay valid until they expire, same as the
+	// disabled case (AIS-406).
+	if err := s.checkAIToolGatewayBlock(ctx, logger, endpoint.OrganizationID, clientID); err != nil {
+		if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "ai_tool_blocked")
+			// This refusal ends an authorization-code exchange before the grant
+			// handler that records token-stage failures is reached, so the
+			// failure is recorded here. Refresh grants stay excluded, as they
+			// are from the handler's own failure accounting.
+			if grantType == oauthwire.GrantTypeAuthorizationCode {
+				s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageToken)
+			}
+			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", blockedErr.Description())
+		}
+		if errors.Is(err, ErrAIToolBlockCheckUnavailable) {
+			return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "cannot determine whether this client is permitted right now")
+		}
+		return oops.E(oops.CodeUnexpected, err, "check ai tool gateway block").LogError(ctx, logger)
+	}
+
 	switch grantType {
-	case "authorization_code":
+	case oauthwire.GrantTypeAuthorizationCode:
 		return s.handleTokenAuthorizationCodeGrant(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, logger)
-	case "refresh_token":
+	case oauthwire.GrantTypeRefreshToken:
 		return s.handleTokenRefreshTokenGrant(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, logger)
+	case oauthwire.GrantTypeJWTBearer:
+		return s.handleTokenJWTBearerGrant(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, logger)
 	default:
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, presentedAuthMethod, grantType, "unsupported_grant_type")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
 	}
+}
+
+// handleTokenJWTBearerGrant exchanges an authenticated ID-JAG for a
+// resource-bound, access-only user session. The assertion is the entire grant:
+// validation, subject resolution, replay reservation, and RBAC authorization
+// all complete before a session is persisted.
+func (s *Service) handleTokenJWTBearerGrant(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	endpoint *ResolvedMcpEndpoint,
+	clientRow *usersessions_repo.UserSessionClient,
+	baseURL string,
+	presentedAuthMethod string,
+	logger *slog.Logger,
+) error {
+	req := usersessions.JWTBearerTokenRequestFromForm(r.PostForm)
+	req.SetDefaults()
+	if err := req.Validate(); err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_request")
+		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
+	}
+
+	canonicalResource, err := endpoint.RootURL(baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build ID-JAG resource identifier").LogError(ctx, logger)
+	}
+	if err := oauthwire.ValidateResourceIndicators(req.Resources, canonicalResource); err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "resource_mismatch")
+		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
+	}
+	result, err := s.idJAGValidator.Validate(ctx, req.Assertion, idjag.Request{
+		OrganizationID:      endpoint.OrganizationID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		Audience:            canonicalResource,
+		Resource:            canonicalResource,
+		ClientID:            clientRow.ClientID,
+	})
+	if err != nil {
+		logger.InfoContext(ctx, "oauth ID-JAG token request rejected", attr.SlogError(err))
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_grant")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
+	}
+
+	// The session does not exist yet, but authz treats an AuthContext without a
+	// session as an internal call. A namespaced assertion JTI makes this context
+	// session-like solely while loading and checking the resolved user's grants.
+	authorizationCtx, err := s.contextForSessionSubject(ctx, endpoint, result.Subject, "id-jag:"+result.Claims.JTI, clientRow.ClientID)
+	if err == nil && endpoint.MetaMcpServerID.Valid {
+		var members []metaMember
+		authorizationCtx, members, err = s.resolveMetaMemberSnapshot(authorizationCtx, logger, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+		if err == nil && len(members) == 0 {
+			err = oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any meta MCP members")
+		}
+	} else if err == nil {
+		authorizationCtx, err = s.authz.PrepareContext(authorizationCtx)
+		if err == nil {
+			err = s.authz.Require(authorizationCtx, authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String()))
+		}
+	}
+	if err != nil {
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "subject_not_authorized")
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
+		}
+		return oops.E(oops.CodeUnexpected, err, "authorize ID-JAG subject").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin ID-JAG session transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	minted, err := s.mintSession(authorizationCtx, endpoint, clientRow, usersessions_repo.New(dbtx), mintSessionParams{
+		Audience:               canonicalResource,
+		AuthorizationExpiresAt: nil,
+		AuthorizerUserID:       pgtype.Text{String: "", Valid: false},
+		BaseURL:                baseURL,
+		DelegatedGrants:        nil,
+		DelegatedGrantsVersion: pgtype.Int4{Int32: 0, Valid: false},
+		DesiredSessionDuration: nil,
+		Replayable:             false,
+		Policy:                 sessionIssuancePolicyResourceScoped,
+		Subject:                result.Subject,
+		ToolSelection:          nil,
+	}, logger)
+	if err != nil {
+		return err
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit ID-JAG session exchange").LogError(ctx, logger)
+	}
+
+	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
+		return err
+	}
+	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request completed", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "")
+	return nil
 }
 
 // handleTokenAuthorizationCodeGrant implements RFC 6749 §4.1.3. Reads the
@@ -329,43 +490,54 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		s.recordPrivateOAuthAuthority(ctx, grant.Endpoint.Authority, authorityStarted, nil)
 	}
 
-	grant, err = s.userSessionGrantCache.GetAndDelete(ctx, grantKey)
-	if err != nil {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_already_redeemed")
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
-	}
-	// Recheck the consumed value so this remains safe if a future writer ever
-	// replaces grants under an existing key between the peek and GETDEL.
-	if grant.Endpoint != nil {
-		if err := endpoint.ValidateGrant(ctx, *grant.Endpoint, grant.UserSessionIssuerID, baseURL); err != nil {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_endpoint_mismatch")
-			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
+	consumeGrant := func() error {
+		consumed, err := s.userSessionGrantCache.GetAndDelete(ctx, grantKey)
+		if err != nil {
+			return fmt.Errorf("consume authorization code: %w", err)
 		}
+		if !reflect.DeepEqual(consumed, grant) {
+			return errors.New("authorization grant changed before consumption")
+		}
+		return nil
+	}
+	// Invalid proofs and definitive admission failures still burn the code.
+	// Only operational preflight failures leave it available for retry.
+	rejectGrant := func(description string) error {
+		if err := consumeGrant(); err != nil {
+			description = "code not found or expired"
+		}
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", description)
 	}
 
 	if grant.ClientID != clientRow.ClientID {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_client_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code was issued to a different client")
+		return rejectGrant("code was issued to a different client")
 	}
 	if grant.RedirectURI != req.RedirectURI {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "redirect_uri_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "redirect_uri does not match the original request")
+		return rejectGrant("redirect_uri does not match the original request")
 	}
 	if !verifyPKCES256(req.CodeVerifier, grant.CodeChallenge) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "pkce_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code_verifier does not match code_challenge")
+		return rejectGrant("code_verifier does not match code_challenge")
 	}
 
 	if grant.AgentAuthorization == nil && grant.Subject.Kind == urn.SessionSubjectKindAgent {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "agent_handoff_missing")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization handoff is missing")
+		return rejectGrant("agent authorization handoff is missing")
 	}
 	subject := grant.Subject
+	var admissionTx pgx.Tx
+	admissionQueries := usersessions_repo.New(s.db)
+	defer func() {
+		if admissionTx != nil {
+			_ = admissionTx.Rollback(ctx)
+		}
+	}()
 	var authorizerUserID pgtype.Text
 	var delegatedGrants []byte
 	var delegatedGrantsVersion pgtype.Int4
@@ -373,12 +545,12 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		if !agentAuthorization.Target.matches(endpoint) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "agent_target_mismatch")
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "authorization code is bound to a different MCP endpoint")
+			return rejectGrant("authorization code is bound to a different MCP endpoint")
 		}
 		credential, cerr := newAgentSessionCredential(agentAuthorization.Target, agentAuthorization.AuthorizerUserID)
 		if cerr != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is invalid")
+			return rejectGrant("agent authorization is invalid")
 		}
 		subject = urn.NewAgentSubject(agentAuthorization.AgentID)
 		authorizationCtx, cerr := s.contextForSessionSubject(ctx, endpoint, subject, "", clientRow.ClientID)
@@ -388,7 +560,27 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		if cerr != nil {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "agent_admission_denied")
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid")
+			return rejectGrant("agent authorization is no longer valid")
+		}
+		admissionTx, err = s.db.Begin(ctx)
+		if err != nil {
+			return oops.E(oops.CodeUnavailable, err, "begin session admission")
+		}
+		admissionQueries = usersessions_repo.New(admissionTx)
+		if _, err := remotesessions_repo.New(admissionTx).LockPrincipalRemoteSessionBindings(ctx, remotesessions_repo.LockPrincipalRemoteSessionBindingsParams{
+			ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
+			PrincipalID: agentAuthorization.AgentID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		}); err != nil {
+			return oops.E(oops.CodeUnavailable, err, "lock agent connections")
+		}
+		// Attachments may be revoked between consent and code exchange.
+		// Recheck before persisting an agent session or issuing its tokens.
+		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); cerr != nil {
+			if !errors.Is(cerr, remotesessions.ErrNoValidToken) {
+				return oops.E(oops.CodeUnavailable, cerr, "check agent connections").LogError(ctx, logger)
+			}
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+			return rejectGrant("required agent connections are no longer available")
 		}
 		ctx = authorizationCtx
 		authorizerUserID = pgtype.Text{String: credential.AuthorizerUserID, Valid: true}
@@ -411,7 +603,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		if grant.ToolSelection.Resource != endpointToolSelectionResource(endpoint) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "tool_selection_resource_mismatch")
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "authorization code is bound to a different MCP endpoint")
+			return rejectGrant("authorization code is bound to a different MCP endpoint")
 		}
 		encoded, merr := json.Marshal(grant.ToolSelection)
 		if merr != nil {
@@ -421,7 +613,14 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		toolSelection = encoded
 	}
 
-	minted, err := s.mintSession(ctx, endpoint, clientRow, usersessions_repo.New(s.db), mintSessionParams{
+	// Consume only after retryable preflight work. Exactly one exchange wins,
+	// and the consumed value must be the immutable grant we just validated.
+	if err := consumeGrant(); err != nil {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
+	}
+
+	minted, err := s.mintSession(ctx, endpoint, clientRow, admissionQueries, mintSessionParams{
+		Audience:               "",
 		AuthorizationExpiresAt: nil,
 		AuthorizerUserID:       authorizerUserID,
 		BaseURL:                baseURL,
@@ -429,6 +628,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		DelegatedGrantsVersion: delegatedGrantsVersion,
 		DesiredSessionDuration: desiredSessionDuration,
 		Replayable:             false,
+		Policy:                 sessionIssuancePolicyIssuerScoped,
 		Subject:                subject,
 		ToolSelection:          toolSelection,
 	}, logger)
@@ -444,6 +644,11 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		// keeps completed meaning "a token the client could actually use."
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return err
+	}
+	if admissionTx != nil {
+		if err := admissionTx.Commit(ctx); err != nil {
+			return oops.E(oops.CodeUnavailable, err, "commit session admission")
+		}
 	}
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
@@ -774,6 +979,7 @@ func (s *Service) rotateRefreshToken(
 	}
 
 	minted, err := s.mintSession(ctx, endpoint, clientRow, txRepo, mintSessionParams{
+		Audience:               "",
 		AuthorizationExpiresAt: &authorizationExpiresAt,
 		AuthorizerUserID:       oldSession.AuthorizerUserID,
 		BaseURL:                baseURL,
@@ -781,6 +987,7 @@ func (s *Service) rotateRefreshToken(
 		DelegatedGrantsVersion: oldSession.DelegatedGrantsVersion,
 		DesiredSessionDuration: nil,
 		Replayable:             true,
+		Policy:                 sessionIssuancePolicyIssuerScoped,
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
 	}, logger)
@@ -1052,8 +1259,9 @@ func (s *Service) mintUserSessionAccessToken(params mintUserSessionAccessTokenPa
 // authorization lifetime.
 const accessTokenLifetime = 1 * time.Hour
 
-// mintSession mints a new access-token JWT (HS256) and an opaque refresh token,
-// then persists a fresh user_sessions row through queries. Refresh rotation
+// mintSession applies a typed issuance policy, mints a new access-token JWT
+// (HS256), and persists a fresh user_sessions row through queries.
+// Issuer-scoped sessions also receive an opaque refresh token. Refresh rotation
 // supplies a transaction-backed repository so consuming the old refresh token
 // and creating its successor commit atomically.
 //
@@ -1066,9 +1274,9 @@ const accessTokenLifetime = 1 * time.Hour
 //
 // `iss` / audience: the JWT issuer claim is built from baseURL (which the
 // caller computes from custom-domain context so it matches what the AS
-// metadata document advertises). The audience is the toolset URN
-// `toolset:<UUID>`, globally unique even when slugs collide across
-// projects — prevents cross-project replay.
+// metadata document advertises). Issuer-scoped sessions retain the endpoint's
+// issuer audience and are refreshable. Resource-scoped sessions use the exact
+// MCP resource URL and are not refreshable.
 // Params.DesiredSessionDuration is used only for an initial authorization: nil
 // means "no explicit choice", falling back to the issuer's session_duration.
 // Params.AuthorizationExpiresAt is used only for rotation and is carried from
@@ -1084,6 +1292,25 @@ func (s *Service) mintSession(
 	params mintSessionParams,
 	logger *slog.Logger,
 ) (*mintedSession, error) {
+	audience := endpoint.AudienceURN
+	refreshable := true
+	switch params.Policy {
+	case sessionIssuancePolicyIssuerScoped:
+		if params.Audience != "" {
+			return nil, oops.E(oops.CodeUnexpected, nil, "issuer-scoped session must not override its audience").LogError(ctx, logger)
+		}
+	case sessionIssuancePolicyResourceScoped:
+		if params.Audience == "" || params.AuthorizationExpiresAt != nil || params.DesiredSessionDuration != nil || params.Replayable || params.AuthorizerUserID.Valid || params.DelegatedGrants != nil || params.DelegatedGrantsVersion.Valid || params.ToolSelection != nil {
+			return nil, oops.E(oops.CodeUnexpected, nil, "invalid resource-scoped session issuance parameters").LogError(ctx, logger)
+		}
+		audience = params.Audience
+		refreshable = false
+		emaLifetime := accessTokenLifetime
+		params.DesiredSessionDuration = &emaLifetime
+	default:
+		return nil, oops.E(oops.CodeUnexpected, nil, "unknown session issuance policy").LogError(ctx, logger)
+	}
+
 	if params.Subject.Kind == urn.SessionSubjectKindAgent {
 		if _, err := loadAgentSessionCredential(
 			endpoint, params.Subject, params.Subject, pgtype.Text{String: endpoint.OrganizationID, Valid: true},
@@ -1153,7 +1380,7 @@ func (s *Service) mintSession(
 	}
 	access, jti, err := s.mintUserSessionAccessToken(mintUserSessionAccessTokenParams{
 		AccessExpiresAt: accessExpiresAt,
-		AudienceURN:     endpoint.AudienceURN,
+		AudienceURN:     audience,
 		ClientID:        clientRow.ClientID,
 		Issuer:          issuerURL,
 		JTI:             jti,
@@ -1163,12 +1390,17 @@ func (s *Service) mintSession(
 		return nil, oops.E(oops.CodeUnexpected, err, "mint session access token").LogError(ctx, logger)
 	}
 
-	refreshTokenRaw, err := generateOpaqueToken()
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "generate refresh token").LogError(ctx, logger)
+	refreshTokenRaw := ""
+	refreshTokenHash := idJAGRefreshTokenHashPrefix + sha256Hex(jti+":"+uuid.NewString())
+	if refreshable {
+		refreshTokenRaw, err = generateOpaqueToken()
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "generate refresh token").LogError(ctx, logger)
+		}
+		refreshTokenHash = sha256Hex(refreshTokenRaw)
 	}
 
-	if _, err := queries.CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
+	_, err = queries.CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
 		UserSessionIssuerID:    endpoint.UserSessionIssuerID,
 		UserSessionClientID:    uuid.NullUUID{UUID: clientRow.ID, Valid: true},
 		SubjectUrn:             params.Subject,
@@ -1176,11 +1408,12 @@ func (s *Service) mintSession(
 		DelegatedGrants:        params.DelegatedGrants,
 		DelegatedGrantsVersion: params.DelegatedGrantsVersion,
 		Jti:                    jti,
-		RefreshTokenHash:       sha256Hex(refreshTokenRaw),
+		RefreshTokenHash:       refreshTokenHash,
 		ExpiresAt:              pgtype.Timestamptz{Time: accessExpiresAt, InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt:       pgtype.Timestamptz{Time: *params.AuthorizationExpiresAt, InfinityModifier: 0, Valid: true},
 		ToolSelection:          params.ToolSelection,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
 	}
 

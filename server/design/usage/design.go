@@ -35,6 +35,8 @@ var TierLimits = Type("TierLimits", func() {
 	Attribute("included_bullets", ArrayOf(String), "Included items bullets of the tier")
 	Attribute("add_on_bullets", ArrayOf(String), "Add-on items bullets of the tier (optional)")
 	Attribute("tum_price_per_million_usd", String, "Exact USD list price per million tokens under management (optional)")
+	Attribute("risk_scan_price_per_million_usd", String, "Exact USD list price per million tokens scanned for risk (optional)")
+	Attribute("mcp_egress_price_per_gib_usd", String, "Exact USD list price per GiB of MCP gateway egress (optional)")
 
 	Required("base_price", "included_tool_calls", "included_servers", "included_credits", "price_per_additional_tool_call", "price_per_additional_server", "feature_bullets", "included_bullets")
 })
@@ -178,6 +180,105 @@ var PaygBillingSummary = Type("PaygBillingSummary", func() {
 	Required("period_start", "period_end", "tum_tokens", "tum_unit_price_usd", "tum_cost_usd", "other_inference_spend_usd", "estimated_total_usd")
 })
 
+// MeterUsageWindow is one inclusive/exclusive UTC-day reporting window.
+var MeterUsageWindow = Type("MeterUsageWindow", func() {
+	Attribute("from", String, "Inclusive UTC midnight window boundary", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Exclusive UTC midnight window boundary", func() { Format(FormatDateTime) })
+	Required("from", "to")
+})
+
+// MeterUsageBucket is one dense UTC day in a usage response.
+var MeterUsageBucket = Type("MeterUsageBucket", func() {
+	Attribute("from", String, "Inclusive bucket boundary", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Exclusive bucket boundary", func() { Format(FormatDateTime) })
+	Attribute("total", String, "Exact integer ordinary usage quantity as a decimal string")
+	Required("from", "to", "total")
+})
+
+// MeterUsageSeries is one selected facet value or the unset/remainder marker.
+var MeterUsageSeries = Type("MeterUsageSeries", func() {
+	Attribute("kind", String, "Identity kind for this series", func() {
+		Enum("value", "unset", "remainder")
+	})
+	Attribute("key", String, "Canonical identity; present for value series and omitted for unset and remainder")
+	Attribute("label", String, "Display label, never chart identity")
+	Attribute("total", String, "Exact integer ordinary usage series total as a decimal string")
+	Attribute("values", ArrayOf(String), "Exact integer ordinary usage values aligned one-for-one with buckets")
+	Required("kind", "label", "total", "values")
+})
+
+// MeterUsageBreakdown contains the selected facet and its bounded series.
+var MeterUsageBreakdown = Type("MeterUsageBreakdown", func() {
+	Attribute("dimension", String, "Selected family-compatible breakdown dimension", func() {
+		Enum(
+			"total", "project",
+			"model", "provider", "billing_mode", "assistant",
+			"billing_user", "division", "department", "job_title", "employee_type", "cost_center", "directory_group_set",
+			"direction", "mcp_server", "server_type",
+			"scanner", "policy", "judge_model", "judge_provider", "tool_name",
+		)
+	})
+	Attribute("series", ArrayOf(MeterUsageSeries), "At most six selected facet series plus a remainder")
+	Required("dimension", "series")
+})
+
+// MeterUsageResponse is an exact, bounded ordinary meter usage report.
+var MeterUsageResponse = Type("MeterUsageResponse", func() {
+	Attribute("family", String, func() {
+		Enum("agent_session_storage", "mcp_bandwidth", "risk_content_scans")
+	})
+	Attribute("window", MeterUsageWindow)
+	Attribute("billing_cycles", ArrayOf(MeterUsageWindow), "Trailing twelve billing-cycle date windows")
+	Attribute("unit", String, func() { Enum("stokens", "bytes") })
+	Attribute("measurement_method", String)
+	Attribute("total", String, "Exact integer ordinary usage period total as a decimal string")
+	Attribute("buckets", ArrayOf(MeterUsageBucket), "Dense UTC daily ordinary usage buckets, including in-progress days")
+	Attribute("breakdown", MeterUsageBreakdown)
+	Attribute("queried_at", String, "Retrieval timestamp, not an ingestion watermark", func() { Format(FormatDateTime) })
+	Required("family", "window", "billing_cycles", "unit", "measurement_method", "total", "buckets", "breakdown", "queried_at")
+})
+
+// SpendBucket is one dense UTC day of estimated product spend.
+var SpendBucket = Type("SpendBucket", func() {
+	Attribute("from", String, "Inclusive bucket boundary", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Exclusive bucket boundary", func() { Format(FormatDateTime) })
+	Attribute("quantity", String, "Exact integer ordinary usage quantity as a decimal string")
+	Attribute("cost_usd", String, "Exact estimated cost at current PAYG list prices")
+	Required("from", "to", "quantity", "cost_usd")
+})
+
+// SpendProduct is one metered product priced at current PAYG list prices.
+var SpendProduct = Type("SpendProduct", func() {
+	Attribute("id", String, func() {
+		Enum("agent_session_storage", "risk_content_scans", "mcp_egress")
+	})
+	Attribute("label", String)
+	Attribute("unit", String, func() { Enum("stokens", "bytes") })
+	Attribute("quantity", String, "Exact integer ordinary usage quantity as a decimal string")
+	Attribute("rate_quantity", String, "Exact integer quantity to which rate_usd applies")
+	Attribute("rate_usd", String, "Exact current PAYG USD list price")
+	Attribute("cost_usd", String, "Exact estimated product cost at current PAYG list prices")
+	Attribute("buckets", ArrayOf(SpendBucket), "Dense UTC daily product buckets, including in-progress and future days")
+	Required("id", "label", "unit", "quantity", "rate_quantity", "rate_usd", "cost_usd", "buckets")
+})
+
+// SpendBreakdownResponse reports whether server-owned spend is available and,
+// for PAYG organizations, an exact current-list-price estimate for the three
+// metered products. It is not an invoice or actual bill.
+var SpendBreakdownResponse = Type("SpendBreakdownResponse", func() {
+	Attribute("availability", String, "Whether spend estimates are available for the organization's plan", func() {
+		Enum("available", "unsupported_plan")
+	})
+	Attribute("window", MeterUsageWindow)
+	Attribute("billing_cycles", ArrayOf(MeterUsageWindow), "Trailing twelve billing-cycle date windows")
+	Attribute("currency", String, func() { Enum("USD") })
+	Attribute("pricing_basis", String, func() { Enum("current_payg_list_price") })
+	Attribute("queried_at", String, "Retrieval timestamp used to distinguish current and future buckets", func() { Format(FormatDateTime) })
+	Attribute("total_cost_usd", String, "Exact estimated total at current PAYG list prices; zero when availability is unsupported_plan, meaning no estimate was calculated")
+	Attribute("products", ArrayOf(SpendProduct), "The three metered PAYG products in stable display order when available; empty when availability is unsupported_plan")
+	Required("availability", "window", "billing_cycles", "currency", "pricing_basis", "queried_at", "total_cost_usd", "products")
+})
+
 var _ = Service("usage", func() {
 	Description("Read usage for gram.")
 	Security(security.Session)
@@ -201,6 +302,69 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "getPeriodUsage")
 		Meta("openapi:extension:x-speakeasy-name-override", "getPeriodUsage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getPeriodUsage"}`)
+	})
+
+	Method("getMeterUsage", func() {
+		Description("Get incrementally aggregated ordinary meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer.")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("family", String, func() {
+				Enum("agent_session_storage", "mcp_bandwidth", "risk_content_scans")
+			})
+			Attribute("from", String, "Inclusive UTC midnight reporting boundary. Must be paired with to.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("breakdown", String, "Family-compatible reporting facet")
+			Required("family")
+		})
+
+		Result(MeterUsageResponse)
+
+		HTTP(func() {
+			GET("/rpc/usage.getMeterUsage")
+			Param("family")
+			Param("from")
+			Param("to")
+			Param("breakdown")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMeterUsage")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMeterUsage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getMeterUsage"}`)
+	})
+
+	Method("getSpendBreakdown", func() {
+		Description("Report spend availability and estimate PAYG organizations' three metered products at current list prices over a maximum of three calendar months. Other plans return unsupported_plan, empty products, and a zero total without calculating estimates. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("from", String, "Inclusive UTC midnight reporting boundary. Must be paired with to.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.", func() {
+				Format(FormatDateTime)
+			})
+		})
+
+		Result(SpendBreakdownResponse)
+
+		HTTP(func() {
+			GET("/rpc/usage.getSpendBreakdown")
+			Param("from")
+			Param("to")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getSpendBreakdown")
+		Meta("openapi:extension:x-speakeasy-name-override", "getSpendBreakdown")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getSpendBreakdown"}`)
 	})
 
 	Method("getTokensUnderManagement", func() {

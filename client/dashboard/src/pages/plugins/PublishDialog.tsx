@@ -247,6 +247,12 @@ export const PublishDialog = memo(function PublishDialog({
                 repo.
               </Dialog.Description>
               <Dialog.Description>
+                Collaborators are added as repository admins, which is what
+                platform marketplaces such as Cursor require to serve these
+                plugins to your team. Adding someone who already has access
+                upgrades them to admin.
+              </Dialog.Description>
+              <Dialog.Description>
                 To view or remove existing collaborators, open the repository on
                 GitHub.
               </Dialog.Description>
@@ -261,7 +267,8 @@ export const PublishDialog = memo(function PublishDialog({
             <>
               <Dialog.Description>
                 Publish all plugins to a GitHub repository. Optionally add
-                collaborators who will receive read access to the repo.
+                collaborators, who become admins on the repo so they can connect
+                it to Cursor, Claude and other marketplaces.
               </Dialog.Description>
               <Dialog.Description>
                 At least one user in your organization will need to be given

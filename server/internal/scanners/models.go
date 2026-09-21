@@ -210,6 +210,7 @@ const (
 //	presidio          pystreams/src/pystreams/risk/handler.py SOURCE_PRESIDIO
 //	prompt_injection  server/internal/scanners/promptinjection.Source
 //	llm_judge         server/internal/scanners/promptpolicy.Source
+//	llm_analyzer      server/internal/scanners/llmanalyzer.Source
 //	shadow_mcp        server/internal/scanners/shadowmcpscan.Source
 //	account_identity  server/internal/background/activities/risk_analysis.SourceAccountIdentity
 //	destructive_tool  server/internal/scanners/destructivetool.Source
@@ -234,9 +235,10 @@ func FindingSurface(source, field, path string) string {
 		// offsets index the anchored message/part text (prompt_injection flags
 		// the whole scanned content).
 		return SurfaceContent
-	case "llm_judge":
-		// The judge's match is a rendered artifact of the judged content; the
-		// rationale carries the signal and the offsets index no stored text.
+	case "llm_judge", "llm_analyzer":
+		// The judge's match is a rendered artifact of the judged content and
+		// the LLM analyzer records no match at all; in both the rationale
+		// carries the signal and the offsets index no stored text.
 		return SurfaceNone
 	case "shadow_mcp", "account_identity", "destructive_tool", "cli_destructive":
 		// The match is derived metadata (server identifier, account email,

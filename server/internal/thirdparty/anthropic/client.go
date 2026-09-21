@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -276,7 +277,7 @@ func (c *Client) download(ctx context.Context, path string) (*DownloadedContent,
 	}
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
 		defer func() { _ = res.Body.Close() }()
-		return nil, &HTTPError{StatusCode: res.StatusCode, Status: res.Status}
+		return nil, newHTTPError(res)
 	}
 	return &DownloadedContent{
 		Body:          res.Body,
@@ -302,7 +303,7 @@ func (c *Client) doJSON(ctx context.Context, method string, endpoint *url.URL, o
 		_ = res.Body.Close()
 	}()
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		return &HTTPError{StatusCode: res.StatusCode, Status: res.Status}
+		return newHTTPError(res)
 	}
 	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
 		return fmt.Errorf("decode anthropic compliance response: %w", err)
@@ -335,8 +336,23 @@ func filenameFromContentDisposition(value string) string {
 type HTTPError struct {
 	StatusCode int
 	Status     string
+	// Body is the leading, printable part of the response body: Anthropic
+	// explains a rejected request there, and the status alone does not say why.
+	Body string
 }
 
 func (e *HTTPError) Error() string {
-	return fmt.Sprintf("anthropic compliance API returned %s", e.Status)
+	if e.Body == "" {
+		return fmt.Sprintf("anthropic compliance API returned %s", e.Status)
+	}
+	return fmt.Sprintf("anthropic compliance API returned %s: %s", e.Status, e.Body)
+}
+
+// maxHTTPErrorBody bounds how much of an error response is kept for the
+// error message.
+const maxHTTPErrorBody = 512
+
+func newHTTPError(res *http.Response) *HTTPError {
+	body, _ := io.ReadAll(io.LimitReader(res.Body, maxHTTPErrorBody))
+	return &HTTPError{StatusCode: res.StatusCode, Status: res.Status, Body: strings.TrimSpace(guardian.PrintableBodySnippet(body))}
 }

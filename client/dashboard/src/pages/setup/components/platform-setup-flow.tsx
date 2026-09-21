@@ -4,7 +4,10 @@ import { Button } from "@/components/ui/Button";
 import { AGENT_PLATFORMS } from "../setup-data";
 import type { PlatformSetupStatus } from "../types";
 import { PlatformSetupStepBody } from "./platform-setup-steps";
-import { usePlatformApiKeys } from "./platform-setup-values";
+import {
+  type PlatformApiKeys,
+  usePlatformApiKeys,
+} from "./platform-setup-values";
 
 interface PlatformSetupFlowProps {
   platformId: string;
@@ -16,6 +19,7 @@ interface PlatformSetupFlowProps {
    * its marketplace section is done rather than handing out empty URLs.
    */
   heldBack?: string;
+  apiKeys?: PlatformApiKeys;
 }
 
 // One platform's whole setup, laid out top to bottom inside the section that
@@ -27,9 +31,11 @@ export function PlatformSetupFlow({
   status,
   onStatusChange,
   heldBack,
+  apiKeys: sharedApiKeys,
 }: PlatformSetupFlowProps): JSX.Element | null {
   const platform = AGENT_PLATFORMS.find((p) => p.id === platformId);
-  const apiKeys = usePlatformApiKeys();
+  const localApiKeys = usePlatformApiKeys();
+  const apiKeys = sharedApiKeys ?? localApiKeys;
   // A platform whose first step asks whether the org qualifies (Claude Code's
   // plan check) shows nothing further until that is answered.
   const [eligible, setEligible] = useState<boolean | null>(null);

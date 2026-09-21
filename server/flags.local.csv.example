@@ -14,3 +14,8 @@ distinct_id,flag,enabled,variant
 #   select id, slug from organization_metadata;
 #
 # <your-organization-id>,assistant-platform-mcp,true,platformmcp
+#
+# gram-risk-llm-analyzer swaps the gitleaks / Presidio / prompt-injection /
+# destructive-tool engines for the fine-tuned risk model for that organization.
+#
+# <your-organization-id>,gram-risk-llm-analyzer,true

@@ -10,12 +10,27 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
+ * Identifier used as the aud claim in private_key_jwt assertions. Null resolves to issuer.
+ */
+export const TokenEndpointAuthAudienceFormat = {
+  Issuer: "issuer",
+  TokenEndpoint: "token_endpoint",
+} as const;
+/**
+ * Identifier used as the aud claim in private_key_jwt assertions. Null resolves to issuer.
+ */
+export type TokenEndpointAuthAudienceFormat = ClosedEnum<
+  typeof TokenEndpointAuthAudienceFormat
+>;
+
+/**
  * How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
  */
 export const RemoteSessionClientTokenEndpointAuthMethod = {
   ClientSecretBasic: "client_secret_basic",
   ClientSecretPost: "client_secret_post",
   None: "none",
+  PrivateKeyJwt: "private_key_jwt",
 } as const;
 /**
  * How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
@@ -36,7 +51,7 @@ export type RemoteSessionClient = {
    * The client_id used to identify this client at the issuer's token and authorization endpoints.
    */
   clientId: string;
-  clientIdIssuedAt: Date;
+  clientIdIssuedAt?: Date | undefined;
   /**
    * When set, the client is in Client ID Metadata Document (CIMD) mode: Gram hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.
    */
@@ -71,6 +86,10 @@ export type RemoteSessionClient = {
    */
   scope?: Array<string> | undefined;
   /**
+   * Identifier used as the aud claim in private_key_jwt assertions. Null resolves to issuer.
+   */
+  tokenEndpointAuthAudienceFormat?: TokenEndpointAuthAudienceFormat | undefined;
+  /**
    * How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
    */
   tokenEndpointAuthMethod?:
@@ -78,10 +97,19 @@ export type RemoteSessionClient = {
     | undefined;
   updatedAt: Date;
   /**
+   * When the issuer's token endpoint last answered invalid_client for this client_id, meaning the issuer no longer recognizes the registration. Null while the registration is in good standing; cleared by a successful rotation, a successful refresh, or a replaced secret.
+   */
+  upstreamRejectedAt?: Date | undefined;
+  /**
    * The user_session_issuers this client is attached to via the join table. Empty for a standalone client with no attachments.
    */
   userSessionIssuerIds: Array<string>;
 };
+
+/** @internal */
+export const TokenEndpointAuthAudienceFormat$inboundSchema: z.ZodMiniEnum<
+  typeof TokenEndpointAuthAudienceFormat
+> = z.enum(TokenEndpointAuthAudienceFormat);
 
 /** @internal */
 export const RemoteSessionClientTokenEndpointAuthMethod$inboundSchema:
@@ -97,9 +125,8 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
   z.object({
     audience: z.optional(z.string()),
     client_id: z.string(),
-    client_id_issued_at: z.pipe(
-      z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
+    client_id_issued_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     client_id_metadata_uri: z.optional(z.string()),
     client_secret_expires_at: z.optional(
@@ -115,12 +142,18 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
     project_id: z.string(),
     remote_session_issuer_id: z.string(),
     scope: z.optional(z.array(z.string())),
+    token_endpoint_auth_audience_format: z.optional(
+      TokenEndpointAuthAudienceFormat$inboundSchema,
+    ),
     token_endpoint_auth_method: z.optional(
       RemoteSessionClientTokenEndpointAuthMethod$inboundSchema,
     ),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
+    ),
+    upstream_rejected_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     user_session_issuer_ids: z.array(z.string()),
   }),
@@ -135,8 +168,10 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "organization_id": "organizationId",
       "project_id": "projectId",
       "remote_session_issuer_id": "remoteSessionIssuerId",
+      "token_endpoint_auth_audience_format": "tokenEndpointAuthAudienceFormat",
       "token_endpoint_auth_method": "tokenEndpointAuthMethod",
       "updated_at": "updatedAt",
+      "upstream_rejected_at": "upstreamRejectedAt",
       "user_session_issuer_ids": "userSessionIssuerIds",
     });
   }),

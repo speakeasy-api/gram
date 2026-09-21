@@ -15,6 +15,9 @@ vi.mock("./workspace-switcher.tsx", () => ({
 vi.mock("./command-palette/CommandPaletteTrigger", () => ({
   CommandPaletteTrigger: () => <button data-testid="command-palette" />,
 }));
+vi.mock("@/components/ui/Sidebar", () => ({
+  SidebarTrigger: () => <button data-testid="sidebar-trigger" />,
+}));
 // Stub context/hook modules imported at the top of page-header.tsx (used only
 // in PageHeaderBreadcrumbs, not PageHeaderComponent, but they execute on import)
 vi.mock("@/contexts/Sdk.tsx", () => ({

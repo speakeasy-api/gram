@@ -185,6 +185,11 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, err
 	}
 
+	provenance, err := parseRegistrationProvenance(ctx, logger, payload.ClientIDIssuedAt, payload.ClientSecretExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+
 	var secretCiphertext pgtype.Text
 	if payload.ClientSecret != nil && *payload.ClientSecret != "" {
 		encrypted, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
@@ -207,17 +212,20 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 	}
 
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
-		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
-		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
-		RemoteSessionIssuerID:   issuerID,
-		ClientID:                clientID,
-		ClientSecretEncrypted:   secretCiphertext,
-		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
-		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
-		Scope:                   payload.Scope,
-		Audience:                conv.PtrToPGText(payload.Audience),
-		LegacyCallbackUrl:       false,
+		ProjectID:                       conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:                  conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID:           issuerID,
+		ClientID:                        clientID,
+		ClientSecretEncrypted:           secretCiphertext,
+		ClientIDIssuedAt:                provenance.clientIDIssuedAt,
+		ClientSecretExpiresAt:           provenance.clientSecretExpiresAt,
+		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
+		Scope:                           payload.Scope,
+		Audience:                        conv.PtrToPGText(payload.Audience),
+		LegacyCallbackUrl:               false,
+		JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
@@ -488,13 +496,14 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 	}
 
 	updated, err := txRepo.UpdateRemoteSessionClient(ctx, repo.UpdateRemoteSessionClientParams{
-		ClientSecretEncrypted:   secretCiphertext,
-		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
-		Scope:                   payload.Scope,
-		Audience:                conv.PtrToPGText(payload.Audience),
-		ID:                      clientID,
-		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
+		ClientSecretEncrypted:           secretCiphertext,
+		ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
+		Scope:                           payload.Scope,
+		Audience:                        conv.PtrToPGText(payload.Audience),
+		ID:                              clientID,
+		ProjectID:                       conv.ToNullUUID(*authCtx.ProjectID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -921,4 +930,37 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, boundUserIssuerIDs)
 
 	return nil
+}
+
+// registrationProvenance is what a create form says about the credentials'
+// lifecycle: the issuance and expiry stamps the issuer reported at dynamic
+// registration. Absent stamps fall back to the time of the call and to no
+// expiry, matching credentials pasted in out-of-band.
+type registrationProvenance struct {
+	clientIDIssuedAt      pgtype.Timestamptz
+	clientSecretExpiresAt pgtype.Timestamptz
+}
+
+// parseRegistrationProvenance validates the optional lifecycle stamps of a
+// create form, which must be RFC 3339.
+func parseRegistrationProvenance(ctx context.Context, logger *slog.Logger, clientIDIssuedAt, clientSecretExpiresAt *string) (registrationProvenance, error) {
+	out := registrationProvenance{
+		clientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
+		clientSecretExpiresAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+	}
+	if clientIDIssuedAt != nil {
+		issuedAt, err := time.Parse(time.RFC3339, *clientIDIssuedAt)
+		if err != nil {
+			return out, oops.E(oops.CodeBadRequest, err, "client_id_issued_at must be an RFC 3339 timestamp").LogError(ctx, logger)
+		}
+		out.clientIDIssuedAt = conv.ToPGTimestamptz(issuedAt.UTC())
+	}
+	if clientSecretExpiresAt != nil {
+		expiresAt, err := time.Parse(time.RFC3339, *clientSecretExpiresAt)
+		if err != nil {
+			return out, oops.E(oops.CodeBadRequest, err, "client_secret_expires_at must be an RFC 3339 timestamp").LogError(ctx, logger)
+		}
+		out.clientSecretExpiresAt = conv.ToPGTimestamptz(expiresAt.UTC())
+	}
+	return out, nil
 }

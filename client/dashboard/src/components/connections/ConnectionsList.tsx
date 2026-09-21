@@ -1,3 +1,5 @@
+import { useSessionAgents } from "@/hooks/useSessionAgents";
+import { AgentIcon, AgentLink } from "@/components/agent-link";
 import { IdentityLink } from "@/components/identity-link";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -18,6 +20,10 @@ import { ClientDetailSheet } from "@/components/sessions/ClientDetailSheet";
 import { RevokeClientDialog } from "@/components/sessions/RevokeClientDialog";
 import { RevokeSessionDialog } from "@/components/sessions/RevokeSessionDialog";
 import { RevokeSessionsDialog } from "@/components/sessions/RevokeSessionsDialog";
+import {
+  WorkloadIcon,
+  WorkloadSessionBadge,
+} from "@/components/sessions/WorkloadSession";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Icon } from "@/components/ui/Icon";
 import { MoreActions } from "@/components/ui/MoreActions";
@@ -264,6 +270,10 @@ function GroupIcon({
   group: ConnectionGroup;
   grouping: ConnectionGrouping;
 }): JSX.Element {
+  if (group.workload) return <WorkloadIcon />;
+  if (grouping === "subject" && group.sessions[0]?.subjectType === "agent") {
+    return <AgentIcon />;
+  }
   if (group.identity) {
     return (
       <PersonIcon label={group.label} photoUrl={group.identity.photoUrl} />
@@ -284,6 +294,22 @@ function GroupIcon({
   // Provider groups have neither an identity nor a registration to show, but
   // the cell still has to be occupied or every column after it shifts left.
   return <span className="size-6 shrink-0" />;
+}
+
+function SubRowIcon({
+  session,
+  label,
+  childIsPerson,
+}: {
+  session: UserSession;
+  label: string;
+  childIsPerson: boolean;
+}): JSX.Element {
+  if (!childIsPerson) return <ClientIcon label={label} />;
+  if (session.workload) return <WorkloadIcon />;
+  return (
+    <PersonIcon label={label} photoUrl={session.subjectPhotoUrl ?? undefined} />
+  );
 }
 
 /**
@@ -339,15 +365,15 @@ function ConnectionSubRow({
         <span />
 
         <span className="border-border flex min-w-0 items-center gap-2 border-l pl-3">
-          {childIsPerson ? (
-            <PersonIcon
-              label={label}
-              photoUrl={session.subjectPhotoUrl ?? undefined}
-            />
-          ) : (
-            <ClientIcon label={label} />
-          )}
+          <SubRowIcon
+            session={session}
+            label={label}
+            childIsPerson={childIsPerson}
+          />
           <span className="text-foreground truncate text-sm">{label}</span>
+          {childIsPerson && session.workload ? (
+            <WorkloadSessionBadge workload={session.workload} />
+          ) : null}
           {childIsPerson && killswitch ? (
             <KillswitchUserStatusIcon
               badge={killswitch.badge}
@@ -576,7 +602,14 @@ function ConnectionGroupRow({
           <GroupIcon group={group} grouping={grouping} />
 
           <span className="flex min-w-0 items-center gap-2">
-            {group.identity?.urn ? (
+            {group.identity?.agentId ? (
+              <AgentLink
+                agentId={group.identity.agentId}
+                className="text-foreground truncate text-sm font-medium"
+              >
+                {group.label}
+              </AgentLink>
+            ) : group.identity?.urn ? (
               <IdentityLink
                 identifier={{ urn: group.identity.urn }}
                 projectSlug={project?.slug}
@@ -595,6 +628,9 @@ function ConnectionGroupRow({
                 unavailable={groupKillswitch.unavailable}
                 href={groupKillswitch.accessHref}
               />
+            ) : null}
+            {group.workload ? (
+              <WorkloadSessionBadge workload={group.workload} />
             ) : null}
             {/* Absent unless the row names a registration, which is what
                 grouping by agent makes it. */}
@@ -708,6 +744,7 @@ function ConnectionGroupRow({
 
       <RevokeSessionsDialog
         sessionIds={group.revocableIds}
+        workload={group.workload}
         newKillswitchHref={groupKillswitch?.createHref}
         open={revokeAllOpen}
         onOpenChange={setRevokeAllOpen}
@@ -745,7 +782,7 @@ function ConnectionGroupRow({
  * is handed, so the three surfaces cannot drift apart in how a connection reads.
  */
 export function ConnectionsList({
-  sessions,
+  sessions: unresolvedSessions,
   grouping,
   canRevoke,
   onRevoked,
@@ -780,6 +817,7 @@ export function ConnectionsList({
   /** Enables user-only Killswitch status/actions on this sessions surface. */
   killswitchContext?: ConnectionKillswitchContext;
 }): JSX.Element {
+  const sessions = useSessionAgents(unresolvedSessions);
   const now = useNow();
   const navigate = useNavigate();
   // The organization page picks its project through a filter, which neither

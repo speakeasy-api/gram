@@ -6,11 +6,13 @@ import (
 	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -26,6 +28,15 @@ const (
 
 	clientAffinityAuthPrefix = "auth"
 )
+
+// GatewayDialTimeout bounds only the TCP connect to a gateway. Route store
+// entries are advertise addresses of pods that can disappear without
+// unpublishing, so a stale route must be detected in about the time a live
+// gateway needs to accept a connection, not in the transport's default
+// minute-scale window. Every caller that dials a gateway — the MCP proxy and
+// the back-channel HTTP client — shares this value so the two paths give up
+// on a dead pod at the same point.
+const GatewayDialTimeout = 3 * time.Second
 
 // ClientAffinityKeyFromRequest derives the stable affinity key used for both
 // gateway-owner selection and local agent-session selection.
@@ -100,25 +111,45 @@ func SelectRoute(clientAffinityKey string, candidates []string, exclude map[stri
 	return available[index.Int64()], true
 }
 
-// BusyResponseRejection converts an exhausted internal capacity response to a
-// transport-neutral JSON-RPC error for POST requests. GET and DELETE retain
-// their HTTP response semantics; the gateway supplies their generic body.
-func BusyResponseRejection(resp *http.Response) *proxy.RejectError {
+// GatewayFailureRejection converts a gateway 502 that the retry policy could
+// not recover into a transport-neutral JSON-RPC error for POST requests: a
+// busy gateway (every session at its substream cap) or a substream that broke
+// mid-flight because the agent's tunnel session closed. Both are conditions on
+// the customer's side of the tunnel; surfacing them as a bare 502 makes a
+// customer outage indistinguishable from a platform fault in 5xx telemetry.
+// Only the busy case is marked retryable: a broken substream may have already
+// delivered the request to the backend, so replaying it could double-execute.
+// GET and DELETE retain their HTTP response semantics; the gateway supplies
+// their generic body.
+func GatewayFailureRejection(resp *http.Response) *proxy.RejectError {
 	if resp == nil ||
 		resp.Request == nil ||
 		resp.Request.Method != http.MethodPost ||
-		resp.StatusCode != http.StatusBadGateway ||
-		resp.Header.Get(ErrorHeader) != wire.TunnelErrorTunnelBusy {
+		resp.StatusCode != http.StatusBadGateway {
 		return nil
 	}
 
-	return &proxy.RejectError{
-		Code:    proxy.RejectCodeServerError,
-		Message: "The MCP server is temporarily unavailable. Please retry.",
-		Data: map[string]any{
-			"code":      "service_unavailable",
-			"retryable": true,
-		},
+	switch resp.Header.Get(ErrorHeader) {
+	case wire.TunnelErrorTunnelBusy:
+		return &proxy.RejectError{
+			Code:    proxy.RejectCodeServerError,
+			Message: "The MCP server is temporarily unavailable. Please retry.",
+			Data: map[string]any{
+				"code":      "service_unavailable",
+				"retryable": true,
+			},
+		}
+	case wire.TunnelErrorSubstreamFailed:
+		return &proxy.RejectError{
+			Code:    proxy.RejectCodeServerError,
+			Message: "The connection to the MCP server was interrupted before it responded. The request may have already run.",
+			Data: map[string]any{
+				"code":      "upstream_disconnected",
+				"retryable": false,
+			},
+		}
+	default:
+		return nil
 	}
 }
 
@@ -130,11 +161,12 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 		}
 
 		tunnelErr := resp.Header.Get(ErrorHeader)
+		var unpublishErr error
 		switch tunnelErr {
 		case wire.TunnelErrorNoLiveSession:
 			if selectedAddr != "" {
 				if err := routes.Unpublish(ctx, tunnelID, selectedAddr); err != nil {
-					return nil, fmt.Errorf("unpublish stale tunnel route: %w", err)
+					unpublishErr = fmt.Errorf("unpublish stale tunnel route: %w", err)
 				}
 			}
 		case wire.TunnelErrorTunnelBusy:
@@ -158,7 +190,7 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 
 		candidates, err := routes.Candidates(ctx, tunnelID)
 		if err != nil {
-			return nil, fmt.Errorf("list tunnel retry routes: %w", err)
+			return nil, errors.Join(fmt.Errorf("list tunnel retry routes: %w", err), unpublishErr)
 		}
 		exclude := map[string]struct{}{selectedAddr: {}}
 		if tunnelErr == wire.TunnelErrorSubstreamFailed {
@@ -166,11 +198,11 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 		}
 		addr, ok := SelectRoute(clientAffinityKey, candidates, exclude)
 		if !ok {
-			return nil, nil
+			return nil, unpublishErr
 		}
 		gatewayURL, err := GatewayURL(addr)
 		if err != nil {
-			return nil, fmt.Errorf("build tunnel retry route URL: %w", err)
+			return nil, errors.Join(fmt.Errorf("build tunnel retry route URL: %w", err), unpublishErr)
 		}
 		return &proxy.UpstreamResponseRetry{
 			RemoteURL: gatewayURL,

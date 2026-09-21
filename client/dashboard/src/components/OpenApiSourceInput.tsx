@@ -10,12 +10,15 @@ import { useMutation } from "@tanstack/react-query";
 import { useSdkClient } from "@/contexts/Sdk";
 import { UploadOpenAPIv3Result } from "@gram/client/models/components/uploadopenapiv3result.js";
 import { CodeBlock } from "@/components/code";
+import { shellQuote } from "@/lib/shell";
 
 interface OpenApiSourceInputProps {
   onUpload: (file: File) => void;
   onUrlUpload?: (result: UploadOpenAPIv3Result) => void | Promise<void>;
   /** When provided, shows a CLI tab with pre-filled commands for this document slug. */
   documentSlug?: string;
+  /** The document's display name, kept by the CLI commands; the slug otherwise. */
+  documentName?: string;
   className?: string;
   isLoading?: boolean;
 }
@@ -24,10 +27,14 @@ export function OpenApiSourceInput({
   onUpload,
   onUrlUpload,
   documentSlug,
+  documentName,
   className,
   isLoading,
 }: OpenApiSourceInputProps): JSX.Element {
   const [url, setUrl] = useState("");
+  // Both CLI commands fall back to the slug as the name when none is given,
+  // which would rename a document whose name differs from its slug.
+  const cliName = documentName ?? documentSlug ?? "";
   const client = useSdkClient();
 
   const fetchMutation = useMutation({
@@ -145,7 +152,7 @@ export function OpenApiSourceInput({
               Direct upload
             </p>
             <CodeBlock language="bash" className="!bg-muted/50 !border-0">
-              {`gram upload --type openapiv3 \\\n  --slug ${documentSlug} \\\n  --name "${documentSlug}" \\\n  --location ./path/to/spec.yaml`}
+              {`gram upload --type openapiv3 \\\n  --slug ${documentSlug} \\\n  --name ${shellQuote(cliName)} \\\n  --location ./path/to/spec.yaml`}
             </CodeBlock>
           </div>
           <div>
@@ -153,7 +160,7 @@ export function OpenApiSourceInput({
               Or stage and push (useful for CI/CD)
             </p>
             <CodeBlock language="bash" className="!bg-muted/50 !border-0">
-              {`gram stage openapi \\\n  --slug ${documentSlug} \\\n  --location ./path/to/spec.yaml\n\ngram push`}
+              {`gram stage openapi \\\n  --slug ${documentSlug} \\\n  --name ${shellQuote(cliName)} \\\n  --location ./path/to/spec.yaml\n\ngram push`}
             </CodeBlock>
           </div>
         </TabsContent>

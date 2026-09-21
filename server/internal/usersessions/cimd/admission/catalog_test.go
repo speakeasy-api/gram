@@ -46,6 +46,29 @@ func TestCatalogAdmits_IsExactMatch(t *testing.T) {
 	}
 }
 
+// TestCatalogAdmits_GitHubCopilotCLIExactly pins the narrow rule for a client
+// hosted on github.com, where admitting a path namespace would also trust
+// unrelated user-controlled content on the same host.
+func TestCatalogAdmits_GitHubCopilotCLIExactly(t *testing.T) {
+	t.Parallel()
+
+	const clientID = "https://github.com/copilot/cli/client-metadata.json"
+
+	reason, ok := CatalogMatch(clientID)
+	require.True(t, ok)
+	require.Equal(t, AdmitCatalogExact, reason)
+
+	nearMisses := []string{
+		clientID + "/",
+		"https://github.com/copilot/client-metadata.json",
+		"https://github.com/copilot/zzz-not-real/client-metadata.json",
+		"https://github.com/copilot/cli/zzz.json",
+	}
+	for _, url := range nearMisses {
+		require.Falsef(t, catalogAdmits(url), "near-miss %q must not be admitted", url)
+	}
+}
+
 // TestCatalog_EntriesAreWellFormed guards the constant itself: every entry
 // must be a syntactically valid CIMD client_id, or it is dead policy that
 // can never match a real presentation.
@@ -75,7 +98,7 @@ func TestCatalog_ReturnsCopy(t *testing.T) {
 	first := Catalog()
 	require.NotEmpty(t, first)
 	original := first[0]
-	first[0] = Preset{VendorKey: "attacker", DisplayName: "attacker", URL: unknownURL, DisplayOnly: false, Enabled: true}
+	first[0] = Preset{VendorKey: "attacker", DisplayName: "attacker", URL: unknownURL, Enabled: true}
 
 	second := Catalog()
 	require.Equal(t, original, second[0])
@@ -101,45 +124,56 @@ func TestCatalogMatch_ReportsWhichEntryMatched(t *testing.T) {
 	require.Empty(t, reason, "a miss must carry no reason")
 }
 
-// TestCatalogMatch_DisplayOnlyEntriesAttributeToTheirRule: a DisplayOnly
-// row names a URL that some other entry admits, so the admission must be
-// attributed to the rule that actually made it. Codex CLI is exactly this
-// case — listed by name, admitted by the ChatGPT connector wildcard.
-//
-// Reporting it as an exact match would misattribute the traffic and hide
-// how much work the wildcard is doing, which is the one thing the
-// exact/pattern split exists to measure.
-func TestCatalogMatch_DisplayOnlyEntriesAttributeToTheirRule(t *testing.T) {
+// TestCatalogMatch_OverlappedLiteralReportsAsExact: entries may overlap, and
+// a client_id is admitted when at least one enabled entry matches. The stable
+// Codex document sits inside OpenAI's connector wildcard, so both admit it.
+// Exact entries are consulted first, so it reports as exact and the
+// wildcard's share counts only the traffic it alone carries.
+func TestCatalogMatch_OverlappedLiteralReportsAsExact(t *testing.T) {
 	t.Parallel()
 
 	reason, ok := CatalogMatch("https://chatgpt.com/oauth/codex/client.json")
 	require.True(t, ok)
-	require.Equal(t, AdmitCatalogPattern, reason)
+	require.Equal(t, AdmitCatalogExact, reason)
+
+	reason, ok = CatalogMatch(chatGPTConnectorURL)
+	require.True(t, ok)
+	require.Equal(t, AdmitCatalogPattern, reason, "an id only the wildcard covers still reports as a pattern")
 }
 
-// TestCatalog_DisplayOnlyEntriesAreCoveredByARule pins the invariant that
-// makes DisplayOnly safe: a row excluded from matching must still be
-// admitted by something, or marking it DisplayOnly silently de-admitted a
-// client the catalog claims to support.
-func TestCatalog_DisplayOnlyEntriesAreCoveredByARule(t *testing.T) {
+// TestCatalogPreset_OverlappedLiteralBeatsTheWildcard pins how an overlap is
+// attributed.
+//
+// OpenAI's connector wildcard admits the stable Codex document, because
+// "codex" occupies its single wildcard segment. Both entries therefore match,
+// and only the literal names the product. Resolving the wildcard instead
+// would hand a Codex caller ChatGPT's identity, and the MCP gateway would
+// judge it under whatever access decision the organization made about
+// ChatGPT.
+func TestCatalogPreset_OverlappedLiteralBeatsTheWildcard(t *testing.T) {
 	t.Parallel()
 
-	var found int
-	for _, preset := range Catalog() {
-		if !preset.DisplayOnly {
-			continue
-		}
-		found++
-		require.Falsef(t, preset.IsPattern(), "a DisplayOnly entry names one URL, so %q must not be a pattern", preset.URL)
-		require.Truef(t, catalogAdmits(preset.URL), "DisplayOnly entry %q is admitted by nothing", preset.URL)
-	}
-	require.Positive(t, found, "expected at least one DisplayOnly entry; delete this guard deliberately if they were removed")
+	const stableDocument = "https://chatgpt.com/oauth/codex/client.json"
+
+	preset, ok := CatalogPreset(stableDocument)
+	require.True(t, ok)
+	require.Equal(t, stableDocument, preset.URL, "the literal entry must win over the wildcard that also admits it")
+	require.Equal(t, "Codex CLI (stable document)", preset.DisplayName)
+
+	connector, ok := CatalogPreset(chatGPTConnectorURL)
+	require.True(t, ok)
+	require.Equal(t, chatGPTPattern, connector.URL, "an id only the wildcard covers still resolves to the wildcard")
 }
 
 // TestCatalog_DisabledEntriesAreNotAdmitted is the guard for the failure
-// cubic caught: before DisplayOnly existed, setting Enabled=false on a row
-// whose URL fell inside a wildcard left it reported as disabled by the
-// management API while /authorize still accepted it.
+// cubic caught: setting Enabled=false on a row whose URL falls inside a
+// wildcard leaves it reported as disabled by the management API while
+// /authorize still accepts it.
+//
+// Admission is an OR, so disabling one of two overlapping entries cannot
+// de-admit the URL by itself. This test does not paper over that the way a
+// per-row "not really a rule" flag did; it fails loudly, so whoever disabled
+// the row finds out the covering wildcard has to be narrowed too.
 //
 // Vacuous while every entry is enabled, which is the point — it fails the
 // build the moment someone disables one that another rule still covers.
@@ -147,7 +181,7 @@ func TestCatalog_DisabledEntriesAreNotAdmitted(t *testing.T) {
 	t.Parallel()
 
 	for _, preset := range Catalog() {
-		if preset.Enabled || preset.DisplayOnly {
+		if preset.Enabled {
 			continue
 		}
 		require.Falsef(t, catalogAdmits(preset.URL),
@@ -160,4 +194,44 @@ func TestCatalog_DisabledEntriesAreNotAdmitted(t *testing.T) {
 func catalogAdmits(clientID string) bool {
 	_, ok := CatalogMatch(clientID)
 	return ok
+}
+
+// TestCatalogPreset_NamesTheVendorBehindAClientID: policy is written about a
+// product, not about the id a client happened to present. A vendor minting
+// one document per MCP server has no literal id to write down, so the
+// pattern entry is the only stable handle on it.
+func TestCatalogPreset_NamesTheVendorBehindAClientID(t *testing.T) {
+	t.Parallel()
+
+	preset, ok := CatalogPreset(claudeCodeURL)
+	require.True(t, ok)
+	require.Equal(t, "anthropic", preset.VendorKey)
+	require.Equal(t, claudeCodeURL, preset.URL)
+
+	preset, ok = CatalogPreset(chatGPTConnectorURL)
+	require.True(t, ok)
+	require.Equal(t, "openai", preset.VendorKey)
+	require.True(t, preset.IsPattern(), "a per-connector id resolves to the wildcard that admits it")
+
+	_, ok = CatalogPreset(unknownURL)
+	require.False(t, ok)
+}
+
+// TestCatalogPreset_AgreesWithCatalogMatch pins the two lookups to one
+// answer. A client this catalog admits must always be nameable, or a policy
+// written about a vendor would silently miss traffic admission let through.
+func TestCatalogPreset_AgreesWithCatalogMatch(t *testing.T) {
+	t.Parallel()
+
+	for _, preset := range Catalog() {
+		if !preset.Enabled || preset.IsPattern() {
+			continue
+		}
+		_, admitted := CatalogMatch(preset.URL)
+		resolved, named := CatalogPreset(preset.URL)
+		require.Equal(t, admitted, named, "catalog entry %q", preset.URL)
+		if named {
+			require.NotEmpty(t, resolved.VendorKey, "catalog entry %q", preset.URL)
+		}
+	}
 }

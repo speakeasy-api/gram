@@ -139,13 +139,14 @@ func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, findingsPu
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		findingsPub,
 		mustCustomRuleScanner(t, nil),
 		mustCELEngine(t),
 		nil,
 		nil,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 	return ab

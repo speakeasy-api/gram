@@ -12,7 +12,9 @@ import {
   IdentityPanelRow,
 } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
+import { EmployeeShadowAISection } from "@/components/observe/EmployeeShadowAISection";
 import { useIdentityOutlet } from "./identityRoute";
+import { useRBAC } from "@/hooks/useRBAC";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { ShareBar } from "@/components/chart/ShareBar";
 import { IdentitySection } from "./IdentitySection";
@@ -23,6 +25,7 @@ import {
   useCanReadRisk,
   useIdentityChallenges,
   useIdentityPrincipalUrn,
+  useIdentityProject,
   useIdentityRisk,
   useIdentityShadowServers,
   useIdentityWindow,
@@ -41,7 +44,22 @@ const RISK_UNAVAILABLE =
 
 export default function IdentitySecurity(): JSX.Element {
   const canReadRisk = useCanReadRisk();
+  // Employee detections are a project read on the server (the email pins
+  // the request to one person), so this panel gates on that scope rather
+  // than on the org:admin the risk panels need.
+  // Checked against the project the request goes to: a read grant on some
+  // other project would enable the panel and then fail the request.
+  const { hasAnyScopeInProject, isLoading: grantsLoading } = useRBAC();
+  const project = useIdentityProject();
+  const canReadDetections = hasAnyScopeInProject(
+    ["project:read", "project:write"],
+    project.id,
+  );
   const { identity } = useIdentityOutlet();
+  // Only an enrolled person has device scans behind them; an API key or an
+  // external identity has nothing to show.
+  const isEmployee = identity.kind === "user" && identity.userIds.length > 0;
+  const employeeEmail = isEmployee ? (identity.emails[0] ?? null) : null;
   const { from, to } = useIdentityWindow();
   const location = useLocation();
   const routes = useRoutes();
@@ -251,6 +269,31 @@ export default function IdentitySecurity(): JSX.Element {
               ))
           )}
         </IdentityPanel>
+
+        {/* Which AI tools this person runs is a security question about them,
+            not a list of things they have connected — it sits here rather than
+            on Connections for the same reason the denied challenges do. */}
+        {isEmployee && (
+          // Full width: the detections table is eight columns and 820px at
+          // minimum, so half the grid would scroll it sideways on a laptop.
+          <div className="md:col-span-2">
+            {grantsLoading ? (
+              // Grants still resolving: saying the permission is missing
+              // would be false for most people who reach this page.
+              <IdentityPanel title="Shadow AI" loading loadingVariant="block">
+                {null}
+              </IdentityPanel>
+            ) : canReadDetections ? (
+              <EmployeeShadowAISection userEmail={employeeEmail} />
+            ) : (
+              <IdentityPanel title="Shadow AI">
+                <IdentityPanelEmpty>
+                  Device-agent detections need the project:read permission.
+                </IdentityPanelEmpty>
+              </IdentityPanel>
+            )}
+          </div>
+        )}
       </div>
     </IdentitySection>
   );

@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -76,9 +77,11 @@ var _ gen.Auther = (*Service)(nil)
 
 const sessionQuarantineCircuitDeleteAttempts = 3
 
-// RiskAnalysisSignaler signals the per-project risk analysis coordinator workflow.
+// RiskAnalysisSignaler signals the per-project risk analysis coordinator
+// workflow and reports its run state for the Watchdog "last analysed" badge.
 type RiskAnalysisSignaler interface {
 	Signal(ctx context.Context, projectID uuid.UUID) error
+	analysisstatus.Describer
 }
 
 // RiskExclusionReconciler triggers the retroactive reconcile sweep for an
@@ -3098,7 +3101,7 @@ func (s *Service) evaluateGuardrailForChat(
 	}
 
 	occurredAt := time.Now().UTC()
-	verdicts, err := ra.EvalPromptGuardrail(
+	evaluation, err := ra.EvalPromptGuardrail(
 		ctx,
 		s.logger,
 		s.promptJudge,
@@ -3115,6 +3118,8 @@ func (s *Service) evaluateGuardrailForChat(
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid scope expression")
 	}
+
+	verdicts := evaluation.Verdicts
 
 	out := make([]*gen.PromptGuardrailMessageVerdict, 0, len(verdicts))
 	flagged := false
@@ -3170,12 +3175,14 @@ func (s *Service) evaluateGuardrailForChat(
 	}
 
 	return &gen.PromptGuardrailEvalResult{
-		ChatID:         chatID.String(),
-		Flagged:        flagged,
-		JudgedCount:    len(out),
-		TotalCostUsd:   totalCostUSD,
-		TotalLatencyMs: totalLatencyMs,
-		Verdicts:       out,
+		ChatID:              chatID.String(),
+		Flagged:             flagged,
+		JudgedCount:         len(out),
+		InScopeMessageCount: evaluation.InScopeMessageCount,
+		MessageLimitHit:     evaluation.MessageLimitHit,
+		TotalCostUsd:        totalCostUSD,
+		TotalLatencyMs:      totalLatencyMs,
+		Verdicts:            out,
 	}, nil
 }
 

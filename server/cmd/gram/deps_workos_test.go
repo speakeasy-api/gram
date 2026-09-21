@@ -3,7 +3,6 @@ package gram
 import (
 	"flag"
 	"maps"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -123,23 +122,6 @@ func TestNewAdminWorkOSOrganizationCreator(t *testing.T) {
 			require.IsType(t, (*workos.Client)(nil), got)
 		})
 	}
-}
-
-// unsetEnv removes a variable for the duration of a test and puts it back
-// afterwards. testing.T can set a variable but not remove one, and an empty
-// value is not the same thing to urfave/cli.
-func unsetEnv(t *testing.T, name string) {
-	t.Helper()
-
-	original, wasSet := os.LookupEnv(name)
-	if !wasSet {
-		return
-	}
-
-	require.NoError(t, os.Unsetenv(name))
-	t.Cleanup(func() {
-		require.NoError(t, os.Setenv(name, original)) //nolint:usetesting // t.Setenv cannot run from a cleanup function
-	})
 }
 
 // newAdminCLIContext builds a context from the admin command's own flags rather

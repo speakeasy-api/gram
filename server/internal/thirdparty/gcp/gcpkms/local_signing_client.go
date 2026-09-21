@@ -9,7 +9,13 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sync"
 
 	jose "github.com/go-jose/go-jose/v4"
 )
@@ -18,20 +24,28 @@ import (
 // the stand-in produces signatures the same width as production.
 const rsaLocalKeyBits = 2048
 
-var _ SigningClient = (*LocalSigningClient)(nil)
+var _ ProvisioningClient = (*LocalSigningClient)(nil)
 
-// LocalSigningClient is an in-process SigningClient backed by a key pair generated at
-// construction, for use where no GCP network path exists: CI, and local
-// development without KMS access.
+// LocalSigningClient is an in-process SigningClient backed by a private key, for
+// use where no GCP network path exists: CI, and local development without KMS
+// access.
 //
 // It is a faithful stand-in for the transport rather than a shortcut around it.
 // Signatures come back in the provider's own encodings — PKCS#1 v1.5 for RSA,
 // ASN.1 DER for ECDSA — so callers exercise the same parsing, conversion and
-// verification code they would against real KMS. The private key is ephemeral
-// and never leaves the process.
+// verification code they would against real KMS.
 type LocalSigningClient struct {
 	alg jose.SignatureAlgorithm
 	key crypto.Signer
+
+	// disabled records versions DisableKeyVersion was called for; they refuse
+	// to sign or export, as a DISABLED version does in KMS. IAM is not modelled.
+	mu       sync.Mutex
+	disabled map[string]bool
+}
+
+func newLocalSigningClient(alg jose.SignatureAlgorithm, key crypto.Signer) *LocalSigningClient {
+	return &LocalSigningClient{alg: alg, key: key, mu: sync.Mutex{}, disabled: map[string]bool{}}
 }
 
 // NewLocalSigningClient generates a key pair for the given algorithm.
@@ -42,18 +56,119 @@ func NewLocalSigningClient(alg jose.SignatureAlgorithm) (*LocalSigningClient, er
 		if err != nil {
 			return nil, fmt.Errorf("generate local rsa key: %w", err)
 		}
-		return &LocalSigningClient{alg: alg, key: key}, nil
+		return newLocalSigningClient(alg, key), nil
 
 	case jose.ES256:
 		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
 			return nil, fmt.Errorf("generate local ecdsa key: %w", err)
 		}
-		return &LocalSigningClient{alg: alg, key: key}, nil
+		return newLocalSigningClient(alg, key), nil
 
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, alg)
 	}
+}
+
+// NewPersistentLocalSigningClient loads a local signing key from path, creating
+// it with mode 0600 when absent. The atomic link makes concurrent server and
+// worker startups converge on one key without replacing a key another process
+// has already loaded.
+func NewPersistentLocalSigningClient(alg jose.SignatureAlgorithm, path string) (*LocalSigningClient, error) {
+	client, err := readLocalSigningClient(alg, path)
+	if err == nil {
+		return client, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+
+	client, err = NewLocalSigningClient(alg)
+	if err != nil {
+		return nil, err
+	}
+
+	der, err := x509.MarshalPKCS8PrivateKey(client.key)
+	if err != nil {
+		return nil, fmt.Errorf("marshal persistent local %s key: %w", alg, err)
+	}
+	doc := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Headers: nil, Bytes: der})
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("create persistent local key directory: %w", err)
+	}
+	tmp, err := os.CreateTemp(dir, ".local-kms-*.tmp")
+	if err != nil {
+		return nil, fmt.Errorf("create persistent local key temporary file: %w", err)
+	}
+	tmpName := tmp.Name()
+	removeTemp := func() error {
+		return errors.Join(tmp.Close(), os.Remove(tmpName))
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		return nil, errors.Join(fmt.Errorf("secure persistent local key temporary file: %w", err), removeTemp())
+	}
+	if _, err := tmp.Write(doc); err != nil {
+		return nil, errors.Join(fmt.Errorf("write persistent local key temporary file: %w", err), removeTemp())
+	}
+	if err := tmp.Sync(); err != nil {
+		return nil, errors.Join(fmt.Errorf("sync persistent local key temporary file: %w", err), removeTemp())
+	}
+	if err := tmp.Close(); err != nil {
+		return nil, errors.Join(fmt.Errorf("close persistent local key temporary file: %w", err), os.Remove(tmpName))
+	}
+
+	if err := os.Link(tmpName, path); err != nil {
+		removeErr := os.Remove(tmpName)
+		if errors.Is(err, fs.ErrExist) {
+			client, readErr := readLocalSigningClient(alg, path)
+			return client, errors.Join(readErr, removeErr)
+		}
+		return nil, errors.Join(fmt.Errorf("publish persistent local key: %w", err), removeErr)
+	}
+	if err := os.Remove(tmpName); err != nil {
+		return nil, fmt.Errorf("remove persistent local key temporary file: %w", err)
+	}
+
+	return client, nil
+}
+
+func readLocalSigningClient(alg jose.SignatureAlgorithm, path string) (*LocalSigningClient, error) {
+	file, err := os.Open(path) //nolint:gosec // path is an application-selected local-development config file, not request input.
+	if err != nil {
+		return nil, fmt.Errorf("open persistent local %s key: %w", alg, err)
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("inspect persistent local %s key: %w", alg, err), file.Close())
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return nil, errors.Join(fmt.Errorf("persistent local %s key must be a regular file accessible only to its owner", alg), file.Close())
+	}
+	doc, readErr := io.ReadAll(file)
+	if err := errors.Join(readErr, file.Close()); err != nil {
+		return nil, fmt.Errorf("read persistent local %s key: %w", alg, err)
+	}
+	block, rest := pem.Decode(doc)
+	if block == nil || block.Type != "PRIVATE KEY" || len(rest) != 0 {
+		return nil, fmt.Errorf("decode persistent local %s key: expected one PKCS#8 PEM block", alg)
+	}
+	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse persistent local %s key: %w", alg, err)
+	}
+	signer, ok := key.(crypto.Signer)
+	if !ok {
+		return nil, fmt.Errorf("parse persistent local %s key: %T is not a signer", alg, key)
+	}
+	if err := checkKeyMatchesAlgorithm(PublicKey{Algorithm: alg, Key: signer.Public()}); err != nil {
+		return nil, fmt.Errorf("validate persistent local %s key: %w", alg, err)
+	}
+	if rsaKey, ok := signer.Public().(*rsa.PublicKey); ok && rsaKey.N.BitLen() < rsaLocalKeyBits {
+		return nil, fmt.Errorf("persistent local %s key must be at least %d bits", alg, rsaLocalKeyBits)
+	}
+	return newLocalSigningClient(alg, signer), nil
 }
 
 // GetPublicKey returns the generated key pair's public half and the algorithm
@@ -70,7 +185,7 @@ func (c *LocalSigningClient) GetPublicKey(ctx context.Context, resourceName stri
 		return nil, fmt.Errorf("get local %s public key: %w", c.alg, err)
 	}
 
-	if err := ValidateKeyVersionName(resourceName); err != nil {
+	if err := c.requireEnabled(resourceName); err != nil {
 		return nil, err
 	}
 
@@ -109,7 +224,7 @@ func (c *LocalSigningClient) AsymmetricSign(ctx context.Context, resourceName st
 		return nil, fmt.Errorf("sign digest with local %s key: %w", c.alg, err)
 	}
 
-	if err := ValidateKeyVersionName(resourceName); err != nil {
+	if err := c.requireEnabled(resourceName); err != nil {
 		return nil, err
 	}
 
@@ -134,6 +249,88 @@ func (c *LocalSigningClient) AsymmetricSign(ctx context.Context, resourceName st
 	}
 
 	return signature, nil
+}
+
+// CreateSigningKey names a key the one in-process key then answers for.
+func (c *LocalSigningClient) CreateSigningKey(ctx context.Context, params CreateSigningKeyParams) (*CreatedSigningKey, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("create local %s signing key: %w", c.alg, err)
+	}
+
+	if err := validateCreateSigningKeyParams(params); err != nil {
+		return nil, err
+	}
+
+	if params.Algorithm != c.alg {
+		return nil, fmt.Errorf("%w: local client signs %s, caller asked for %s", ErrUnsupportedAlgorithm, c.alg, params.Algorithm)
+	}
+
+	keyName := params.KeyRing + "/cryptoKeys/" + params.KeyID
+
+	return &CreatedSigningKey{KeyName: keyName, KeyVersionName: signingKeyVersionName(keyName)}, nil
+}
+
+// GrantSignerVerifier validates its inputs; there is no IAM in-process.
+func (c *LocalSigningClient) GrantSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("grant local signer verifier: %w", err)
+	}
+
+	if err := ValidateKeyName(keyName); err != nil {
+		return err
+	}
+	if serviceAccountEmail == "" {
+		return errors.New("grant local signer verifier: service account email is required")
+	}
+
+	return nil
+}
+
+// RevokeSignerVerifier validates its inputs; there is no IAM in-process.
+func (c *LocalSigningClient) RevokeSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("revoke local signer verifier: %w", err)
+	}
+	if err := ValidateKeyName(keyName); err != nil {
+		return err
+	}
+	if serviceAccountEmail == "" {
+		return errors.New("revoke local signer verifier: service account email is required")
+	}
+
+	return nil
+}
+
+// DisableKeyVersion marks the version disabled: later signing and public key
+// reads for it fail, as they would against a DISABLED version in KMS.
+func (c *LocalSigningClient) DisableKeyVersion(ctx context.Context, versionName string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("disable local key version: %w", err)
+	}
+	if err := ValidateKeyVersionName(versionName); err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.disabled[versionName] = true
+
+	return nil
+}
+
+// requireEnabled validates the version name and refuses a disabled version.
+func (c *LocalSigningClient) requireEnabled(versionName string) error {
+	if err := ValidateKeyVersionName(versionName); err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.disabled[versionName] {
+		return fmt.Errorf("%w: %s", ErrKeyVersionDisabled, versionName)
+	}
+
+	return nil
 }
 
 // Close is a no-op: the key lives in memory and there is no connection to

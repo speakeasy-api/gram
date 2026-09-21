@@ -62,7 +62,9 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account). Set by ingest. Empty until classified (materialized from attributes.gram.account_type).',
     billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token, cost is real spend) | flat_rate (subscription seat, cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).',
     event_urn String MATERIALIZED toString(attributes.gram.event.urn) COMMENT 'Canonical event identity in the form urn:telemetry:<origin>:<kind>:<type> where origin is the observation channel (provider_otel | provider_api | agent_hook | gram_service | unknown), kind is the signal shape (log | metric | span) and type is the producer event type lowercased. Stamped by telemetry.Logger. Empty on rows written before the column existed (materialized from attributes.gram.event.urn).',
-    meta_mcp_server_id String MATERIALIZED toString(attributes.gram.meta_mcp_server.id) COMMENT 'Meta MCP server (Gateway Endpoint) ID when the call was dispatched through a gateway (materialized from attributes.gram.meta_mcp_server.id).'
+    meta_mcp_server_id String MATERIALIZED toString(attributes.gram.meta_mcp_server.id) COMMENT 'Meta MCP server (Gateway Endpoint) ID when the call was dispatched through a gateway (materialized from attributes.gram.meta_mcp_server.id).',
+    mcp_client_name String MATERIALIZED toString(attributes.gram.mcp.client.name) COMMENT 'MCP client name self-reported at the initialize handshake or in the per-request _meta hint. Untrusted, attribution only. Empty for hook-observed and non-MCP traffic (materialized from attributes.gram.mcp.client.name).',
+    mcp_client_version String MATERIALIZED toString(attributes.gram.mcp.client.version) COMMENT 'MCP client version reported alongside mcp_client_name. Empty when the client reported a name but no version (materialized from attributes.gram.mcp.client.version).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -98,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_block_reason ON telemetry
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_remote_mcp_server_id ON telemetry_logs (remote_mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_mcp_server_id ON telemetry_logs (mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_meta_mcp_server_id ON telemetry_logs (meta_mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_mcp_client_name ON telemetry_logs (mcp_client_name) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_name ON telemetry_logs (skill_name) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_external_org_id ON telemetry_logs (external_org_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_account_type ON telemetry_logs (account_type) TYPE set(0) GRANULARITY 4;
@@ -191,6 +194,8 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     toolset_slug SimpleAggregateFunction(max, String),
     external_user_id SimpleAggregateFunction(max, String),
     user_id SimpleAggregateFunction(max, String),
+    -- Managed runtime actor, not the credential owner or approving human.
+    agent_id SimpleAggregateFunction(max, String),
     mcp_match SimpleAggregateFunction(max, String),
     mcp_server_url SimpleAggregateFunction(max, String),
 
@@ -232,7 +237,13 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     -- Meta MCP server (Gateway Endpoint) the trace was dispatched through,
     -- materialized on telemetry_logs from attributes.gram.meta_mcp_server.id.
     -- Carried, not a sort key; max() keeps the non-empty value over empties.
-    meta_mcp_server_id SimpleAggregateFunction(max, String)
+    meta_mcp_server_id SimpleAggregateFunction(max, String),
+    -- MCP client identity, materialized on telemetry_logs from
+    -- attributes.gram.mcp.client.*. Only the tool_call row of a trace carries
+    -- it, so a non-empty value must win over empty siblings across part
+    -- merges, exactly as toolset_slug and meta_mcp_server_id do.
+    mcp_client_name SimpleAggregateFunction(max, String),
+    mcp_client_version SimpleAggregateFunction(max, String)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 90 DAY
@@ -269,6 +280,7 @@ SELECT
     anyIf(toolset_slug, toolset_slug != '') AS toolset_slug,
     anyIf(external_user_id, external_user_id != '') AS external_user_id,
     anyIf(user_id, user_id != '') AS user_id,
+    max(if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')) AS agent_id,
     anyIf(toString(attributes.gram.mcp.match), toString(attributes.gram.mcp.match) != '') AS mcp_match,
     anyIf(toString(attributes.gram.mcp.server_url), toString(attributes.gram.mcp.server_url) != '') AS mcp_server_url,
     min(time_unix_nano) AS start_time_unix_nano,
@@ -283,7 +295,9 @@ SELECT
     anyIf(toString(attributes.gram.hook.block_reason), toString(attributes.gram.hook.block_reason) != '') AS block_reason,
     anyIf(account_type, account_type != '') AS account_type,
     anyIf(provider, provider != '') AS provider,
-    anyIf(meta_mcp_server_id, meta_mcp_server_id != '') AS meta_mcp_server_id
+    anyIf(meta_mcp_server_id, meta_mcp_server_id != '') AS meta_mcp_server_id,
+    anyIf(mcp_client_name, mcp_client_name != '') AS mcp_client_name,
+    anyIf(mcp_client_version, mcp_client_version != '') AS mcp_client_version
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
@@ -689,10 +703,10 @@ WITH
     -- OTEL stream above. Deliberately NOT claude-code:usage, which stays
     -- excluded as a duplicate of the OTEL api_request stream.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
-    -- opencode and openclaw report per-turn tokens and cost on their
+    -- opencode, openclaw and Pi report per-turn tokens and cost on their
     -- unified-ingest assistant.responded rows, under the canonical
     -- gen_ai.usage.* keys that every fallback branch below already reads.
-    -- Neither has an OTEL stream and the unified ingest path stamps no
+    -- None of them has an OTEL stream and the unified ingest path stamps no
     -- gram_urn, so provenance anchors on hook_source instead. The
     -- AfterAgentResponse event guard scopes this to the turn-closing row: a
     -- session's other rows (thoughts, usage.reported, tool calls, session
@@ -701,9 +715,10 @@ WITH
     -- turn (no token fields) still counts. openclaw's turn close is agenthooks'
     -- KindStop, with usage spliced from the cached llm_output frame; it has no
     -- raw-vocabulary parser, so it resolves through the canonical event map to
-    -- the same AfterAgentResponse name.
+    -- the same AfterAgentResponse name. Pi reports usage on its message_end
+    -- event, decoded as the same stop kind and resolved through the same map.
     (
-        toString(attributes.gram.hook.source) IN ('opencode', 'openclaw')
+        toString(attributes.gram.hook.source) IN ('opencode', 'openclaw', 'pi')
         AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
     ) AS is_hook_turn_usage_row,
@@ -720,14 +735,14 @@ WITH
     ) AS is_litellm_usage_row,
     -- Rows that carry token usage: the sumIf guard for every token/cost sum.
     (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row) AS is_usage_row,
-    -- Codex/Cursor/opencode/openclaw tool calls arrive as hook rows, one
+    -- Codex/Cursor/opencode/openclaw/Pi tool calls arrive as hook rows, one
     -- PostToolUse/PostToolUseFailure row per completed call (Codex raw OTEL
     -- tool events are deliberately not counted — hook rows stay the sole
     -- source). The hook.event guard is required: every call also emits a
     -- PreToolUse row with the same gram.tool.name. Provider names (the
     -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
     (
-        toString(attributes.gram.hook.source) IN ('codex', 'cursor', 'opencode', 'openclaw')
+        toString(attributes.gram.hook.source) IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
@@ -1088,13 +1103,13 @@ WITH
     -- chat_id guard below — listed here only to keep this predicate textually
     -- aligned with attribute_metrics_summaries_mv and the Go session path.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
-    -- opencode and openclaw usage rides on their unified-ingest
+    -- opencode, openclaw and Pi usage rides on their unified-ingest
     -- assistant.responded rows, anchored on hook_source because that path
     -- stamps no gram_urn, and gated on the AfterAgentResponse event so
     -- thoughts/usage.reported/tool-call rows are not double-counted as usage
     -- turns; see attribute_metrics_summaries_mv above.
     (
-        hook_source IN ('opencode', 'openclaw')
+        hook_source IN ('opencode', 'openclaw', 'pi')
         AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
     ) AS is_hook_turn_usage_row,
@@ -1107,7 +1122,7 @@ WITH
         )
     ) AS is_litellm_usage_row,
     (
-        hook_source IN ('codex', 'cursor', 'opencode', 'openclaw')
+        hook_source IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
@@ -1258,10 +1273,10 @@ SETTINGS index_granularity = 8192
 COMMENT 'Raw usage ledger with producer-time stable-id convergence and billing reads requiring FINAL or equivalent id deduplication';
 
 -- Usage quantity, occurrence time, and reporting attributes are frozen upstream.
--- Redeliveries retain the full sorting key and occurrence month. Readers must use
--- FINAL with SETTINGS do_not_merge_across_partitions_select_final = 1 before
--- aggregating: background replacement alone does not guarantee unique reads.
--- Adjustments remain separate signed facts and do not replace original usage.
+-- Redeliveries retain the full sorting key and occurrence month. Ledger readers
+-- that require logical-reading convergence use FINAL with
+-- do_not_merge_across_partitions_select_final = 1. Incremental reporting instead
+-- counts each physical delivery. Adjustments remain separate signed facts.
 CREATE TABLE IF NOT EXISTS billing_meter_readings_by_time (
     id UUID COMMENT 'Deterministic reading UUID stable across redelivery.',
     organization_id String COMMENT 'Organization that owns the workload.',
@@ -1286,7 +1301,199 @@ PARTITION BY toYYYYMM(occurred_at)
 PRIMARY KEY (organization_id, meter_id, occurred_at)
 ORDER BY (organization_id, meter_id, occurred_at, project_id, id)
 SETTINGS index_granularity = 8192
-COMMENT 'Time-windowed usage ledger with redelivery convergence requiring FINAL before aggregation';
+COMMENT 'Time-windowed usage ledger with optional FINAL convergence for logical-reading queries';
+
+-- Each incoming delivery block is expanded into independent family facets and
+-- aggregated at UTC-day precision. SummingMergeTree combines partial sums from
+-- later blocks and background merges; duplicate physical deliveries therefore
+-- count independently.
+CREATE TABLE IF NOT EXISTS billing_meter_daily_summaries (
+    organization_id String,
+    family LowCardinality(String),
+    reading_kind LowCardinality(String),
+    facet LowCardinality(String),
+    day Date,
+    series_kind LowCardinality(String),
+    series_key String,
+    label String,
+    unit LowCardinality(String),
+    measurement_method LowCardinality(String),
+    quantity Int128,
+    reading_count Int64
+) ENGINE = SummingMergeTree((quantity, reading_count))
+PARTITION BY toYYYYMM(day)
+PRIMARY KEY (
+    organization_id,
+    family,
+    reading_kind,
+    facet,
+    series_kind,
+    series_key,
+    day
+)
+ORDER BY (
+    organization_id,
+    family,
+    reading_kind,
+    facet,
+    series_kind,
+    series_key,
+    day,
+    unit,
+    measurement_method,
+    label
+)
+SETTINGS index_granularity = 8192
+COMMENT 'Incremental daily meter family and facet marginals';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS billing_meter_daily_summaries_mv TO billing_meter_daily_summaries AS
+SELECT
+    organization_id,
+    family,
+    reading_kind,
+    facet_identity.1 AS facet,
+    toDate(occurred_at, 'UTC') AS day,
+    facet_identity.2 AS series_kind,
+    facet_identity.3 AS series_key,
+    max(facet_label) AS label,
+    unit,
+    measurement_method,
+    sum(toInt128(value)) AS quantity,
+    toInt64(count()) AS reading_count
+FROM
+(
+    SELECT
+        organization_id,
+        reading_kind,
+        occurred_at,
+        unit,
+        measurement_method,
+        value,
+        multiIf(
+            meter_id = 'gram.agent_session.storage', 'agent_session_storage',
+            meter_id IN ('gram.mcp.bandwidth.ingress', 'gram.mcp.bandwidth.egress'), 'mcp_bandwidth',
+            'risk_content_scans'
+        ) AS family,
+        arrayJoin(
+            multiIf(
+                meter_id = 'gram.agent_session.storage',
+                [
+                    tuple('total', 'value', 'total', 'Total'),
+                    tuple('project', 'value', toString(project_id), toString(project_id)),
+                    tuple('model', if(model = '', 'unset', 'value'), model, if(model = '', '(unset)', model)),
+                    tuple('provider', if(provider = '', 'unset', 'value'), provider, if(provider = '', '(unset)', provider)),
+                    tuple('billing_mode', if(billing_mode = '', 'unset', 'value'), billing_mode, if(billing_mode = '', '(unset)', billing_mode)),
+                    tuple('assistant', if(assistant_id = '', 'unset', 'value'), assistant_id, if(assistant_id = '', '(unset)', assistant_id)),
+                    tuple('billing_user', if(billing_user_id = '', 'unset', 'value'), billing_user_id, if(billing_user_id = '', '(unset)', billing_user_id)),
+                    tuple('division', if(billing_user_division_name = '', 'unset', 'value'), billing_user_division_name, if(billing_user_division_name = '', '(unset)', billing_user_division_name)),
+                    tuple('department', if(billing_user_department_name = '', 'unset', 'value'), billing_user_department_name, if(billing_user_department_name = '', '(unset)', billing_user_department_name)),
+                    tuple('job_title', if(billing_user_job_title = '', 'unset', 'value'), billing_user_job_title, if(billing_user_job_title = '', '(unset)', billing_user_job_title)),
+                    tuple('employee_type', if(billing_user_employee_type = '', 'unset', 'value'), billing_user_employee_type, if(billing_user_employee_type = '', '(unset)', billing_user_employee_type)),
+                    tuple('cost_center', if(billing_user_cost_center_name = '', 'unset', 'value'), billing_user_cost_center_name, if(billing_user_cost_center_name = '', '(unset)', billing_user_cost_center_name)),
+                    tuple(
+                        'directory_group_set',
+                        if(empty(normalized_directory_groups), 'unset', 'value'),
+                        if(empty(normalized_directory_groups), '', toJSONString(normalized_directory_groups)),
+                        if(empty(normalized_directory_groups), '(unset)', arrayStringConcat(normalized_directory_groups, ', '))
+                    )
+                ],
+                meter_id IN ('gram.mcp.bandwidth.ingress', 'gram.mcp.bandwidth.egress'),
+                [
+                    tuple('total', 'value', 'total', 'Total'),
+                    tuple('project', 'value', toString(project_id), toString(project_id)),
+                    tuple(
+                        'direction',
+                        'value',
+                        if(meter_id = 'gram.mcp.bandwidth.ingress', 'ingress', 'egress'),
+                        if(meter_id = 'gram.mcp.bandwidth.ingress', 'Ingress', 'Egress')
+                    ),
+                    tuple(
+                        'mcp_server',
+                        if(mcp_server_type = '' OR mcp_server_id = '', 'unset', 'value'),
+                        if(mcp_server_type = '' OR mcp_server_id = '', '', concat(mcp_server_type, ':', mcp_server_id)),
+                        if(
+                            mcp_server_type = '' OR mcp_server_id = '',
+                            '(unset)',
+                            if(mcp_server_slug = '', concat(mcp_server_type, ':', mcp_server_id), mcp_server_slug)
+                        )
+                    ),
+                    tuple('server_type', if(mcp_server_type = '', 'unset', 'value'), mcp_server_type, if(mcp_server_type = '', '(unset)', mcp_server_type))
+                ],
+                [
+                    tuple('total', 'value', 'total', 'Total'),
+                    tuple('project', 'value', toString(project_id), toString(project_id)),
+                    tuple(
+                        'scanner',
+                        'value',
+                        meter_id,
+                        multiIf(
+                            meter_id = 'gram.risk.scan.gitleaks', 'Gitleaks',
+                            meter_id = 'gram.risk.scan.presidio', 'Presidio',
+                            meter_id = 'gram.risk.scan.prompt_injection', 'Prompt injection',
+                            meter_id = 'gram.risk.scan.prompt_policy', 'Prompt policy',
+                            meter_id = 'gram.risk.scan.custom_rules', 'Custom rules',
+                            'CLI destructive'
+                        )
+                    ),
+                    tuple('policy', if(risk_policy_id = '', 'unset', 'value'), risk_policy_id, if(risk_policy_id = '', '(unset)', risk_policy_id)),
+                    tuple('judge_model', if(model = '', 'unset', 'value'), model, if(model = '', '(unset)', model)),
+                    tuple('judge_provider', if(provider = '', 'unset', 'value'), provider, if(provider = '', '(unset)', provider)),
+                    tuple('tool_name', if(tool_name = '', 'unset', 'value'), tool_name, if(tool_name = '', '(unset)', tool_name))
+                ]
+            )
+        ) AS facet_identity,
+        facet_identity.4 AS facet_label
+    FROM
+    (
+        SELECT
+            organization_id,
+            project_id,
+            meter_id,
+            reading_kind,
+            occurred_at,
+            unit,
+            measurement_method,
+            value,
+            attributes['assistant_id'] AS assistant_id,
+            attributes['billing_mode'] AS billing_mode,
+            attributes['billing_user_cost_center_name'] AS billing_user_cost_center_name,
+            attributes['billing_user_department_name'] AS billing_user_department_name,
+            arraySort(arrayDistinct(JSONExtract(if(attributes['billing_user_directory_groups'] = '', '[]', attributes['billing_user_directory_groups']), 'Array(String)'))) AS normalized_directory_groups,
+            attributes['billing_user_division_name'] AS billing_user_division_name,
+            attributes['billing_user_employee_type'] AS billing_user_employee_type,
+            attributes['billing_user_id'] AS billing_user_id,
+            attributes['billing_user_job_title'] AS billing_user_job_title,
+            attributes['mcp_server_id'] AS mcp_server_id,
+            attributes['mcp_server_slug'] AS mcp_server_slug,
+            attributes['mcp_server_type'] AS mcp_server_type,
+            attributes['model'] AS model,
+            attributes['provider'] AS provider,
+            attributes['risk_policy_id'] AS risk_policy_id,
+            attributes['tool_name'] AS tool_name
+        FROM billing_meter_readings_by_time
+    )
+    WHERE meter_id IN (
+        'gram.agent_session.storage',
+        'gram.mcp.bandwidth.ingress',
+        'gram.mcp.bandwidth.egress',
+        'gram.risk.scan.gitleaks',
+        'gram.risk.scan.presidio',
+        'gram.risk.scan.prompt_injection',
+        'gram.risk.scan.prompt_policy',
+        'gram.risk.scan.custom_rules',
+        'gram.risk.scan.cli_destructive'
+    )
+)
+GROUP BY
+    organization_id,
+    family,
+    reading_kind,
+    facet,
+    day,
+    series_kind,
+    series_key,
+    unit,
+    measurement_method;
 
 CREATE TABLE IF NOT EXISTS authz_challenges (
     -- Identity
@@ -1518,7 +1725,22 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- inserted_at, so an at-least-once redelivery of the original scanner row
     -- can never clobber a later dismissal. Declared last for the same
     -- append-only migration reason as the columns above.
-    event_kind LowCardinality(String) DEFAULT '' COMMENT 'Kind of this copy of the finding: finding (scanner output, dead-letter sentinels included), suppression or unsuppression (appended state-change copies from manual dismiss/undo and the retroactive exclusion reconcile). Empty on rows written before the column existed - such rows rank as finding copies.'
+    event_kind LowCardinality(String) DEFAULT '' COMMENT 'Kind of this copy of the finding: finding (scanner output, dead-letter sentinels included), suppression or unsuppression (appended state-change copies from manual dismiss/undo and the retroactive exclusion reconcile). Empty on rows written before this column existed - such rows rank as finding copies.',
+
+    -- Mediated execution metadata. No arguments, results, credentials, or
+    -- stream contents are persisted here. Declared last for append-only
+    -- migration parity with the columns above.
+    execution_id String DEFAULT '' COMMENT 'Correlation ID of one mediated execution. Empty for legacy and chat-only findings.' CODEC(ZSTD),
+    mcp_server_id String DEFAULT '' COMMENT 'Canonical concrete MCP server ID. Empty when unavailable.' CODEC(ZSTD),
+    meta_mcp_server_id String DEFAULT '' COMMENT 'Outer meta MCP gateway ID, separate from the concrete member server.' CODEC(ZSTD),
+    toolset_id String DEFAULT '' COMMENT 'Persisted toolset ID, empty for runtime-only or unavailable toolsets.' CODEC(ZSTD),
+    tool_name String DEFAULT '' COMMENT 'Resolved concrete tool name, empty when unavailable.' CODEC(ZSTD),
+    phase LowCardinality(String) DEFAULT '' COMMENT 'Inspection phase: request or response. Empty for legacy findings.',
+    mediation_surface LowCardinality(String) DEFAULT '' COMMENT 'Concrete mediation seam producing the finding.',
+    mcp_method LowCardinality(String) DEFAULT '' COMMENT 'MCP method or equivalent mediated operation, such as tools/call.',
+    principal_kind LowCardinality(String) DEFAULT '' COMMENT 'Credential class established exclusively by mcpidentity. Empty when unstamped.',
+    identity_stamped Bool DEFAULT false COMMENT 'Whether validated principal provenance was present, including validated anonymous sessions.',
+    enforcement_outcome Enum8('' = 0, 'logged' = 1, 'denied' = 2, 'withheld' = 3, 'warned_pending' = 4, 'warned_acknowledged' = 5, 'warned_abandoned' = 6, 'quarantined' = 7) DEFAULT '' COMMENT 'Enforcement action taken, independent of detection. Empty when unspecified or legacy.'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(created_at)
 ORDER BY (organization_id, project_id, created_at, id)
@@ -1534,6 +1756,7 @@ CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_id ON risk_findings (chat_id) 
 CREATE INDEX IF NOT EXISTS idx_risk_findings_risk_policy_id ON risk_findings (risk_policy_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_rule_id ON risk_findings (rule_id) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_assistant_id ON risk_findings (assistant_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_risk_findings_mcp_server_id ON risk_findings (mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS skill_efficacy_scores (
     id UUID COMMENT 'Producer-supplied score identifier.',
@@ -1798,3 +2021,171 @@ COMMENT 'Normalized OTel spans teed off the gram.otel.v1.Span topic after transf
 CREATE INDEX IF NOT EXISTS idx_otel_traces_trace_id ON otel_traces (trace_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_otel_traces_span_name ON otel_traces (span_name) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_otel_traces_source ON otel_traces (source) TYPE set(0) GRANULARITY 4;
+
+-- agent_events is append-only on purpose. ReplacingMergeTree would buy nothing:
+-- it collapses on background merges, so a query without FINAL still sees
+-- duplicates. Events have to be read duplicate-tolerantly either way, which
+-- makes append-only the honest contract and keeps every observation for
+-- lineage. De-duplication happens at read time on record_id.
+--
+-- ORDER BY puts organization first so org-wide reads prune without enumerating
+-- projects, project second because every query carries exactly one, then the
+-- full timestamp for the sharpest time pruning. A re-observation with a
+-- corrected timestamp becomes a second row, which is accepted.
+CREATE TABLE IF NOT EXISTS agent_events (
+    -- Tenancy, stamped at the ingest edge from authenticated state, never from producer-controlled resource attributes.
+    organization_id String COMMENT 'Organization the record belongs to, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
+    project_id String COMMENT 'Project the record was ingested under, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
+
+    -- Timing
+    occurred_at_unix_nano Int64 COMMENT 'Producer event time as Unix time (ns). What every query window filters on.' CODEC(Delta, ZSTD),
+    observed_at_unix_nano Int64 COMMENT 'Unix time (ns) when the record reached the ingest edge. Orders competing observations of the same fact.' CODEC(Delta, ZSTD),
+
+    -- Delivery identity
+    record_id String COMMENT 'One delivery key, resolved at ingest: the publisher record id for log-derived records, the span identity for span-derived ones. Readers de-duplicate on this and never branch on how a record arrived.' CODEC(ZSTD),
+
+    -- Agent-session containment
+    session_id String COMMENT 'Agent session the record belongs to, as extracted by the dialect. Rows sharing a session_id are the same session by definition. Empty when the producer states none.' CODEC(ZSTD),
+    turn_id String COMMENT 'Turn within the session, when the producer states one. Populated unevenly across producers.' CODEC(ZSTD),
+
+    -- What happened
+    event_id String COMMENT 'Natural identity of the subject (the message, the tool call), shared across observations of it by design. A minted id when the producer states none.' CODEC(ZSTD),
+    event_type LowCardinality(String) COMMENT 'Canonical event type assigned by the dialect. Says which kind of thing event_id names. Empty for records no dialect classified.',
+    raw_event_name String COMMENT 'The producer own name for the event. For a span-derived row this is the span name. Kept so an unclassified record stays reclassifiable.' CODEC(ZSTD),
+
+    -- Producer, in agent vocabulary. Filled only when stated.
+    source LowCardinality(String) COMMENT 'Canonicalized producer surface derived from resource service.name at write time (e.g. claude-code, litellm). Empty when not stated.',
+    provider LowCardinality(String) COMMENT 'Model provider the record concerns (e.g. anthropic, openai). Empty when not stated.',
+    surface LowCardinality(String) COMMENT 'Agent surface the activity happened on (e.g. claude-code, codex, cursor). Empty when not stated.',
+
+    -- Actor
+    user_id String COMMENT 'Producer-stated user id. Empty when not stated.' CODEC(ZSTD),
+    user_email String COMMENT 'Producer-stated user email. Empty when not stated.' CODEC(ZSTD),
+    external_user_id String COMMENT 'User id in the provider own account system. Empty when not stated.' CODEC(ZSTD),
+
+    -- Gram-resolved attribution. Empty until the account-attribution path is ported into this pipeline.
+    account_type LowCardinality(String) COMMENT 'Resolved account type. Empty until attribution runs in this pipeline.',
+    billing_mode LowCardinality(String) COMMENT 'Resolved billing mode. Empty until attribution runs in this pipeline.',
+    external_org_id String COMMENT 'Organization id in the provider own account system. Empty when not resolved.' CODEC(ZSTD),
+    device_id String COMMENT 'Device the activity came from, when the device agent reported one. Empty otherwise.' CODEC(ZSTD),
+
+    -- Directory enrichment, stamped as-was by the existing enrichers. Typed rather than joined because the compiler has no join support.
+    department_name String COMMENT 'Directory department of the user at ingest time. Empty when not enriched.' CODEC(ZSTD),
+    division_name String COMMENT 'Directory division of the user at ingest time. Empty when not enriched.' CODEC(ZSTD),
+    job_title String COMMENT 'Directory job title of the user at ingest time. Empty when not enriched.' CODEC(ZSTD),
+    employee_type String COMMENT 'Directory employee type of the user at ingest time. Empty when not enriched.' CODEC(ZSTD),
+    cost_center_name String COMMENT 'Directory cost center of the user at ingest time. Empty when not enriched.' CODEC(ZSTD),
+    roles Array(String) COMMENT 'Directory roles of the user at ingest time. Empty when not enriched.' CODEC(ZSTD),
+    groups Array(String) COMMENT 'Directory groups of the user at ingest time. Empty when not enriched.' CODEC(ZSTD),
+
+    -- Request shape
+    model String COMMENT 'Model named by the record. Empty when not stated.' CODEC(ZSTD),
+    query_source LowCardinality(String) COMMENT 'Where the request originated inside the agent (e.g. user_prompt, tool_result). Empty when not stated.',
+    skill_name String COMMENT 'Skill invoked, when the record says so. Empty otherwise.' CODEC(ZSTD),
+    agent_name String COMMENT 'Sub-agent name, when the record says so. Empty otherwise.' CODEC(ZSTD),
+    mcp_server_name String COMMENT 'MCP server involved, when the record says so. Empty otherwise.' CODEC(ZSTD),
+    mcp_tool_name String COMMENT 'MCP tool involved, when the record says so. Empty otherwise.' CODEC(ZSTD),
+
+    -- The tool, when the record is about one: a call, its result, or a decision about it
+    tool_name String COMMENT 'Tool the record concerns, when the record says so. Empty otherwise.' CODEC(ZSTD),
+
+    -- What the record said, in words
+    text String COMMENT 'The record in words. Empty where the producer put everything in attributes, in which case raw_event_name is the readable headline.' CODEC(ZSTD),
+
+    -- How it went, and how long it took
+    outcome LowCardinality(String) COMMENT 'Agent-vocabulary outcome: ok | error | rejected (a tool call the user or a policy refused to run) | refused (a model declining to answer) | empty when not stated. Not a protocol status code.',
+    outcome_message String COMMENT 'Producer-stated message accompanying an error outcome. Empty otherwise.' CODEC(ZSTD),
+    duration_nano Int64 COMMENT 'Duration in nanoseconds when the producer states one (span duration, tool call duration). 0 when not stated.' CODEC(Delta, ZSTD),
+
+    -- Content, normalized by the dialect so transcript reads never depend on each producer own key
+    input_content String COMMENT 'Normalized input message JSON. Empty when the record carries none.' CODEC(ZSTD),
+    output_content String COMMENT 'Normalized output message JSON. Empty when the record carries none.' CODEC(ZSTD),
+
+    -- Usage carried on the record itself, present when the producer log or span states it
+    input_tokens Int64 COMMENT 'Input tokens stated on the record. 0 when not stated.',
+    output_tokens Int64 COMMENT 'Output tokens stated on the record. 0 when not stated.',
+    cache_read_tokens Int64 COMMENT 'Cache read tokens stated on the record. 0 when not stated.',
+    cache_write_tokens Int64 COMMENT 'Cache write tokens stated on the record. 0 when not stated.',
+    cost_usd Float64 COMMENT 'Cost in USD stated on the record. 0 when not stated.',
+
+    -- Verbatim payload. The three levels stay separate, matching otel_logs and otel_traces.
+    attributes JSON COMMENT 'Record attributes verbatim, including Gram enrichments. Anything not typed above survives here.' CODEC(ZSTD),
+    resource_attributes JSON COMMENT 'Attributes of the resource that produced the record.' CODEC(ZSTD),
+    scope_attributes JSON COMMENT 'Instrumentation scope attributes.' CODEC(ZSTD)
+) ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(occurred_at_unix_nano))
+ORDER BY (organization_id, project_id, occurred_at_unix_nano, event_type, event_id)
+TTL fromUnixTimestamp64Nano(occurred_at_unix_nano) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'One row per observed agent occurrence, resolved by the ingest dialects into agent vocabulary rather than the shape it arrived in. Rows sharing a session_id belong to the same agent session. Append-only: every observation is retained so the lineage of a fact stays queryable, and de-duplication is performed at read time. The queryable surface is defined by the semantic layer, not by this table.';
+
+-- agent_metrics is ReplacingMergeTree, unlike agent_events, because metric
+-- measures are sums: duplicates corrupt them directly and there is no
+-- count-distinct equivalent to read around them. Fingerprint collisions resolve
+-- last-write-wins, the engine default, which the OTel spec permits: receivers
+-- must de-duplicate but which point wins in an overlap is unspecified.
+--
+-- Retained for 730 days against agent_events 90, because billing reads
+-- measures across historical cycles, not narrative.
+CREATE TABLE IF NOT EXISTS agent_metrics (
+    -- Tenancy, stamped at the ingest edge from authenticated state.
+    organization_id String COMMENT 'Organization the data point belongs to, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
+    project_id String COMMENT 'Project the data point was ingested under, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
+
+    -- Timing. window_start and window_end carry the interval OTLP data points actually report and equal occurred_at for point observations.
+    occurred_at_unix_nano Int64 COMMENT 'The data point own time as Unix time (ns). What every query window filters on.' CODEC(Delta, ZSTD),
+    observed_at_unix_nano Int64 COMMENT 'Unix time (ns) when the data point reached the ingest edge. The ReplacingMergeTree version column.' CODEC(Delta, ZSTD),
+    window_start_unix_nano Int64 COMMENT 'Start of the interval the data point covers, as Unix time (ns). Equals occurred_at_unix_nano for point observations.' CODEC(Delta, ZSTD),
+    window_end_unix_nano Int64 COMMENT 'End of the interval the data point covers, as Unix time (ns). Equals occurred_at_unix_nano for point observations.' CODEC(Delta, ZSTD),
+
+    -- Measurement semantics
+    grain LowCardinality(String) COMMENT 'Producer native reporting grain: turn | session | minute | hour | day | point. Gates rollup eligibility.',
+    temporality LowCardinality(String) COMMENT 'OTLP aggregation temporality: delta | cumulative | unspecified. Without it a reader cannot know whether sum() over a set of rows is valid.',
+    is_monotonic UInt8 COMMENT '1 when the producer declares the series monotonic, else 0.',
+
+    -- Identity
+    metric_id String COMMENT 'Content-derived fingerprint over the OTel identifying set (resource attributes, scope, metric name, unit, data point type, temporality, monotonicity, point attributes) plus the point timestamps. Value is excluded on purpose so a replay reproduces the same fingerprint.' CODEC(ZSTD),
+
+    -- The measure. Narrow: one row per data point per measure.
+    metric_name String COMMENT 'The producer own metric name, verbatim.' CODEC(ZSTD),
+    canonical_metric LowCardinality(String) COMMENT 'The dialect canonical name for the measure. Discriminating point attributes fold in here, so claude_code.token.usage with type=input becomes its own canonical metric.',
+    value Float64 COMMENT 'The measured value. One column rather than an int/double pair because Float64 is exact to 2^53 and the OTel spec says the numeric representation is not identifying.',
+    unit LowCardinality(String) COMMENT 'Unit as declared by the producer. Empty when not declared.',
+
+    -- Dimensions, repeated in full so any measure can be grouped by any dimension with no join. Empty where the producer does not supply them.
+    session_id String COMMENT 'Agent session the data point is attributable to. Empty for feeds that report without one.' CODEC(ZSTD),
+    turn_id String COMMENT 'Turn within the session, when the producer states one.' CODEC(ZSTD),
+    user_id String COMMENT 'Producer-stated user id. Empty when not stated.' CODEC(ZSTD),
+    user_email String COMMENT 'Producer-stated user email. Empty when not stated.' CODEC(ZSTD),
+    external_user_id String COMMENT 'User id in the provider own account system. Empty when not stated.' CODEC(ZSTD),
+    model String COMMENT 'Model the measurement concerns. Empty when not stated.' CODEC(ZSTD),
+    query_source LowCardinality(String) COMMENT 'Where the request originated inside the agent. Empty when not stated.',
+    skill_name String COMMENT 'Skill invoked, when stated. Empty otherwise.' CODEC(ZSTD),
+    agent_name String COMMENT 'Sub-agent name, when stated. Empty otherwise.' CODEC(ZSTD),
+    mcp_server_name String COMMENT 'MCP server involved, when stated. Empty otherwise.' CODEC(ZSTD),
+    mcp_tool_name String COMMENT 'MCP tool involved, when stated. Empty otherwise.' CODEC(ZSTD),
+    source LowCardinality(String) COMMENT 'Canonicalized producer surface derived from resource service.name at write time. Empty when not stated.',
+    provider LowCardinality(String) COMMENT 'Model provider the measurement concerns. Empty when not stated.',
+    surface LowCardinality(String) COMMENT 'Agent surface the activity happened on. Empty when not stated.',
+    account_type LowCardinality(String) COMMENT 'Resolved account type. Empty until attribution runs in this pipeline.',
+    billing_mode LowCardinality(String) COMMENT 'Resolved billing mode. Empty until attribution runs in this pipeline.',
+    external_org_id String COMMENT 'Organization id in the provider own account system. Empty when not resolved.' CODEC(ZSTD),
+    device_id String COMMENT 'Device the activity came from, when the device agent reported one. Empty otherwise.' CODEC(ZSTD),
+    department_name String COMMENT 'Directory department of the user at ingest time. Empty when not enriched.' CODEC(ZSTD),
+    division_name String COMMENT 'Directory division of the user at ingest time. Empty when not enriched.' CODEC(ZSTD),
+    job_title String COMMENT 'Directory job title of the user at ingest time. Empty when not enriched.' CODEC(ZSTD),
+    employee_type String COMMENT 'Directory employee type of the user at ingest time. Empty when not enriched.' CODEC(ZSTD),
+    cost_center_name String COMMENT 'Directory cost center of the user at ingest time. Empty when not enriched.' CODEC(ZSTD),
+    roles Array(String) COMMENT 'Directory roles of the user at ingest time. Empty when not enriched.' CODEC(ZSTD),
+    groups Array(String) COMMENT 'Directory groups of the user at ingest time. Empty when not enriched.' CODEC(ZSTD),
+
+    -- Verbatim payload
+    attributes JSON COMMENT 'Data point attributes verbatim, including Gram enrichments.' CODEC(ZSTD),
+    resource_attributes JSON COMMENT 'Attributes of the resource that produced the data point.' CODEC(ZSTD),
+    scope_attributes JSON COMMENT 'Instrumentation scope attributes.' CODEC(ZSTD)
+) ENGINE = ReplacingMergeTree(observed_at_unix_nano)
+PARTITION BY toYYYYMM(fromUnixTimestamp64Nano(occurred_at_unix_nano))
+ORDER BY (organization_id, project_id, occurred_at_unix_nano, canonical_metric, metric_id)
+TTL fromUnixTimestamp64Nano(occurred_at_unix_nano) + INTERVAL 730 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'One row per measurement data point per measure, at the producer native grain. Carries a full dimension repeat so no join is required. Retained beyond agent_events so billing can read historical cycles. Replacing collapses only on background merges, so a reader must de-duplicate on metric_id (FINAL, or ORDER BY observed_at_unix_nano DESC then LIMIT 1 BY metric_id, since an unordered LIMIT 1 BY keeps an arbitrary version) and never sum raw rows.';

@@ -6,14 +6,17 @@
 // A group declared in the sheet would close that circle, and a circular import
 // leaves whichever module evaluates second holding an undefined constant.
 
+import {
+  createdRange,
+  type CreatedSelection,
+  type CreatedRangeKey,
+} from "@/lib/createdRange";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
 import { TRIAL_STATES, type TrialState } from "@/lib/gramAdminApi";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
 
-// Whether an organization is switched off. Declared here rather than in the
-// API module because the server has no enum for it: it derives the state from
-// `disabled_at`, and these two words are the whole of what `disabled_states`
-// accepts.
+// The two restricted states derived from `disabled_at`.
+// The API also accepts "all"; statusParams translates these selections.
 export const DISABLED_STATES = ["active", "disabled"] as const;
 
 export type DisabledState = (typeof DISABLED_STATES)[number];
@@ -22,8 +25,17 @@ export const FILTER_GROUP_KEYS = ["type", "trial", "disabled"] as const;
 
 export type FilterGroupKey = (typeof FILTER_GROUP_KEYS)[number];
 
-/** One list of chosen values per group, in the order the pickers offer them. */
-export type FilterSelection = Record<FilterGroupKey, string[]>;
+export type MemberRange = { minMembers?: string; maxMembers?: string };
+export type MemberRangeKey = keyof MemberRange;
+export type FilterControlKey =
+  | FilterGroupKey
+  | MemberRangeKey
+  | CreatedRangeKey
+  | "created";
+/** Chosen values per group; status is empty (All) or a single state. */
+export type FilterSelection = Record<FilterGroupKey, string[]> &
+  MemberRange &
+  CreatedSelection;
 
 export const NO_FILTERS: FilterSelection = {
   type: [],
@@ -47,8 +59,7 @@ export type FilterGroup = {
   options: FilterOption[];
 };
 
-// "Status", rather than the "disabled" the parameter is named for: a group
-// headed Disabled whose first option is Active reads as a contradiction.
+// Shared labels for the dropdown and applied-filter summaries.
 const DISABLED_LABELS: Record<DisabledState, string> = {
   active: "Active",
   disabled: "Disabled",
@@ -78,10 +89,9 @@ export const FILTER_GROUPS: FilterGroup[] = [
   },
   {
     key: "disabled",
-    label: "Status",
-    emptyLabel: "Active only",
-    // Not the empty label: this group's default is a filter, not everything.
-    allLabel: "Active and disabled",
+    label: "Organization Status",
+    emptyLabel: "All",
+    allLabel: "All",
     options: DISABLED_STATES.map((value) => ({
       value,
       label: DISABLED_LABELS[value],
@@ -184,24 +194,109 @@ export function disabledStates(chosen: string[]): DisabledState[] | undefined {
   return kept.length > 0 ? kept : undefined;
 }
 
-/** The three params a chosen set puts in the URL. */
-export type FilterSearch = {
-  type?: string[];
-  trial?: TrialState[];
-  disabled?: DisabledState[];
-};
+/** Canonical status; old fields are read only for bookmark compatibility. */
+export type FilterSearch = MemberRange &
+  CreatedSelection & {
+    type?: string[];
+    trial?: TrialState[];
+    disabledStatus?: "all" | DisabledState;
+    disabled?: DisabledState[];
+    disabledOnly?: boolean;
+  };
 
-/**
- * A chosen set as the URL states it.
- *
- * Written through the same three readers a pasted link goes through, so a
- * control cannot put a value in the URL that a reload would refuse: the view
- * an operator sends is the view they are looking at.
- */
-export function filtersToSearch(filters: FilterSelection): FilterSearch {
+/** New navigations only write the canonical status, omitting All. */
+export function filtersToSearch(filters: FilterSelection): MemberRange &
+  CreatedSelection & {
+    type?: string[];
+    trial?: TrialState[];
+    disabledStatus?: DisabledState;
+  } {
+  const status = disabledStates(filters.disabled);
   return {
+    ...memberRange(filters),
+    ...createdRange(filters),
+    createdPreset: filters.createdPreset,
     type: accountTypes(filters.type),
     trial: trialStates(filters.trial),
-    disabled: disabledStates(filters.disabled),
+    disabledStatus: status?.length === 1 ? status[0] : undefined,
   };
+}
+
+/** A valid canonical status wins, including explicit All. */
+export function statusSelection(search: FilterSearch): string[] {
+  if (search.disabledStatus === "all") return [];
+  if (
+    search.disabledStatus === "active" ||
+    search.disabledStatus === "disabled"
+  ) {
+    return [search.disabledStatus];
+  }
+  if (search.disabledOnly === true) return ["disabled"];
+  if (search.disabledOnly === false) return [];
+  return search.disabled?.length === 1 ? search.disabled : [];
+}
+
+/** Translate status at the API boundary. */
+export function statusParams(search: FilterSearch): {
+  disabled_status: "all" | "active" | "disabled";
+} {
+  const status = statusSelection(search)[0];
+  return {
+    disabled_status:
+      status === "active" || status === "disabled" ? status : "all",
+  };
+}
+
+const MAX_MEMBERS = "9223372036854775807";
+type RawMemberRange = { minMembers?: unknown; maxMembers?: unknown };
+
+// Only strings: Router has already JSON-parsed bare numbers, losing both
+// unsafe integer precision and syntax (1e3 / 1.0). Its default serializer
+// quotes our decimal strings, so UI-written URLs always round trip losslessly.
+function memberBound(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!/^[0-9]+$/.test(trimmed)) return undefined;
+  const decimal = trimmed.replace(/^0+(?=\d)/, "");
+  if (
+    decimal.length > MAX_MEMBERS.length ||
+    (decimal.length === MAX_MEMBERS.length && decimal > MAX_MEMBERS)
+  )
+    return undefined;
+  return decimal;
+}
+
+export function memberRangeErrors(
+  raw: RawMemberRange,
+): Partial<Record<MemberRangeKey, string>> {
+  const errors: Partial<Record<MemberRangeKey, string>> = {};
+  for (const key of ["minMembers", "maxMembers"] as const) {
+    const value = raw[key];
+    const blank =
+      value === undefined || (typeof value === "string" && value.trim() === "");
+    if (!blank && memberBound(value) === undefined) {
+      errors[key] = `Enter a whole number from 0 to ${MAX_MEMBERS}.`;
+    }
+  }
+  const min = memberBound(raw.minMembers);
+  const max = memberBound(raw.maxMembers);
+  if (min !== undefined && max !== undefined && BigInt(min) > BigInt(max)) {
+    errors.maxMembers = "Max must be greater than or equal to Min.";
+  }
+  return errors;
+}
+
+// Match the route's forgiving filter policy: drop malformed bounds separately;
+// drop a reversed pair together, never send an invalid range to the API.
+export function memberRange(raw: RawMemberRange): MemberRange {
+  const minMembers = memberBound(raw.minMembers);
+  const maxMembers = memberBound(raw.maxMembers);
+  if (
+    minMembers !== undefined &&
+    maxMembers !== undefined &&
+    BigInt(minMembers) > BigInt(maxMembers)
+  ) {
+    return { minMembers: undefined, maxMembers: undefined };
+  }
+  return { minMembers, maxMembers };
 }

@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 )
 
 func TestUpsertAIDetectionsRejectsZeroSeenAt(t *testing.T) {
@@ -48,4 +50,19 @@ func TestUpsertAIDetectionsRejectsInvalidFiniteValues(t *testing.T) {
 	invalidCategory.Category = "other"
 	_, categoryErr := New(nil).UpsertAIDetections(t.Context(), []UpsertAIDetectionParams{invalidCategory})
 	require.ErrorContains(t, categoryErr, "invalid category")
+}
+
+// TestUpsertAIDetectionsAcceptsEveryKnownCategory holds this layer's category
+// literals to aitargets.KnownCategories. The check is on the vocabulary rather
+// than on a call because a valid row runs on past validation into ClickHouse,
+// which New(nil) has no connection for. This layer cannot import aitargets in
+// production without inverting the dependency, so the test carries the link.
+func TestUpsertAIDetectionsAcceptsEveryKnownCategory(t *testing.T) {
+	t.Parallel()
+	known := make([]string, 0, len(aitargets.KnownCategories()))
+	for _, category := range aitargets.KnownCategories() {
+		known = append(known, string(category))
+	}
+	require.ElementsMatch(t, known, aiDetectionCategories,
+		"the ClickHouse write path and the scan-report ingest must accept the same categories")
 }

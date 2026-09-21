@@ -4,7 +4,6 @@
 package remotesessions_test
 
 import (
-	"context"
 	"crypto/x509"
 	"net/http"
 	"net/http/httptest"
@@ -17,12 +16,12 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -184,6 +183,12 @@ func TestRemoteLoginRejectedIDTokenDoesNotFallBackToUserinfo(t *testing.T) {
 	doc := decodeEnrichment(t, sess.Enrichment)
 	require.Equal(t, "ok", doc.Interfaces["userinfo"].Status)
 	require.Equal(t, "rejected", doc.Interfaces["id_token"].Status, "the marker survives the merge")
+
+	// The card still names the account from the stored userinfo answer, with the caveat that it was not recorded.
+	statuses, err := env.mgr.RemoteSessionStatuses(ctx, env.subject, env.projectID, env.organizationID, sess.UserSessionIssuerID)
+	require.NoError(t, err)
+	require.Equal(t, "grant-owner@example.com", statuses[env.clientID].ConnectedAs)
+	require.NotEmpty(t, statuses[env.clientID].IdentityCaveat)
 }
 
 // The exchange's id token rejection outlives a token response over the cap.
@@ -701,30 +706,107 @@ func TestEnrichRemoteSessionIntrospectionJWT(t *testing.T) {
 	}
 }
 
-// A 404 from an advertised endpoint asks for the issuer's metadata to be refreshed.
-func TestEnrichRemoteSession404RequestsIssuerMetadataRefresh(t *testing.T) {
+// An advertised endpoint answering 404 or 410 without an OAuth error body refreshes the issuer's metadata under enrichment_endpoint_missing, once per reactive interval.
+func TestEnrichRemoteSessionUserinfoMissingRefreshesIssuerMetadata(t *testing.T) {
 	t.Parallel()
 
 	as := newEnrichmentAS(t)
-	var refreshed atomic.Int64
-	var refreshedIssuer atomic.Pointer[uuid.UUID]
-	ctx, env := newSyntheticExpiryEnv(t, "introspect-404", plainTokenHandler(false),
-		withIDTokenIssuer(newIDTokenIssuer(t)), withEnrichmentAS(as),
-		withIssuerMetadataRefreshSeam(func(_ context.Context, issuerID uuid.UUID) {
-			refreshed.Add(1)
-			refreshedIssuer.Store(&issuerID)
-		}),
+	var discoveries atomic.Int32
+	upstream := fakeIssuerServer(t, func(doc map[string]any) {
+		discoveries.Add(1)
+		doc["userinfo_endpoint"] = as.userinfoURL
+		doc["introspection_endpoint"] = as.introspectionURL
+	})
+	ctx, env := newSyntheticExpiryEnv(t, "userinfo-missing", plainTokenHandler(false),
+		withIDTokenIssuer(newIDTokenIssuer(t)), withEnrichmentAS(as), withIssuerURL(upstream.URL),
+		withIssuerMetadataRefresh(), withIssuerMetadataFetchedAt(time.Now().Add(-2*time.Hour)),
 	)
-	require.EqualValues(t, 1, refreshed.Load(), "the unscripted userinfo endpoint answered 404 at the exchange")
-	require.Equal(t, env.issuerID, *refreshedIssuer.Load())
+	env.issuerMetadata.Wait()
+	require.EqualValues(t, 1, discoveries.Load(), "the unscripted userinfo endpoint answered 404 at the exchange")
+	require.WithinDuration(t, time.Now(), loadEnvIssuer(t, env).MetadataFetchedAt.Time, time.Minute)
+	counts := reasonOutcomeCounts(t, env.issuerMetadataReader)
+	require.Len(t, counts, 1, "the on-use cadence stays silent: %v", counts)
+	require.Equal(t, int64(1), counts[remotesessionmetrics.IssuerMetadataRefreshReasonEnrichmentEndpointMissing][remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed])
 
-	upstream, err := env.mgr.EnrichRemoteSession(ctx, env.ref(env.session))
+	as.script(nil, jsonHandler(http.StatusGone, ""))
+	upstream2, err := env.mgr.EnrichRemoteSession(ctx, env.ref(env.session))
 	require.NoError(t, err)
-	require.False(t, upstream.Inactive)
-	require.EqualValues(t, 3, refreshed.Load(), "both unscripted endpoints answered 404 on verify")
+	require.False(t, upstream2.Inactive)
+	env.issuerMetadata.Wait()
+	require.EqualValues(t, 1, discoveries.Load(), "answers inside the reactive interval start no discovery")
+	reactive := reasonOutcomeCounts(t, env.issuerMetadataReader)[remotesessionmetrics.IssuerMetadataRefreshReasonEnrichmentEndpointMissing]
+	require.Equal(t, int64(1), reactive[remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed])
+	require.Equal(t, int64(2), reactive[remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedRecent], "userinfo 404 and introspection 410 on verify")
 	doc := decodeEnrichment(t, reloadSession(t, env).Enrichment)
 	require.Equal(t, http.StatusNotFound, doc.Interfaces["userinfo"].HTTPStatus)
-	require.Equal(t, http.StatusNotFound, doc.Interfaces["introspection"].HTTPStatus)
+	require.Equal(t, http.StatusGone, doc.Interfaces["introspection"].HTTPStatus)
+}
+
+// A userinfo answer that carries an OAuth error body, or succeeds, says nothing about the endpoint's location.
+func TestEnrichRemoteSessionUserinfoAnsweredDoesNotRefreshIssuerMetadata(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		userinfo http.HandlerFunc
+	}{
+		{name: "404 with oauth error body", userinfo: jsonHandler(http.StatusNotFound, `{"error":"invalid_token"}`)},
+		{name: "410 with oauth error body", userinfo: jsonHandler(http.StatusGone, `{"error":"invalid_token","error_description":"expired"}`)},
+		{name: "200", userinfo: jsonHandler(http.StatusOK, `{"sub":"user-1"}`)},
+	}
+	for i, tc := range cases {
+		as := newEnrichmentAS(t)
+		as.script(tc.userinfo, jsonHandler(http.StatusOK, `{"active":true}`))
+		var discoveries atomic.Int32
+		upstream := fakeIssuerServer(t, func(map[string]any) { discoveries.Add(1) })
+		ctx, env := newSyntheticExpiryEnv(t, "userinfo-answered-"+strconv.Itoa(i), plainTokenHandler(false),
+			withIDTokenIssuer(newIDTokenIssuer(t)), withEnrichmentAS(as), withIssuerURL(upstream.URL),
+			withIssuerMetadataRefresh(), withIssuerMetadataFetchedAt(time.Now().Add(-2*time.Hour)),
+		)
+		_, err := env.mgr.EnrichRemoteSession(ctx, env.ref(env.session))
+		require.NoError(t, err, tc.name)
+		env.issuerMetadata.Wait()
+		require.Zero(t, discoveries.Load(), tc.name)
+		require.Empty(t, reasonOutcomeCounts(t, env.issuerMetadataReader), tc.name)
+	}
+}
+
+// An introspection endpoint answering 404 or 410 without an OAuth error body refreshes the issuer's metadata; one carrying an error body does not.
+func TestEnrichRemoteSessionIntrospectionMissingRefreshesIssuerMetadata(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		introspect http.HandlerFunc
+		refreshed  bool
+	}{
+		{name: "404 empty body", introspect: jsonHandler(http.StatusNotFound, ""), refreshed: true},
+		{name: "410 empty body", introspect: jsonHandler(http.StatusGone, ""), refreshed: true},
+		{name: "404 with oauth error body", introspect: jsonHandler(http.StatusNotFound, `{"error":"invalid_client"}`), refreshed: false},
+		{name: "200", introspect: jsonHandler(http.StatusOK, `{"active":true}`), refreshed: false},
+	}
+	for i, tc := range cases {
+		as := newEnrichmentAS(t)
+		as.script(jsonHandler(http.StatusOK, `{"sub":"user-1"}`), tc.introspect)
+		var discoveries atomic.Int32
+		upstream := fakeIssuerServer(t, func(map[string]any) { discoveries.Add(1) })
+		ctx, env := newSyntheticExpiryEnv(t, "introspect-missing-"+strconv.Itoa(i), plainTokenHandler(false),
+			withIDTokenIssuer(newIDTokenIssuer(t)), withEnrichmentAS(as), withIssuerURL(upstream.URL),
+			withIssuerMetadataRefresh(), withIssuerMetadataFetchedAt(time.Now().Add(-2*time.Hour)),
+		)
+		_, err := env.mgr.EnrichRemoteSession(ctx, env.ref(env.session))
+		require.NoError(t, err, tc.name)
+		env.issuerMetadata.Wait()
+		counts := reasonOutcomeCounts(t, env.issuerMetadataReader)
+		if !tc.refreshed {
+			require.Zero(t, discoveries.Load(), tc.name)
+			require.Empty(t, counts, tc.name)
+			continue
+		}
+		require.EqualValues(t, 1, discoveries.Load(), tc.name)
+		require.Len(t, counts, 1, "%s: %v", tc.name, counts)
+		require.Equal(t, int64(1), counts[remotesessionmetrics.IssuerMetadataRefreshReasonEnrichmentEndpointMissing][remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed], tc.name)
+	}
 }
 
 // A grant that moved since the verify started is not written to.

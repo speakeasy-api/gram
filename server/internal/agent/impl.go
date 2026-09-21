@@ -42,7 +42,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // ProductFeaturesClient is the slice of the product-features client the agent
@@ -288,8 +287,7 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		// Per-user key: the owner is the enrolled developer, bound to the token.
 		email = conv.NormalizeEmail(*authCtx.Email)
 	}
-	emailPrincipal, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + email)
-	if err != nil {
+	if _, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + email); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid email")
 	}
 
@@ -362,35 +360,12 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		}
 	}
 
-	// Assignments can target the email or the org wildcard directly; those always
-	// apply regardless of whether the email maps to an org member.
-	principals := []string{emailPrincipal.String(), urn.PrincipalWildcard}
-	directoryAudiences, err := plugins.ResolveDirectoryAudiencePrincipalsByEmails(ctx, s.db, authCtx.ActiveOrganizationID, []string{email})
+	// Resolve the reported email through current organization membership before
+	// adding user:<id>, user:all, or role principals. Agent keys can outlive their
+	// owner's membership, so the authenticated user id is not trusted directly.
+	principals, err := plugins.ResolveDeliveryPrincipals(ctx, s.db, authCtx.ActiveOrganizationID, email, "")
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent directory audiences").LogError(ctx, s.logger)
-	}
-	principals = append(principals, directoryAudiences[email]...)
-
-	// Resolve the reported email to an org member so user:<id>, user:all, and
-	// role:<kind>:<uuid> assignments deliver too. A non-member (or unknown email) is not
-	// an error: the caller still receives email- and wildcard-scoped plugins.
-	user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
-		Email:          email,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	switch {
-	case err == nil:
-		resolved, err := authz.ResolveUserPrincipals(ctx, s.db, authCtx.ActiveOrganizationID, user.ID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent principals").LogError(ctx, s.logger)
-		}
-		for _, principal := range resolved {
-			principals = append(principals, principal.String())
-		}
-	case errors.Is(err, pgx.ErrNoRows):
-		// Email is not an active member of this org; wildcard/email scoping only.
-	default:
-		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent user").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
 	}
 
 	return s.pluginSetFor(ctx, authCtx, principals)

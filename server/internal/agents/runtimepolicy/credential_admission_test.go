@@ -2,6 +2,7 @@ package runtimepolicy
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -324,4 +325,52 @@ func TestCredentialAdmissionRejectsMissingContextBeforeDatabaseAccess(t *testing
 	require.Error(t, err)
 	_, err = AdmitPrincipalCredentialWithDBTX(t.Context(), nil)
 	require.Error(t, err)
+}
+
+func TestPrincipalCredentialsHonorLiveServerRestriction(t *testing.T) {
+	t.Parallel()
+	for _, apiKey := range []bool{false, true} {
+		t.Run(fmt.Sprintf("api-key-%t", apiKey), func(t *testing.T) {
+			t.Parallel()
+			fixture := newCredentialAdmissionFixture(t)
+			actor := urn.NewPrincipal(urn.PrincipalTypeAgent, fixture.agentID.String())
+			for _, principal := range []urn.Principal{actor, urn.NewPrincipal(urn.PrincipalTypeUser, fixture.ownerUserID)} {
+				seedGrant(t, t.Context(), fixture.db, fixture.organizationID, principal, authz.ScopeMCPWrite, "*")
+			}
+			policy, err := NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, "*")})
+			require.NoError(t, err)
+			raw, err := EncodeDelegatedPolicy(CurrentDelegatedPolicyVersion, policy)
+			require.NoError(t, err)
+			credential := contextvalues.PrincipalCredential{AuthorizerUserID: fixture.authorizerUserID, DelegatedGrants: raw, DelegatedGrantsVersion: int32(CurrentDelegatedPolicyVersion)}
+			authCtx := &contextvalues.AuthContext{ActiveOrganizationID: fixture.organizationID}
+			ctx := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), authCtx, actor, credential)
+			if apiKey {
+				key, err := keysrepo.New(fixture.db).CreateAPIKey(t.Context(), keysrepo.CreateAPIKeyParams{
+					OrganizationID: fixture.organizationID, CreatedByUserID: fixture.authorizerUserID,
+					Name: "server-restriction", KeyPrefix: "gram_test", KeyHash: uuid.NewString(), Scopes: []string{"producer"},
+				})
+				require.NoError(t, err)
+				//nolint:glint // notestingrawsql: seed the immutable principal-key profile under test
+				_, err = fixture.db.Exec(t.Context(), `UPDATE api_keys SET scopes = '{}', subject_urn = $1, delegated_grants = $2, delegated_grants_version = $3, expires_at = statement_timestamp() + INTERVAL '1 day' WHERE id = $4`, actor.String(), raw, credential.DelegatedGrantsVersion, key.ID)
+				require.NoError(t, err)
+				authCtx.APIKeyID = key.ID.String()
+				ctx = contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), authCtx, actor, credential)
+			} else {
+				ctx = contextvalues.SetOAuthClientID(ctx, "test-agent-client")
+			}
+			selected := authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: "selected-server"}
+			other := authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: "other-server"}
+			prepared, err := fixture.engine.PrepareContext(ctx)
+			require.NoError(t, err)
+			require.NoError(t, fixture.engine.Require(prepared, selected))
+			require.NoError(t, fixture.engine.Require(prepared, other))
+			seedGrant(t, t.Context(), fixture.db, fixture.organizationID, actor, authz.ScopeMCPBlockedConnect, selected.ResourceID)
+			prepared, err = fixture.engine.PrepareContext(ctx)
+			require.NoError(t, err)
+			var denied *oops.ShareableError
+			require.ErrorAs(t, fixture.engine.Require(prepared, selected), &denied)
+			require.Equal(t, oops.CodeForbidden, denied.Code)
+			require.NoError(t, fixture.engine.Require(prepared, other), "the same existing credential still reaches the other server")
+		})
+	}
 }

@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/throttle"
 	"github.com/speakeasy-api/gram/server/internal/uuidv7"
@@ -286,6 +288,22 @@ func (s *TemporalRiskAnalysisSignaler) Signal(ctx context.Context, projectID uui
 	return nil
 }
 
+// Describe reports the run state of the project's coordinator by describing
+// the latest run of its deterministic workflow id. An empty run id asks
+// Temporal for the most recent run, which is what "last ran" means for a
+// ContinueAsNew chain. NotFound maps to StateNever rather than an error.
+func (s *TemporalRiskAnalysisSignaler) Describe(ctx context.Context, projectID uuid.UUID) (analysisstatus.Status, error) {
+	if s.TemporalEnv == nil {
+		return analysisstatus.Status{}, errors.New("risk analysis signaler has no temporal environment")
+	}
+	resp, err := s.TemporalEnv.Client().DescribeWorkflowExecution(ctx, coordinatorWorkflowID(projectID), "")
+	status, err := analysisstatus.FromDescribe(resp, err)
+	if err != nil {
+		return analysisstatus.Status{}, fmt.Errorf("describe coordinator %s: %w", coordinatorWorkflowID(projectID), err)
+	}
+	return status, nil
+}
+
 // ── Throttled Signaler ───────────────────────────────────────────────────────
 
 // ProjectSignaler wakes a per-project coordinator workflow. Every coordinator
@@ -351,6 +369,21 @@ func (t *ThrottledSignaler) Signal(ctx context.Context, projectID uuid.UUID) err
 		)
 	}
 	return nil
+}
+
+// Describe delegates to the wrapped signaler when it can describe its
+// coordinator. Throttling only shapes signals, never reads, so there is
+// nothing to coalesce here.
+func (t *ThrottledSignaler) Describe(ctx context.Context, projectID uuid.UUID) (analysisstatus.Status, error) {
+	d, ok := t.inner.(analysisstatus.Describer)
+	if !ok {
+		return analysisstatus.Status{}, fmt.Errorf("risk analysis signaler %T cannot describe coordinator runs", t.inner)
+	}
+	status, err := d.Describe(ctx, projectID)
+	if err != nil {
+		return analysisstatus.Status{}, fmt.Errorf("describe: %w", err)
+	}
+	return status, nil
 }
 
 // Shutdown flushes any pending throttled signals. Call during graceful shutdown.

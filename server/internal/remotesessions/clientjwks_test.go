@@ -246,9 +246,7 @@ func TestDetachClientKeySet_AbsentSetIsNoop(t *testing.T) {
 }
 
 // TestDetachClientKeySet_RefusedForPrivateKeyJWT exercises the coupling rule
-// AIM-156 makes reachable. private_key_jwt is not in the Goa enum yet, so the
-// value is planted directly; the point of landing the rule now is that it exists
-// before the value becomes selectable.
+// for an attached signing key and a client configured for private_key_jwt.
 func TestDetachClientKeySet_RefusedForPrivateKeyJWT(t *testing.T) {
 	t.Parallel()
 
@@ -332,10 +330,8 @@ func TestAttachKeySet_ProjectSurface(t *testing.T) {
 // tenant update surfaces: a client with no set cannot be moved onto
 // private_key_jwt, and the same call succeeds once a set is attached.
 //
-// private_key_jwt is not in the Goa enum until AIM-156, so a request over HTTP
-// is rejected at the transport. These call the handlers directly, which is the
-// only way to reach the rule — and the reason to land it now is precisely that
-// it must already be correct when the enum opens up.
+// The handlers are called directly so both project and organization update
+// paths exercise the same key-set invariant.
 func TestPrivateKeyJWTRequiresKeySet_UpdatePaths(t *testing.T) {
 	t.Parallel()
 

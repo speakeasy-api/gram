@@ -118,7 +118,7 @@ func run() error {
 		return <-receiveDone
 	}
 
-	dispatcher, err := enforcereply.NewDispatcher(ctx, logger, otel.GetMeterProvider(), broker, inbox, enforcereply.DispatcherConfig{WaitTimeout: enforcereply.DefaultWaitTimeout})
+	dispatcher, err := enforcereply.NewDispatcher(ctx, logger, otel.GetMeterProvider(), broker, inbox, enforcereply.DispatcherConfig{WaitTimeout: enforcereply.DefaultWaitTimeout, LaneWaitTimeout: nil})
 	if err != nil {
 		_ = stopAndWait()
 		return fmt.Errorf("create enforcement dispatcher: %w", err)
@@ -135,8 +135,13 @@ func run() error {
 	lane := enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""}
 	outcome, err := dispatcher.Dispatch(ctx, enforcereply.DispatchRequest{
 		OrganizationID:         "prototype-org",
+		OrganizationSlug:       "",
 		ProjectID:              prototypeProjectID,
 		Content:                "AccessKeyId: " + fakeAccessKeyID + ", SecretAccessKey: " + fakeSecret,
+		Body:                   "",
+		ToolName:               "",
+		MessageType:            "",
+		ToolCalls:              nil,
 		PresidioEntities:       nil,
 		PresidioScoreThreshold: nil,
 		Lanes:                  []enforcereply.Lane{lane},

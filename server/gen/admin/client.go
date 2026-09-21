@@ -64,10 +64,16 @@ type Client struct {
 	MigrateToGlobalIssuerEndpoint                 goa.Endpoint
 	UploadPlatformImageEndpoint                   goa.Endpoint
 	ServeImageEndpoint                            goa.Endpoint
+	StartTrialEndpoint                            goa.Endpoint
+	ChangeTrialEndDateEndpoint                    goa.Endpoint
+	GetMeterUsageEndpoint                         goa.Endpoint
+	GetSpendBreakdownEndpoint                     goa.Endpoint
+	GetSupportMatrixEndpoint                      goa.Endpoint
+	UpdateSupportMatrixEndpoint                   goa.Endpoint
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix goa.Endpoint) *Client {
 	return &Client{
 		LoginEndpoint:                                 login,
 		CallbackEndpoint:                              callback,
@@ -116,6 +122,12 @@ func NewClient(login, callback, logout, getSession, getOrganizationFeatures, set
 		MigrateToGlobalIssuerEndpoint:                 migrateToGlobalIssuer,
 		UploadPlatformImageEndpoint:                   uploadPlatformImage,
 		ServeImageEndpoint:                            serveImage,
+		StartTrialEndpoint:                            startTrial,
+		ChangeTrialEndDateEndpoint:                    changeTrialEndDate,
+		GetMeterUsageEndpoint:                         getMeterUsage,
+		GetSpendBreakdownEndpoint:                     getSpendBreakdown,
+		GetSupportMatrixEndpoint:                      getSupportMatrix,
+		UpdateSupportMatrixEndpoint:                   updateSupportMatrix,
 	}
 }
 
@@ -1200,4 +1212,142 @@ func (c *Client) ServeImage(ctx context.Context, p *ServeImageForm) (res *ServeI
 	}
 	o := ires.(*ServeImageResponseData)
 	return o.Result, o.Body, nil
+}
+
+// StartTrial calls the "startTrial" endpoint of the "admin" service.
+// StartTrial may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) StartTrial(ctx context.Context, p *StartTrialPayload) (res *AdminOrganization, err error) {
+	var ires any
+	ires, err = c.StartTrialEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganization), nil
+}
+
+// ChangeTrialEndDate calls the "changeTrialEndDate" endpoint of the "admin"
+// service.
+// ChangeTrialEndDate may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ChangeTrialEndDate(ctx context.Context, p *ChangeTrialEndDatePayload) (res *AdminOrganization, err error) {
+	var ires any
+	ires, err = c.ChangeTrialEndDateEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganization), nil
+}
+
+// GetMeterUsage calls the "getMeterUsage" endpoint of the "admin" service.
+// GetMeterUsage may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetMeterUsage(ctx context.Context, p *GetMeterUsagePayload) (res *AdminMeterUsageResponse, err error) {
+	var ires any
+	ires, err = c.GetMeterUsageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminMeterUsageResponse), nil
+}
+
+// GetSpendBreakdown calls the "getSpendBreakdown" endpoint of the "admin"
+// service.
+// GetSpendBreakdown may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetSpendBreakdown(ctx context.Context, p *GetSpendBreakdownPayload) (res *AdminSpendBreakdownResponse, err error) {
+	var ires any
+	ires, err = c.GetSpendBreakdownEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminSpendBreakdownResponse), nil
+}
+
+// GetSupportMatrix calls the "getSupportMatrix" endpoint of the "admin"
+// service.
+// GetSupportMatrix may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetSupportMatrix(ctx context.Context, p *GetSupportMatrixPayload) (res *SupportMatrix, err error) {
+	var ires any
+	ires, err = c.GetSupportMatrixEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SupportMatrix), nil
+}
+
+// UpdateSupportMatrix calls the "updateSupportMatrix" endpoint of the "admin"
+// service.
+// UpdateSupportMatrix may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateSupportMatrix(ctx context.Context, p *UpdateSupportMatrixPayload) (res *SupportMatrix, err error) {
+	var ires any
+	ires, err = c.UpdateSupportMatrixEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SupportMatrix), nil
 }

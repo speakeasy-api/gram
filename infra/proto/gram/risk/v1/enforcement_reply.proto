@@ -10,6 +10,7 @@ enum EnforcementScanner {
   ENFORCEMENT_SCANNER_PRESIDIO = 2;
   ENFORCEMENT_SCANNER_PROMPT_INJECTION = 3;
   ENFORCEMENT_SCANNER_JUDGE = 4;
+  ENFORCEMENT_SCANNER_LLM_ANALYZER = 5;
 }
 
 enum EnforcementStatus {
@@ -31,6 +32,10 @@ message EnforcementFinding {
   string tool_call_id = 9;
   string masked_preview = 10;
   string fingerprint = 11;
+  // Model rationale for the finding, limited to 500 Unicode characters. Set
+  // only by the LLM analyzer lane. It may paraphrase the flagged content, so
+  // it is treated with the same care as masked_preview.
+  string description = 12;
 }
 
 message EnforcementDiagnostics {

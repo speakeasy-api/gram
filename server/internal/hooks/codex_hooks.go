@@ -122,10 +122,10 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			// Acknowledged warn is excluded from the enforcement block so it
 			// falls through to the shadow-MCP guard below: an ack clears the
 			// risk challenge but must never bypass unapproved-toolset validation.
-			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil && (!scanResult.IsWarnChallenge() || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
 				// Unacknowledged warn → warning + ack link (challenge, not a
 				// durable block page). No ack link buildable → fall through to block.
-				if scanResult.Action == "warn" {
+				if scanResult.IsWarnChallenge() {
 					// Codex surfaces a single reason (the CLI user reads it), so use
 					// the human-facing framing that carries the ack link.
 					if _, warnUserReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
@@ -136,7 +136,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 					}
 				}
 				blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
+				userReason = renderUserBlockReason(scanResult, blockReason)
 				isToolCallBlock = true
 				blockToolName = ev.ToolName
 				blockPolicyID = scanResult.PolicyID
@@ -234,8 +234,8 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			// unacknowledged warn is challenged (deny + ack link), not
 			// hard-blocked with the raw user_message — consistent with tool calls.
 			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
-				(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
-				if scanResult.Action == "warn" {
+				(!scanResult.IsWarnChallenge() || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+				if scanResult.IsWarnChallenge() {
 					if _, warnUserReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 						blockReason = fmt.Sprintf("Speakeasy challenged this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 						userReason = warnUserReason
@@ -244,7 +244,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 					}
 				}
 				blockReason = fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
+				userReason = renderUserBlockReason(scanResult, blockReason)
 			}
 		case *hookevents.UserPromptSubmit:
 			// Spend gate runs before any risk-policy evaluation: an over-budget
@@ -256,9 +256,9 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			}
 			// warn never hard-blocks at prompt submit (no confirmation primitive
 			// here); it defers to the follow-on tool call. Matches Claude/Cursor.
-			if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
+			if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && !scanResult.IsWarnChallenge() {
 				blockReason = fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
+				userReason = renderUserBlockReason(scanResult, blockReason)
 			}
 		default:
 			// Non-blocking events: telemetry only.

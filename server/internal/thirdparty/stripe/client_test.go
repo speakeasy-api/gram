@@ -23,53 +23,38 @@ func TestCatalogValidate(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "valid",
-			catalog: Catalog{
-				PriceIDTUM:            "price_test",
-				MeterIDTUM:            "mtr_test",
-				MeterEventName:        "tum",
-				PortalConfigurationID: "bpc_test",
-			},
+			name:    "valid",
+			catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_test", PortalConfigurationID: "bpc_test"},
 		},
 		{
 			name:    "missing price",
-			catalog: Catalog{MeterIDTUM: "mtr_test", MeterEventName: "tum", PortalConfigurationID: "bpc_test"},
+			catalog: Catalog{PriceIDTUM: "", PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PortalConfigurationID: "bpc_test"},
 			wantErr: "missing TUM price id",
-		},
-		{
-			name:    "missing meter",
-			catalog: Catalog{PriceIDTUM: "price_test", MeterEventName: "tum", PortalConfigurationID: "bpc_test"},
-			wantErr: "missing TUM meter id",
-		},
-		{
-			name:    "missing meter event name",
-			catalog: Catalog{PriceIDTUM: "price_test", MeterIDTUM: "mtr_test", PortalConfigurationID: "bpc_test"},
-			wantErr: "missing meter event name",
 		},
 		{
 			name:    "unset price",
-			catalog: Catalog{PriceIDTUM: "unset", MeterIDTUM: "mtr_test", MeterEventName: "tum", PortalConfigurationID: "bpc_test"},
+			catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "unset", PortalConfigurationID: "bpc_test"},
 			wantErr: "missing TUM price id",
 		},
 		{
-			name:    "unset meter",
-			catalog: Catalog{PriceIDTUM: "price_test", MeterIDTUM: "unset", MeterEventName: "tum", PortalConfigurationID: "bpc_test"},
-			wantErr: "missing TUM meter id",
-		},
-		{
-			name:    "unset meter event name",
-			catalog: Catalog{PriceIDTUM: "price_test", MeterIDTUM: "mtr_test", MeterEventName: "unset", PortalConfigurationID: "bpc_test"},
-			wantErr: "missing meter event name",
-		},
-		{
 			name:    "missing portal configuration",
-			catalog: Catalog{PriceIDTUM: "price_test", MeterIDTUM: "mtr_test", MeterEventName: "tum"},
+			catalog: Catalog{PriceIDTUM: "price_test", PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PortalConfigurationID: ""},
 			wantErr: "missing portal configuration id",
 		},
 		{
 			name:    "unset portal configuration",
-			catalog: Catalog{PriceIDTUM: "price_test", MeterIDTUM: "mtr_test", MeterEventName: "tum", PortalConfigurationID: "unset"},
+			catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_test", PortalConfigurationID: "unset"},
 			wantErr: "missing portal configuration id",
+		},
+		{
+			name:    "missing MCP egress price",
+			catalog: Catalog{PriceIDTUM: "price_test", PriceIDMCPEgress: "", PriceIDRiskScans: "price_risk_scans", PortalConfigurationID: "bpc_test"},
+			wantErr: "missing MCP egress price id",
+		},
+		{
+			name:    "unset risk scans price",
+			catalog: Catalog{PriceIDTUM: "price_test", PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "unset", PortalConfigurationID: "bpc_test"},
+			wantErr: "missing risk scans price id",
 		},
 	}
 
@@ -109,9 +94,6 @@ type fakeStripeAPI struct {
 	subscription               *stripesdk.Subscription
 	portalSessionParams        *stripesdk.BillingPortalSessionCreateParams
 	portalSession              *stripesdk.BillingPortalSession
-	meterEventParams           *stripesdk.BillingMeterEventCreateParams
-	meterSummaryParams         *stripesdk.BillingMeterEventSummaryListParams
-	meterSummaries             []*stripesdk.BillingMeterEventSummary
 	invoiceRetrieveParams      *stripesdk.InvoiceRetrieveParams
 	invoice                    *stripesdk.Invoice
 	invoiceItemParams          *stripesdk.InvoiceItemCreateParams
@@ -176,27 +158,6 @@ func (f *fakeStripeAPI) createPortalSession(_ context.Context, params *stripesdk
 	f.calls++
 	f.portalSessionParams = params
 	return f.portalSession, f.err
-}
-
-func (f *fakeStripeAPI) createMeterEvent(_ context.Context, params *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error) {
-	f.calls++
-	f.meterEventParams = params
-	return &stripesdk.BillingMeterEvent{}, f.err
-}
-
-func (f *fakeStripeAPI) listMeterEventSummaries(_ context.Context, params *stripesdk.BillingMeterEventSummaryListParams) stripesdk.Seq2[*stripesdk.BillingMeterEventSummary, error] {
-	f.calls++
-	f.meterSummaryParams = params
-	return func(yield func(*stripesdk.BillingMeterEventSummary, error) bool) {
-		for _, summary := range f.meterSummaries {
-			if !yield(summary, nil) {
-				return
-			}
-		}
-		if f.err != nil {
-			yield(nil, f.err)
-		}
-	}
 }
 
 func (f *fakeStripeAPI) retrieveInvoice(_ context.Context, _ string, params *stripesdk.InvoiceRetrieveParams) (*stripesdk.Invoice, error) {
@@ -282,7 +243,7 @@ func TestGetSubscriptionReturnsLiveLifecycleState(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeStripeAPI{subscription: testSubscription()}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
 
 	state, err := c.GetSubscription(t.Context(), "sub_test")
 	require.NoError(t, err)
@@ -327,7 +288,7 @@ func TestGetSubscriptionPaymentFailed(t *testing.T) {
 			subscription.LatestInvoice.Status = tt.invoice
 			subscription.LatestInvoice.AmountRemaining = tt.amountRemaining
 			api := &fakeStripeAPI{subscription: subscription}
-			client := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum"}}
+			client := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PortalConfigurationID: ""}}
 
 			state, err := client.GetSubscription(t.Context(), "sub_test")
 			require.NoError(t, err)
@@ -340,7 +301,7 @@ func TestGetSubscriptionRequiresConfiguredTUMItem(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeStripeAPI{subscription: testSubscription()}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_other", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_other", PortalConfigurationID: "bpc_test"}}
 
 	_, err := c.GetSubscription(t.Context(), "sub_test")
 	require.ErrorContains(t, err, "missing the configured TUM service period")
@@ -352,7 +313,7 @@ func TestSetSubscriptionCancelAtPeriodEndReturnsUpdatedState(t *testing.T) {
 	subscription := testSubscription()
 	subscription.CancelAtPeriodEnd = false
 	api := &fakeStripeAPI{subscription: subscription}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
 
 	state, err := c.SetSubscriptionCancelAtPeriodEnd(t.Context(), SetSubscriptionCancelAtPeriodEndInput{
 		SubscriptionID:    "sub_test",
@@ -372,7 +333,7 @@ func TestCreatePortalSessionUsesControlledConfiguration(t *testing.T) {
 		Customer: "cus_test",
 		URL:      "https://billing.stripe.test/session",
 	}}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
 
 	session, err := c.CreatePortalSession(t.Context(), CreatePortalSessionInput{
 		CustomerID: "cus_test",
@@ -433,13 +394,8 @@ func TestCreateCheckoutSessionBuildsMeteredSubscription(t *testing.T) {
 
 	api := &fakeStripeAPI{}
 	c := &client{
-		api: api,
-		catalog: Catalog{
-			PriceIDTUM:            "price_tum",
-			MeterIDTUM:            "mtr_tum",
-			MeterEventName:        "tum",
-			PortalConfigurationID: "bpc_test",
-		},
+		api:     api,
+		catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"},
 	}
 	billingCycleAnchor := time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC)
 	expiresAt := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
@@ -469,9 +425,13 @@ func TestCreateCheckoutSessionBuildsMeteredSubscription(t *testing.T) {
 	require.Equal(t, "always", stripesdk.StringValue(params.PaymentMethodCollection))
 	require.Equal(t, "https://app.example.test/the-customer/billing", stripesdk.StringValue(params.SuccessURL))
 	require.Equal(t, "https://app.example.test/the-customer/billing", stripesdk.StringValue(params.CancelURL))
-	require.Len(t, params.LineItems, 1)
+	require.Len(t, params.LineItems, 3)
 	require.Equal(t, "price_tum", stripesdk.StringValue(params.LineItems[0].Price))
-	require.Nil(t, params.LineItems[0].Quantity)
+	require.Equal(t, "price_mcp_egress", stripesdk.StringValue(params.LineItems[1].Price))
+	require.Equal(t, "price_risk_scans", stripesdk.StringValue(params.LineItems[2].Price))
+	for _, item := range params.LineItems {
+		require.Nil(t, item.Quantity)
+	}
 	require.Equal(t, "<ORG_ID>", params.Metadata[organizationIDMetadataKey])
 	require.Equal(t, "the-customer", params.Metadata[organizationSlugMetadataKey])
 	require.NotNil(t, params.SubscriptionData)
@@ -486,7 +446,7 @@ func TestCreateCheckoutSessionWithoutTrialStartsImmediately(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeStripeAPI{}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
 
 	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
 		CustomerID:         "",
@@ -580,175 +540,16 @@ func TestGetCheckoutSessionExpandsSubscription(t *testing.T) {
 	require.Equal(t, "subscription", stripesdk.StringValue(api.checkoutRetrieveParams.Expand[0]))
 }
 
-func TestCreateMeterEventPropagatesIdempotencyKey(t *testing.T) {
-	t.Parallel()
-
-	api := &fakeStripeAPI{}
-	c := &client{
-		api:     api,
-		catalog: Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: "tum", PortalConfigurationID: ""},
-	}
-	timestamp := time.Date(2026, time.August, 14, 10, 0, 0, 0, time.UTC)
-
-	err := c.CreateMeterEvent(t.Context(), CreateMeterEventInput{
-		CustomerID:     "cus_test",
-		EventName:      "tum_replay",
-		Value:          42,
-		Timestamp:      timestamp,
-		IdempotencyKey: "meter:<ORG_ID>:1",
-	})
-	require.NoError(t, err)
-	require.Equal(t, "meter:<ORG_ID>:1", stripesdk.StringValue(api.meterEventParams.IdempotencyKey))
-	require.Equal(t, "meter:<ORG_ID>:1", stripesdk.StringValue(api.meterEventParams.Identifier))
-	require.Equal(t, "tum_replay", stripesdk.StringValue(api.meterEventParams.EventName))
-	require.Equal(t, "cus_test", api.meterEventParams.Payload[meterCustomerPayloadKey])
-	require.Equal(t, "42", api.meterEventParams.Payload[meterValuePayloadKey])
-	require.Equal(t, timestamp.Unix(), stripesdk.Int64Value(api.meterEventParams.Timestamp))
-}
-
-func TestCreateMeterEventRejectsMissingIdempotencyKey(t *testing.T) {
-	t.Parallel()
-
-	api := &fakeStripeAPI{}
-	c := &client{api: api}
-
-	err := c.CreateMeterEvent(t.Context(), CreateMeterEventInput{})
-	require.ErrorIs(t, err, errMissingIdempotencyKey)
-	require.Zero(t, api.calls)
-}
-
-func TestCreateMeterEventRejectsMissingEventName(t *testing.T) {
-	t.Parallel()
-
-	api := &fakeStripeAPI{}
-	c := &client{api: api}
-
-	err := c.CreateMeterEvent(t.Context(), CreateMeterEventInput{IdempotencyKey: "meter:<ORG_ID>:1"})
-	require.ErrorIs(t, err, errMissingMeterEventName)
-	require.Zero(t, api.calls)
-}
-
-func TestGetMeterEventSummaryAggregatesSDKSequence(t *testing.T) {
-	t.Parallel()
-	// stripe-go's All method owns HTTP pagination and exposes the resulting
-	// items as Seq2. This fake starts at that SDK boundary and verifies that
-	// the client aggregates every item in the sequence.
-
-	api := &fakeStripeAPI{meterSummaries: []*stripesdk.BillingMeterEventSummary{
-		{AggregatedValue: 10.5},
-		{AggregatedValue: -2},
-		{AggregatedValue: 4.25},
-	}}
-	c := &client{
-		api: api,
-		catalog: Catalog{
-			PriceIDTUM:            "",
-			MeterIDTUM:            "mtr_tum",
-			MeterEventName:        "",
-			PortalConfigurationID: "",
-		},
-	}
-	start := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
-
-	total, err := c.GetMeterEventSummary(t.Context(), GetMeterEventSummaryInput{
-		CustomerID: "cus_test",
-		Start:      start,
-		End:        end,
-	})
-	require.NoError(t, err)
-	require.InDelta(t, 12.75, total, 0.000001)
-	require.Equal(t, "mtr_tum", stripesdk.StringValue(api.meterSummaryParams.ID))
-	require.Equal(t, "cus_test", stripesdk.StringValue(api.meterSummaryParams.Customer))
-	require.Equal(t, start.Unix(), stripesdk.Int64Value(api.meterSummaryParams.StartTime))
-	require.Equal(t, end.Unix(), stripesdk.Int64Value(api.meterSummaryParams.EndTime))
-	require.Equal(t, int64(100), stripesdk.Int64Value(api.meterSummaryParams.Limit))
-}
-
-func TestGetMeterEventSummaryValidatesBounds(t *testing.T) {
-	t.Parallel()
-
-	start := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
-	tests := []struct {
-		name    string
-		start   time.Time
-		end     time.Time
-		wantErr string
-	}{
-		{
-			name:    "start not minute aligned",
-			start:   start.Add(time.Second),
-			end:     start.Add(time.Hour),
-			wantErr: "minute-aligned",
-		},
-		{
-			name:    "end not minute aligned",
-			start:   start,
-			end:     start.Add(time.Hour + time.Second),
-			wantErr: "minute-aligned",
-		},
-		{
-			name:    "empty interval",
-			start:   start,
-			end:     start,
-			wantErr: "end must be after start",
-		},
-		{
-			name:    "reversed interval",
-			start:   start,
-			end:     start.Add(-time.Minute),
-			wantErr: "end must be after start",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			api := &fakeStripeAPI{}
-			c := &client{api: api}
-			_, err := c.GetMeterEventSummary(t.Context(), GetMeterEventSummaryInput{
-				CustomerID: "cus_test",
-				Start:      tt.start,
-				End:        tt.end,
-			})
-			require.ErrorContains(t, err, tt.wantErr)
-			require.Zero(t, api.calls)
-		})
-	}
-}
-
-func TestGetMeterEventSummaryWrapsListError(t *testing.T) {
-	t.Parallel()
-
-	apiErr := errors.New("request failed")
-	api := &fakeStripeAPI{err: apiErr}
-	c := &client{api: api}
-	start := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
-
-	_, err := c.GetMeterEventSummary(t.Context(), GetMeterEventSummaryInput{
-		CustomerID: "cus_test",
-		Start:      start,
-		End:        start.Add(time.Hour),
-	})
-	require.ErrorIs(t, err, apiErr)
-	require.ErrorContains(t, err, "list Stripe meter event summaries")
-}
-
 func TestWritesWrapStripeErrors(t *testing.T) {
 	t.Parallel()
 
 	apiErr := errors.New("request failed")
 	api := &fakeStripeAPI{err: apiErr}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: "tum", PortalConfigurationID: ""}}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "", PortalConfigurationID: ""}}
 
 	_, err := c.CreateCustomer(t.Context(), CreateCustomerInput{IdempotencyKey: "customer"})
 	require.ErrorIs(t, err, apiErr)
 	require.ErrorContains(t, err, "create Stripe customer")
-
-	err = c.CreateMeterEvent(t.Context(), CreateMeterEventInput{EventName: "tum", IdempotencyKey: "meter"})
-	require.ErrorIs(t, err, apiErr)
-	require.ErrorContains(t, err, "create Stripe meter event")
 
 	_, err = c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
 		BillingCycleAnchor: time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC),
@@ -1174,7 +975,6 @@ func TestStubClientIsSafeToCall(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "cs_local_stub", checkout.ID)
 	require.Equal(t, "http://localhost:3000/test%2Forg/billing", checkout.URL)
-	require.NoError(t, c.CreateMeterEvent(t.Context(), CreateMeterEventInput{}))
 	require.Equal(t, Catalog{}, c.Catalog())
 	_, err = c.VerifyWebhook(nil, "")
 	require.ErrorIs(t, err, ErrWebhookNotConfigured)
@@ -1251,7 +1051,7 @@ func TestCreateCheckoutSessionStampsContractMetadata(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeStripeAPI{}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
 	anchor := time.Date(2026, time.September, 3, 0, 0, 0, 0, time.UTC)
 
 	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{

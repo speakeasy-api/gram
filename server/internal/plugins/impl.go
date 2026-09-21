@@ -64,6 +64,10 @@ import (
 // Strict enough to prevent path traversal in API URL construction.
 var validGitHubUsername = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$`)
 
+// marketplaceCollaboratorPermission is admin because some marketplace setup
+// (e.g. Cursor's "Serve Marketplace From Cursor") requires repo admin.
+const marketplaceCollaboratorPermission = "admin"
+
 // GitHubPublisher is the interface for creating repos and pushing files to GitHub.
 type GitHubPublisher interface {
 	CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error
@@ -171,8 +175,10 @@ type Service struct {
 	distributionAdmission *admission.Guard
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
@@ -1338,6 +1344,8 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		filename = "observability-copilot"
 	case "openclaw":
 		filename = "observability-openclaw"
+	case "pi":
+		filename = "observability-pi"
 	}
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
@@ -1893,8 +1901,8 @@ type PublishProjectResult struct {
 // placeholder fail that JOIN. This is the cheap shape check only -- it says
 // nothing about whether the id belongs to a current member of the target
 // organization, which requirePluginAPIKeyCreator establishes against the
-// database. Exported so the rollout workflow can drop a placeholder candidate
-// deterministically, without a second copy of the sentinel values.
+// database. Exported so the rollout workflow can drop a candidate the actor
+// resolution found no member for, without a second copy of the sentinel values.
 func UsableAPIKeyCreatorID(userID string) bool {
 	return userID != "" && userID != "system"
 }
@@ -1911,22 +1919,42 @@ func requirePluginAPIKeyCreator(ctx context.Context, db usersrepo.DBTX, organiza
 		return fmt.Errorf("get plugin api key creator: %w", err)
 	}
 	if len(members) == 0 {
-		return fmt.Errorf("created by user id %q is not a member of the organization", userID)
+		return fmt.Errorf("%w: created by user id %q", ErrPluginAPIKeyCreatorNotMember, userID)
 	}
 	return nil
 }
 
-func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput) (*PublishProjectResult, error) {
-	if !UsableAPIKeyCreatorID(input.CreatedByUserID) {
-		return nil, fmt.Errorf("created by user id must be a real user")
-	}
+// ErrPluginAPIKeyCreatorNotMember reports that no current member of the
+// project's organization could be resolved as the publish actor: the
+// organization has nobody the minted API keys could be attributed to. Retrying
+// the same publish cannot change that.
+var ErrPluginAPIKeyCreatorNotMember = errors.New("no organization member is available as the plugin publish actor")
 
+// resolvePublishActor picks the users.id the publish's API keys are attributed
+// to (see ResolvePluginPublishActor). The user who made the change wins while
+// they are a member of the organization; a Speakeasy admin editing another
+// organization, the rollout sweep, and the CLI restore all fall back to an
+// existing member so the publish goes out immediately under an id that
+// authenticates.
+func (s *Service) resolvePublishActor(ctx context.Context, projectID uuid.UUID, organizationID, preferredUserID string) (string, error) {
+	actor, err := s.repo.ResolvePluginPublishActor(ctx, repo.ResolvePluginPublishActorParams{
+		OrganizationID:  organizationID,
+		PreferredUserID: preferredUserID,
+		ProjectID:       projectID,
+	})
+	if err != nil {
+		return "", fmt.Errorf("resolve plugin publish actor: %w", err)
+	}
+	if !UsableAPIKeyCreatorID(actor) {
+		return "", fmt.Errorf("%w: organization %q", ErrPluginAPIKeyCreatorNotMember, organizationID)
+	}
+	return actor, nil
+}
+
+func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput) (*PublishProjectResult, error) {
 	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, input.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("get project with organization metadata: %w", err)
-	}
-	if err := requirePluginAPIKeyCreator(ctx, s.db, project.ID, input.CreatedByUserID); err != nil {
-		return nil, err
 	}
 	if s.github == nil {
 		return nil, fmt.Errorf("github publishing is not configured")
@@ -2053,6 +2081,12 @@ type publishOutcome struct {
 }
 
 func (s *Service) publishProject(ctx context.Context, input publishProjectInput) (*publishOutcome, error) {
+	actorID, err := s.resolvePublishActor(ctx, input.ProjectID, input.OrganizationID, input.Actor.CreatedByUserID)
+	if err != nil {
+		return nil, err
+	}
+	input.Actor.CreatedByUserID = actorID
+
 	pluginInfos, err := s.resolvePluginInfos(ctx, input.ProjectID)
 	if err != nil {
 		return nil, err
@@ -2317,7 +2351,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	}
 
 	for _, username := range input.GitHubUsernames {
-		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, username, "pull"); err != nil {
+		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, username, marketplaceCollaboratorPermission); err != nil {
 			s.logger.WarnContext(ctx, "failed to add collaborator (non-fatal)",
 				attr.SlogOrganizationID(input.OrganizationID),
 				attr.SlogGitHubUsername(username),

@@ -41,6 +41,12 @@ function goAuditActions(): string[] {
 }
 
 describe("AUDIT_ACTIONS", () => {
+  it("describes changed trial end dates", () => {
+    expect(
+      staticActionPhrase("organization:enterprise_trial_end_changed"),
+    ).toBe("changed enterprise trial end date");
+  });
+
   // Guards the exhaustive switch in staticActionPhrase: it only proves every
   // action has a phrase if this list matches what the server can emit.
   it("matches the Action constants declared in server/internal/audit", () => {
@@ -55,9 +61,21 @@ describe("AUDIT_ACTIONS", () => {
     }
   });
 
-  it("describes enterprise conversion against its organization subject", () => {
-    expect(staticActionPhrase("organization:enterprise_trial_converted")).toBe(
-      "converted enterprise trial for",
+  it("describes starting a new enterprise trial separately from arming one", () => {
+    expect(staticActionPhrase("organization:enterprise_trial_started")).toBe(
+      "started a new enterprise trial",
+    );
+    expect(staticActionPhrase("organization:enterprise_trial_armed")).toBe(
+      "started enterprise trial",
+    );
+  });
+
+  it("describes binding changes against the audited principal", () => {
+    expect(staticActionPhrase("remote-session:attach")).toBe(
+      "attached a binding to",
+    );
+    expect(staticActionPhrase("remote-session:detach")).toBe(
+      "detached a binding from",
     );
   });
 
@@ -80,6 +98,26 @@ describe("AUDIT_ACTIONS", () => {
       "created OpenTelemetry destination",
       "updated OpenTelemetry destination",
       "deleted OpenTelemetry destination",
+    ]);
+  });
+
+  it("describes identity provider connection actions with the provider as subject", () => {
+    expect(
+      (
+        [
+          "identity-provider-connection:create",
+          "identity-provider-connection:submit-client-id",
+          "identity-provider-connection:verify",
+          "identity-provider-connection:record-agent",
+          "identity-provider-connection:revoke",
+        ] as const
+      ).map((action) => `${staticActionPhrase(action)} okta`),
+    ).toEqual([
+      "connected identity provider okta",
+      "submitted client ID for identity provider okta",
+      "verified identity provider connection to okta",
+      "recorded agent for identity provider okta",
+      "revoked identity provider connection to okta",
     ]);
   });
 

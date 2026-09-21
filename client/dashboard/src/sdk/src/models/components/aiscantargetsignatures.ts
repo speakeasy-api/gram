@@ -21,7 +21,7 @@ export type AiScanTargetSignatures = {
    */
   bundleIds: Array<string>;
   /**
-   * Directories whose existence marks the tool as installed, taken as home-relative unless they start with /.
+   * Directories whose existence marks the tool as installed, taken as home-relative unless they start with /. A `*` is a wildcard matching any run of characters within ONE path segment, never crossing a `/`, for tools installed under a version-stamped directory name such as an editor extension.
    */
   configDirs: Array<string>;
   /**

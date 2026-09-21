@@ -185,6 +185,26 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	ServeImage(context.Context, *ServeImageForm) (res *ServeImageResult, body io.ReadCloser, err error)
+	// Starts a new enterprise trial for an organization that has never trialled,
+	// or restarts one that has expired without converting or being demoted. Sets
+	// the account type, whitelist flag, trial entitlements and a fresh runway
+	// counted from now. A running, demoted or converted trial is rejected: those
+	// are extend, re-arm and a contract.
+	StartTrial(context.Context, *StartTrialPayload) (res *AdminOrganization, err error)
+	// Sets a running trial's end date to a future instant, shortening or extending
+	// it without restarting the trial.
+	ChangeTrialEndDate(context.Context, *ChangeTrialEndDatePayload) (res *AdminOrganization, err error)
+	// Returns totals-only ordinary meter usage for an organization over a bounded
+	// UTC-day window.
+	GetMeterUsage(context.Context, *GetMeterUsagePayload) (res *AdminMeterUsageResponse, err error)
+	// Returns exact current PAYG list-price estimates for an organization's three
+	// metered products over a maximum of three calendar months. Available for
+	// every organization regardless of account type or subscription state.
+	GetSpendBreakdown(context.Context, *GetSpendBreakdownPayload) (res *AdminSpendBreakdownResponse, err error)
+	// Read the shared support catalog and product coverage.
+	GetSupportMatrix(context.Context, *GetSupportMatrixPayload) (res *SupportMatrix, err error)
+	// Save coverage against the last read revision; rejects concurrent changes.
+	UpdateSupportMatrix(context.Context, *UpdateSupportMatrixPayload) (res *SupportMatrix, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -207,7 +227,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [47]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage"}
+var MethodNames = [53]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -305,6 +325,32 @@ type AdminListOrganizationsResult struct {
 	NextCursor *string
 	// Number of organizations matching the filters, before paging.
 	Total int64
+}
+
+type AdminMeterUsageBucket struct {
+	// Inclusive UTC day boundary
+	From string
+	// Exclusive UTC day boundary
+	To string
+	// Exact integer ordinary usage quantity as a decimal string
+	Total string
+}
+
+// AdminMeterUsageResponse is the result type of the admin service
+// getMeterUsage method.
+type AdminMeterUsageResponse struct {
+	Family string
+	Window *MeterUsageWindow
+	// Trailing twelve billing-cycle date windows
+	BillingCycles []*MeterUsageWindow
+	Unit          string
+	// Exact integer ordinary usage period total as a decimal string
+	Total string
+	// Dense UTC daily ordinary usage buckets
+	Buckets []*AdminMeterUsageBucket
+	// Retrieval timestamp, not an ingestion watermark
+	QueriedAt         string
+	MeasurementMethod string
 }
 
 // AdminOrganization is the result type of the admin service updateOrganization
@@ -447,6 +493,22 @@ type AdminSession struct {
 	Name  *string
 }
 
+// AdminSpendBreakdownResponse is the result type of the admin service
+// getSpendBreakdown method.
+type AdminSpendBreakdownResponse struct {
+	Window *MeterUsageWindow
+	// Trailing twelve billing-cycle date windows
+	BillingCycles []*MeterUsageWindow
+	Currency      string
+	PricingBasis  string
+	// Retrieval timestamp used to distinguish current and future buckets
+	QueriedAt string
+	// Exact estimated total at current PAYG list prices
+	TotalCostUsd string
+	// The three metered products in stable display order
+	Products []*SpendProduct
+}
+
 // AdminStripeCustomer is the result type of the admin service
 // getStripeCustomer method.
 type AdminStripeCustomer struct {
@@ -555,6 +617,16 @@ type CancelStripeSubscriptionPayload struct {
 	OrganizationID    string
 }
 
+// ChangeTrialEndDatePayload is the payload type of the admin service
+// changeTrialEndDate method.
+type ChangeTrialEndDatePayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// New trial end date in UTC.
+	EndsAt string
+}
+
 // CreateGlobalIssuerPayload is the payload type of the admin service
 // createGlobalIssuer method.
 type CreateGlobalIssuerPayload struct {
@@ -614,6 +686,9 @@ type CreateGlobalIssuerPayload struct {
 	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
 	// pre-flight outbound CIMD. Default false.
 	ClientIDMetadataDocumentSupported *bool
+	// Route this issuer's OAuth endpoint calls through an MCP tunnel in the same
+	// project. Platform admins only.
+	TunneledMcpServerID *string
 	// OpenID Connect userinfo endpoint. Discovered from the issuer metadata
 	// document; rejected unless an absolute https URL, or http on loopback.
 	UserinfoEndpoint *string
@@ -740,6 +815,20 @@ type GetInferenceSpendHistoryPayload struct {
 	OrganizationID    string
 }
 
+// GetMeterUsagePayload is the payload type of the admin service getMeterUsage
+// method.
+type GetMeterUsagePayload struct {
+	AdminSessionToken *string
+	// Organization ID or canonical slug.
+	OrganizationID string
+	Family         string
+	// Inclusive UTC midnight reporting boundary. Must be paired with to.
+	From *string
+	// Exclusive UTC midnight reporting boundary. Must be paired with from and no
+	// later than three calendar months after from.
+	To *string
+}
+
 // GetOrganizationChatAnalysisSettingsPayload is the payload type of the admin
 // service getOrganizationChatAnalysisSettings method.
 type GetOrganizationChatAnalysisSettingsPayload struct {
@@ -791,6 +880,20 @@ type GetSessionPayload struct {
 	AdminSessionToken *string
 }
 
+// GetSpendBreakdownPayload is the payload type of the admin service
+// getSpendBreakdown method.
+type GetSpendBreakdownPayload struct {
+	AdminSessionToken *string
+	// Organization ID or canonical slug.
+	OrganizationID string
+	// Inclusive UTC midnight reporting boundary. Must be paired with to.
+	From *string
+	// Exclusive UTC midnight reporting boundary. Must be paired with from and no
+	// later than three calendar months after from, clamped to the target month's
+	// last day.
+	To *string
+}
+
 // GetStripeCustomerPayload is the payload type of the admin service
 // getStripeCustomer method.
 type GetStripeCustomerPayload struct {
@@ -804,6 +907,12 @@ type GetStripeCustomerPayload struct {
 type GetStripeSubscriptionPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
+}
+
+// GetSupportMatrixPayload is the payload type of the admin service
+// getSupportMatrix method.
+type GetSupportMatrixPayload struct {
+	AdminSessionToken *string
 }
 
 // GlobalRemoteSessionIssuer is the result type of the admin service
@@ -952,10 +1061,8 @@ type ListOrganizationsPayload struct {
 	AdminSessionToken *string
 	// Search term, trimmed of surrounding whitespace. Matches name and slug as a
 	// case-insensitive substring, with % and _ taken literally, and matches
-	// organization id and WorkOS id exactly, ignoring case. An id match also
-	// returns an organization that disabled_states or include_disabled would
-	// otherwise hide; it still respects account_type, account_types, trial_states
-	// and cursor.
+	// organization id and WorkOS id exactly, ignoring case. All filters apply even
+	// to exact ID matches.
 	Q *string
 	// Filter by a single gram_account_type (e.g. free, pro, payg, enterprise).
 	// Superseded by account_types, which it joins as one more member of the same
@@ -969,12 +1076,26 @@ type ListOrganizationsPayload struct {
 	// Empty matches every trial state. An unrecognised value matches nothing
 	// rather than failing the request.
 	TrialStates []string
-	// Match any of active or disabled. Empty falls back to include_disabled. An
-	// unrecognised value matches nothing rather than failing the request.
-	DisabledStates []string
-	// Include organizations with disabled_at set. Defaults to false. Superseded by
-	// disabled_states, which overrides it outright when supplied.
-	IncludeDisabled *bool
+	// Organization status: all (default), active (disabled_at IS NULL), or
+	// disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.
+	DisabledStatus *string
+	// Inclusive minimum active member count, from 0 through 9223372036854775807.
+	// The generated TypeScript SDK accepts bigint. The handwritten admin client
+	// accepts safe integers or decimal strings; use decimal strings above
+	// Number.MAX_SAFE_INTEGER.
+	MinMembers *int64
+	// Inclusive maximum active member count, from 0 through 9223372036854775807.
+	// Must be at least min_members. The generated TypeScript SDK accepts bigint.
+	// The handwritten admin client accepts safe integers or decimal strings; use
+	// decimal strings above Number.MAX_SAFE_INTEGER.
+	MaxMembers *int64
+	// Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date
+	// bound is optional; must not be after created_to.
+	CreatedFrom *string
+	// Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Includes
+	// the entire UTC day, implemented as an exclusive bound at the following
+	// midnight.
+	CreatedTo *string
 	// Pagination cursor: id of the last item from the previous page in created_at
 	// descending, id ascending order. The anchor is resolved regardless of
 	// filters; a deleted or unknown id returns an empty page. Ignored when sort or
@@ -1035,6 +1156,13 @@ type MarkEnterpriseTrialConvertedResult struct {
 	OrganizationID string
 	// The time at which the enterprise trial was recorded as converted.
 	ConvertedAt string
+}
+
+type MeterUsageWindow struct {
+	// Inclusive UTC midnight window boundary
+	From string
+	// Exclusive UTC midnight window boundary
+	To string
 }
 
 // MigrateRemoteSessionIssuerResult is the result type of the admin service
@@ -1203,6 +1331,91 @@ type SetStripeCustomerPayload struct {
 	StripeCustomerID  string
 }
 
+type SpendBucket struct {
+	// Inclusive bucket boundary
+	From string
+	// Exclusive bucket boundary
+	To string
+	// Exact integer ordinary usage quantity as a decimal string
+	Quantity string
+	// Exact estimated cost at current PAYG list prices
+	CostUsd string
+}
+
+type SpendProduct struct {
+	ID    string
+	Label string
+	Unit  string
+	// Exact integer ordinary usage quantity as a decimal string
+	Quantity string
+	// Exact integer quantity to which rate_usd applies
+	RateQuantity string
+	// Exact current PAYG USD list price
+	RateUsd string
+	// Exact estimated product cost at current PAYG list prices
+	CostUsd string
+	// Dense UTC daily product buckets, including in-progress and future days
+	Buckets []*SpendBucket
+}
+
+// StartTrialPayload is the payload type of the admin service startTrial method.
+type StartTrialPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// Number of days the trial runs for, counted from now.
+	Days int
+}
+
+type SupportCapability struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Group string `json:"group"`
+}
+
+type SupportDraft struct {
+	Mappings   map[string]*SupportMapping         `json:"mappings"`
+	References map[string]map[string]*SupportFact `json:"references"`
+}
+
+type SupportFact struct {
+	Status string `json:"status"`
+	Note   string `json:"note"`
+	Verify bool   `json:"verify"`
+}
+
+type SupportMapping struct {
+	Applicability string                  `json:"applicability"`
+	Conditions    string                  `json:"conditions"`
+	Facts         map[string]*SupportFact `json:"facts"`
+}
+
+// SupportMatrix is the result type of the admin service getSupportMatrix
+// method.
+type SupportMatrix struct {
+	Methods      []*SupportMethod     `json:"methods"`
+	Products     []*SupportPlatform   `json:"products"`
+	Capabilities []*SupportCapability `json:"capabilities"`
+	Draft        *SupportDraft        `json:"draft"`
+	Revision     string               `json:"revision"`
+}
+
+type SupportMethod struct {
+	ID     string                  `json:"id"`
+	Name   string                  `json:"name"`
+	Vendor string                  `json:"vendor"`
+	Plans  string                  `json:"plans"`
+	Facts  map[string]*SupportFact `json:"facts"`
+}
+
+type SupportPlatform struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Vendor  string `json:"vendor"`
+	Family  string `json:"family"`
+	Surface string `json:"surface"`
+}
+
 // TriggerOrganizationChatAnalysisPayload is the payload type of the admin
 // service triggerOrganizationChatAnalysis method.
 type TriggerOrganizationChatAnalysisPayload struct {
@@ -1262,6 +1475,10 @@ type UpdateGlobalIssuerPayload struct {
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported *bool
+	// Set or clear this issuer's MCP tunnel binding. Omission keeps the binding;
+	// an empty string clears it; any other value must be a tunneled MCP server in
+	// the same project. Platform admins only.
+	TunneledMcpServerID *string
 	// Set or clear the OpenID Connect userinfo endpoint. An empty string clears it
 	// to NULL; any other value must be an absolute https URL, or http on loopback.
 	UserinfoEndpoint *string
@@ -1305,6 +1522,14 @@ type UpdateOrganizationPayload struct {
 	AccountType *string
 	// New whitelisted flag.
 	Whitelisted *bool
+}
+
+// UpdateSupportMatrixPayload is the payload type of the admin service
+// updateSupportMatrix method.
+type UpdateSupportMatrixPayload struct {
+	AdminSessionToken *string
+	Revision          string
+	Draft             *SupportDraft
 }
 
 // UploadImageResult is the result type of the admin service

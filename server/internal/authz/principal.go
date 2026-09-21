@@ -186,6 +186,10 @@ func ValidatePrincipal(ctx context.Context, db repo.DBTX, organizationID string,
 	case urn.PrincipalTypeSystem:
 		// A system principal is an audit actor, never a grant target.
 		return fmt.Errorf("%w: system principal %q cannot hold grants", ErrPrincipalInvalid, principal.String())
+	case urn.PrincipalTypeWorkload:
+		// A workload holds no grants of its own; it inherits the permission
+		// policies of the agents assigned to it.
+		return fmt.Errorf("%w: workload principal %q cannot hold grants", ErrPrincipalInvalid, principal.String())
 	default:
 		return fmt.Errorf("%w: unsupported principal type %q", ErrPrincipalInvalid, principal.Type)
 	}

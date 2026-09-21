@@ -331,9 +331,8 @@ func TestService_ListEmployeeAIDetections_ProjectReaderGetsCanonicalEmployeeOnly
 	seedAIDetection(t, ctx, ti, "detections-test-org-"+uuid.NewString(), "codex", "serial-9", workEmail, "running", "harness", "1.0.0", now.Add(2*time.Hour))
 
 	result, err := ti.service.ListEmployeeAIDetections(ctx, &gen.ListEmployeeAIDetectionsPayload{
-		UserEmail:        strings.ToUpper(workEmail),
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
+		UserEmail:    strings.ToUpper(workEmail),
+		SessionToken: nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Detections, 2)
@@ -358,9 +357,8 @@ func TestService_ListEmployeeAIDetections_RejectsInsufficientProjectScope(t *tes
 	})
 
 	_, err := ti.service.ListEmployeeAIDetections(ctx, &gen.ListEmployeeAIDetectionsPayload{
-		UserEmail:        "employee@example.com",
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
+		UserEmail:    "employee@example.com",
+		SessionToken: nil,
 	})
 	var shareableErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareableErr)
@@ -385,9 +383,8 @@ func TestService_ListEmployeeAIDetections_RejectsProjectFromAnotherActiveOrganiz
 	})
 
 	_, err := ti.service.ListEmployeeAIDetections(ctx, &gen.ListEmployeeAIDetectionsPayload{
-		UserEmail:        "employee@example.com",
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
+		UserEmail:    "employee@example.com",
+		SessionToken: nil,
 	})
 	var shareableErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareableErr)
@@ -407,9 +404,8 @@ func TestService_ListEmployeeAIDetections_RejectsEmptyEmployeeScope(t *testing.T
 	})
 
 	_, err := ti.service.ListEmployeeAIDetections(ctx, &gen.ListEmployeeAIDetectionsPayload{
-		UserEmail:        "",
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
+		UserEmail:    "",
+		SessionToken: nil,
 	})
 	var shareableErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareableErr)
@@ -429,9 +425,8 @@ func TestService_ListEmployeeAIDetections_UserWithoutDetectionsGetsEmptyResult(t
 	})
 
 	result, err := ti.service.ListEmployeeAIDetections(ctx, &gen.ListEmployeeAIDetectionsPayload{
-		UserEmail:        "missing-" + uuid.NewString() + "@example.com",
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
+		UserEmail:    "missing-" + uuid.NewString() + "@example.com",
+		SessionToken: nil,
 	})
 	require.NoError(t, err)
 	require.Empty(t, result.Detections)
@@ -462,4 +457,32 @@ func TestListEmployeeAIDetections_HTTPRequiresEmployeeEmail(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 	require.False(t, called, "a request without an employee email must not reach the service")
+}
+
+// TestService_ListAIDetections_FiltersOnTheEffectiveCategory: a detection row
+// stores the category its target had when it was written, while the response
+// reports the catalog's current one. Filtering on the stored value would omit
+// a reclassified tool from the category it now belongs to and return it under
+// the one it left. chatgpt-classic is exactly that case: moved from harness to
+// assistant, with rows written before the move still stored as harness.
+func TestService_ListAIDetections_FiltersOnTheEffectiveCategory(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	seedAIDetection(t, ctx, ti, orgID, "chatgpt-classic", "serial-7", "alex@example.com", "installed", "harness", "", now)
+
+	assistant := "assistant"
+	result, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: &assistant, DirectoryGroupID: nil, SessionToken: nil})
+	require.NoError(t, err)
+	require.Len(t, result.Detections, 1, "a reclassified tool is found under the category it now belongs to")
+	require.Equal(t, "chatgpt-classic", result.Detections[0].TargetID)
+	require.Equal(t, "assistant", result.Detections[0].Category, "and reports that category")
+
+	harness := "harness"
+	result, err = ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: &harness, DirectoryGroupID: nil, SessionToken: nil})
+	require.NoError(t, err)
+	require.Empty(t, result.Detections, "and is not returned under the category it left, whatever the row stores")
 }

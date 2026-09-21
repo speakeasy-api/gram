@@ -55,7 +55,7 @@ type ReadingRow struct {
 	Attributes map[string]string `ch:"attributes"`
 }
 
-// Queries writes billing meter readings to ClickHouse.
+// Queries reads and writes billing meter data in ClickHouse.
 type Queries struct {
 	conn clickhouse.Conn
 }

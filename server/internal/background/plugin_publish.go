@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -148,6 +150,13 @@ func PluginPublishWorkflow(ctx workflow.Context, params PluginPublishParams) (*p
 		CommitMessage:   params.CommitMessage,
 		SkipIfUnchanged: params.SkipIfUnchanged,
 	}).Get(ctx, &result); err != nil {
+		var appErr *temporal.ApplicationError
+		if errors.As(err, &appErr) && appErr.Type() == activities.ErrTypePluginActorNotMember {
+			// The organization has no member to attribute the publish to, so
+			// no retry or later sweep can publish it either.
+			workflow.GetLogger(ctx).Warn("plugin project publish skipped: no organization member to publish as", "error", err.Error())
+			return &plugins.PublishProjectResult{RepoURL: "", Skipped: true}, nil
+		}
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}
 	return &result, nil
@@ -160,8 +169,10 @@ type TemporalPluginPublisher struct {
 	TemporalEnv *tenv.Environment
 }
 
-var _ plugins.PluginPublishSignaler = (*TemporalPluginPublisher)(nil)
-var _ domainskills.PluginPublishSignaler = (*TemporalPluginPublisher)(nil)
+var (
+	_ plugins.PluginPublishSignaler      = (*TemporalPluginPublisher)(nil)
+	_ domainskills.PluginPublishSignaler = (*TemporalPluginPublisher)(nil)
+)
 
 // SignalPluginPublish enqueues a fingerprint-gated republish: the caller
 // changed plugin state, so the publish is worth attempting, but it does no

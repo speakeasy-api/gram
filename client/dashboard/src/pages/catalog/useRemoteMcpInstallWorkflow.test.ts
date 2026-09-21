@@ -12,6 +12,7 @@ const mockUnproxiedCreateServer = vi.fn();
 const mockUnproxiedDeleteServer = vi.fn();
 const mockFetchImageFromURL = vi.fn();
 const mockMcpMetadataSet = vi.fn();
+const mockAutoConfigureRemoteMcpAuth = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
 const mockClient = {
@@ -42,10 +43,20 @@ const mockClient = {
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => mockClient,
   useSlugs: () => ({ orgSlug: "test-org", projectSlug: "test-project" }),
+  useProjectSlugForRequests: () => "test-project",
+}));
+
+vi.mock("@/contexts/Auth", () => ({
+  useIsPlatformAdmin: () => false,
 }));
 
 vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: mockAuthedFetch }),
+}));
+
+vi.mock("@/pages/sources/remote-mcp/autoConfigureAuth", () => ({
+  autoConfigureRemoteMcpAuth: (...args: unknown[]) =>
+    mockAutoConfigureRemoteMcpAuth(...args),
 }));
 
 vi.mock("sonner", () => ({
@@ -163,6 +174,11 @@ describe("useRemoteMcpInstallWorkflow", () => {
     mockUnproxiedDeleteServer.mockResolvedValue(undefined);
     mockFetchImageFromURL.mockResolvedValue({ asset: { id: "asset-1" } });
     mockMcpMetadataSet.mockResolvedValue({ mcpServerId: "mcp-server-1" });
+    mockAutoConfigureRemoteMcpAuth.mockResolvedValue({
+      status: "skipped",
+      message: "No OAuth metadata was discovered.",
+      warn: false,
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -556,6 +572,13 @@ describe("useRemoteMcpInstallWorkflow", () => {
       expect.anything(),
       undefined,
       { headers: { "gram-project": "other-proj" } },
+    );
+    expect(mockAutoConfigureRemoteMcpAuth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isPlatformAdmin: false,
+        projectSlug: "other-proj",
+        options: { headers: { "gram-project": "other-proj" } },
+      }),
     );
   });
 

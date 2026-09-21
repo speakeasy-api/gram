@@ -50,16 +50,17 @@ type PlatformContext struct {
 	// names. The manifest can say what one tool does; only something read at
 	// the start of a conversation can say how the pieces relate, which is what
 	// keeps a reply from narrating the machinery instead of the outcome.
-	Overview string `json:"overview"`
+	Overview             string   `json:"overview"`
+	AvailableWorkflows   []string `json:"available_workflows"`
+	RequestableWorkflows []string `json:"requestable_workflows"`
 }
 
-// platformOverview is the one plain-language account of this platform a caller
-// gets. It names the stages in the order a person experiences them and glosses
-// the two words — project and plugin — that have no meaning outside Gram.
-const platformOverview = "An administrator sets MCP servers and skills up here, then hands them to the people in their organization. " +
-	"A project is where that work is kept before anyone receives it. A plugin is a bundle of MCP servers and skills you share with people. " +
-	"An MCP server reaches a person in stages: added to a project, its OAuth provider connected, confirmed working, put into a plugin, and published to the people it is shared with. " +
-	"A skill is a written set of instructions an agent loads when it applies; it also reaches people through a plugin or an assistant."
+// platformOverview explains capability-filtered discovery and denial behavior,
+// and glosses the two platform terms — project and plugin — that have no
+// meaning outside Gram.
+const platformOverview = "This session exposes a catalogue filtered to workflows supported by your current RBAC grants. Exact project or resource checks apply only when a call targets that project or resource. " +
+	"A workflow missing from the catalogue may be requestable; requestable_workflows names only broad categories and never reveals hidden resources. A denied admin-gated call names the required permission and, when safe, offers a request-access link; member reads may instead hide inaccessible resources or return a generic denial. " +
+	"A project is where MCP servers and skills are kept. A plugin is a bundle administrators share with people. MCP read access, MCP connection access, and skill permissions remain separate."
 
 type ListProjectsInput struct {
 	Limit int `json:"limit,omitempty" jsonschema:"maximum number of projects to return; server clamps this to 100"`
@@ -74,6 +75,11 @@ type Project struct {
 type ListProjectsOutput struct {
 	Projects  []Project `json:"projects"`
 	Truncated bool      `json:"truncated"`
+
+	// authorizationFiltered is retained for internal diagnostics only. Exposing
+	// it would reveal that the organization contains projects the caller cannot
+	// access.
+	authorizationFiltered bool
 }
 
 type FindMCPInput struct {
@@ -119,6 +125,7 @@ type MCP struct {
 	EffectiveEnabled bool              `json:"effective_enabled"`
 	Model            string            `json:"model"`
 	BackendKind      MCPBackendKind    `json:"backend_kind"`
+	UpstreamURL      string            `json:"upstream_url,omitempty"`
 	Source           MCPSource         `json:"source"`
 	Registration     *MCPRegistration  `json:"registration,omitempty"`
 	Readiness        MCPReadiness      `json:"readiness"`
@@ -194,7 +201,12 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 
 	registerReadTools(reg, reader, cursorKeyMaterial)
 	if postgresReader, ok := reader.(*PostgresReader); ok {
-		registerRiskToolsWithMutations(reg, postgresReader.riskReads, riskMutations)
+		if postgresReader.reviewRequests == nil {
+			registerUnavailableReviewRequestTools(reg)
+		} else {
+			registerReviewRequestTools(reg, postgresReader.reviewRequests, postgresReader, postgresReader.reviewRequestBudget)
+		}
+		registerRiskToolsWithMutations(reg, postgresReader.riskReads, postgresReader.riskAnalysisStatus, riskMutations)
 		if postgresReader.dataExports == nil {
 			registerUnavailableDataExportTools(reg)
 		} else {
@@ -217,7 +229,10 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		}
 		registerShadowInventoryTools(reg, postgresReader.shadowInventory)
 		registerShadowDecisionTool(reg, postgresReader.shadowDecisions)
+		registerShadowAITools(reg, postgresReader.shadowAI)
 	} else {
+		registerUnavailableReviewRequestTools(reg)
+		registerRiskAnalysisStatusTool(reg, nil)
 		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
 		registerUnavailableDataExportTools(reg)
 		registerUnavailableDataExportMutationTool(reg)
@@ -225,6 +240,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableOrganizationEventTools(reg)
 		registerUnavailableShadowInventoryTools(reg)
 		registerShadowDecisionTool(reg, nil)
+		registerUnavailableShadowAITools(reg)
 	}
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {
@@ -339,7 +355,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			Name:        "send_platform_mcp_feedback",
 			Title:       "Send Feedback About This Platform",
 			Description: "Send feedback about this platform. This is not switched on for your organization yet.",
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
 	} else {
 		registerFeedbackTool(reg, feedback)
 	}
@@ -368,7 +384,7 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
 	}
 }
 
@@ -378,7 +394,7 @@ func registerUnavailableCandidateInspectionTool(reg *Registrar) {
 		Title:       "Inspect an MCP Server",
 		Description: "Look at one MCP server before adding it. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("candidate_inspection"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("candidate_inspection"))
 }
 
 func registerUnavailableCatalogRegistrationTool(reg *Registrar) {
@@ -386,7 +402,7 @@ func registerUnavailableCatalogRegistrationTool(reg *Registrar) {
 		Name:        "register_catalog_mcp",
 		Title:       "Add a Reviewed MCP Server to a Project",
 		Description: "Add a reviewed MCP server to a project. This is not switched on for your organization yet.",
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog_registration"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog_registration"))
 }
 
 func registerUnavailableRemoteRegistrationTool(reg *Registrar) {
@@ -394,7 +410,7 @@ func registerUnavailableRemoteRegistrationTool(reg *Registrar) {
 		Name:        "register_remote_mcp",
 		Title:       "Add Your Own MCP Server to a Project",
 		Description: "Add an MCP server of your own to a project. This is not switched on for your organization yet.",
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("direct_remote_registration"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("direct_remote_registration"))
 }
 
 func registerUnavailableLifecycleMetadataTool(reg *Registrar) {
@@ -402,7 +418,7 @@ func registerUnavailableLifecycleMetadataTool(reg *Registrar) {
 		Name:        "update_mcp_metadata",
 		Title:       "Rename an MCP Server",
 		Description: "Rename one MCP server. This is not switched on for your organization yet.",
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_metadata"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_metadata"))
 }
 
 func registerUnavailableSetupHandoffTool(reg *Registrar) {
@@ -410,7 +426,7 @@ func registerUnavailableSetupHandoffTool(reg *Registrar) {
 		Name:        "get_setup_handoff",
 		Title:       "Open Setup in the Dashboard",
 		Description: "Open the dashboard to finish setting up an MCP server. This is not switched on for your organization yet.",
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
 }
 
 func registerUnavailableTools(reg *Registrar) {
@@ -428,7 +444,7 @@ func registerUnavailableTools(reg *Registrar) {
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
-		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool(tool.feature))
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool(tool.feature))
 	}
 }
 
@@ -446,7 +462,7 @@ func registerUnavailableReadinessTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
 	}
 }
 

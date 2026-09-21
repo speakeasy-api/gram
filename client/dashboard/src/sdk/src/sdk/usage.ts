@@ -10,8 +10,10 @@ import { usageCreateStripePortalSession } from "../funcs/usageCreateStripePortal
 import { usageCreateTopUpCheckout } from "../funcs/usageCreateTopUpCheckout.js";
 import { usageGetBillingEmail } from "../funcs/usageGetBillingEmail.js";
 import { usageGetInferenceSpendCaps } from "../funcs/usageGetInferenceSpendCaps.js";
+import { usageGetMeterUsage } from "../funcs/usageGetMeterUsage.js";
 import { usageGetPaygBillingSummary } from "../funcs/usageGetPaygBillingSummary.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
+import { usageGetSpendBreakdown } from "../funcs/usageGetSpendBreakdown.js";
 import { usageGetStripeSubscription } from "../funcs/usageGetStripeSubscription.js";
 import { usageGetTokensUnderManagement } from "../funcs/usageGetTokensUnderManagement.js";
 import { usageGetUsageTiers } from "../funcs/usageGetUsageTiers.js";
@@ -22,8 +24,10 @@ import { usageSetSpendCap } from "../funcs/usageSetSpendCap.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { BillingEmail } from "../models/components/billingemail.js";
 import { InferenceSpendCap } from "../models/components/inferencespendcap.js";
+import { MeterUsageResponse } from "../models/components/meterusageresponse.js";
 import { PaygBillingSummary } from "../models/components/paygbillingsummary.js";
 import { PeriodUsage } from "../models/components/periodusage.js";
+import { SpendBreakdownResponse } from "../models/components/spendbreakdownresponse.js";
 import { SpendCap } from "../models/components/spendcap.js";
 import { StripeSubscription } from "../models/components/stripesubscription.js";
 import { TokensUnderManagement } from "../models/components/tokensundermanagement.js";
@@ -61,6 +65,10 @@ import {
   GetInferenceSpendCapsSecurity,
 } from "../models/operations/getinferencespendcaps.js";
 import {
+  GetMeterUsageRequest,
+  GetMeterUsageSecurity,
+} from "../models/operations/getmeterusage.js";
+import {
   GetPaygBillingSummaryRequest,
   GetPaygBillingSummarySecurity,
 } from "../models/operations/getpaygbillingsummary.js";
@@ -68,6 +76,10 @@ import {
   GetPeriodUsageRequest,
   GetPeriodUsageSecurity,
 } from "../models/operations/getperiodusage.js";
+import {
+  GetSpendBreakdownRequest,
+  GetSpendBreakdownSecurity,
+} from "../models/operations/getspendbreakdown.js";
 import {
   GetStripeSubscriptionRequest,
   GetStripeSubscriptionSecurity,
@@ -248,6 +260,25 @@ export class Usage extends ClientSDK {
   }
 
   /**
+   * getMeterUsage usage
+   *
+   * @remarks
+   * Get incrementally aggregated ordinary meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer.
+   */
+  async getMeterUsage(
+    request: GetMeterUsageRequest,
+    security?: GetMeterUsageSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<MeterUsageResponse> {
+    return unwrapAsync(usageGetMeterUsage(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getPaygBillingSummary usage
    *
    * @remarks
@@ -278,6 +309,25 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PeriodUsage> {
     return unwrapAsync(usageGetPeriodUsage(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getSpendBreakdown usage
+   *
+   * @remarks
+   * Report spend availability and estimate PAYG organizations' three metered products at current list prices over a maximum of three calendar months. Other plans return unsupported_plan, empty products, and a zero total without calculating estimates. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.
+   */
+  async getSpendBreakdown(
+    request?: GetSpendBreakdownRequest | undefined,
+    security?: GetSpendBreakdownSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SpendBreakdownResponse> {
+    return unwrapAsync(usageGetSpendBreakdown(
       this,
       request,
       security,

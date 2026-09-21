@@ -3,6 +3,7 @@ package remotesessions
 import (
 	"bytes"
 	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -42,6 +43,18 @@ var errIDTokenSubjectMismatch = errors.New("id token subject differs from the id
 
 // errIDTokenVerificationDisabled is NoIDTokenVerifier's answer; callers treat it as silence.
 var errIDTokenVerificationDisabled = errors.New("id token verification is disabled")
+
+// errJWTKeySetUnavailable marks a key-set failure that says nothing about the token: source, cache, fetch, or budget.
+var errJWTKeySetUnavailable = errors.New("issuer key set unavailable")
+
+// errUnknownSigningKey marks an ID token whose named kid the key set lacks; a kid-less token against several keys is not this.
+var errUnknownSigningKey = errors.New("id token names a kid the key set lacks")
+
+// unknownSigningKeyError keeps the resolver's text while also matching errUnknownSigningKey.
+type unknownSigningKeyError struct{ err error }
+
+func (e *unknownSigningKeyError) Error() string   { return e.err.Error() }
+func (e *unknownSigningKeyError) Unwrap() []error { return []error{e.err, errUnknownSigningKey} }
 
 // maxEnrichmentBytes caps the provider-controlled enrichment document; larger
 // ones are dropped. UpdateRemoteSessionIdentity repeats it as the 16384 literal.
@@ -157,6 +170,9 @@ type IDTokenExpectation struct {
 	// fetchScope is the issuer row id, so tenants sharing an issuer URL cannot spend each other's budget.
 	fetchScope string
 
+	// transport reads the key set over the issuer's tunnel binding; nil is direct egress.
+	transport httpDoer
+
 	// signingAlgs is the issuer's id_token_signing_alg_values_supported; empty means unadvertised.
 	signingAlgs []string
 
@@ -196,7 +212,7 @@ func (v *jwksIDTokenVerifier) Verify(ctx context.Context, rawIDToken string, exp
 	}
 	var claims jwt.Claims
 	var all map[string]json.RawMessage
-	if _, err := verifyIssuerSignedJWT(ctx, v.keys, expect.jwksURI, conv.Default(expect.fetchScope, expect.issuer), rawIDToken, algorithms, &claims, &all); err != nil {
+	if _, err := verifyIssuerSignedJWT(ctx, v.keys, expect.jwksURI, conv.Default(expect.fetchScope, expect.issuer), expect.transport, rawIDToken, algorithms, &claims, &all); err != nil {
 		return UpstreamIdentity{}, err
 	}
 	if claims.Expiry == nil {
@@ -245,11 +261,21 @@ func (v *jwksIDTokenVerifier) Verify(ctx context.Context, rawIDToken string, exp
 // verifyIssuerSignedJWT checks one signature on raw against the issuer's
 // published key set, charging key fetches to fetchScope, and decodes the
 // claims into dest. The header comes back for checks the caller owns.
-func verifyIssuerSignedJWT(ctx context.Context, keys *jwks.KeyResolver, jwksURI, fetchScope, raw string, algorithms []jose.SignatureAlgorithm, dest ...any) (jose.Header, error) {
+func verifyIssuerSignedJWT(ctx context.Context, keys *jwks.KeyResolver, jwksURI, fetchScope string, transport httpDoer, raw string, algorithms []jose.SignatureAlgorithm, dest ...any) (jose.Header, error) {
+	return verifyIssuerSignedJWTWithKeyPolicy(ctx, keys, jwksURI, fetchScope, transport, raw, algorithms, nil, dest...)
+}
+
+// verifyIssuerSignedJWTWithKeyPolicy is verifyIssuerSignedJWT with a per-interface check on the resolved key.
+func verifyIssuerSignedJWTWithKeyPolicy(ctx context.Context, keys *jwks.KeyResolver, jwksURI, fetchScope string, transport httpDoer, raw string, algorithms []jose.SignatureAlgorithm, keyPolicy func(*jose.JSONWebKey) error, dest ...any) (jose.Header, error) {
 	var none jose.Header
 	source, err := jwks.NewRemoteSource(jwksURI)
 	if err != nil {
-		return none, fmt.Errorf("issuer jwks_uri: %w", err)
+		return none, fmt.Errorf("issuer jwks_uri: %w: %w", errJWTKeySetUnavailable, err)
+	}
+	// A tunnel-bound issuer publishes its key set inside the customer network,
+	// so the key that verifies its tokens is only readable over the tunnel.
+	if transport != nil {
+		source = source.WithTransport(transport)
 	}
 	token, err := jwt.ParseSigned(raw, algorithms)
 	if err != nil {
@@ -261,12 +287,31 @@ func verifyIssuerSignedJWT(ctx context.Context, keys *jwks.KeyResolver, jwksURI,
 	header := token.Headers[0]
 	key, err := keys.VerificationKeyForAlgorithm(ctx, source.WithFetchScope(fetchScope), header.KeyID, jose.SignatureAlgorithm(header.Algorithm))
 	if err != nil {
-		return none, fmt.Errorf("resolve jwt signing key: %w", err)
+		if errors.Is(err, jwks.ErrKeyNotFound) || errors.Is(err, jwks.ErrKeyAlgorithmMismatch) {
+			if header.KeyID != "" && errors.Is(err, jwks.ErrKeyNotFound) {
+				err = &unknownSigningKeyError{err: err}
+			}
+			return none, fmt.Errorf("resolve jwt signing key: %w", err)
+		}
+		return none, fmt.Errorf("resolve jwt signing key: %w: %w", errJWTKeySetUnavailable, err)
+	}
+	if keyPolicy != nil {
+		if err := keyPolicy(key); err != nil {
+			return none, fmt.Errorf("issuer signing key policy: %w", err)
+		}
 	}
 	if err := token.Claims(key, dest...); err != nil {
 		return none, fmt.Errorf("verify jwt signature: %w", err)
 	}
 	return header, nil
+}
+
+// RFC 7518 §§3.3, 3.5: RSA (RS* and PS*) access-token verification keys must be at least 2048 bits.
+func validateJWTVerificationKeyStrength(key *jose.JSONWebKey) error {
+	if public, ok := key.Key.(*rsa.PublicKey); ok && public.N.BitLen() < 2048 {
+		return errors.New("rsa verification key is smaller than 2048 bits")
+	}
+	return nil
 }
 
 // displayNameFromClaims picks the best human-readable name the standard
@@ -295,17 +340,26 @@ func claimString(claims map[string]json.RawMessage, name string) string {
 // its own key, the non-standard token response members, and the last outcome
 // of every interface that was asked.
 type enrichmentDocument struct {
-	IDToken       map[string]json.RawMessage `json:"id_token,omitempty"`
-	TokenResponse map[string]json.RawMessage `json:"token_response,omitempty"`
-	Userinfo      map[string]json.RawMessage `json:"userinfo,omitempty"`
-	Introspection map[string]json.RawMessage `json:"introspection,omitempty"`
-	Interfaces    map[string]interfaceRecord `json:"interfaces,omitempty"`
+	IDToken        map[string]json.RawMessage `json:"id_token,omitempty"`
+	TokenResponse  map[string]json.RawMessage `json:"token_response,omitempty"`
+	Userinfo       map[string]json.RawMessage `json:"userinfo,omitempty"`
+	Introspection  map[string]json.RawMessage `json:"introspection,omitempty"`
+	JWTAccessToken map[string]json.RawMessage `json:"jwt_access_token,omitempty"`
+	Interfaces     map[string]interfaceRecord `json:"interfaces,omitempty"`
 }
 
 // buildEnrichment serializes the enrichment column at exchange or refresh;
 // nil when there is nothing to keep.
-func buildEnrichment(tok tokenResponse, identity *UpstreamIdentity, interfaces map[string]interfaceRecord) ([]byte, error) {
-	doc := enrichmentDocument{IDToken: nil, TokenResponse: tok.extras(), Userinfo: nil, Introspection: nil, Interfaces: interfaces}
+// jwtClaims are kept under enrichment.jwt_access_token even when a stronger identity won.
+func buildEnrichment(tok tokenResponse, identity *UpstreamIdentity, interfaces map[string]interfaceRecord, jwtClaims map[string]json.RawMessage) ([]byte, error) {
+	doc := enrichmentDocument{
+		IDToken:        nil,
+		TokenResponse:  tok.extras(),
+		Userinfo:       nil,
+		Introspection:  nil,
+		JWTAccessToken: nil,
+		Interfaces:     interfaces,
+	}
 	if identity != nil {
 		claims := retainedClaims(identity.Claims)
 		// email_verified describes the email beside it; without one it is meaningless.
@@ -320,9 +374,20 @@ func buildEnrichment(tok tokenResponse, identity *UpstreamIdentity, interfaces m
 			doc.IDToken = claims
 		case IdentitySourceUserinfo:
 			doc.Userinfo = claims
+		case IdentitySourceJWTAccessToken:
+			doc.JWTAccessToken = claims
 		}
 	}
-	if doc.IDToken == nil && doc.TokenResponse == nil && doc.Userinfo == nil && len(doc.Interfaces) == 0 {
+	if doc.JWTAccessToken == nil && len(jwtClaims) != 0 {
+		claims := retainedClaims(jwtClaims)
+		if claimString(claims, "email") == "" {
+			delete(claims, "email_verified")
+		}
+		if len(claims) != 0 {
+			doc.JWTAccessToken = claims
+		}
+	}
+	if doc.IDToken == nil && doc.TokenResponse == nil && doc.Userinfo == nil && doc.JWTAccessToken == nil && len(doc.Interfaces) == 0 {
 		return nil, nil
 	}
 	raw, err := json.Marshal(doc)

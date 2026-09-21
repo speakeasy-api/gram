@@ -1,0 +1,27 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+message LLMEnforcer {
+  // The handler ACKs model and reply-write failures because redelivery cannot
+  // rescue an inline scan; the requester has already given up on the reply.
+  // The dead-letter topic therefore primarily receives undecodable or
+  // malformed requests; a consumer crash or lost ack lease can also strand a
+  // valid request there after max delivery attempts. Either way the payloads
+  // contain raw content and require restricted access and retention.
+  //
+  // The ack deadline stays above the requester's per-lane wait so a slow
+  // model call is never redelivered while the original consumer is still
+  // working on it.
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.risk.v1.LLMEnforcement"
+    ack_deadline: {seconds: 30}
+    retention: {seconds: 600}
+    dead_letter: {max_delivery_attempts: 5}
+    retry_policy: {minimum_backoff: {seconds: 10}}
+  };
+}

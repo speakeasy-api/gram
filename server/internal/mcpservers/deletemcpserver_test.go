@@ -5,10 +5,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assistants"
+	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -19,7 +22,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -405,4 +410,101 @@ func TestDeleteMcpServer_SoftDeletesMetaMcpMemberships(t *testing.T) {
 	removeAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMetaMcpServerRemoveMember)
 	require.NoError(t, err)
 	require.Equal(t, removeBefore+1, removeAfter)
+}
+
+func TestDeleteMcpServer_DetachesFromAssistants(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ar := assistantsrepo.New(ti.conn)
+	assistant, err := ar.CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
+		ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+		Name: "attachment test assistant", Model: "test-model", Status: "active", MaxConcurrency: 1,
+	})
+	require.NoError(t, err)
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Other project", Slug: "other-project", OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	otherAssistant, err := ar.CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
+		ProjectID: otherProject.ID, OrganizationID: authCtx.ActiveOrganizationID,
+		Name: "other assistant", Model: "test-model", Status: "active", MaxConcurrency: 1,
+	})
+	require.NoError(t, err)
+	otherBackendID := seedRemoteMcpServer(t, ctx, ti.conn, otherProject.ID)
+	otherTarget, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: otherProject.ID,
+		Name: pgtype.Text{String: "Other server", Valid: true}, Slug: pgtype.Text{String: "other-server", Valid: true},
+		RemoteMcpServerID: uuid.NullUUID{UUID: otherBackendID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: otherProject.ID, McpServerID: uuid.NullUUID{UUID: otherTarget.ID, Valid: true}, Slug: "other-server-endpoint",
+	})
+	require.NoError(t, err)
+	_, err = ar.AddAssistantMcpServers(ctx, []assistantsrepo.AddAssistantMcpServersParams{{
+		AssistantID: otherAssistant.ID, McpServerID: otherTarget.ID, ProjectID: otherProject.ID,
+	}})
+	require.NoError(t, err)
+	otherBefore, err := ar.LoadAssistantMcpServers(ctx, assistantsrepo.LoadAssistantMcpServersParams{
+		AssistantIds: []uuid.UUID{otherAssistant.ID}, ProjectID: otherProject.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, otherBefore, 1)
+	var ids []string
+	var deleteID string
+	for i, name := range []string{"deleted target", "retained target"} {
+		backendID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+		created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{Name: name, RemoteMcpServerID: &backendID, Visibility: types.McpServerVisibility("private")})
+		require.NoError(t, err)
+		_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+			ProjectID: *authCtx.ProjectID, McpServerID: uuid.NullUUID{UUID: uuid.MustParse(created.ID), Valid: true}, Slug: "endpoint-" + created.ID,
+		})
+		require.NoError(t, err)
+		ids = append(ids, created.ID)
+		if i == 0 {
+			deleteID = created.ID
+		}
+		_, err = ar.AddAssistantMcpServers(ctx, []assistantsrepo.AddAssistantMcpServersParams{{
+			AssistantID: assistant.ID, McpServerID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID,
+		}})
+		require.NoError(t, err)
+	}
+	err = mcpserversrepo.New(ti.conn).DeleteAssistantMCPServersByMCPServer(ctx, mcpserversrepo.DeleteAssistantMCPServersByMCPServerParams{
+		McpServerID: uuid.MustParse(ids[0]), ProjectID: otherProject.ID,
+	})
+	require.NoError(t, err)
+	before, err := ar.LoadAssistantMcpServers(ctx, assistantsrepo.LoadAssistantMcpServersParams{
+		AssistantIds: []uuid.UUID{assistant.ID}, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, before, 2, "a different project cannot detach these attachments")
+	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: deleteID})
+	require.NoError(t, err)
+	counts, err := testrepo.New(ti.conn).CountAssistantAttachments(ctx, testrepo.CountAssistantAttachmentsParams{
+		ProjectID: *authCtx.ProjectID, AssistantID: assistant.ID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, counts.McpServers, "deleted target must be physically detached")
+	remaining, err := ar.LoadAssistantMcpServers(ctx, assistantsrepo.LoadAssistantMcpServersParams{
+		AssistantIds: []uuid.UUID{assistant.ID}, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, remaining, 1)
+	require.Equal(t, uuid.MustParse(ids[1]), remaining[0].McpServerID, "unrelated target must remain")
+	otherAfter, err := ar.LoadAssistantMcpServers(ctx, assistantsrepo.LoadAssistantMcpServersParams{
+		AssistantIds: []uuid.UUID{otherAssistant.ID}, ProjectID: otherProject.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, otherBefore, otherAfter, "another project's independent attachments must survive deletion")
+
+	core := assistants.NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, nil, nil, nil, nil, nil, nil, audit.NewLogger())
+	reloaded, err := core.GetAssistant(ctx, *authCtx.ProjectID, assistant.ID)
+	require.NoError(t, err)
+	require.Len(t, reloaded.MCPServers, 1)
+	name := "updated assistant"
+	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, nil, []*types.AssistantMCPServerRef{{McpServerSlug: reloaded.MCPServers[0].ServerSlug.String}}, nil, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, name, updated.Name)
 }

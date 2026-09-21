@@ -48,8 +48,7 @@ export type QueryParams = Record<
   string | number | boolean | string[] | undefined
 >;
 
-// Values the admin API reads as unset. Every boolean it takes is an opt-in
-// flag, so `false` is the same request as no flag at all.
+// Values the admin API reads as unset. Boolean flags are opt-in.
 //
 // A cache key runs through this too, so the key and the request agree on what
 // "unset" means. Without that, `{type: []}` and `{}` send one request and cache
@@ -133,7 +132,7 @@ export async function gramAdminFetch<T>(
 
 // A mutation reports its own failure rather than taking the 401 redirect,
 // which would sign the operator back in behind the action they just took.
-async function gramAdminMutation<T>(
+export async function gramAdminMutation<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
@@ -314,14 +313,8 @@ export type ListOrganizationsResult = {
   next_cursor?: string;
 };
 
-// Each filter is a repeated parameter the server reads as a set, and an absent
-// one means no filter of that kind: no account_types is every type, no
-// trial_states is every state, no disabled_states is active organizations only.
-//
-// The scalar `account_type` and the `include_disabled` flag these replaced are
-// still accepted by the server, so its half of this change can merge first.
-// Nothing here sends them, and nothing should: two ways to say the same filter
-// is how the browser and the server end up disagreeing about what is on.
+// Set filters match any supplied value; omitted filters are unrestricted.
+// Status is strict even for exact ID searches.
 export type ListOrganizationsParams = {
   sort?: string;
   direction?: "asc" | "desc";
@@ -329,7 +322,15 @@ export type ListOrganizationsParams = {
   q?: string;
   account_types?: string[];
   trial_states?: string[];
-  disabled_states?: string[];
+  disabled_status?: "all" | "active" | "disabled";
+  /** Nonnegative int64. Use decimal strings above Number.MAX_SAFE_INTEGER. */
+  min_members?: number | string;
+  /** Nonnegative int64. Unsafe numeric values are rejected before sending. */
+  max_members?: number | string;
+  /** Inclusive UTC calendar date, strictly YYYY-MM-DD (not a timestamp). */
+  created_from?: string;
+  /** Inclusive UTC calendar date, strictly YYYY-MM-DD (not a timestamp). */
+  created_to?: string;
   cursor?: string;
   limit?: number;
 };
@@ -337,6 +338,32 @@ export type ListOrganizationsParams = {
 export function listOrganizations(
   params: ListOrganizationsParams = {},
 ): Promise<ListOrganizationsResult> {
+  for (const key of ["min_members", "max_members"] as const) {
+    const value = params[key];
+    if (value === undefined) continue;
+    // Never convert a decimal string through Number: int64 exceeds JS precision.
+    if (
+      (typeof value === "number" && !Number.isSafeInteger(value)) ||
+      !/^[0-9]+$/.test(String(value)) ||
+      BigInt(value) > 9223372036854775807n
+    ) {
+      throw new RangeError(
+        `${key} must be a nonnegative int64; use a decimal string for large values`,
+      );
+    }
+  }
+  for (const key of ["created_from", "created_to"] as const) {
+    const value = params[key];
+    if (value === undefined) continue;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (
+      !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) ||
+      !Number.isFinite(date.getTime()) ||
+      date.toISOString().slice(0, 10) !== value
+    ) {
+      throw new RangeError(`${key} must be a valid YYYY-MM-DD UTC date`);
+    }
+  }
   const qs = toSearchParams(params).toString();
   return gramAdminFetch<ListOrganizationsResult>(
     `/admin/organizations.list${qs ? `?${qs}` : ""}`,
@@ -457,28 +484,6 @@ export function markEnterpriseTrialConverted(
   );
 }
 
-// Both answer the organization in its new state, so a caller updates its cache
-// from the response rather than reading the record back.
-export function disableOrganization(
-  body: OrganizationRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/organization.disable", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-export function enableOrganization(
-  body: OrganizationRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/organization.enable", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
 // The server's own bounds, mirrored so a value it would reject never leaves the
 // browser. See MinTrialExtensionDays and MaxTrialExtensionDays in
 // server/internal/constants/trials.go: zero moves nothing but updated_at, a
@@ -486,23 +491,6 @@ export function enableOrganization(
 // where a trial becomes a contract.
 export const MIN_TRIAL_EXTENSION_DAYS = 1;
 export const MAX_TRIAL_EXTENSION_DAYS = 365;
-
-export type ExtendTrialRequest = {
-  id: string;
-  days: number;
-};
-
-// The days are added to the trial's current end date, not to today, so an
-// extension applied early does not shorten the trial.
-export function extendTrial(
-  body: ExtendTrialRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/trial.extend", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
 
 // The server's own bounds for a re-arm, mirrored the way the extension bounds
 // above are. See MinTrialRearmDays and MaxTrialRearmDays in
@@ -512,24 +500,11 @@ export function extendTrial(
 export const MIN_TRIAL_REARM_DAYS = 1;
 export const MAX_TRIAL_REARM_DAYS = 365;
 
-export type RearmTrialRequest = {
-  id: string;
-  days: number;
-};
-
-// Not an extension with a different verb. The days are the whole length of a
-// fresh run counted from now, and the write also restores the organization's
-// account type and whitelist flag and revives its model provider keys. Only a
-// demoted trial can be re-armed; anything else is refused with a conflict.
-export function rearmTrial(
-  body: RearmTrialRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/trial.rearm", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
+// The server's own bounds for a start, mirrored the way the re-arm bounds
+// above are. See MinTrialStartDays and MaxTrialStartDays in
+// server/internal/constants/trials.go.
+export const MIN_TRIAL_START_DAYS = 1;
+export const MAX_TRIAL_START_DAYS = 365;
 
 export type CreateOrganizationRequest = {
   name: string;

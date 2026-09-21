@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	extcredrepo "github.com/speakeasy-api/gram/server/internal/externalcredentials/repo"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
@@ -348,10 +349,10 @@ func TestVerifyGcpKmsKey_HonorsStoredProjectVerificationExemption(t *testing.T) 
 		WifProjectNumber:          pgtype.Text{String: "", Valid: false},
 		SkipProjectVerification:   true,
 	})
-	key := createGcpKmsKey(t, ctx, ti, "behind-exempted-sa", credID)
+	keyID := provisiontest.CreateGcpKmsKeyDirect(t, ctx, ti.conn, ti.orgID, "behind-exempted-sa", credID)
 
 	result, err := ti.service.VerifyGcpKmsKey(adminCtx(t, ctx), &gen.VerifyGcpKmsKeyPayload{
-		ID:           key.ID,
+		ID:           keyID,
 		SessionToken: nil,
 	})
 	require.NoError(t, err)

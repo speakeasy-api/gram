@@ -4,7 +4,20 @@ import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { SearchBar } from "@/components/ui/SearchBar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/Dropdown";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   Sheet,
@@ -30,14 +43,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
+  Blocks,
+  Boxes,
   Cable,
+  ChevronDown,
+  Cloud,
+  Code,
+  FileCode,
   Globe,
   Loader2,
   Plus,
   Server,
   Trash2,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import {
@@ -45,11 +64,21 @@ import {
   type MemberRow,
   buildAddCandidates,
   classifyMemberServer,
+  addCandidateBatch,
+  reconcileCompletedMembers,
+  candidateKey,
+  candidateName,
+  type AddCandidate,
+  type AddResult,
+  type AddBatchState,
   memberBackendKind,
   nextSortOrder,
   planReorder,
 } from "./memberRows";
-import { useGatewayMemberRows } from "./useGatewayMemberRows";
+import {
+  useGatewayMemberRows,
+  useReconcileWrappers,
+} from "./useGatewayMemberRows";
 import { useToolsets } from "../../toolsets/useToolsets";
 
 const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
@@ -194,16 +223,51 @@ export function GatewayMembersSection({
 }: {
   metaMcpServer: MetaMcpServer;
 }): JSX.Element {
-  const routes = useRoutes();
-  const navigate = useNavigate();
   const client = useSdkClient();
   const queryClient = useQueryClient();
-  const { rows, isLoading, servers } = useGatewayMemberRows(metaMcpServer.id);
+  const {
+    rows,
+    isLoading,
+    servers,
+    isError,
+    refetch,
+    membersUpdatedAt,
+    serversUpdatedAt,
+  } = useGatewayMemberRows(metaMcpServer.id);
   const toolsets = useToolsets();
 
   const [addOpen, setAddOpen] = useState(false);
+  const batchState = useMemo<AddBatchState>(
+    () => ({ wrappers: new Map(), orders: new Map(), completed: new Set() }),
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- reset retry caches when navigating to another gateway
+    [metaMcpServer.id],
+  );
+  const batchRunning = useRef(false);
+  const reconciledAt = useRef(membersUpdatedAt);
+  const latestMembersUpdatedAt = useRef(membersUpdatedAt);
   const [removeTarget, setRemoveTarget] = useState<MemberRow | null>(null);
   const [mutating, setMutating] = useState(false);
+  const markWrapperWritesSettled = useReconcileWrappers(
+    batchState,
+    servers,
+    serversUpdatedAt,
+    mutating,
+  );
+
+  useEffect(() => {
+    if (membersUpdatedAt) latestMembersUpdatedAt.current = membersUpdatedAt;
+    if (
+      mutating ||
+      !membersUpdatedAt ||
+      membersUpdatedAt === reconciledAt.current
+    )
+      return;
+    reconciledAt.current = membersUpdatedAt;
+    reconcileCompletedMembers(
+      batchState,
+      new Set(rows.map((row) => row.member.mcpServerId)),
+    );
+  }, [batchState, membersUpdatedAt, mutating, rows]);
 
   const invalidateMembers = () =>
     Promise.all([
@@ -245,57 +309,107 @@ export function GatewayMembersSection({
           updateMetaMcpMemberForm: change,
         });
       }
-    }, "Failed to reorder members");
+    }, "Failed to reorder servers");
 
   const handleRemove = (row: MemberRow) =>
     runMutation(async () => {
       await client.metaMcp.removeMember({ id: row.member.id });
+      const key = row.server
+        ? candidateKey(
+            { kind: "server", server: row.server },
+            batchState.wrappers,
+          )
+        : `server-${row.member.mcpServerId}`;
+      batchState.completed.delete(key);
+      batchState.orders.delete(key);
       setRemoveTarget(null);
-      toast.success("Member removed");
-    }, "Failed to remove member");
+      toast.success("Server removed");
+    }, "Failed to remove server");
 
-  const handleAdd = (server: McpServer) =>
-    runMutation(async () => {
-      await client.metaMcp.addMember({
-        addMetaMcpMemberForm: {
-          metaMcpServerId: metaMcpServer.id,
-          mcpServerId: server.id,
-          sortOrder: nextSortOrder(rows.map((row) => row.member)),
-        },
-      });
-      toast.success(`Added ${server.name || "server"} to the gateway`);
-    }, "Failed to add member");
-
-  // Members are keyed by mcp_server_id: mint the toolset's server row, then
-  // attach it. Private is the only visibility a toolset-backed row can hold
-  // from its own page; the gateway defers access to the toolset's MCP gate.
-  const handleAddToolset = (toolset: ToolsetEntry) =>
-    runMutation(async () => {
-      const wrapper = await client.mcpServers.create({
-        createMcpServerForm: {
-          name: toolset.name,
-          toolsetId: toolset.id,
-          visibility: "private",
-        },
-      });
-      try {
-        await client.metaMcp.addMember({
-          addMetaMcpMemberForm: {
-            metaMcpServerId: metaMcpServer.id,
-            mcpServerId: wrapper.id,
-            sortOrder: nextSortOrder(rows.map((row) => row.member)),
+  const handleAdd = async (
+    candidates: AddCandidate[],
+  ): Promise<AddResult[]> => {
+    if (batchRunning.current) return [];
+    batchRunning.current = true;
+    setMutating(true);
+    try {
+      return await addCandidateBatch(
+        candidates,
+        nextSortOrder(rows.map((row) => row.member)),
+        batchState,
+        {
+          createWrapper: async (toolset) => {
+            const findWrapper = async () => {
+              // Read from the server, not the picker cache: a previous create
+              // may have committed even when its response never reached us.
+              const { mcpServers } = await client.mcpServers.list({
+                toolsetId: toolset.id,
+              });
+              if (mcpServers.length > 1) {
+                throw new Error(
+                  "Multiple servers use this source. Select the intended existing server.",
+                );
+              }
+              return mcpServers[0]?.id;
+            };
+            const existing = await findWrapper();
+            if (existing) return existing;
+            try {
+              const wrapper = await client.mcpServers.create({
+                createMcpServerForm: {
+                  name: toolset.name,
+                  toolsetId: toolset.id,
+                  visibility: "private",
+                },
+              });
+              return wrapper.id;
+            } catch (error) {
+              const recovered = await findWrapper();
+              if (recovered) return recovered;
+              throw error;
+            }
           },
-        });
-      } catch (error) {
-        // The row now exists and is offered as a regular server candidate.
-        throw new Error(
-          `Created an MCP server for ${toolset.name} but couldn't add it to the gateway: ${
-            error instanceof Error ? error.message : "unknown error"
-          }. Add it again from the list.`,
+          attach: async (mcpServerId, sortOrder) => {
+            try {
+              await client.metaMcp.addMember({
+                addMetaMcpMemberForm: {
+                  metaMcpServerId: metaMcpServer.id,
+                  mcpServerId,
+                  sortOrder,
+                },
+              });
+            } catch (error) {
+              // A lost response (or a retry conflict) is success only when a
+              // fresh read confirms this exact server's membership.
+              const { members } = await client.metaMcp.listMembers({
+                metaMcpServerId: metaMcpServer.id,
+              });
+              if (
+                !members.some((member) => member.mcpServerId === mcpServerId)
+              ) {
+                throw error;
+              }
+            }
+          },
+        },
+      );
+    } finally {
+      // Ignore responses received during the writes. Only a subsequent
+      // successful refresh can retire optimistic duplicate protection.
+      reconciledAt.current = latestMembersUpdatedAt.current;
+      markWrapperWritesSettled();
+      try {
+        await invalidateMembers();
+      } catch {
+        toast.error(
+          "Servers changed, but the list couldn't refresh. Reload to see the latest servers.",
         );
+      } finally {
+        batchRunning.current = false;
+        setMutating(false);
       }
-      toast.success(`Added ${toolset.name} to the gateway`);
-    }, "Failed to add member");
+    }
+  };
 
   const indexByMemberId = new Map(
     rows.map((row, index) => [row.member.id, index]),
@@ -385,7 +499,7 @@ export function GatewayMembersSection({
             size="sm"
             disabled={mutating}
             onClick={() => setRemoveTarget(row)}
-            aria-label="Remove member"
+            aria-label="Remove server"
           >
             <Button.Icon>
               <Trash2 className="size-4" />
@@ -402,7 +516,7 @@ export function GatewayMembersSection({
         {/* Section heading under the Overview page title: no eyebrow, smaller
             serif. */}
         <Page.Section.Title area="" className="text-display-xs">
-          Members
+          Servers
         </Page.Section.Title>
         <Page.Section.Description>
           The MCP servers this gateway fronts, in the order agents see them in
@@ -419,13 +533,20 @@ export function GatewayMembersSection({
               <Button.LeftIcon>
                 <Plus />
               </Button.LeftIcon>
-              <Button.Text>Add member</Button.Text>
+              <Button.Text>Add servers</Button.Text>
             </Button>
           </RequireScope>
         </Page.Section.CTA>
         <Page.Section.Body>
           {isLoading ? (
             <SkeletonTable />
+          ) : isError ? (
+            <div role="alert" className="space-y-2">
+              <Text>Couldn't load gateway servers.</Text>
+              <Button variant="secondary" onClick={() => void refetch()}>
+                <Button.Text>Retry loading</Button.Text>
+              </Button>
+            </div>
           ) : (
             <Table columns={columns}>
               <Table.Header columns={columns} />
@@ -436,7 +557,7 @@ export function GatewayMembersSection({
                       state sit lower than every other one. */}
                   <div className="flex flex-col items-center gap-3">
                     <Text muted>
-                      No members yet. A gateway with no members exposes its four
+                      No servers yet. A gateway with no servers exposes its four
                       tools but has nothing to route to.
                     </Text>
                     <RequireScope
@@ -452,7 +573,7 @@ export function GatewayMembersSection({
                         <Button.LeftIcon>
                           <Plus className="size-4" />
                         </Button.LeftIcon>
-                        <Button.Text>Add the first member</Button.Text>
+                        <Button.Text>Add servers</Button.Text>
                       </Button>
                     </RequireScope>
                   </div>
@@ -469,23 +590,26 @@ export function GatewayMembersSection({
         </Page.Section.Body>
       </Page.Section>
 
-      <AddMemberSheet
+      <AddServersSheet
+        key={metaMcpServer.id}
         open={addOpen}
-        onOpenChange={setAddOpen}
+        onOpenChange={(open) => {
+          if (!batchRunning.current) setAddOpen(open);
+        }}
         servers={servers}
-        toolsets={toolsets}
-        isLoading={isLoading || toolsets.isLoading}
+        toolsets={toolsets.isError ? [] : toolsets}
+        toolsetsLoading={toolsets.isLoading}
         toolsetsFailed={toolsets.isError}
+        isLoading={isLoading}
+        loadFailed={isError}
+        onRetryLoad={() => {
+          void refetch();
+          void toolsets.refetch();
+        }}
         memberServerIds={new Set(rows.map((row) => row.member.mcpServerId))}
-        onAdd={(server) => void handleAdd(server)}
-        onAddToolset={(toolset) => void handleAddToolset(toolset)}
-        onAddFromCatalog={() =>
-          void navigate(
-            routes.mcp.add.catalog.href() +
-              "?attachToGateway=" +
-              metaMcpServer.id,
-          )
-        }
+        wrappers={batchState.wrappers}
+        onAdd={handleAdd}
+        gatewayId={metaMcpServer.id}
         adding={mutating}
         projectId={metaMcpServer.projectId}
       />
@@ -498,13 +622,13 @@ export function GatewayMembersSection({
       >
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
-            <Dialog.Title>Remove this member?</Dialog.Title>
+            <Dialog.Title>Remove this server?</Dialog.Title>
             <Dialog.Description>
               {`Agents connected to this gateway lose access to ${
                 removeTarget?.server?.name ||
                 removeTarget?.member.mcpServerName ||
                 "this server"
-              }'s tools. In-flight sessions see it disappear from list_servers.`}
+              }'s tools. The server itself is not deleted. In-flight sessions see it disappear from list_servers.`}
             </Dialog.Description>
           </Dialog.Header>
           <Dialog.Footer>
@@ -527,7 +651,7 @@ export function GatewayMembersSection({
                   <Loader2 aria-hidden="true" className="size-4 animate-spin" />
                 </Button.LeftIcon>
               )}
-              <Button.Text>Remove member</Button.Text>
+              <Button.Text>Remove server</Button.Text>
             </Button>
           </Dialog.Footer>
         </Dialog.Content>
@@ -536,213 +660,534 @@ export function GatewayMembersSection({
   );
 }
 
-function AddMemberSheet({
+export function AddServersSheet({
   open,
   onOpenChange,
   servers,
   toolsets,
+  toolsetsLoading = false,
+  toolsetsFailed = false,
   isLoading,
-  toolsetsFailed,
+  loadFailed,
+  onRetryLoad,
   memberServerIds,
+  wrappers,
   onAdd,
-  onAddToolset,
-  onAddFromCatalog,
   adding,
   projectId,
+  gatewayId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   servers: McpServer[];
   toolsets: ToolsetEntry[];
+  toolsetsLoading?: boolean;
+  toolsetsFailed?: boolean;
   isLoading: boolean;
-  toolsetsFailed: boolean;
+  loadFailed: boolean;
+  onRetryLoad: () => void;
   memberServerIds: Set<string>;
-  onAdd: (server: McpServer) => void;
-  onAddToolset: (toolset: ToolsetEntry) => void;
-  onAddFromCatalog: () => void;
+  wrappers?: ReadonlyMap<string, string>;
+  onAdd: (candidates: AddCandidate[]) => Promise<AddResult[]>;
   adding: boolean;
   projectId: string;
+  gatewayId: string;
 }): JSX.Element {
+  const routes = useRoutes();
+  const navigate = useNavigate();
+  const telemetry = useTelemetry();
+  const { hasScope, isLoading: permissionsLoading } = useRBAC();
+  const canWrite = !permissionsLoading && hasScope("mcp:write", gatewayId);
+  const canCreate = !permissionsLoading && hasScope("mcp:write", projectId);
+  const canWriteProject =
+    !permissionsLoading && hasScope("project:write", projectId);
+  // Match the Catalog page's browse permission; installation checks stay there.
+  const canBrowseCatalog =
+    !permissionsLoading && (hasScope("project:read") || hasScope("mcp:write"));
+  const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState("");
-
+  const searchContainerRef = useRef<HTMLLabelElement>(null);
+  const creationMenuOutsideEventRef = useRef<Event | null>(null);
+  const [results, setResults] = useState<AddResult[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const busy = adding || submitting;
   const candidates = useMemo(
-    () => buildAddCandidates(servers, toolsets, memberServerIds, search),
-    [servers, toolsets, memberServerIds, search],
+    () => buildAddCandidates(servers, toolsets, memberServerIds, ""),
+    [servers, toolsets, memberServerIds],
   );
-
+  const options = candidates.map((candidate) => {
+    const key = candidateKey(candidate, wrappers);
+    if (candidate.kind === "toolset") {
+      return {
+        value: key,
+        label: candidateName(candidate),
+        mcpServerId: undefined,
+        slug: candidate.toolset.slug,
+        classification: CLASSIFICATION_LABEL.hosted,
+        badge: candidate.toolset.mcpEnabled ? undefined : "MCP off",
+        description: `${candidate.toolset.slug} · Hosted${candidate.toolset.mcpEnabled ? "" : " · MCP off: excluded until enabled"}${canCreate ? "" : " · Requires project-level MCP write permission"}`,
+        disabled: !canWrite || !canCreate,
+      };
+    }
+    const server = candidate.server;
+    const classification = classifyMemberServer(server);
+    const restriction = server.unproxiedMcpServerId
+      ? "Direct-connect servers cannot be added to a gateway."
+      : !server.slug
+        ? "A server slug is required before adding."
+        : classification === "disabled"
+          ? "Disabled: excluded until enabled."
+          : STATUS_BY_CLASSIFICATION[classification].why;
+    return {
+      value: key,
+      label: candidateName(candidate) || "MCP server",
+      mcpServerId: server.id,
+      slug: server.slug,
+      classification: CLASSIFICATION_LABEL[classification],
+      badge:
+        classification === "hosted" || classification === "proxied"
+          ? undefined
+          : "Excluded",
+      description: `${server.slug || "No slug"} · ${restriction}`,
+      disabled:
+        !canWrite || !server.slug || Boolean(server.unproxiedMcpServerId),
+    };
+  });
+  const query = search.trim().toLowerCase();
+  const visibleOptions = options.filter((option) =>
+    `${option.label} ${option.slug ?? ""}`.toLowerCase().includes(query),
+  );
+  const selectedCandidates = candidates.filter(
+    (candidate) =>
+      selected.includes(candidateKey(candidate, wrappers)) &&
+      !options.find(
+        (option) => option.value === candidateKey(candidate, wrappers),
+      )?.disabled,
+  );
+  const selectedValues = selectedCandidates.map((candidate) =>
+    candidateKey(candidate, wrappers),
+  );
+  const submit = async () => {
+    if (
+      submittingRef.current ||
+      busy ||
+      !canWrite ||
+      isLoading ||
+      loadFailed ||
+      selectedCandidates.length === 0
+    )
+      return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      const returned = await onAdd(selectedCandidates);
+      // Missing results are not successes (including a rejected duplicate batch).
+      const next = selectedCandidates.map((candidate) => {
+        const key = candidateKey(candidate, wrappers);
+        return (
+          returned.find((result) => result.key === key) ?? {
+            key,
+            name: candidateName(candidate),
+            error: "Couldn't confirm this server was added. Try again.",
+          }
+        );
+      });
+      const failures = next.filter((result) => result.error);
+      setResults(failures);
+      setSelected(failures.map((result) => result.key));
+      if (failures.length === 0) {
+        toast.success(
+          `${next.length} ${next.length === 1 ? "server" : "servers"} added`,
+        );
+        // Bypass the user-dismissal busy guard after the batch has settled.
+        onOpenChange(false);
+      }
+    } catch (error) {
+      setResults(
+        selectedCandidates.map((candidate) => ({
+          key: candidateKey(candidate, wrappers),
+          name: candidateName(candidate),
+          error:
+            error instanceof Error
+              ? error.message
+              : "Couldn't add this server. Try again.",
+        })),
+      );
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  };
+  const creationOptions = [
+    {
+      label: "From the catalog",
+      description:
+        "Pick a reviewed third-party server — Salesforce, Datadog, Linear, Slack, Okta and more.",
+      Icon: Blocks,
+      group: "Recommended",
+      href: routes.mcp.catalog.href() + "?attachToGateway=" + gatewayId,
+      allowed: canBrowseCatalog,
+    },
+    {
+      label: "Hosted remotely",
+      description:
+        "Add a server that already runs elsewhere by its URL, proxied through Gram.",
+      Icon: Cloud,
+      group: "Recommended",
+      href:
+        routes.mcp.add.remote.href() +
+        "?attachToGateway=" +
+        encodeURIComponent(gatewayId),
+      allowed: canCreate,
+    },
+    ...(telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG)
+      ? [
+          {
+            label: "Reachable through a tunnel",
+            description:
+              "Connect a server running inside your own network through a tunnel.",
+            Icon: Cable,
+            group: "Recommended",
+            href:
+              routes.mcp.add.tunneled.href() +
+              "?attachToGateway=" +
+              encodeURIComponent(gatewayId),
+            allowed: canCreate,
+          },
+        ]
+      : []),
+    {
+      label: "From your API",
+      description: "Upload an OpenAPI document to generate tools.",
+      Icon: FileCode,
+      group: "Advanced",
+      href:
+        routes.mcp.add.openapi.href() +
+        "?attachToGateway=" +
+        encodeURIComponent(gatewayId),
+      allowed: canWriteProject && canCreate,
+    },
+    {
+      label: "From an existing source",
+      description:
+        "Build a server from an OpenAPI document or function this project already has.",
+      Icon: Boxes,
+      group: "Advanced",
+      href:
+        routes.mcp.add.fromSource.href() +
+        "?attachToGateway=" +
+        encodeURIComponent(gatewayId),
+      allowed: canCreate,
+    },
+    ...(telemetry.isFeatureEnabled("gram-functions")
+      ? [
+          {
+            label: "Write custom code",
+            description: "Create tools with TypeScript functions.",
+            Icon: Code,
+            group: "Advanced",
+            href:
+              routes.mcp.add.function.href() +
+              "?attachToGateway=" +
+              encodeURIComponent(gatewayId),
+            allowed: canWriteProject && canCreate,
+          },
+        ]
+      : []),
+  ];
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open}
+      onOpenChange={(value) => {
+        if (!busy) onOpenChange(value);
+      }}
+    >
       <SheetContent
-        side="right"
-        className="flex w-[520px] flex-col sm:max-w-[520px]"
+        className="flex w-full flex-col gap-0 p-0 sm:max-w-xl"
+        onPointerDownOutside={(event) => {
+          // Dialog defers dismissal until click, after the menu has closed.
+          // Consume only the pointer interaction that dismissed the menu.
+          if (
+            event.detail.originalEvent === creationMenuOutsideEventRef.current
+          ) {
+            event.preventDefault();
+          }
+        }}
+        onEscapeKeyDown={(event) => {
+          if (
+            search &&
+            document.activeElement ===
+              searchContainerRef.current?.querySelector("input")
+          ) {
+            event.preventDefault();
+            setSearch("");
+          }
+        }}
       >
-        <SheetHeader className="px-6 pt-6 pb-0">
-          <SheetTitle>Add member</SheetTitle>
+        <SheetHeader className="px-6 pt-6 pb-4">
+          <SheetTitle>Add servers to gateway</SheetTitle>
           <SheetDescription>
-            Front another MCP server through this gateway. Hosted servers are
-            set up as members when added. Disabled servers, and hosted servers
-            with MCP turned off, can be added but won't serve until enabled;
-            unproxied and slugless servers can't be added.
+            Choose existing servers to add, or get started with a new one.
           </SheetDescription>
         </SheetHeader>
-
-        <div className="flex items-center gap-2 px-6 pt-4">
-          <div className="flex-1">
-            <SearchBar
-              value={search}
-              onChange={setSearch}
-              placeholder="Search MCP servers..."
-            />
-          </div>
-          {/* The catalog install flow is page-gated on project:write;
-              scoping to this gateway's project keeps the check exact when a
-              grant is selector-constrained to specific projects. */}
-          <RequireScope
-            scope="project:write"
-            resourceId={projectId}
-            level="component"
-          >
-            <Button variant="secondary" onClick={onAddFromCatalog}>
-              <Button.Text>Add from catalog</Button.Text>
-            </Button>
-          </RequireScope>
-        </div>
-
-        <div className="flex-1 space-y-2 overflow-y-auto px-6 py-4">
-          {toolsetsFailed && (
-            <Text className="text-destructive text-xs">
-              Couldn't load hosted MCP servers. Only servers with their own
-              entry are listed.
+        <div className="flex-1 space-y-4 overflow-y-auto px-6 pb-6">
+          <section aria-labelledby="add-new-server" className="space-y-3">
+            <Text as="h3" id="add-new-server" variant="subheading">
+              Create a new server
             </Text>
-          )}
-          {isLoading ? (
-            <Text muted className="py-8 text-center">
-              Loading MCP servers…
-            </Text>
-          ) : candidates.length === 0 &&
-            toolsetsFailed ? null : candidates.length === 0 ? (
-            <Text muted className="py-8 text-center">
-              {search
-                ? `No MCP servers matching \u201c${search}\u201d`
-                : "Every MCP server is already a member."}
-            </Text>
-          ) : (
-            candidates.map((candidate) => {
-              if (candidate.kind === "toolset") {
-                const { toolset } = candidate;
-                return (
-                  <CandidateRow
-                    key={`toolset-${toolset.id}`}
-                    name={toolset.name}
-                    slug={toolset.slug}
-                    label={CLASSIFICATION_LABEL.hosted}
-                    badge={toolset.mcpEnabled ? undefined : "MCP off"}
-                    action={
-                      // Minting the server row is a project-level write, so
-                      // gate on the project rather than the gateway.
-                      <RequireScope
-                        scope="mcp:write"
-                        resourceId={projectId}
-                        level="component"
-                      >
-                        <AddButton
-                          disabled={adding}
-                          onClick={() => onAddToolset(toolset)}
-                        />
-                      </RequireScope>
-                    }
-                  />
-                );
-              }
-              const { server } = candidate;
-              const classification = classifyMemberServer(server);
-              const servable =
-                classification === "hosted" || classification === "proxied";
-              // The backend rejects these outright (unproxied has no dispatch
-              // path; slugless can't be addressed), so don't offer a doomed Add.
-              // Derived from the server fields, not the display classification,
-              // which collapses a disabled+slugless/unproxied server to
-              // "disabled" and would otherwise look addable.
-              const canAdd =
-                Boolean(server.slug) && !server.unproxiedMcpServerId;
-              return (
-                <CandidateRow
-                  key={`server-${server.id}`}
-                  mcpServerId={server.id}
-                  name={server.name || "MCP server"}
-                  slug={server.slug}
-                  label={CLASSIFICATION_LABEL[classification]}
-                  badge={servable ? undefined : "Excluded"}
-                  action={
-                    <AddButton
-                      disabled={adding || !canAdd}
-                      onClick={() => onAdd(server)}
-                    />
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                asChild
+                disabled={
+                  busy ||
+                  !canWrite ||
+                  !creationOptions.some((option) => option.allowed)
+                }
+              >
+                <Button
+                  variant="primary"
+                  disabled={
+                    busy ||
+                    !canWrite ||
+                    !creationOptions.some((option) => option.allowed)
                   }
-                />
-              );
-            })
-          )}
+                >
+                  <Button.LeftIcon>
+                    <Plus className="size-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Add new</Button.Text>
+                  <Button.RightIcon>
+                    <ChevronDown className="size-4" />
+                  </Button.RightIcon>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                onPointerDownOutside={(event) => {
+                  creationMenuOutsideEventRef.current =
+                    event.detail.originalEvent;
+                }}
+                align="start"
+                className="w-80 max-w-[calc(100vw-2rem)]"
+              >
+                {["Recommended", "Advanced"].map((group, index) => (
+                  <Fragment key={group}>
+                    {index > 0 && <DropdownMenuSeparator />}
+                    <DropdownMenuGroup aria-label={group}>
+                      <DropdownMenuLabel className="text-muted-foreground text-xs">
+                        {group}
+                      </DropdownMenuLabel>
+                      {creationOptions
+                        .filter((option) => option.group === group)
+                        .map((option) => (
+                          <DropdownMenuItem
+                            key={option.href}
+                            className="items-start"
+                            textValue={option.label}
+                            disabled={busy || !canWrite || !option.allowed}
+                            onSelect={() => {
+                              if (!busy && canWrite && option.allowed)
+                                void navigate(option.href);
+                            }}
+                          >
+                            <option.Icon className="mt-0.5" />
+                            <span className="min-w-0">
+                              <span className="block">{option.label}</span>
+                              <span className="text-muted-foreground mt-0.5 block text-xs leading-relaxed">
+                                {option.description}
+                              </span>
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                    </DropdownMenuGroup>
+                  </Fragment>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </section>
+          <section
+            aria-labelledby="add-existing-server"
+            className="space-y-4 border-t pt-4"
+          >
+            <Text as="h3" id="add-existing-server" variant="subheading">
+              Add existing servers
+            </Text>
+            <label ref={searchContainerRef} className="block">
+              <span className="sr-only">Search existing servers</span>
+              <SearchBar
+                value={search}
+                onChange={setSearch}
+                placeholder="Search by name or slug"
+                disabled={busy}
+              />
+            </label>
+            {toolsetsLoading && <Text muted>Loading hosted servers…</Text>}
+            {toolsetsFailed && (
+              <div role="alert" className="space-y-2">
+                <Text muted>
+                  Couldn't load hosted servers. Existing servers are still
+                  available.
+                </Text>
+                <Button
+                  variant="secondary"
+                  onClick={onRetryLoad}
+                  disabled={busy}
+                >
+                  <Button.Text>Retry loading hosted servers</Button.Text>
+                </Button>
+              </div>
+            )}
+            {isLoading ? (
+              <Text muted>Loading servers…</Text>
+            ) : loadFailed ? (
+              <div role="alert" className="space-y-2">
+                <Text>
+                  Couldn't load all servers. Retry to refresh the list.
+                </Text>
+                <Button
+                  variant="secondary"
+                  onClick={onRetryLoad}
+                  disabled={busy}
+                >
+                  <Button.Text>Retry loading</Button.Text>
+                </Button>
+              </div>
+            ) : candidates.length === 0 &&
+              (toolsetsLoading || toolsetsFailed) &&
+              (servers.length > 0 ||
+                toolsets.length > 0) ? null : candidates.length === 0 ? (
+              <div className="bg-muted/20 flex min-h-24 items-center justify-center border border-dashed px-6 py-8 text-center">
+                <Text muted>
+                  {servers.length === 0 && toolsets.length === 0
+                    ? "No existing servers yet. Create a new server to get started."
+                    : "All existing servers have already been added."}
+                </Text>
+              </div>
+            ) : (
+              <ul aria-label="Existing servers" className="space-y-2">
+                {visibleOptions.length === 0 ? (
+                  <li className="p-3">
+                    <Text muted>
+                      No matching servers. Try another search or add a new
+                      server.
+                    </Text>
+                  </li>
+                ) : (
+                  visibleOptions.map((option) => (
+                    <li key={option.value}>
+                      {/* Native label activation toggles the checkbox once for
+                          the whole row, without a second bubbling click handler. */}
+                      <label
+                        className={`border-border/60 flex items-center gap-3 border px-3 py-2.5 ${busy || option.disabled ? "cursor-not-allowed" : "hover:border-border hover:bg-muted/40 cursor-pointer"}`}
+                      >
+                        <SourceMcpIcon
+                          mcpServerId={option.mcpServerId}
+                          className="size-6 shrink-0 object-contain"
+                        />
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <Text
+                            as="span"
+                            className="truncate text-sm font-medium"
+                          >
+                            {option.label}
+                          </Text>
+                          <span className="flex items-center gap-2">
+                            {option.slug && (
+                              <Text
+                                as="span"
+                                muted
+                                className="truncate font-mono text-xs"
+                              >
+                                {option.slug}
+                              </Text>
+                            )}
+                            <Text as="span" muted className="text-xs">
+                              {option.classification}
+                            </Text>
+                          </span>
+                          <span
+                            id={`${option.value}-description`}
+                            className={
+                              option.disabled
+                                ? "text-muted-foreground text-xs"
+                                : "sr-only"
+                            }
+                          >
+                            {option.description}
+                          </span>
+                          {results.find((result) => result.key === option.value)
+                            ?.error && (
+                            <span
+                              role="alert"
+                              className="text-destructive text-xs"
+                            >
+                              {`${option.label}: ${results.find((result) => result.key === option.value)?.error}`}
+                            </span>
+                          )}
+                        </span>
+                        {option.badge && (
+                          <Badge variant="warning">
+                            <Badge.Text>{option.badge}</Badge.Text>
+                          </Badge>
+                        )}
+                        <Checkbox
+                          aria-label={option.label}
+                          aria-describedby={`${option.value}-description`}
+                          checked={selectedValues.includes(option.value)}
+                          disabled={busy || option.disabled}
+                          onCheckedChange={(checked) => {
+                            if (busy || option.disabled) return;
+                            setSelected((previous) =>
+                              checked
+                                ? [
+                                    ...previous.filter(
+                                      (value) => value !== option.value,
+                                    ),
+                                    option.value,
+                                  ]
+                                : previous.filter(
+                                    (value) => value !== option.value,
+                                  ),
+                            );
+                          }}
+                        />
+                      </label>
+                    </li>
+                  ))
+                )}
+              </ul>
+            )}
+            {!canWrite && (
+              <Text muted small>
+                You need MCP write permission on this gateway to add servers.
+              </Text>
+            )}
+            {(busy || candidates.length > 0) && (
+              <Button
+                disabled={
+                  busy ||
+                  !canWrite ||
+                  isLoading ||
+                  loadFailed ||
+                  selectedCandidates.length === 0
+                }
+                aria-busy={busy}
+                onClick={() => void submit()}
+              >
+                {busy && (
+                  <Button.LeftIcon>
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  </Button.LeftIcon>
+                )}
+                <Button.Text>Add selected servers</Button.Text>
+              </Button>
+            )}
+            <div aria-live="polite" className="space-y-2">
+              {busy && <Text muted>Adding selected servers…</Text>}
+            </div>
+          </section>
         </div>
       </SheetContent>
     </Sheet>
-  );
-}
-
-function CandidateRow({
-  mcpServerId,
-  name,
-  slug,
-  label,
-  badge,
-  action,
-}: {
-  mcpServerId?: string;
-  name: string;
-  slug: string | undefined;
-  label: string;
-  badge: string | undefined;
-  action: ReactNode;
-}): JSX.Element {
-  return (
-    <div className="border-border/60 hover:border-border hover:bg-muted/40 trans flex items-center gap-3 border px-3 py-2.5">
-      <SourceMcpIcon
-        mcpServerId={mcpServerId}
-        className="size-6 shrink-0 object-contain"
-      />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Text className="truncate text-sm font-medium">{name}</Text>
-        <div className="flex items-center gap-2">
-          {slug && (
-            <Text muted className="truncate font-mono text-xs">
-              {slug}
-            </Text>
-          )}
-          <Text muted className="text-xs">
-            {label}
-          </Text>
-        </div>
-      </div>
-      {badge && (
-        <Badge variant="warning">
-          <Badge.Text>{badge}</Badge.Text>
-        </Badge>
-      )}
-      {action}
-    </div>
-  );
-}
-
-function AddButton({
-  disabled,
-  onClick,
-}: {
-  disabled: boolean;
-  onClick: () => void;
-}): JSX.Element {
-  return (
-    <Button variant="secondary" size="sm" disabled={disabled} onClick={onClick}>
-      <Button.Text>Add</Button.Text>
-    </Button>
   );
 }

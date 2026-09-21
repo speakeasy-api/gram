@@ -1,8 +1,9 @@
-import type { Role } from "@gram/client/models/components/role.js";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+
 import { CreateRoleDialog } from "./CreateRoleDialog";
+import type { Role } from "@gram/client/models/components/role.js";
 
 const mocks = vi.hoisted(() => ({
   status: "ready" as "ready" | "loading" | "error",
@@ -38,6 +39,12 @@ vi.mock("@gram/client/react-query/listScopes.js", () => ({
           visibility: "user_visible",
           label: "Read organization",
         },
+        {
+          slug: "mcp:connect",
+          resourceType: "mcp",
+          visibility: "user_visible",
+          label: "Connect to MCP servers",
+        },
       ],
     },
   }),
@@ -51,14 +58,55 @@ vi.mock("@gram/client/react-query/updateRole.js", () => ({
 vi.mock("./RolePermissionsSection", () => ({
   RolePermissionsSection: ({
     onToggleScope,
+    renderScopeRule,
   }: {
-    onToggleScope: (scope: "org:read") => void;
+    onToggleScope: (scope: "org:read" | "mcp:connect") => void;
+    renderScopeRule: (scope: {
+      slug: "mcp:connect";
+      resourceType: "mcp";
+    }) => React.ReactNode;
   }) => (
-    <button onClick={() => onToggleScope("org:read")}>Read organization</button>
+    <>
+      <button onClick={() => onToggleScope("org:read")}>
+        Read organization
+      </button>
+      <button onClick={() => onToggleScope("mcp:connect")}>
+        Connect to MCP servers
+      </button>
+      {renderScopeRule({ slug: "mcp:connect", resourceType: "mcp" })}
+    </>
+  ),
+}));
+vi.mock("./PermissionScopeControl", () => ({
+  PermissionScopeControl: ({
+    onChooseSpecific,
+    onResetToAll,
+  }: {
+    onChooseSpecific: () => void;
+    onResetToAll: () => void;
+  }) => (
+    <>
+      <button onClick={onChooseSpecific}>Choose specific servers</button>
+      <button onClick={onResetToAll}>Reset to all servers</button>
+    </>
   ),
 }));
 vi.mock("./GrantRuleDrawerContent", () => ({
-  GrantRuleDrawerContent: () => null,
+  GrantRuleDrawerContent: ({
+    onChangeSelectors,
+  }: {
+    onChangeSelectors: (
+      selectors: Array<{ resourceKind: string; resourceId: string }>,
+    ) => void;
+  }) => (
+    <button
+      onClick={() =>
+        onChangeSelectors([{ resourceKind: "mcp", resourceId: "server-a" }])
+      }
+    >
+      Select server A
+    </button>
+  ),
 }));
 
 const role: Role = {
@@ -74,13 +122,14 @@ const role: Role = {
   createdAt: new Date(),
   updatedAt: new Date(),
 };
-function renderEditor(editingRole?: Role) {
+function renderEditor(editingRole?: Role, confirmAssignmentFor?: string) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <CreateRoleDialog
         open
         onOpenChange={vi.fn<(open: boolean) => void>()}
         editingRole={editingRole}
+        confirmAssignmentFor={confirmAssignmentFor}
         presentation="page"
       />
     </QueryClientProvider>,
@@ -92,6 +141,66 @@ beforeEach(() => {
   mocks.status = "ready";
   mocks.enabled = false;
 });
+describe("role assignment confirmation", () => {
+  function confirmAssignment() {
+    const confirmation = screen.getByRole("checkbox", {
+      name: "Confirm role assignment",
+    });
+    fireEvent.click(confirmation);
+    expect(confirmation.getAttribute("data-state")).toBe("checked");
+    return confirmation;
+  }
+
+  it("clears an acknowledgement when a scope is toggled", () => {
+    renderEditor(undefined, "Denied User");
+    fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
+      target: { value: "Reader" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Read organization" }));
+
+    const confirmation = confirmAssignment();
+    fireEvent.click(screen.getByRole("button", { name: "Read organization" }));
+
+    expect(confirmation.getAttribute("data-state")).toBe("unchecked");
+  });
+
+  it("clears an acknowledgement when a rule-editor change is saved", () => {
+    renderEditor(undefined, "Denied User");
+    fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
+      target: { value: "Reader" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect to MCP servers" }),
+    );
+
+    const confirmation = confirmAssignment();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Choose specific servers" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Select server A" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    expect(confirmation.getAttribute("data-state")).toBe("unchecked");
+  });
+
+  it("clears an acknowledgement when a rule is reset to all resources", () => {
+    renderEditor(undefined, "Denied User");
+    fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
+      target: { value: "Reader" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect to MCP servers" }),
+    );
+
+    const confirmation = confirmAssignment();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reset to all servers" }),
+    );
+
+    expect(confirmation.getAttribute("data-state")).toBe("unchecked");
+  });
+});
+
 describe("agent management rollout", () => {
   it.each(["false", "loading", "missing", "error"] as const)(
     "does not enable the query or show the picker when %s",

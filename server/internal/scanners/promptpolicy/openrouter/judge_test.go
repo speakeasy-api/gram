@@ -1,9 +1,12 @@
 package openrouter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,10 +17,14 @@ import (
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -87,6 +94,86 @@ func TestJudgeRateLimitIgnoresFailMode(t *testing.T) {
 	require.ErrorIs(t, err, promptpolicy.ErrRateLimited)
 	require.Nil(t, verdict)
 	require.Zero(t, client.calls.Load(), "throttled call must not reach the completion client")
+}
+
+func TestJudgeCanceledContextSkipsLimiterAndCompletion(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(context.Background())) })
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	client := &countingCompletionClient{}
+	j := New(logger, testenv.NewTracerProvider(t), meterProvider, client, testJudgeLimiter(t))
+	drainLimiter(t, j)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	verdict, err := j.Evaluate(ctx, promptpolicy.Input{
+		OrgID:     "org-a",
+		ProjectID: "proj",
+		Prompt:    "flag secrets",
+		Message:   judgemessage.New(message.User, "", "hello"),
+		Config:    promptpolicy.Config{Temperature: nil, FailOpen: true},
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, verdict)
+	require.Zero(t, client.calls.Load(), "canceled evaluation must not consume rate limit or call the model")
+	require.Equal(t, int64(1), evaluationCountByOutcome(t, reader, o11y.OutcomeCanceled))
+	require.NotContains(t, logs.String(), `"level":"WARN"`)
+}
+
+func TestJudgeExpiredContextRecordsTimeout(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(context.Background())) })
+	client := &countingCompletionClient{}
+	j := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), meterProvider, client, testJudgeLimiter(t))
+
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	_, err := j.Evaluate(ctx, promptpolicy.Input{
+		OrgID:     "org-a",
+		ProjectID: "proj",
+		Prompt:    "flag secrets",
+		Message:   judgemessage.New(message.User, "", "hello"),
+		Config:    promptpolicy.Config{Temperature: nil, FailOpen: true},
+	})
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Zero(t, client.calls.Load())
+	require.Equal(t, int64(1), evaluationCountByOutcome(t, reader, o11y.OutcomeTimeout))
+	require.Zero(t, evaluationCountByOutcome(t, reader, o11y.OutcomeCanceled))
+}
+
+func TestJudgeCompletionCancellationIsNotWarned(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(context.Background())) })
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	client := &countingCompletionClient{err: fmt.Errorf("object completion: %w", context.Canceled)}
+	j := New(logger, testenv.NewTracerProvider(t), meterProvider, client, testJudgeLimiter(t))
+
+	verdict, err := j.Evaluate(t.Context(), promptpolicy.Input{
+		OrgID:     "org-a",
+		ProjectID: "proj",
+		Prompt:    "flag secrets",
+		Message:   judgemessage.New(message.User, "", "hello"),
+		Config:    promptpolicy.Config{Temperature: nil, FailOpen: true},
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, verdict)
+	require.Equal(t, int64(1), client.calls.Load())
+	require.Equal(t, int64(1), evaluationCountByOutcome(t, reader, o11y.OutcomeCanceled))
+	require.NotContains(t, logs.String(), `"level":"WARN"`)
 }
 
 func TestJudgeEvaluatesEmptyBodyToolCall(t *testing.T) {
@@ -248,10 +335,14 @@ func TestJudgeBillsInternalKeyAsRiskAnalysis(t *testing.T) {
 // so tests can assert a throttled Evaluate never reaches the LLM.
 type countingCompletionClient struct {
 	calls atomic.Int64
+	err   error
 }
 
 func (c *countingCompletionClient) GetObjectCompletion(_ context.Context, _ openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
 	c.calls.Add(1)
+	if c.err != nil {
+		return nil, c.err
+	}
 	return nil, errors.New("not implemented")
 }
 
@@ -446,6 +537,30 @@ func TestBuildJudgePromptTruncatesRuneSafe(t *testing.T) {
 
 func (c *countingCompletionClient) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {
 	return openrouter.PlatformKey(), nil
+}
+
+func evaluationCountByOutcome(t *testing.T, reader *sdkmetric.ManualReader, outcome o11y.Outcome) int64 {
+	t.Helper()
+
+	var metrics metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &metrics))
+	var count int64
+	for _, scope := range metrics.ScopeMetrics {
+		for _, candidate := range scope.Metrics {
+			if candidate.Name != meterJudgeEvaluations {
+				continue
+			}
+			sum, ok := candidate.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, point := range sum.DataPoints {
+				value, ok := point.Attributes.Value(attr.OutcomeKey)
+				if ok && value.AsString() == string(outcome) {
+					count += point.Value
+				}
+			}
+		}
+	}
+	return count
 }
 
 func (c *successfulCompletionClient) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {

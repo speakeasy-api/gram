@@ -1,5 +1,111 @@
 # dashboard
 
+## 0.122.0
+
+### Minor Changes
+
+- ddc0c6c: Explore filters pick their values from what the dimension holds inside the window, with a count beside each, instead of being typed blind. A value that is not listed can still be typed.
+- db02c08: Explore runs a query when you press Run: a run scans the dataset across its whole window, so nothing runs as a side effect of editing. The window opens on the last 24 hours, filters sit above the measures in the builder, and the results panel names the query it answers. Timeseries charts draw with a summary table beneath them; tables and number tiles draw the whole-window figures.
+- a5c64f9: Add the Explore page (preview) to the Observability navigation, behind the `gram-explore` rollout flag: a query builder generated from the analytics catalog, so each dataset reconfigures the measures, filters, and breakdowns it offers.
+- 85ad1d0: Add a metered-product spend breakdown endpoint and stacked billing chart for agent session storage, per-scanner risk scanning, and MCP egress. Show exact server-calculated estimates at current PAYG list prices with daily, weekly, monthly, cumulative, product, and date-range controls. Inference, credits, discounts, taxes, and billing adjustments are excluded; these ordinary-usage estimates are not invoices.
+  
+  Restrict spend estimates to PAYG organizations using server-owned availability. Other plans return `unsupported_plan`, empty products, and a `"0"` total without querying usage; the dashboard hides the entire spend section while retaining the ordinary usage explorer.
+- 728a2bb: Label workload sessions on the MCP Sessions page. `userSessions.list` now returns a `workload` object for `workload:` subjects, with the workload issuer's name and URL, the external subject, the assigned agent and its state, and every admission (project or organization tier) currently letting the workload in. The dashboard marks these rows as workloads rather than people. The revoke dialog lists the controls that can stop a workload, from narrowest to widest, and shows which ones stop it from reconnecting. Revoking a workload session ends only that session: the workload can exchange a new token and reconnect.
+
+### Patch Changes
+
+- 7ea4e5b: Adds audit feed phrases for identity provider connection actions.
+- df903af: Adds the audit feed phrase for identity provider applications sync requests.
+- ac147cd: Link the cost breakdown chart to the table beneath it: rows carry their bar segment's swatch, hovering either one spotlights the other, and clicking a bar segment drills into that group without throwing away your scroll position. Retune the shared chart palette so the Costs and MCP & Tools boards read as one system, and give trend colours their own dark-mode steps.
+- f8e5896: Open project links in their owning organization instead of combining the active organization with a project from another workspace.
+- e9df905: Add an optional second step in Platform MCP setup for bringing existing remote MCP servers from Claude Code into Speakeasy management. The reviewed workflow verifies the agent's connection, requests informed discovery consent or a sanitized manual inventory, and prefers catalogue entries matched by endpoint or confirmed provider/name before using custom URLs. It confirms the destination and selected servers and reports each registration separately. Authentication stays in Speakeasy without migrating local credentials.
+- 72128df: Include all PAYG metered prices in Checkout, preserve resumable billing setup, and apply trial conversion only after confirmed completion. Handle delayed completion and subscription deletion without losing inference-key conversion or post-checkout cleanup, preserve existing Checkout sessions, and show setup actions only to eligible users.
+  
+  Remove the obsolete platform-admin TUM contract controls and contract price estimator from the billing page.
+  
+  Show the PAYG risk scanning rate of $0.99 per million tokens scanned and MCP gateway egress rate of $20 per GiB alongside token management pricing.
+  
+  Place Payment beside PAYG pricing on wider screens and stack them on smaller screens. Prioritize payment setup and recovery above usage, keep healthy subscriptions usage-first, and retain the Organization eyebrow at the top of the billing page.
+  
+  Use Agent session storage as the billing product name and Stored sessions for usage labels and charts. Rename the Meter usage section to Usage without changing token-based metering or rates.
+- 5ad2b81: AI integration syncs now stop retrying when the provider rejects the request outright (HTTP 400/401/403/404/422), show the provider's reason on the integration, and pause the schedule after repeated rejections instead of retrying forever. Chat analysis and skill efficacy judging retry transient model failures without failing the background task, and expected API responses such as permission denied or not found are no longer reported as frontend errors.
+- d52b737: Add a structured Remote MCP `probeURL` endpoint with availability, authentication, invalid-response, and unreachable outcomes while retaining the deprecated `verifyURL` endpoint for compatibility.
+- b5e9295: Restore the source management surfaces lost when Sources moved under MCP: source deletion, uploading a new OpenAPI version, the usage, format and deployment-error filters, failed-deployment signalling and row actions on the sources list; the activity panel, editable tools list, versions log and danger zone on the source page; public access, tunnel key rotation, live connections, resource identifier and setup snippets for tunneled servers; upstream URL and source name editing for remote servers; a cascading delete for source-backed servers; and legacy source URLs that resolve to the right page.
+- 9059ae1: Allow staff to enable Tailscale private access for an organization from the admin feature controls without requiring a separate PostHog rollout flag.
+
+## 0.121.1
+
+### Patch Changes
+
+- bba144d: Show the no-data state on a tool usage timeline whose every bucket is empty, rather than a labelled but blank chart, and stop the log detail sheet from holding the previous record's payload on screen while the next one is highlighted — one call's arguments could appear under another call's heading
+
+## 0.121.0
+
+### Minor Changes
+
+- 6f0271b: Capture Pi (pi.dev) sessions, and enforce policy on them, alongside the agents
+  Gram already observes. Pi has no hook configuration dialect to render into and
+  no MCP client of its own: its only integration point is a TypeScript extension
+  loaded into the Pi process. The observability package for Pi is therefore a
+  generated extension that forwards Pi's lifecycle events to the hooks relay over
+  NDJSON stdio, where the existing redaction, credential, and decision paths turn
+  them into canonical hook events. Prompts, tool calls and their results, per-turn
+  tokens and cost, and session start/end all land in the dashboard under the `pi`
+  source, and a policy deny blocks the prompt or tool call inside Pi rather than
+  being reported after the fact.
+  
+  MCP for Pi comes from third-party extensions that bridge servers in as ordinary
+  Pi tools, which leaves tool names as the only signal that a call left the
+  machine. The relay reads the config those extensions share (`.pi/mcp.json`,
+  `~/.pi/agent/mcp.json`), reports the servers a workspace can reach as an
+  inventory snapshot at session start — with credentials redacted — and attributes
+  tool calls to the matching server so Pi traffic is visible to Shadow MCP rather
+  than appearing as unattributed local tools.
+  
+  The package is downloadable per platform from the plugins page, ships in the
+  published marketplace repo for extraction into `~/.pi/agent/` or a repository's
+  `.pi/`, and `speakeasy-hooks install --provider=pi` renders the same extension
+  locally. Pi also joins the setup walkthrough and the shared agent-provider
+  catalog, so it carries its own name and mark everywhere a captured session's
+  source is shown.
+- 8464d04: Add `private_key_jwt` authentication for remote OAuth token exchanges and refreshes. Remote session clients can select an attached organization JSON Web Key Set and configure whether signed client assertions use the issuer URL or token endpoint URL as their audience.
+
+### Patch Changes
+
+- 6f6ab02: Replace the admin trial extension action with Change end date. Operators can shorten or extend a running trial to any future UTC calendar date, with an audit record of the previous and new end dates. New and restarted trials still default to fourteen days.
+- 0fecf64: Assign access challenge roles before resolving requests.
+- 29b0b09: Reduce noisy failures from canceled guardrail workbench evaluations and limit oversized session replays. The workbench now reports when a session contains more messages than the replay can evaluate.
+- 57312da: Grant marketplace repo collaborators admin access so platforms that gate marketplace setup on repository admin — such as Cursor's "Serve Marketplace From Cursor" — can be enabled without editing the repo on GitHub.
+- 57312da: Report adding marketplace collaborators as "Collaborators added" instead of "Plugins published to GitHub" on the plugins list and plugin detail pages.
+- 8fafae0: Remote session issuers can be bound to a tunneled MCP server, so Gram routes persisted issuer metadata refreshes and back-channel OAuth calls through the tunnel when the authorization server is unreachable from the public internet. That covers the whole back channel: the code exchange, token refresh, revocation, dynamic client registration, the issuer's JWK Set, and the userinfo and introspection calls that name a session's owner. Every issuer endpoint routed through the tunnel must be reachable from the same local origin as `TUNNEL_LOCAL_MCP_URL`; the agent pins tunneled requests to that origin while preserving their paths and queries. Discover by URL still uses Gram's direct egress; private issuer endpoints, including the DCR endpoint, can be entered manually in issuer settings. Platform admins can manage the binding from the issuer settings page; tunnel bindings and tunneled dynamic client registration remain platform-admin-only. Adding an MCP Catalogue server whose provider is already set up as a bound issuer is refused rather than registered over direct egress. Replacing a client registration the identity provider no longer recognizes also rides the binding, so a private provider's clients recover on their own instead of failing every login until an administrator re-registers them by hand.
+- e116bae: The dashboard gains a Shadow AI section listing the AI tools running on an organization's devices, split into coding harnesses, assistants, and open model runners, with each tool's logo and its access decision. A new AI scan targets page shows the detection library behind it — built-in targets grouped by kind and collapsed by default, an organization's own targets above them — and lets an admin add a target by pasting its JSON or by fetching it from a URL.
+- 4918df0: The Watchdog page now shows when risk analysis last ran: "Analyzing now", "Last analyzed 4m ago", or "No recent analysis". The same status is available as `risk.getAnalysisStatus` in the management API and as the `get_risk_analysis_status` Platform MCP tool.
+
+## 0.120.0
+
+### Minor Changes
+
+- c7fa413: Surface the MCP catalog as a tab on the MCP page, next to MCP Servers, Sources and Deployments. The catalog keeps the same Add-from-catalog flow and now lives at `/mcp/catalog` rather than inside the add flow; `/catalog`, `/sources/add-from-catalog` and `/mcp/add/catalog` all redirect there, and "From the catalog" on the Add MCP server page still leads to it.
+  
+  Catalog entries are also searchable from the command palette, in an "MCP Catalog" group kept separate from the "MCP Servers" group so a third-party server you could add is never mistaken for one the project already runs. The group appears once you start typing, and selecting an entry opens its catalog page.
+- 8710c79: Add incremental meter usage reporting for stored-message tokens, MCP ingress/egress bytes, and risk-scanning volume. The additive `usage.getMeterUsage` API returns exact integer daily totals and bounded facet breakdowns for UTC-midnight windows up to three calendar months. The API and dashboard report ordinary usage only; correction readings are excluded.
+  
+  The billing explorer now uses these readings while retaining independent contract-position and invoice estimates. Totals, daily averages, chart axes, and breakdown rows use compact KTok/MTok/BTok or binary KiB/MiB/GiB units, with full values available on hover. Project breakdowns show available project slugs consistently in charts and tables, falling back to IDs when unavailable. Switching breakdowns keeps the chart and legend synchronized, including transitions between total-only and stacked views. Reset sits beside the period controls and matches the Refresh button's sizing. API deployments must configure the dedicated `CLICKHOUSE_READ_*` connection with a SELECT-only reader before rollout; meter reporting never falls back to the writer connection.
+  
+  Insert-triggered materialized views maintain daily SummingMergeTree series without historical rebuilds. Queries sum unmerged increments and rank series in storage order with bounded top-six state. Duplicate deliveries count unless prevented by the producer or corrected out of band; raw-table replacement merges do not retract summary contributions. The single schema migration does not backfill existing readings, and no summary worker or publication privileges are required.
+
+### Patch Changes
+
+- f5fb216: Operators can start or restart an enterprise trial from the admin organization overview trial panel, including orgs that never trialled and expired trials that have not converted or been demoted.
+- 8936131: Gateway server instructions are editable: the gateway settings tab gains an Instructions section, and the metaMcp update endpoint accepts `instructions` and `instructions_mode`. Custom text is appended to Gram's built-in drill-down guidance by default, or replaces it when the mode is set to replace. Gateways without custom text keep serving the built-in text.
+- 1c632ce: Recover automatically from expired upstream dynamic client registrations. Remote session clients now record the expiry the identity provider reported at registration. When a provider stops recognizing a client (`invalid_client` on refresh), Gram confirms it against the token endpoint and re-registers the client in place at the identity provider's registration endpoint before the next login, revoking the sessions bound to the old client. Organization administrators can also rotate a client on demand from its settings page.
+
+## 0.119.0
+
+### Minor Changes
+
+- 8b5b56f: Add rollout-gated Tailscale private network setup and hosted MCP server network access controls.
+
 ## 0.118.0
 
 ### Minor Changes

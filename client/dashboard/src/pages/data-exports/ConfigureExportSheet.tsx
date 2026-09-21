@@ -40,7 +40,7 @@ import type { Destination } from "@gram/client/models/components/destination.js"
 import type { OtelDestination } from "@gram/client/models/components/oteldestination.js";
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 import { Plus } from "lucide-react";
-import { useId, useMemo } from "react";
+import { type ReactNode, useId, useMemo } from "react";
 
 const NEW_DESTINATION = "__new_destination__";
 
@@ -124,7 +124,7 @@ export function ConfigureExportSheet({
   dataSources: Array<{
     value: DataSourceValue;
     label: string;
-    description: string;
+    description: ReactNode;
   }>;
   destinations: OtelDataExportDestination[];
   route?: DataExportRoute;
