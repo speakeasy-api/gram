@@ -15,10 +15,10 @@ export const AUDIT_ACTIONS = [
   "access_role:update",
   "agent:create",
   "agent:delete",
+  "agent:owner_loss",
   "agent:policy_grant_create",
   "agent:policy_grant_delete",
   "agent:policy_grant_update",
-  "agent:owner_loss",
   "agent:reassign",
   "agent:rename",
   "agent:resume",
@@ -119,9 +119,9 @@ export const AUDIT_ACTIONS = [
   "model_provider_key:delete",
   "model_provider_key:upsert",
   "network_ingress:create",
-  "network_ingress:update",
-  "network_ingress:rotate_credentials",
   "network_ingress:delete",
+  "network_ingress:rotate_credentials",
+  "network_ingress:update",
   "openrouter-key:disable",
   "openrouter-key:enable",
   "openrouter-key:set_spend_cap",
@@ -129,8 +129,8 @@ export const AUDIT_ACTIONS = [
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
-  "organization:enterprise_trial_extended",
   "organization:enterprise_trial_end_changed",
+  "organization:enterprise_trial_extended",
   "organization:enterprise_trial_rearmed",
   "organization:enterprise_trial_started",
   "organization:hooks_fail_open_disabled",
@@ -147,6 +147,8 @@ export const AUDIT_ACTIONS = [
   "organization_invitation:update_role",
   "otel_destination:create",
   "otel_destination:delete",
+  "okta-resource-connection:confirm",
+  "okta-resource-connection:reset",
   "otel_destination:update",
   "platform-mcp-diagnostics:attribution_read",
   "platform-mcp-diagnostics:user_status_read",
@@ -378,6 +380,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "revoked identity provider connection to";
     case "identity-provider-connection:sync-applications":
       return "requested an applications sync for identity provider";
+    case "okta-resource-connection:confirm":
+      return "confirmed the Cross App Access connection for";
+    case "okta-resource-connection:reset":
+      return "reset the Cross App Access connection for";
     case "json_web_key_set:create":
       return "created JSON Web Key Set";
     case "json_web_key_set:update":

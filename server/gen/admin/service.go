@@ -727,8 +727,12 @@ type CreateGlobalIssuerPayload struct {
 // createOrganization method.
 type CreateOrganizationPayload struct {
 	AdminSessionToken *string
-	// Display name for the new organization.
-	Name string
+	// Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes
+	// the name and verified email domain.
+	URL string
+	// The operator confirms that domain ownership was established outside this
+	// form.
+	OwnershipConfirmed bool
 }
 
 // DeleteGlobalIssuerPayload is the payload type of the admin service

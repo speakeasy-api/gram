@@ -2096,6 +2096,25 @@ SELECT throwIf(
      AND (chat_source = '' OR team = '' OR user_email = '')) > 0,
   'demo seed postflight: risk_findings missing chat_source/team/user_email attribution');
 
+-- Platform MCP summarizes rule-level impact, not individual finding rows.
+-- Keep at least one live cluster with multiple attributed users and clients
+-- plus a stored display sample so that its privacy-safe evidence path is exercised.
+SELECT throwIf(
+  (SELECT count() FROM (
+    SELECT rule_id
+    FROM risk_findings
+    WHERE organization_id = 'org_gram_demo_workspace'
+      AND project_id = 'dec0de00-0000-4000-a000-000000000001'
+      AND excluded_at IS NULL AND false_positive_at IS NULL
+      AND dead_letter_reason = ''
+    GROUP BY rule_id
+    HAVING uniqExactIf(if(external_user_id != '', external_user_id, user_id),
+                      external_user_id != '' OR user_id != '') > 1
+       AND uniqExactIf(chat_source, chat_source != '') > 1
+       AND countIf(match_redacted != '') > 0
+  )) = 0,
+  'demo seed postflight: watchdog needs multi-user multi-client evidence');
+
 -- Fewer than four distinct rule clusters means the weighted type draw
 -- collapsed and the Watchdog list is a flat rotation again.
 SELECT throwIf(

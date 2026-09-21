@@ -98,9 +98,9 @@
     "tw-shimmer": "^0.4.11",
     "use-stick-to-bottom": "^1.1.6",
     "uuid": "^14.0.1",
-    "vega": "^6.3.1",
-    "vega-interpreter": "^2.3.1",
-    "xstate": "^5.32.4",
+    "vega": "^6.4.0",
+    "vega-interpreter": "^2.3.2",
+    "xstate": "^5.32.6",
     "zod": "^4",
     "zustand": "^5.0.15"
   },
@@ -127,6 +127,6 @@
     "svix-react": "^1.13.9",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.0"
   }
 }

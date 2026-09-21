@@ -86,8 +86,12 @@ type ExtendTrialRequestBody struct {
 // CreateOrganizationRequestBody is the type of the "admin" service
 // "createOrganization" endpoint HTTP request body.
 type CreateOrganizationRequestBody struct {
-	// Display name for the new organization.
-	Name string `form:"name" json:"name" xml:"name"`
+	// Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes
+	// the name and verified email domain.
+	URL string `form:"url" json:"url" xml:"url"`
+	// The operator confirms that domain ownership was established outside this
+	// form.
+	OwnershipConfirmed bool `form:"ownership_confirmed" json:"ownership_confirmed" xml:"ownership_confirmed"`
 }
 
 // RearmTrialRequestBody is the type of the "admin" service "rearmTrial"
@@ -12277,7 +12281,8 @@ func NewExtendTrialRequestBody(p *admin.ExtendTrialPayload) *ExtendTrialRequestB
 // payload of the "createOrganization" endpoint of the "admin" service.
 func NewCreateOrganizationRequestBody(p *admin.CreateOrganizationPayload) *CreateOrganizationRequestBody {
 	body := &CreateOrganizationRequestBody{
-		Name: p.Name,
+		URL:                p.URL,
+		OwnershipConfirmed: p.OwnershipConfirmed,
 	}
 	return body
 }

@@ -47,11 +47,13 @@ import { EventMatchDialog, MaskedMatch } from "./risk-ui";
 import {
   getCategoryCodeForFinding,
   getRuleTitleFallback,
-  isJudgeSource,
+  isRationaleSource,
 } from "./risk-utils";
 import { useRBAC } from "@/hooks/useRBAC";
 import { invalidateExclusionSurfaces } from "./exclusion-invalidation";
+import type { DetectorMode } from "./policy-data";
 import { useCelEngine } from "./use-cel-engine";
+import { useDetectorMode } from "./use-detector-mode";
 
 const GLOBAL_SCOPE = "__global__";
 
@@ -262,6 +264,9 @@ function ExclusionForm({
   // operator who picks "any finding from this rule" should not leave an audit
   // entry for a value they never looked at.
   const { hasScope } = useRBAC();
+  // Entity-type exclusions only mean something to the Presidio engine; under
+  // the LLM analyzer they are not applied, so the sheet stops offering them.
+  const mode = useDetectorMode();
   const reveals = useUnmaskedMatch(single?.id ?? "");
   const exact = exactCandidate(
     single,
@@ -273,7 +278,7 @@ function ExclusionForm({
   // Ready-made rules for the selection. Always at least ["custom"], so an
   // edit or a no-finding create renders no picker and opens on the DSL box.
   // A pre-targeted rule is on offer even before any findings load.
-  const options = exclusionOptions(results, exact, presetRuleId);
+  const options = exclusionOptions(results, exact, presetRuleId, mode);
   const [choice, setChoice] = useState<ExclusionOption["value"]>(() => {
     // A pre-targeted create opens on the rule option: the flow began as "stop
     // flagging this signal", which is the whole rule cluster, not any one
@@ -505,7 +510,7 @@ function ExclusionForm({
               {error && (
                 <Text className="text-destructive text-sm">{error}</Text>
               )}
-              <ExclusionExamples />
+              <ExclusionExamples mode={mode} />
             </div>
           </>
         )}
@@ -612,11 +617,12 @@ function SelectedFindingRow({ result }: { result: RiskResult }): JSX.Element {
 }
 
 // The evidence cell for a context row, mirroring the findings tables: judge
-// findings show their rationale and open the flagged event in a dialog, other
-// findings go through the audited click-to-reveal. Chat surfaces carry the
-// plaintext on the finding itself, so there is nothing left to reveal there.
+// and LLM analyzer findings show their rationale (and, for a judge, open the
+// flagged event in a dialog), other findings go through the audited
+// click-to-reveal. Chat surfaces carry the plaintext on the finding itself, so
+// there is nothing left to reveal there.
 function SelectedFindingMatch({ result }: { result: RiskResult }): JSX.Element {
-  if (isJudgeSource(result.source)) {
+  if (isRationaleSource(result.source)) {
     return (
       <EventMatchDialog
         resultId={result.id}
@@ -640,14 +646,19 @@ function SelectedFindingMatch({ result }: { result: RiskResult }): JSX.Element {
   );
 }
 
-function ExclusionExamples() {
+function ExclusionExamples({ mode }: { mode: DetectorMode }) {
   const examples: [string, string][] = [
     ['match == "value"', "exact literal match"],
     ['match ~= "regex"', "regex (RE2 syntax, ≤ 512 chars)"],
     ['rule_id == "pii.email_address"', "suppress a specific rule"],
     ['source == "prompt_injection"', "suppress a source"],
-    ['entity_type == "EMAIL_ADDRESS"', "suppress by entity type"],
   ];
+  if (mode === "presidio") {
+    examples.push([
+      'entity_type == "EMAIL_ADDRESS"',
+      "suppress by entity type",
+    ]);
+  }
   return (
     <div className="bg-muted/40 text-muted-foreground space-y-1 p-3 text-xs">
       <Text className="font-medium" small>
