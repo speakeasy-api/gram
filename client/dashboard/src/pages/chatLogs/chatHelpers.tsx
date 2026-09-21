@@ -129,9 +129,8 @@ export function getMatchStrings(results: RiskResult[] | undefined): string[] {
   return [...set].sort((a, b) => b.length - a.length);
 }
 
-/** `match` as it reads inside a JSON string. Tool call arguments are JSON, so a
- * secret holding a quote, backslash or newline appears there escaped and the
- * literal match alone would leave it unmasked. */
+/** `match` as it reads inside a JSON string, e.g. in tool call arguments, where
+ * a quote, backslash or newline is escaped. */
 export function jsonEscaped(match: string): string {
   return JSON.stringify(match).slice(1, -1);
 }

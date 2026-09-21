@@ -31,17 +31,10 @@ import { REVEAL_SCOPE } from "../unmask";
 import { collectChatFindings } from "./collect-findings";
 
 /**
- * Evidence card header: the session title with a chevron and a session link
- * right after it, and the finding's age on the right. Clicking the title opens
- * the session transcript over the drawer, the link opens the same session in
- * Agent Sessions in a new tab, and the chevron shows the whole message the
- * finding was flagged in under the title. The card otherwise shows only
- * the matched span, and the title is a session label cut to 80 runes, so the
- * message itself never reaches this list and has to be loaded. A message that
- * turns out not to be showable says why under the title, which stays in place.
- * Findings with no chat or message, and viewers without chat:read, only get
- * the chevron when the title visually overflows, and it just un-clips the
- * title.
+ * Evidence card header. The title opens the session transcript, the chevron
+ * loads and shows the flagged message (or says why it can't be shown), and the
+ * link opens the session in Agent Sessions. Without a chat, a message, or
+ * chat:read, the chevron only appears for a clipped title and un-clips it.
  */
 export function EvidenceTitle({
   title,
@@ -59,12 +52,8 @@ export function EvidenceTitle({
 }): JSX.Element {
   const routes = useRoutes();
   const { hasScope } = useRBAC();
-  // Everything chat-backed here (the transcript, the full message, the session
-  // link) shows chat content, so it only exists for chat:read holders. Anyone
-  // else gets the plain title, and no request for the chat is ever made.
-  // Checked against this chat: grants are "All sessions" in the roles UI, but
-  // the API accepts a per-chat selector, and an unscoped check would pass on
-  // any chat:read grant at all.
+  // Chat content needs chat:read on this chat. An unscoped check would pass on
+  // a grant for any chat. Without it, the chat is never requested.
   const chatId =
     findingChatId && hasScope(REVEAL_SCOPE, findingChatId)
       ? findingChatId
@@ -72,8 +61,7 @@ export function EvidenceTitle({
   const [expanded, setExpanded] = useState(false);
   const [clipped, setClipped] = useState(false);
   const titleRef = useRef<HTMLElement>(null);
-  // Only measured while collapsed: an expanded title never overflows, and the
-  // chevron has to stay so it can collapse again.
+  // Only measured while collapsed, so the chevron stays to collapse again.
   useLayoutEffect(() => {
     const el = titleRef.current;
     if (!el || expanded) return;
@@ -141,8 +129,7 @@ export function EvidenceTitle({
             </Link>
           )}
         </div>
-        {/* Outside the title button so the message can be selected and
-            copied, and a click on it doesn't open the session. */}
+        {/* Outside the title button so the text can be selected. */}
         {expanded && flaggedMessage.content && (
           <div className="text-muted-foreground font-mono text-xs break-words whitespace-pre-wrap">
             {flaggedMessage.content}
@@ -170,14 +157,9 @@ export function EvidenceTitle({
 }
 
 /**
- * The message this finding was flagged in, loaded once the header is expanded.
- * Flagged secrets in it stay dotted out, as in the transcript: revealing one
- * is an audited action this preview must not bypass. `problem` is set once the
- * load settles without a showable message and says why: a request failed
- * (`failed`), or, as warnings, the message is not in the chat's latest
- * generation, the finding is no longer active, the findings needed for masking
- * could not be fully paged, or a secret flagged in the message can't be found
- * in its text to mask.
+ * The flagged message, loaded once the header is expanded. Secrets stay masked:
+ * revealing one is an audited action this preview must not bypass. `problem`
+ * says why a message can't be shown; `failed` marks a request error.
  */
 function useFlaggedMessage(
   chatId: string | undefined,
@@ -190,18 +172,15 @@ function useFlaggedMessage(
 } {
   const client = useSdkClient();
   const active = enabled && Boolean(chatId) && Boolean(chatMessageId);
-  // The risk transcript's own first request (every actively flagged message in
-  // the latest generation, with context around each), so opening the session
-  // afterwards reuses this response. A finding carries no generation, so one
-  // flagged before the chat was compacted or edited can't be asked for.
+  // Same request as the risk transcript, so opening the session reuses it.
+  // Only covers the latest generation: a finding carries no generation.
   const messageQuery = useLoadChat(
     { id: chatId ?? "", limit: WINDOW_INITIAL_LIMIT, riskOnly: true },
     undefined,
     { enabled: active, throwOnError: false },
   );
-  // Every finding in the chat, not just the first page: a match the masking
-  // pass never sees would print in the clear. A chat with more findings than
-  // the page budget resolves to null, which keeps the message hidden.
+  // Every finding in the chat, since an unseen match would print in the clear.
+  // Null when the chat has too many to collect.
   const findingsQuery = useQuery({
     queryKey: ["chat", chatId, "all-findings"],
     queryFn: () => collectChatFindings(client, chatId ?? ""),
@@ -254,11 +233,8 @@ function useFlaggedMessage(
       },
     };
   }
-  // The transcript's masking rule: once the message holds a literal secret or
-  // PII (gitleaks, presidio), every match in it is dotted out; otherwise
-  // matches such as a flagged command are highlighted but readable. Judged
-  // against every finding in the chat, so a secret flagged on
-  // another message is still masked if it recurs in this one.
+  // The transcript's rule: a message holding a secret or PII has every match
+  // masked; otherwise matches are highlighted but readable.
   const secretMatches = withJsonEscaped(
     getMatchStrings(findings.filter((r) => resultsAreSensitive([r]))),
   );
@@ -275,10 +251,8 @@ function useFlaggedMessage(
   };
 }
 
-/** The message as the transcript words it: its text, then each tool call as
- * its name and arguments. The raw toolCalls string is never printed, because
- * arguments nested in it are escaped twice and a match would not line up. A
- * payload that can't be parsed contributes nothing. */
+/** The message text, then each tool call's name and arguments. The raw
+ * toolCalls string is double-escaped, so matches would not line up in it. */
 function flaggedMessageText(message: ChatMessage): string {
   const parts = [messageText(message.content)];
   for (const call of parseToolCalls(message.toolCalls) ?? []) {
@@ -289,12 +263,9 @@ function flaggedMessageText(message: ChatMessage): string {
   return parts.filter(Boolean).join("\n\n");
 }
 
-/** Whether a secret or PII match flagged on this very message can't be found in
- * the text about to be shown. Tool call arguments arrive as the provider wrote
- * them, so a secret can sit there in an escaping (`\u00e9`, `\/`) that neither
- * the literal match nor its JSON-escaped form lines up with, and it would print
- * in the clear. A match inside the harness envelope is fine: the envelope is
- * stripped from the text, so the secret isn't shown at all. */
+/** Whether a secret flagged on this message can't be found in `text`, e.g. the
+ * provider escaped it differently (`\u00e9`, `\/`), so it would print in the
+ * clear. A match in the stripped harness envelope is never shown, so it's fine. */
 function hasUnlocatedSecret(
   findings: RiskResult[],
   message: ChatMessage,

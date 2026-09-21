@@ -211,9 +211,7 @@ export function SignalDrawer({
     null,
   );
   const [collecting, setCollecting] = useState(false);
-  // Remembered with the signal it was opened from and derived below, so a
-  // chat left open when the signal is swapped or cleared by the parent (which
-  // fires no close event here) never reappears under a different signal.
+  // Keyed to its signal, so a chat left open never reappears under another.
   const [openChat, setOpenChat] = useState<{
     signalKey: string;
     chatId: string;
@@ -613,10 +611,8 @@ export function SignalDrawer({
               </div>
             </RevealAllProvider>
           )}
-          {/* The risk-focused transcript Risk Events opens, scrolled to the
-              finding that was clicked rather than the chat's first. Nested inside this
-              sheet's content so closing it leaves the signal drawer open
-              instead of reading as an outside click. */}
+          {/* Nested in this sheet so closing it doesn't read as an outside
+              click and close the drawer too. */}
           <ChatDetailSheet
             chatId={shownChat?.chatId ?? null}
             focusedMessageId={shownChat?.chatMessageId}

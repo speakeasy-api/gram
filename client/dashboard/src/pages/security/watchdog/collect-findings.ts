@@ -13,11 +13,8 @@ type RiskResultsFilter = Omit<
   "cursor" | "limit"
 >;
 
-/**
- * Pages `risk.listResults` for one filter until the list ends or `done` says
- * enough has been collected. `complete` is false when it stopped early, so a
- * caller that needs the whole set can tell a partial one apart.
- */
+/** Pages `risk.listResults` until the list ends or `done` returns true.
+ * `complete` is false when it stopped early. */
 async function pageRiskResults(
   client: ReturnType<typeof useSdkClient>,
   filter: RiskResultsFilter,
@@ -37,12 +34,11 @@ async function pageRiskResults(
   return { results, complete: !cursor };
 }
 
-// Masking a message needs every finding in its chat; a chat past this many is
-// treated as uncollectable rather than masked from a partial set.
+// Past this many findings a chat is treated as uncollectable.
 const CHAT_FINDINGS_CAP = 5000;
 
-/** Every finding in one chat, or null when the chat has more than the cap, so
- * the caller can refuse to render rather than mask from a partial set. */
+/** Every finding in one chat, or null past the cap, so callers never mask from
+ * a partial set. */
 export async function collectChatFindings(
   client: ReturnType<typeof useSdkClient>,
   chatId: string,
