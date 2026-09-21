@@ -508,7 +508,7 @@ func (s *RefreshService) refresh(
 	})
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && latest.ID != sess.ID) {
 		zero.Outcome = remotesessionmetrics.RefreshOutcomeSessionInactive
-		return zero, client.IssuerUrl, nil, nil
+		return zero, &client, nil, nil
 	}
 	if err != nil {
 		return zero, &client, nil, refreshErr

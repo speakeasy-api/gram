@@ -130,6 +130,29 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	ownerCtx, err = ti.service.APIKeyAuth(context.WithValue(ownerCtx, goa.MethodKey, "listRemoteSessions"), *auth.ProjectSlug, &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema})
 	require.NoError(t, err, "eligible-session route delegates project authorization to the owner-aware handler")
 
+	for _, method := range []string{"listBindings", "attachBinding", "detachBinding"} {
+		t.Run(method+" owner middleware", func(t *testing.T) {
+			bindingCtx, err := ti.service.APIKeyAuth(context.WithValue(ownerCtx, goa.MethodKey, method), *auth.ProjectSlug, &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema})
+			require.NoError(t, err, "binding routes delegate authorization to the owner-aware handler")
+			switch method {
+			case "listBindings":
+				_, err = ti.service.ListBindings(bindingCtx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})
+			case "attachBinding":
+				_, err = ti.service.AttachBinding(bindingCtx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: mine.ID.String()})
+			case "detachBinding":
+				listed, listErr := ti.service.ListBindings(bindingCtx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})
+				require.NoError(t, listErr)
+				require.Len(t, listed.Items, 1)
+				err = ti.service.DetachBinding(bindingCtx, &gen.DetachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), ID: listed.Items[0].ID})
+			}
+			require.NoError(t, err, "owners do not need project read permission for bindings")
+			_, err = ti.service.ListBindings(bindingCtx, &gen.ListBindingsPayload{PrincipalID: uuid.NewString(), UserSessionIssuerID: config.String()})
+			requireOopsCode(t, err, oops.CodeForbidden)
+		})
+	}
+	_, err = ti.service.APIKeyAuth(context.WithValue(ownerCtx, goa.MethodKey, "revokeRemoteSession"), *auth.ProjectSlug, &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
 	_, err = ti.service.ListRemoteSessions(ownerCtx, &gen.ListRemoteSessionsPayload{})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	eligiblePayload := &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String()), Limit: conv.PtrEmpty(1)}

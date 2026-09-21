@@ -48,7 +48,7 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return fmt.Errorf("manage consent connection: %w", err)
 	}
-	if enabled, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
+	if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
 		return oops.C(oops.CodeNotFound)
 	}
 	action := r.PostForm.Get("action")

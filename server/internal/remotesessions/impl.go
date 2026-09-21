@@ -185,10 +185,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	if ctx.Value(goa.MethodKey) == "listRemoteSessions" {
+	// These handlers enforce either project-read or human agent-owner access.
+	switch ctx.Value(goa.MethodKey) {
+	case "listRemoteSessions", "listBindings", "attachBinding", "detachBinding":
 		authorizedCtx, err := s.auth.AuthorizeWithHandlerProjectAccess(ctx, key, schema)
 		if err != nil {
-			return authorizedCtx, fmt.Errorf("authorize remote-session listing: %w", err)
+			return authorizedCtx, fmt.Errorf("authorize remote-session handler access: %w", err)
 		}
 		return authorizedCtx, nil
 	}

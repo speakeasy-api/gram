@@ -32,7 +32,7 @@ func (s *Service) authenticateIssuerGateAgentKey(ctx context.Context, token stri
 		if !ok || authCtx == nil || authCtx.ActiveOrganizationID != endpoint.OrganizationID || (authCtx.ProjectID != nil && *authCtx.ProjectID != endpoint.ProjectID) {
 			return oops.C(oops.CodeUnauthorized)
 		}
-		if enabled, _ := s.agentAuthorizationRollout(ctx, s.logger, endpoint); !enabled {
+		if enabled, _, _ := s.agentAuthorizationRollout(ctx, s.logger, endpoint); !enabled {
 			return oops.C(oops.CodeNotFound)
 		}
 		return nil
