@@ -22,8 +22,8 @@ import (
 // TokenHost routes requests addressed to a dedicated token host to the
 // per-server token endpoint alone.
 //
-// The host is an alias, not a move: `POST /mcp/{mcpSlug}/token` keeps serving
-// on the MCP host unchanged. On the token host the same handler runs with the
+// The host is an alias: `POST /mcp/{mcpSlug}/token` also serves on the MCP
+// host. On the token host the same handler runs with the
 // canonical values (the issuer and the RFC 8707 resource) still derived from
 // the MCP host, and only the token endpoint URL taken from the token host.
 //

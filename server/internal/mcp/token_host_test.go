@@ -128,7 +128,7 @@ func TestTokenHost_TokenHostAudienceAccepted(t *testing.T) {
 	w = harness.serve(t, http.MethodPost, "auth.example.com:443", "/mcp/"+slug+"/token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, advertisedIssuer)))
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	// Metadata keeps advertising the MCP host's token endpoint.
+	// Metadata advertises the MCP host's token endpoint.
 	require.Equal(t, advertisedIssuer+"/token", fetchAdvertisedTokenEndpoint(t, ti, slug))
 }
 
@@ -206,9 +206,8 @@ func TestTokenHost_IDJAGExchangeRefused(t *testing.T) {
 }
 
 // A JWT bearer request presenting no client reaches the clientless branch on
-// the token host rather than being turned away by the host itself. That branch
-// refuses it until the workload grant lands, with the missing-client answer
-// rather than unsupported_grant_type.
+// the token host rather than being turned away by the host itself, so it gets
+// that branch's answer rather than unsupported_grant_type.
 func TestTokenHost_ClientlessAssertionGrantReachesClientlessBranch(t *testing.T) {
 	t.Parallel()
 
