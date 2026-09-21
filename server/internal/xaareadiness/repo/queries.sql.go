@@ -663,7 +663,7 @@ WHERE c.deleted IS FALSE
   AND c.remote_session_issuer_id = ANY ($2::uuid[])
   AND (
     (c.project_id IS NOT NULL AND p.organization_id = $1 AND p.deleted IS FALSE)
-    OR (c.project_id IS NULL AND c.organization_id = $1)
+    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $1))
   )
 ORDER BY c.remote_session_issuer_id, c.project_id NULLS LAST, c.created_at, c.id
 `

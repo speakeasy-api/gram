@@ -103,7 +103,7 @@ func newTestService(t *testing.T) (context.Context, *instance) {
 	flags.SetFlag(feature.FlagOktaConnections, orgID, true)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := xaareadiness.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), flags)
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, orgID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, orgID), authz.NewGrant(authz.ScopeMCPRead, authz.WildcardResource))
 
 	si := &instance{svc: svc, conn: conn, q: repo.New(conn), orgID: orgID, connectionID: uuid.Nil, flags: flags, authCtx: authCtx}
 	si.connectionID = createConnection(t, ctx, si)
@@ -603,6 +603,52 @@ func TestExportChecklist(t *testing.T) {
 	require.Contains(t, string(raw), "| "+audience+" |")
 }
 
+func TestReadiness_OnlyServersTheAdminCanRead(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	recordAgent(t, ctx, si, "wlp1")
+	visible := capableServer(t, ctx, si, "Notion")
+	hidden := capableServer(t, ctx, si, "Linear")
+
+	narrow := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, si.orgID), authz.NewGrant(authz.ScopeMCPRead, visible.serverID.String()))
+	res, err := si.svc.ListReadiness(narrow, &gen.ListReadinessPayload{SessionToken: nil, IncludeAll: true})
+	require.NoError(t, err)
+	require.Len(t, res.Servers, 1)
+	require.Equal(t, visible.serverID.String(), res.Servers[0].McpServerID)
+	require.Equal(t, 1, res.TotalCount)
+
+	_, body, err := si.svc.ExportChecklist(narrow, &gen.ExportChecklistPayload{SessionToken: nil, Format: "csv", IncludeAll: true})
+	require.NoError(t, err)
+	raw, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.NoError(t, body.Close())
+	require.Contains(t, string(raw), `"Notion"`)
+	require.NotContains(t, string(raw), `"Linear"`)
+
+	_, err = confirm(t, narrow, si, audience, nil, hidden.serverID)
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, err = si.svc.ResetConnection(narrow, &gen.ResetConnectionPayload{SessionToken: nil, McpServerID: hidden.serverID.String()})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestListReadiness_IncludesPlatformGlobalClients(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	recordAgent(t, ctx, si, "wlp1")
+	projectID := createProject(t, ctx, si, si.orgID, "proj-"+uuid.NewString()[:8])
+	issuerID := createResourceIssuer(t, ctx, si, si.orgID, projectID, true)
+	_, err := si.q.CreateIssuerClientFixture(ctx, repo.CreateIssuerClientFixtureParams{
+		ProjectID: uuid.NullUUID{}, OrganizationID: pgtype.Text{}, RemoteSessionIssuerID: issuerID,
+		ClientID: "0oaglobalclient", Scope: []string{"files:read"}, ResourceIdentifier: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	serverID := createServer(t, ctx, si, projectID, issuerID, "Notion")
+
+	row := rowFor(t, list(t, ctx, si, true), serverID)
+	require.Equal(t, "0oaglobalclient", *row.ClientID)
+	require.Equal(t, xaareadiness.ClientBindingSingle, row.ClientBinding)
+}
+
 func TestListReadiness_SkipsRevokedTunnels(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
@@ -672,7 +718,7 @@ func TestReadiness_Guards(t *testing.T) {
 	otherOrg := createOrganization(t, ctx, si.conn)
 	other := *si.authCtx
 	other.ActiveOrganizationID = otherOrg
-	otherCtx := authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &other), authz.NewGrant(authz.ScopeOrgAdmin, otherOrg))
+	otherCtx := authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &other), authz.NewGrant(authz.ScopeOrgAdmin, otherOrg), authz.NewGrant(authz.ScopeMCPRead, authz.WildcardResource))
 	_, err = si.svc.ListReadiness(otherCtx, &gen.ListReadinessPayload{SessionToken: nil, IncludeAll: true})
 	requireOopsCode(t, err, oops.CodeFailedPrecondition)
 	otherSi := &instance{svc: si.svc, conn: si.conn, q: si.q, orgID: otherOrg, connectionID: uuid.Nil, flags: si.flags, authCtx: &other}
