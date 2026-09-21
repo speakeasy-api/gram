@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -103,4 +105,16 @@ func TestCreateAgentRejectsProjectFromAnotherOrganization(t *testing.T) {
 	ctx := humanContextInProject(t, "org-agent-tenant-a", "owner", &foreign.ID)
 	_, err := service.Create(ctx, &gen.CreatePayload{Name: "Cross tenant agent"})
 	require.Error(t, err)
+
+	// Naming the constraint is the point: a bare require.Error would still pass
+	// if the composite key stopped enforcing and something else happened to
+	// reject the write.
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, pgerrcode.ForeignKeyViolation, pgErr.Code)
+	require.Equal(t, "agents_organization_id_project_id_fkey", pgErr.ConstraintName)
+
+	stored, err := repo.New(conn).ListManagedAgents(t.Context(), "org-agent-tenant-a")
+	require.NoError(t, err)
+	require.Empty(t, stored, "a rejected create must leave no agent behind")
 }
