@@ -1,35 +1,41 @@
 import { useCallback, useEffect, useState } from "react";
 
-import type { XaaServerReadiness } from "@gram/client/models/components/xaaserverreadiness.js";
+import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 
 import type { AppInstanceOption } from "./xaaView";
 
 /** Confirmations are shared only by servers with the same issuer ID and resource. */
-export function sharedConfirmationKey(row: XaaServerReadiness): string {
+export function sharedConfirmationKey(
+  row: OktaResourceConnectionServer,
+): string {
   return row.issuerId
     ? JSON.stringify([row.issuerId, row.resourceIndicator])
     : JSON.stringify([row.mcpServerId]);
 }
 
 export type ClearedSnapshots = {
-  snapshots: XaaServerReadiness[];
-  snapshotFor: (mcpServerId: string) => XaaServerReadiness | undefined;
-  remember: (row: XaaServerReadiness) => void;
-  retire: (confirmed: XaaServerReadiness[]) => void;
-  canUndo: (snapshot: XaaServerReadiness) => boolean;
+  snapshots: OktaResourceConnectionServer[];
+  snapshotFor: (
+    mcpServerId: string,
+  ) => OktaResourceConnectionServer | undefined;
+  remember: (row: OktaResourceConnectionServer) => void;
+  retire: (confirmed: OktaResourceConnectionServer[]) => void;
+  canUndo: (snapshot: OktaResourceConnectionServer) => boolean;
 };
 
 /** Snapshots of cleared confirmations, kept until the shared confirmation is saved again. */
 export function useClearedConfirmations(
   readiness: {
-    servers: XaaServerReadiness[] | undefined;
+    servers: OktaResourceConnectionServer[] | undefined;
     isPlaceholderData: boolean;
   },
   appInstances: AppInstanceOption[],
 ): ClearedSnapshots {
-  const [snapshots, setSnapshots] = useState<XaaServerReadiness[]>([]);
+  const [snapshots, setSnapshots] = useState<OktaResourceConnectionServer[]>(
+    [],
+  );
 
-  const retire = useCallback((confirmed: XaaServerReadiness[]) => {
+  const retire = useCallback((confirmed: OktaResourceConnectionServer[]) => {
     const keys = new Set(confirmed.map(sharedConfirmationKey));
     setSnapshots((previous) => {
       const remaining = previous.filter(
@@ -46,7 +52,7 @@ export function useClearedConfirmations(
   }, [servers, isPlaceholderData, retire]);
 
   const remember = useCallback(
-    (row: XaaServerReadiness) =>
+    (row: OktaResourceConnectionServer) =>
       setSnapshots((previous) => [
         ...previous.filter(
           (snapshot) => snapshot.mcpServerId !== row.mcpServerId,

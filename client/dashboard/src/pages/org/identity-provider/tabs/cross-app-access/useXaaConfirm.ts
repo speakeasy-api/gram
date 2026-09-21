@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import type { XaaServerReadiness } from "@gram/client/models/components/xaaserverreadiness.js";
-import { useConfirmXaaConnectionsMutation } from "@gram/client/react-query/confirmXaaConnections.js";
+import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
+import { useConfirmOktaResourceConnectionsMutation } from "@gram/client/react-query/confirmOktaResourceConnections.js";
 
 import {
   inlineError,
@@ -24,19 +24,21 @@ const IDLE: ConfirmFeedback = { kind: "idle" };
 
 /** Confirms rows in API-sized batches; undefined means another confirmation was already running. */
 export function useXaaConfirm(
-  onBatchConfirmed: (rows: XaaServerReadiness[]) => void,
+  onBatchConfirmed: (rows: OktaResourceConnectionServer[]) => void,
 ): {
   confirming: boolean;
   feedback: ConfirmFeedback;
   clearFeedback: () => void;
   confirmRows: (
-    rows: XaaServerReadiness[],
+    rows: OktaResourceConnectionServer[],
     audience: string,
     oktaApplicationId: string | undefined,
   ) => Promise<ConfirmOutcome | undefined>;
 } {
   const queryClient = useQueryClient();
-  const confirm = useConfirmXaaConnectionsMutation({ onError: inlineError });
+  const confirm = useConfirmOktaResourceConnectionsMutation({
+    onError: inlineError,
+  });
   const [confirming, setConfirming] = useState(false);
   const [feedback, setFeedback] = useState<ConfirmFeedback>(IDLE);
   const inFlight = useRef(false);
@@ -44,7 +46,7 @@ export function useXaaConfirm(
   const clearFeedback = useCallback(() => setFeedback(IDLE), []);
 
   const confirmRows = async (
-    rows: XaaServerReadiness[],
+    rows: OktaResourceConnectionServer[],
     audience: string,
     oktaApplicationId: string | undefined,
   ): Promise<ConfirmOutcome | undefined> => {
@@ -62,7 +64,7 @@ export function useXaaConfirm(
       )) {
         const result = await confirm.mutateAsync({
           security: SESSION_SECURITY,
-          request: { confirmXaaConnectionsRequestBody: body },
+          request: { confirmOktaResourceConnectionsRequestBody: body },
         });
         const batchIds = new Set(body.connections.map((c) => c.mcpServerId));
         onBatchConfirmed(rows.filter((row) => batchIds.has(row.mcpServerId)));

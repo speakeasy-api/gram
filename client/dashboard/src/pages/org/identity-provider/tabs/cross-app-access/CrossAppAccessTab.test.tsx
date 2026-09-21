@@ -12,7 +12,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { OktaIdentityProviderConnection } from "@gram/client/models/components/oktaidentityproviderconnection.js";
-import type { XaaServerReadiness } from "@gram/client/models/components/xaaserverreadiness.js";
+import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 import { CrossAppAccessTab } from "./CrossAppAccessTab";
 import { confirmedRow as savedRow, pendingRow as row } from "./xaaTestRows";
 
@@ -28,14 +28,18 @@ const mocks = vi.hoisted(() => ({
   applications: vi.fn(),
   invalidate: vi.fn(),
 }));
-vi.mock("@gram/client/react-query/xaaReadiness.js", () => ({
-  useXaaReadiness: mocks.readiness,
+vi.mock("@gram/client/react-query/oktaResourceConnections.js", () => ({
+  useOktaResourceConnections: mocks.readiness,
 }));
-vi.mock("@gram/client/react-query/confirmXaaConnections.js", () => ({
-  useConfirmXaaConnectionsMutation: () => ({ mutateAsync: mocks.confirm }),
+vi.mock("@gram/client/react-query/confirmOktaResourceConnections.js", () => ({
+  useConfirmOktaResourceConnectionsMutation: () => ({
+    mutateAsync: mocks.confirm,
+  }),
 }));
-vi.mock("@gram/client/react-query/resetXaaConnection.js", () => ({
-  useResetXaaConnectionMutation: (options: typeof mocks.resetOptions) => {
+vi.mock("@gram/client/react-query/resetOktaResourceConnection.js", () => ({
+  useResetOktaResourceConnectionMutation: (
+    options: typeof mocks.resetOptions,
+  ) => {
     mocks.resetOptions = options;
     return { isPending: false, mutate: mocks.reset, reset: mocks.resetState };
   },
@@ -74,7 +78,10 @@ beforeEach(() => {
   HTMLElement.prototype.scrollIntoView = vi.fn<() => void>();
 });
 
-function setReadiness(rows: XaaServerReadiness[], placeholder = false) {
+function setReadiness(
+  rows: OktaResourceConnectionServer[],
+  placeholder = false,
+) {
   mocks.readiness.mockReturnValue({
     data: {
       servers: rows,
@@ -86,7 +93,7 @@ function setReadiness(rows: XaaServerReadiness[], placeholder = false) {
     isPlaceholderData: placeholder,
   });
 }
-function show(rows: XaaServerReadiness[], placeholder = false) {
+function show(rows: OktaResourceConnectionServer[], placeholder = false) {
   setReadiness(rows, placeholder);
   const client = new QueryClient();
   const ui = () => (
@@ -108,7 +115,7 @@ function show(rows: XaaServerReadiness[], placeholder = false) {
   const view = render(ui());
   return {
     ...view,
-    refresh: (nextRows: XaaServerReadiness[], stale = false) => {
+    refresh: (nextRows: OktaResourceConnectionServer[], stale = false) => {
       setReadiness(nextRows, stale);
       view.rerender(ui());
     },
@@ -133,7 +140,7 @@ function selectAndConfirm(count: number) {
 const connectionsUrl =
   "https://example-admin.okta.com/admin/workload-principals/ai-agents/example-agent/resource-connections";
 
-function confirmedRow(): XaaServerReadiness {
+function confirmedRow(): OktaResourceConnectionServer {
   return savedRow(0, { deepLink: `${connectionsUrl}/create` });
 }
 
@@ -172,7 +179,7 @@ const issuerInput = () => screen.getByLabelText<HTMLInputElement>("Issuer URL");
 
 describe("bulk confirmation", () => {
   it("freezes the selection and filter during confirmation", async () => {
-    let resolve!: (value: { servers: XaaServerReadiness[] }) => void;
+    let resolve!: (value: { servers: OktaResourceConnectionServer[] }) => void;
     mocks.confirm.mockImplementation(
       () =>
         new Promise((done) => {
@@ -228,8 +235,8 @@ describe("bulk confirmation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm 1 server" }));
     await waitFor(() => expect(mocks.confirm).toHaveBeenCalledTimes(3));
     expect(
-      mocks.confirm.mock.calls[2]?.[0].request.confirmXaaConnectionsRequestBody
-        .connections,
+      mocks.confirm.mock.calls[2]?.[0].request
+        .confirmOktaResourceConnectionsRequestBody.connections,
     ).toEqual([
       { mcpServerId: "server-2", audience: "https://issuer.example.com" },
     ]);
@@ -365,8 +372,8 @@ describe("review panel", () => {
     await waitFor(() => expect(mocks.confirm).toHaveBeenCalledTimes(1));
     // Omission means retain the backend app binding, not clear it.
     expect(
-      mocks.confirm.mock.calls[0]?.[0].request.confirmXaaConnectionsRequestBody
-        .connections,
+      mocks.confirm.mock.calls[0]?.[0].request
+        .confirmOktaResourceConnectionsRequestBody.connections,
     ).toEqual([
       {
         mcpServerId: server.mcpServerId,
@@ -431,7 +438,9 @@ describe("clearing a confirmation", () => {
     expect(mocks.reset).toHaveBeenCalledWith(
       expect.objectContaining({
         request: {
-          resetXaaConnectionRequestBody: { mcpServerId: server.mcpServerId },
+          resetOktaResourceConnectionRequestBody: {
+            mcpServerId: server.mcpServerId,
+          },
         },
       }),
     );
@@ -444,8 +453,8 @@ describe("clearing a confirmation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(mocks.confirm).toHaveBeenCalledTimes(1));
     expect(
-      mocks.confirm.mock.calls[0]?.[0].request.confirmXaaConnectionsRequestBody
-        .connections,
+      mocks.confirm.mock.calls[0]?.[0].request
+        .confirmOktaResourceConnectionsRequestBody.connections,
     ).toEqual([
       {
         mcpServerId: server.mcpServerId,
@@ -582,7 +591,8 @@ describe("Undo", () => {
     );
     expect(
       mocks.confirm.mock.calls.map(
-        ([input]) => input.request.confirmXaaConnectionsRequestBody.connections,
+        ([input]) =>
+          input.request.confirmOktaResourceConnectionsRequestBody.connections,
       ),
     ).toEqual([
       [

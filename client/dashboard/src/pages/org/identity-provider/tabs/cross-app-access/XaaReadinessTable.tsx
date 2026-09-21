@@ -15,7 +15,7 @@ import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import type { RowSelection } from "@/hooks/useRowSelection";
 import { HumanizeDateTime } from "@/lib/dates";
-import type { XaaServerReadiness } from "@gram/client/models/components/xaaserverreadiness.js";
+import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 
 import { OktaLinkButton } from "./OktaLinkButton";
 import { oktaConnectionsUrl } from "../../oktaConsoleLinks";
@@ -60,7 +60,11 @@ function CopyCell({
   );
 }
 
-function ServerCell({ row }: { row: XaaServerReadiness }): JSX.Element {
+function ServerCell({
+  row,
+}: {
+  row: OktaResourceConnectionServer;
+}): JSX.Element {
   return (
     <div className="flex min-w-0 flex-col">
       <Text className="text-sm leading-6 font-medium whitespace-normal [overflow-wrap:anywhere]">
@@ -78,7 +82,11 @@ function ServerCell({ row }: { row: XaaServerReadiness }): JSX.Element {
   );
 }
 
-function StateCell({ row }: { row: XaaServerReadiness }): JSX.Element {
+function StateCell({
+  row,
+}: {
+  row: OktaResourceConnectionServer;
+}): JSX.Element {
   return (
     <div className="flex min-w-0 flex-col items-start gap-2 pt-1">
       <Badge variant={xaaStateVariant(row.state)} size="sm">
@@ -101,7 +109,11 @@ function StateCell({ row }: { row: XaaServerReadiness }): JSX.Element {
   );
 }
 
-function ConfirmationCell({ row }: { row: XaaServerReadiness }): JSX.Element {
+function ConfirmationCell({
+  row,
+}: {
+  row: OktaResourceConnectionServer;
+}): JSX.Element {
   if (row.state !== "connected") return <EmptyCell />;
   const app = row.oktaApplicationLabel ?? row.oktaApplicationId;
   return (
@@ -122,7 +134,11 @@ function ConfirmationCell({ row }: { row: XaaServerReadiness }): JSX.Element {
   );
 }
 
-function ConfigurationCell({ row }: { row: XaaServerReadiness }): JSX.Element {
+function ConfigurationCell({
+  row,
+}: {
+  row: OktaResourceConnectionServer;
+}): JSX.Element {
   const clientNote = clientBindingNote(row.clientBinding);
   return (
     <dl className="grid w-full min-w-0 grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
@@ -167,11 +183,11 @@ function RowActions({
   onReview,
   onClear,
 }: {
-  row: XaaServerReadiness;
+  row: OktaResourceConnectionServer;
   connectionsHref: string | undefined;
   locked: boolean;
-  onReview: (row: XaaServerReadiness) => void;
-  onClear: (row: XaaServerReadiness) => void;
+  onReview: (row: OktaResourceConnectionServer) => void;
+  onClear: (row: OktaResourceConnectionServer) => void;
 }): JSX.Element | null {
   const confirmed = row.state === "connected";
   if (!confirmed && !isConfirmable(row)) return null;
@@ -246,17 +262,17 @@ export function XaaReadinessTable({
   onReview,
   onClear,
 }: {
-  rows: XaaServerReadiness[];
-  selection: RowSelection<XaaServerReadiness>;
+  rows: OktaResourceConnectionServer[];
+  selection: RowSelection<OktaResourceConnectionServer>;
   /** True while a confirmation is running or the rows are stale. */
   locked: boolean;
   fallbackDeepLink: string | undefined;
   emptyMessage: string;
   onSelectionChange: () => void;
-  onReview: (row: XaaServerReadiness) => void;
-  onClear: (row: XaaServerReadiness) => void;
+  onReview: (row: OktaResourceConnectionServer) => void;
+  onClear: (row: OktaResourceConnectionServer) => void;
 }): JSX.Element {
-  const columns: Column<XaaServerReadiness>[] = [
+  const columns: Column<OktaResourceConnectionServer>[] = [
     {
       key: "select",
       header: (

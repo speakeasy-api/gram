@@ -1,7 +1,7 @@
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
-import type { XaaServerReadiness } from "@gram/client/models/components/xaaserverreadiness.js";
+import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 
 export function ClearedConfirmationNotice({
   snapshot,
@@ -10,7 +10,7 @@ export function ClearedConfirmationNotice({
   onUndo,
   onReview,
 }: {
-  snapshot: XaaServerReadiness;
+  snapshot: OktaResourceConnectionServer;
   canUndo: boolean;
   locked: boolean;
   onUndo: () => void;

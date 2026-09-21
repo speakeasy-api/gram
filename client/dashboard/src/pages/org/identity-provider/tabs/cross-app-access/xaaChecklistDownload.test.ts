@@ -48,7 +48,7 @@ describe("downloadXaaChecklist", () => {
 
     expect(requests).toHaveLength(1);
     const url = new URL(requests[0]!.url);
-    expect(url.pathname).toBe("/rpc/xaaReadiness.exportChecklist");
+    expect(url.pathname).toBe("/rpc/oktaResourceConnections.exportChecklist");
     expect(url.searchParams.get("format")).toBe("csv");
     expect(url.searchParams.get("include_all")).toBe("true");
     expect(mocks.downloadBlob).toHaveBeenCalledTimes(1);

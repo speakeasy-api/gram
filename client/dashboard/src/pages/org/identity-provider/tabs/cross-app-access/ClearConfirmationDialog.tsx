@@ -4,8 +4,8 @@ import { toast } from "sonner";
 import { ApiErrorAlert } from "@/components/api-error-alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import type { XaaServerReadiness } from "@gram/client/models/components/xaaserverreadiness.js";
-import { useResetXaaConnectionMutation } from "@gram/client/react-query/resetXaaConnection.js";
+import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
+import { useResetOktaResourceConnectionMutation } from "@gram/client/react-query/resetOktaResourceConnection.js";
 
 import {
   SESSION_SECURITY,
@@ -19,13 +19,13 @@ export function ClearConfirmationDialog({
   onCleared,
   onClose,
 }: {
-  target: XaaServerReadiness | null;
+  target: OktaResourceConnectionServer | null;
   canUndo: boolean;
-  onCleared: (row: XaaServerReadiness) => void;
+  onCleared: (row: OktaResourceConnectionServer) => void;
   onClose: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const reset = useResetXaaConnectionMutation({
+  const reset = useResetOktaResourceConnectionMutation({
     onSuccess: () => {
       toast.success(
         "Confirmation cleared. The Okta connection was not changed.",
@@ -79,7 +79,7 @@ export function ClearConfirmationDialog({
               reset.mutate({
                 security: SESSION_SECURITY,
                 request: {
-                  resetXaaConnectionRequestBody: {
+                  resetOktaResourceConnectionRequestBody: {
                     mcpServerId: target.mcpServerId,
                   },
                 },

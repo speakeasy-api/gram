@@ -1,6 +1,6 @@
-import type { XaaServerReadiness } from "@gram/client/models/components/xaaserverreadiness.js";
+import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 
-export function pendingRow(index: number): XaaServerReadiness {
+export function pendingRow(index: number): OktaResourceConnectionServer {
   return {
     mcpServerId: `server-${index}`,
     serverName: `Server ${index}`,
@@ -18,8 +18,8 @@ export function pendingRow(index: number): XaaServerReadiness {
 
 export function confirmedRow(
   index = 0,
-  overrides: Partial<XaaServerReadiness> = {},
-): XaaServerReadiness {
+  overrides: Partial<OktaResourceConnectionServer> = {},
+): OktaResourceConnectionServer {
   return {
     ...pendingRow(index),
     state: "connected",

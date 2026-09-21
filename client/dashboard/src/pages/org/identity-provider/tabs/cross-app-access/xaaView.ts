@@ -3,30 +3,37 @@ import { chunk } from "@/lib/utils";
 import type {
   ClientBinding,
   NotApplicableReason,
-  XaaServerReadinessState,
-} from "@gram/client/models/components/xaaserverreadiness.js";
+  OktaResourceConnectionServerState,
+} from "@gram/client/models/components/oktaresourceconnectionserver.js";
 
 type BadgeVariant = NonNullable<BadgeProps["variant"]>;
 
-const XAA_STATE_LABELS: Record<XaaServerReadinessState, string> = {
+const XAA_STATE_LABELS: Record<OktaResourceConnectionServerState, string> = {
   not_applicable: "Not applicable",
   needs_agent: "Needs agent",
   needs_connection: "Not confirmed",
   connected: "Confirmed",
 };
 
-const XAA_STATE_VARIANTS: Record<XaaServerReadinessState, BadgeVariant> = {
+const XAA_STATE_VARIANTS: Record<
+  OktaResourceConnectionServerState,
+  BadgeVariant
+> = {
   not_applicable: "neutral",
   needs_agent: "warning",
   needs_connection: "warning",
   connected: "success",
 };
 
-export function xaaStateLabel(state: XaaServerReadinessState): string {
+export function xaaStateLabel(
+  state: OktaResourceConnectionServerState,
+): string {
   return XAA_STATE_LABELS[state];
 }
 
-export function xaaStateVariant(state: XaaServerReadinessState): BadgeVariant {
+export function xaaStateVariant(
+  state: OktaResourceConnectionServerState,
+): BadgeVariant {
   return XAA_STATE_VARIANTS[state];
 }
 
@@ -90,7 +97,7 @@ export function appInstanceOptions(
 
 type ConfirmableRow = {
   pending: boolean;
-  state: XaaServerReadinessState;
+  state: OktaResourceConnectionServerState;
   clientBinding: ClientBinding;
 };
 

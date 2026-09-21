@@ -4,7 +4,7 @@ import {
   headerValue,
 } from "@/lib/download";
 import type { GramCore } from "@gram/client/core.js";
-import { xaaReadinessExportChecklist } from "@gram/client/funcs/xaaReadinessExportChecklist.js";
+import { oktaResourceConnectionsExportChecklist } from "@gram/client/funcs/oktaResourceConnectionsExportChecklist.js";
 
 import { SESSION_SECURITY } from "../../identityProviderQueries";
 
@@ -15,7 +15,7 @@ export async function downloadXaaChecklist(
   format: ChecklistFormat,
   includeAll: boolean,
 ): Promise<void> {
-  const response = await xaaReadinessExportChecklist(
+  const response = await oktaResourceConnectionsExportChecklist(
     client,
     { format, includeAll },
     SESSION_SECURITY,

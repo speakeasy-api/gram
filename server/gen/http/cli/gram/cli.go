@@ -63,6 +63,7 @@ import (
 	metamcpc "github.com/speakeasy-api/gram/server/gen/http/meta_mcp/client"
 	modelkeysc "github.com/speakeasy-api/gram/server/gen/http/model_keys/client"
 	networkingressc "github.com/speakeasy-api/gram/server/gen/http/network_ingress/client"
+	oktaresourceconnectionsc "github.com/speakeasy-api/gram/server/gen/http/okta_resource_connections/client"
 	organizationassetsc "github.com/speakeasy-api/gram/server/gen/http/organization_assets/client"
 	organizationremotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/client"
 	organizationremotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/client"
@@ -99,7 +100,6 @@ import (
 	usersessionissuerscimdclientsc "github.com/speakeasy-api/gram/server/gen/http/user_session_issuers_cimd_clients/client"
 	usersessionsc "github.com/speakeasy-api/gram/server/gen/http/user_sessions/client"
 	variationsc "github.com/speakeasy-api/gram/server/gen/http/variations/client"
-	xaareadinessc "github.com/speakeasy-api/gram/server/gen/http/xaa_readiness/client"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -153,6 +153,7 @@ func UsageCommands() []string {
 		"meta-mcp (create-meta-mcp-server|get-meta-mcp-server|list-meta-mcp-servers|update-meta-mcp-server|delete-meta-mcp-server|list-meta-mcp-members|add-meta-mcp-member|update-meta-mcp-member|remove-meta-mcp-member)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"network-ingress (get-ingress|create-ingress|update-ingress|rotate-credentials|get-delete-impact|delete-ingress|check-health)",
+		"okta-resource-connections (list|confirm|reset|export-checklist)",
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task)",
 		"otel (logs|metrics|traces|list-event-log|get-event-volume|get-event-facets)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
@@ -194,7 +195,6 @@ func UsageCommands() []string {
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|get-issuer-delete-preflight|delete-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
-		"xaa-readiness (list-readiness|confirm-connections|reset-connection|export-checklist)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
 	}
 }
@@ -1889,6 +1889,25 @@ func ParseEndpoint(
 
 		networkIngressCheckHealthFlags            = flag.NewFlagSet("check-health", flag.ExitOnError)
 		networkIngressCheckHealthSessionTokenFlag = networkIngressCheckHealthFlags.String("session-token", "", "")
+
+		oktaResourceConnectionsFlags = flag.NewFlagSet("okta-resource-connections", flag.ContinueOnError)
+
+		oktaResourceConnectionsListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
+		oktaResourceConnectionsListIncludeAllFlag   = oktaResourceConnectionsListFlags.String("include-all", "", "")
+		oktaResourceConnectionsListSessionTokenFlag = oktaResourceConnectionsListFlags.String("session-token", "", "")
+
+		oktaResourceConnectionsConfirmFlags            = flag.NewFlagSet("confirm", flag.ExitOnError)
+		oktaResourceConnectionsConfirmBodyFlag         = oktaResourceConnectionsConfirmFlags.String("body", "REQUIRED", "")
+		oktaResourceConnectionsConfirmSessionTokenFlag = oktaResourceConnectionsConfirmFlags.String("session-token", "", "")
+
+		oktaResourceConnectionsResetFlags            = flag.NewFlagSet("reset", flag.ExitOnError)
+		oktaResourceConnectionsResetBodyFlag         = oktaResourceConnectionsResetFlags.String("body", "REQUIRED", "")
+		oktaResourceConnectionsResetSessionTokenFlag = oktaResourceConnectionsResetFlags.String("session-token", "", "")
+
+		oktaResourceConnectionsExportChecklistFlags            = flag.NewFlagSet("export-checklist", flag.ExitOnError)
+		oktaResourceConnectionsExportChecklistFormatFlag       = oktaResourceConnectionsExportChecklistFlags.String("format", "csv", "")
+		oktaResourceConnectionsExportChecklistIncludeAllFlag   = oktaResourceConnectionsExportChecklistFlags.String("include-all", "", "")
+		oktaResourceConnectionsExportChecklistSessionTokenFlag = oktaResourceConnectionsExportChecklistFlags.String("session-token", "", "")
 
 		organizationsFlags = flag.NewFlagSet("organizations", flag.ContinueOnError)
 
@@ -4305,25 +4324,6 @@ func ParseEndpoint(
 		userSessionsRevokeUserSessionApikeyTokenFlag      = userSessionsRevokeUserSessionFlags.String("apikey-token", "", "")
 		userSessionsRevokeUserSessionProjectSlugInputFlag = userSessionsRevokeUserSessionFlags.String("project-slug-input", "", "")
 
-		xaaReadinessFlags = flag.NewFlagSet("xaa-readiness", flag.ContinueOnError)
-
-		xaaReadinessListReadinessFlags            = flag.NewFlagSet("list-readiness", flag.ExitOnError)
-		xaaReadinessListReadinessIncludeAllFlag   = xaaReadinessListReadinessFlags.String("include-all", "", "")
-		xaaReadinessListReadinessSessionTokenFlag = xaaReadinessListReadinessFlags.String("session-token", "", "")
-
-		xaaReadinessConfirmConnectionsFlags            = flag.NewFlagSet("confirm-connections", flag.ExitOnError)
-		xaaReadinessConfirmConnectionsBodyFlag         = xaaReadinessConfirmConnectionsFlags.String("body", "REQUIRED", "")
-		xaaReadinessConfirmConnectionsSessionTokenFlag = xaaReadinessConfirmConnectionsFlags.String("session-token", "", "")
-
-		xaaReadinessResetConnectionFlags            = flag.NewFlagSet("reset-connection", flag.ExitOnError)
-		xaaReadinessResetConnectionBodyFlag         = xaaReadinessResetConnectionFlags.String("body", "REQUIRED", "")
-		xaaReadinessResetConnectionSessionTokenFlag = xaaReadinessResetConnectionFlags.String("session-token", "", "")
-
-		xaaReadinessExportChecklistFlags            = flag.NewFlagSet("export-checklist", flag.ExitOnError)
-		xaaReadinessExportChecklistFormatFlag       = xaaReadinessExportChecklistFlags.String("format", "csv", "")
-		xaaReadinessExportChecklistIncludeAllFlag   = xaaReadinessExportChecklistFlags.String("include-all", "", "")
-		xaaReadinessExportChecklistSessionTokenFlag = xaaReadinessExportChecklistFlags.String("session-token", "", "")
-
 		variationsFlags = flag.NewFlagSet("variations", flag.ContinueOnError)
 
 		variationsUpsertGlobalFlags                = flag.NewFlagSet("upsert-global", flag.ExitOnError)
@@ -4748,6 +4748,12 @@ func ParseEndpoint(
 	networkIngressGetDeleteImpactFlags.Usage = networkIngressGetDeleteImpactUsage
 	networkIngressDeleteIngressFlags.Usage = networkIngressDeleteIngressUsage
 	networkIngressCheckHealthFlags.Usage = networkIngressCheckHealthUsage
+
+	oktaResourceConnectionsFlags.Usage = oktaResourceConnectionsUsage
+	oktaResourceConnectionsListFlags.Usage = oktaResourceConnectionsListUsage
+	oktaResourceConnectionsConfirmFlags.Usage = oktaResourceConnectionsConfirmUsage
+	oktaResourceConnectionsResetFlags.Usage = oktaResourceConnectionsResetUsage
+	oktaResourceConnectionsExportChecklistFlags.Usage = oktaResourceConnectionsExportChecklistUsage
 
 	organizationsFlags.Usage = organizationsUsage
 	organizationsGetFlags.Usage = organizationsGetUsage
@@ -5269,12 +5275,6 @@ func ParseEndpoint(
 	userSessionsMintUserSessionFlags.Usage = userSessionsMintUserSessionUsage
 	userSessionsRevokeUserSessionFlags.Usage = userSessionsRevokeUserSessionUsage
 
-	xaaReadinessFlags.Usage = xaaReadinessUsage
-	xaaReadinessListReadinessFlags.Usage = xaaReadinessListReadinessUsage
-	xaaReadinessConfirmConnectionsFlags.Usage = xaaReadinessConfirmConnectionsUsage
-	xaaReadinessResetConnectionFlags.Usage = xaaReadinessResetConnectionUsage
-	xaaReadinessExportChecklistFlags.Usage = xaaReadinessExportChecklistUsage
-
 	variationsFlags.Usage = variationsUsage
 	variationsUpsertGlobalFlags.Usage = variationsUpsertGlobalUsage
 	variationsDeleteGlobalFlags.Usage = variationsDeleteGlobalUsage
@@ -5385,6 +5385,8 @@ func ParseEndpoint(
 			svcf = modelKeysFlags
 		case "network-ingress":
 			svcf = networkIngressFlags
+		case "okta-resource-connections":
+			svcf = oktaResourceConnectionsFlags
 		case "organizations":
 			svcf = organizationsFlags
 		case "otel":
@@ -5467,8 +5469,6 @@ func ParseEndpoint(
 			svcf = organizationUserSessionIssuersFlags
 		case "user-sessions":
 			svcf = userSessionsFlags
-		case "xaa-readiness":
-			svcf = xaaReadinessFlags
 		case "variations":
 			svcf = variationsFlags
 		default:
@@ -6583,6 +6583,22 @@ func ParseEndpoint(
 
 			case "check-health":
 				epf = networkIngressCheckHealthFlags
+
+			}
+
+		case "okta-resource-connections":
+			switch epn {
+			case "list":
+				epf = oktaResourceConnectionsListFlags
+
+			case "confirm":
+				epf = oktaResourceConnectionsConfirmFlags
+
+			case "reset":
+				epf = oktaResourceConnectionsResetFlags
+
+			case "export-checklist":
+				epf = oktaResourceConnectionsExportChecklistFlags
 
 			}
 
@@ -8064,22 +8080,6 @@ func ParseEndpoint(
 
 			}
 
-		case "xaa-readiness":
-			switch epn {
-			case "list-readiness":
-				epf = xaaReadinessListReadinessFlags
-
-			case "confirm-connections":
-				epf = xaaReadinessConfirmConnectionsFlags
-
-			case "reset-connection":
-				epf = xaaReadinessResetConnectionFlags
-
-			case "export-checklist":
-				epf = xaaReadinessExportChecklistFlags
-
-			}
-
 		case "variations":
 			switch epn {
 			case "upsert-global":
@@ -9235,6 +9235,22 @@ func ParseEndpoint(
 			case "check-health":
 				endpoint = c.CheckHealth()
 				data, err = networkingressc.BuildCheckHealthPayload(*networkIngressCheckHealthSessionTokenFlag)
+			}
+		case "okta-resource-connections":
+			c := oktaresourceconnectionsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list":
+				endpoint = c.List()
+				data, err = oktaresourceconnectionsc.BuildListPayload(*oktaResourceConnectionsListIncludeAllFlag, *oktaResourceConnectionsListSessionTokenFlag)
+			case "confirm":
+				endpoint = c.Confirm()
+				data, err = oktaresourceconnectionsc.BuildConfirmPayload(*oktaResourceConnectionsConfirmBodyFlag, *oktaResourceConnectionsConfirmSessionTokenFlag)
+			case "reset":
+				endpoint = c.Reset()
+				data, err = oktaresourceconnectionsc.BuildResetPayload(*oktaResourceConnectionsResetBodyFlag, *oktaResourceConnectionsResetSessionTokenFlag)
+			case "export-checklist":
+				endpoint = c.ExportChecklist()
+				data, err = oktaresourceconnectionsc.BuildExportChecklistPayload(*oktaResourceConnectionsExportChecklistFormatFlag, *oktaResourceConnectionsExportChecklistIncludeAllFlag, *oktaResourceConnectionsExportChecklistSessionTokenFlag)
 			}
 		case "organizations":
 			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -10727,22 +10743,6 @@ func ParseEndpoint(
 			case "revoke-user-session":
 				endpoint = c.RevokeUserSession()
 				data, err = usersessionsc.BuildRevokeUserSessionPayload(*userSessionsRevokeUserSessionIDFlag, *userSessionsRevokeUserSessionSessionTokenFlag, *userSessionsRevokeUserSessionApikeyTokenFlag, *userSessionsRevokeUserSessionProjectSlugInputFlag)
-			}
-		case "xaa-readiness":
-			c := xaareadinessc.NewClient(scheme, host, doer, enc, dec, restore)
-			switch epn {
-			case "list-readiness":
-				endpoint = c.ListReadiness()
-				data, err = xaareadinessc.BuildListReadinessPayload(*xaaReadinessListReadinessIncludeAllFlag, *xaaReadinessListReadinessSessionTokenFlag)
-			case "confirm-connections":
-				endpoint = c.ConfirmConnections()
-				data, err = xaareadinessc.BuildConfirmConnectionsPayload(*xaaReadinessConfirmConnectionsBodyFlag, *xaaReadinessConfirmConnectionsSessionTokenFlag)
-			case "reset-connection":
-				endpoint = c.ResetConnection()
-				data, err = xaareadinessc.BuildResetConnectionPayload(*xaaReadinessResetConnectionBodyFlag, *xaaReadinessResetConnectionSessionTokenFlag)
-			case "export-checklist":
-				endpoint = c.ExportChecklist()
-				data, err = xaareadinessc.BuildExportChecklistPayload(*xaaReadinessExportChecklistFormatFlag, *xaaReadinessExportChecklistIncludeAllFlag, *xaaReadinessExportChecklistSessionTokenFlag)
 			}
 		case "variations":
 			c := variationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -18364,6 +18364,102 @@ func networkIngressCheckHealthUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "network-ingress check-health --session-token \"abc123\"")
+}
+
+// oktaResourceConnectionsUsage displays the usage of the
+// okta-resource-connections command and its subcommands.
+func oktaResourceConnectionsUsage() {
+	fmt.Fprintln(os.Stderr, `Okta resource connections per MCP server: what the organization administrator still has to do in the identity provider console, what they confirmed, and what the exchange path observed. Advisory only; the exchange path never consults it.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] okta-resource-connections COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list: List the Okta resource connection and derived state of every eligible MCP server. Requires org:admin and a live identity provider connection.`)
+	fmt.Fprintln(os.Stderr, `    confirm: Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one Okta resource connection. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin and the okta-connections rollout.`)
+	fmt.Fprintln(os.Stderr, `    reset: Delete the Okta resource connection for this server's upstream so it, and every server sharing that upstream, shows as pending again. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    export-checklist: Download the checklist of pending servers as CSV or Markdown, with the values to enter for each. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s okta-resource-connections COMMAND --help\n", os.Args[0])
+}
+func oktaResourceConnectionsListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] okta-resource-connections list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -include-all BOOL")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the Okta resource connection and derived state of every eligible MCP server. Requires org:admin and a live identity provider connection.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -include-all BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "okta-resource-connections list --include-all false --session-token \"abc123\"")
+}
+
+func oktaResourceConnectionsConfirmUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] okta-resource-connections confirm", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one Okta resource connection. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin and the okta-connections rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "okta-resource-connections confirm --body '{\n      \"connections\": [\n         {\n            \"audience\": \"aaa\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"okta_application_id\": \"aaa\"\n         },\n         {\n            \"audience\": \"aaa\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"okta_application_id\": \"aaa\"\n         }\n      ]\n   }' --session-token \"abc123\"")
+}
+
+func oktaResourceConnectionsResetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] okta-resource-connections reset", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete the Okta resource connection for this server's upstream so it, and every server sharing that upstream, shows as pending again. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "okta-resource-connections reset --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func oktaResourceConnectionsExportChecklistUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] okta-resource-connections export-checklist", os.Args[0])
+	fmt.Fprint(os.Stderr, " -format STRING")
+	fmt.Fprint(os.Stderr, " -include-all BOOL")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Download the checklist of pending servers as CSV or Markdown, with the values to enter for each. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -format STRING: `)
+	fmt.Fprintln(os.Stderr, `    -include-all BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "okta-resource-connections export-checklist --format \"markdown\" --include-all false --session-token \"abc123\"")
 }
 
 // organizationsUsage displays the usage of the organizations command and its
@@ -29166,102 +29262,6 @@ func userSessionsRevokeUserSessionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions revoke-user-session --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-// xaaReadinessUsage displays the usage of the xaa-readiness command and its
-// subcommands.
-func xaaReadinessUsage() {
-	fmt.Fprintln(os.Stderr, `Cross App Access readiness per MCP server: what the organization administrator still has to do in the identity provider console, what they confirmed, and what the exchange path observed. Advisory only; the exchange path never consults it.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] xaa-readiness COMMAND [flags]\n\n", os.Args[0])
-	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list-readiness: List readiness for every eligible MCP server. Requires org:admin and a live identity provider connection.`)
-	fmt.Fprintln(os.Stderr, `    confirm-connections: Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one confirmation. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin and the okta-connections rollout.`)
-	fmt.Fprintln(os.Stderr, `    reset-connection: Withdraw the confirmation for this server's upstream so it, and every server sharing that upstream, shows as pending again. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    export-checklist: Download the checklist of pending servers as CSV or Markdown, with the values to enter for each. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s xaa-readiness COMMAND --help\n", os.Args[0])
-}
-func xaaReadinessListReadinessUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] xaa-readiness list-readiness", os.Args[0])
-	fmt.Fprint(os.Stderr, " -include-all BOOL")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List readiness for every eligible MCP server. Requires org:admin and a live identity provider connection.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -include-all BOOL: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "xaa-readiness list-readiness --include-all false --session-token \"abc123\"")
-}
-
-func xaaReadinessConfirmConnectionsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] xaa-readiness confirm-connections", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one confirmation. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin and the okta-connections rollout.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "xaa-readiness confirm-connections --body '{\n      \"connections\": [\n         {\n            \"audience\": \"aaa\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"okta_application_id\": \"aaa\"\n         },\n         {\n            \"audience\": \"aaa\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"okta_application_id\": \"aaa\"\n         }\n      ]\n   }' --session-token \"abc123\"")
-}
-
-func xaaReadinessResetConnectionUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] xaa-readiness reset-connection", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Withdraw the confirmation for this server's upstream so it, and every server sharing that upstream, shows as pending again. Requires org:admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "xaa-readiness reset-connection --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
-}
-
-func xaaReadinessExportChecklistUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] xaa-readiness export-checklist", os.Args[0])
-	fmt.Fprint(os.Stderr, " -format STRING")
-	fmt.Fprint(os.Stderr, " -include-all BOOL")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Download the checklist of pending servers as CSV or Markdown, with the values to enter for each. Requires org:admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -format STRING: `)
-	fmt.Fprintln(os.Stderr, `    -include-all BOOL: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "xaa-readiness export-checklist --format \"markdown\" --include-all false --session-token \"abc123\"")
 }
 
 // variationsUsage displays the usage of the variations command and its

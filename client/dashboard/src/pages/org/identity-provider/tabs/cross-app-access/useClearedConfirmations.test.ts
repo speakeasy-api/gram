@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
-import type { XaaServerReadiness } from "@gram/client/models/components/xaaserverreadiness.js";
+import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 
 import {
   sharedConfirmationKey,
@@ -11,9 +11,15 @@ import { confirmedRow, pendingRow } from "./xaaTestRows";
 const OTHER_ISSUER = "00000000-0000-4000-8000-000000000002";
 const APPS = [{ id: "recorded-app", label: "Recorded app" }];
 
-type Props = { servers: XaaServerReadiness[]; isPlaceholderData: boolean };
+type Props = {
+  servers: OktaResourceConnectionServer[];
+  isPlaceholderData: boolean;
+};
 
-function renderSnapshots(servers: XaaServerReadiness[] = [], apps = APPS) {
+function renderSnapshots(
+  servers: OktaResourceConnectionServer[] = [],
+  apps = APPS,
+) {
   return renderHook((props: Props) => useClearedConfirmations(props, apps), {
     initialProps: { servers, isPlaceholderData: false },
   });

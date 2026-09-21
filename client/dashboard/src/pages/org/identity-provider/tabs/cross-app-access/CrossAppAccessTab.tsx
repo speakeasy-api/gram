@@ -12,9 +12,9 @@ import { Text } from "@/components/ui/Text";
 import { useRowSelection } from "@/hooks/useRowSelection";
 import { pluralize } from "@/lib/format";
 import type { OktaIdentityProviderConnection } from "@gram/client/models/components/oktaidentityproviderconnection.js";
-import type { XaaServerReadiness } from "@gram/client/models/components/xaaserverreadiness.js";
+import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 import { useIdentityProviderConnectionApplications } from "@gram/client/react-query/identityProviderConnectionApplications.js";
-import { useXaaReadiness } from "@gram/client/react-query/xaaReadiness.js";
+import { useOktaResourceConnections } from "@gram/client/react-query/oktaResourceConnections.js";
 
 import { ClearConfirmationDialog } from "./ClearConfirmationDialog";
 import { ClearedConfirmationNotice } from "./ClearedConfirmationNotice";
@@ -42,7 +42,7 @@ import {
 
 type ReadinessFilter = "pending" | "all";
 
-function serverId(row: XaaServerReadiness): string {
+function serverId(row: OktaResourceConnectionServer): string {
   return row.mcpServerId;
 }
 
@@ -90,11 +90,15 @@ function ReadinessChecklist({
 }): JSX.Element {
   const [filter, setFilter] = useState<ReadinessFilter>("pending");
   const includeAll = filter === "all";
-  const readiness = useXaaReadiness({ includeAll }, SESSION_SECURITY, {
-    throwOnError: false,
-    retry: false,
-    placeholderData: (previous) => previous,
-  });
+  const readiness = useOktaResourceConnections(
+    { includeAll },
+    SESSION_SECURITY,
+    {
+      throwOnError: false,
+      retry: false,
+      placeholderData: (previous) => previous,
+    },
+  );
   const rows = useMemo(() => readiness.data?.servers ?? [], [readiness.data]);
   const confirmable = useMemo(() => rows.filter(isConfirmable), [rows]);
   const selection = useRowSelection(confirmable, serverId);
@@ -109,11 +113,10 @@ function ReadinessChecklist({
   const { confirming, feedback, clearFeedback, confirmRows } = useXaaConfirm(
     cleared.retire,
   );
-  const [clearTarget, setClearTarget] = useState<XaaServerReadiness | null>(
-    null,
-  );
+  const [clearTarget, setClearTarget] =
+    useState<OktaResourceConnectionServer | null>(null);
   const [reviewTarget, setReviewTarget] = useState<{
-    row: XaaServerReadiness;
+    row: OktaResourceConnectionServer;
     initialValues: XaaConfirmValues;
   } | null>(null);
   const reviewRef = useRef<HTMLDivElement>(null);
@@ -157,7 +160,7 @@ function ReadinessChecklist({
   };
 
   const confirmOne = async (
-    row: XaaServerReadiness,
+    row: OktaResourceConnectionServer,
     audience: string,
     oktaApplicationId: string | undefined,
   ) => {
@@ -169,7 +172,7 @@ function ReadinessChecklist({
     setReviewTarget(null);
   };
 
-  const openReview = (row: XaaServerReadiness) => {
+  const openReview = (row: OktaResourceConnectionServer) => {
     if (locked) return;
     const saved = cleared.snapshotFor(row.mcpServerId) ?? row;
     resetInteraction();

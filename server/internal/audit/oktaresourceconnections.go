@@ -36,11 +36,11 @@ type LogOktaResourceConnectionEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	ReadinessURN   urn.OktaResourceConnection
-	ServerName     string
-	ServerSlug     string
-	SnapshotBefore *OktaResourceConnectionSnapshot
-	SnapshotAfter  *OktaResourceConnectionSnapshot
+	ResourceConnectionURN urn.OktaResourceConnection
+	ServerName            string
+	ServerSlug            string
+	SnapshotBefore        *OktaResourceConnectionSnapshot
+	SnapshotAfter         *OktaResourceConnectionSnapshot
 }
 
 func (l *Logger) LogOktaResourceConnectionConfirm(ctx context.Context, dbtx repo.DBTX, event LogOktaResourceConnectionEvent) error {
@@ -72,7 +72,7 @@ func (l *Logger) logOktaResourceConnection(ctx context.Context, dbtx repo.DBTX, 
 
 		Action: string(action),
 
-		SubjectID:          event.ReadinessURN.ID.String(),
+		SubjectID:          event.ResourceConnectionURN.ID.String(),
 		SubjectType:        string(subjectTypeOktaResourceConnection),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.ServerName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.ServerSlug),

@@ -2,14 +2,16 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { XaaServerReadiness } from "@gram/client/models/components/xaaserverreadiness.js";
+import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 
 import { useXaaConfirm } from "./useXaaConfirm";
 import { pendingRow } from "./xaaTestRows";
 
 const mocks = vi.hoisted(() => ({ confirm: vi.fn(), invalidate: vi.fn() }));
-vi.mock("@gram/client/react-query/confirmXaaConnections.js", () => ({
-  useConfirmXaaConnectionsMutation: () => ({ mutateAsync: mocks.confirm }),
+vi.mock("@gram/client/react-query/confirmOktaResourceConnections.js", () => ({
+  useConfirmOktaResourceConnectionsMutation: () => ({
+    mutateAsync: mocks.confirm,
+  }),
 }));
 vi.mock("../../identityProviderQueries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../identityProviderQueries")>()),
@@ -31,7 +33,8 @@ const AUDIENCE = "https://issuer.example.com";
 const rows = [pendingRow(0), pendingRow(1), pendingRow(2)];
 
 function renderConfirm() {
-  const onBatchConfirmed = vi.fn<(rows: XaaServerReadiness[]) => void>();
+  const onBatchConfirmed =
+    vi.fn<(rows: OktaResourceConnectionServer[]) => void>();
   const client = new QueryClient();
   const hook = renderHook(() => useXaaConfirm(onBatchConfirmed), {
     wrapper: ({ children }: { children: ReactNode }) => (
@@ -43,7 +46,7 @@ function renderConfirm() {
 
 function sentConnections(call: number) {
   return mocks.confirm.mock.calls[call]?.[0].request
-    .confirmXaaConnectionsRequestBody.connections;
+    .confirmOktaResourceConnectionsRequestBody.connections;
 }
 
 beforeEach(() => vi.resetAllMocks());
@@ -102,7 +105,7 @@ describe("useXaaConfirm", () => {
   });
 
   it("ignores a second confirmation while one is running", async () => {
-    let resolve!: (value: { servers: XaaServerReadiness[] }) => void;
+    let resolve!: (value: { servers: OktaResourceConnectionServer[] }) => void;
     mocks.confirm.mockImplementation(
       () =>
         new Promise((done) => {

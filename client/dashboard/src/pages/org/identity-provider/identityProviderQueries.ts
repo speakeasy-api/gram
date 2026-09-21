@@ -5,7 +5,7 @@ import {
   useIdentityProviderConnection,
 } from "@gram/client/react-query/identityProviderConnection.js";
 import { invalidateAllIdentityProviderConnectionApplications } from "@gram/client/react-query/identityProviderConnectionApplications.js";
-import { invalidateAllXaaReadiness } from "@gram/client/react-query/xaaReadiness.js";
+import { invalidateAllOktaResourceConnections } from "@gram/client/react-query/oktaResourceConnections.js";
 
 export const SESSION_SECURITY = { sessionHeaderGramSession: "" } as const;
 
@@ -34,6 +34,6 @@ export function invalidateIdentityProviderQueries(
   return Promise.all([
     invalidateAllIdentityProviderConnection(client),
     invalidateAllIdentityProviderConnectionApplications(client),
-    invalidateAllXaaReadiness(client),
+    invalidateAllOktaResourceConnections(client),
   ]).then(() => undefined);
 }
