@@ -47,6 +47,7 @@ func TestRiskReadingIdentitySeparatesScannersAndRetainsProvenance(t *testing.T) 
 		metering.RiskGitleaks(), metering.RiskPresidio(),
 		metering.RiskPromptInjection(), metering.RiskPromptPolicy(),
 		metering.RiskCustomRules(), metering.RiskCLIDestructive(),
+		metering.RiskLLMAnalyzer(),
 	} {
 		reading, err := metering.PrepareRiskReading(definition, provenance, 23, occurredAt)
 		require.NoError(t, err)
@@ -147,6 +148,7 @@ func TestRiskStripeExporterDropsRegisteredScansWithoutCustomerLookup(t *testing.
 		metering.RiskGitleaks(), metering.RiskPresidio(),
 		metering.RiskPromptInjection(), metering.RiskPromptPolicy(),
 		metering.RiskCustomRules(), metering.RiskCLIDestructive(),
+		metering.RiskLLMAnalyzer(),
 	} {
 		reading, err := metering.PrepareRiskReading(definition, riskProvenance(), 5, time.Now().UTC())
 		require.NoError(t, err)

@@ -16,6 +16,10 @@ import (
 // should surface it as a reportable outcome.
 var ErrUnsupportedAlgorithm = errors.New("kms key algorithm not supported")
 
+// ErrKeyVersionDisabled is returned by the local stand-in when a disabled
+// version is asked to sign or export its public half.
+var ErrKeyVersionDisabled = errors.New("kms key version is disabled")
+
 // supportedAlgorithms are the JOSE signing algorithms Gram publishes and signs
 // with. Widening this set is an interoperability decision, not a mechanical one:
 // PS256 is optional in RFC 7518 and plenty of verifiers do not implement it.

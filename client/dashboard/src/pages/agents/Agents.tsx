@@ -18,10 +18,11 @@ import {
   useOrganization,
   useSession,
 } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
@@ -52,21 +53,29 @@ export default function AgentsPage(): JSX.Element {
   if (flag.status !== "enabled") {
     return (
       <FormPage
-        title="Agent Identity"
+        title={
+          flag.status === "loading"
+            ? "Loading agent management"
+            : "Agent management unavailable"
+        }
         description={
           flag.status === "loading"
-            ? "Loading agent management…"
-            : "Agent management is not enabled for this organization."
+            ? "Checking feature availability."
+            : flag.status === "disabled"
+              ? "Agent management is not enabled for this organization."
+              : "Unable to determine agent management availability. Try again later."
         }
       >
         {null}
       </FormPage>
     );
   }
-  return <AgentsPageContent />;
+
+  // Do not mount inventory, detail, or policy discovery until rollout is enabled.
+  return <AgentManagementPage />;
 }
 
-function AgentsPageContent(): JSX.Element {
+function AgentManagementPage(): JSX.Element {
   const organization = useOrganization();
   const session = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();
@@ -144,15 +153,7 @@ function AgentList({
   onCreate: () => void;
 }) {
   // Ownership is an independent authorization path. Do not gate this query on RBAC.
-  const organization = useOrganization();
-  const sdk = useSdkClient();
-  const agents = useQuery({
-    queryKey: ["managed-agents", organization.id, "list"],
-    queryKeyHashFn: hashKey,
-    queryFn: ({ signal }) => sdk.agents.list(undefined, undefined, { signal }),
-    throwOnError: false,
-    retry: false,
-  });
+  const agents = useReadableAgents(true);
   const [search, setSearch] = useState("");
   const rows = (agents.data ?? []).filter((agent) =>
     agent.name.toLowerCase().includes(search.trim().toLowerCase()),
@@ -356,6 +357,8 @@ function AgentSettings({
   agentID: string;
   onBack: () => void;
 }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [credentialBusy, setCredentialBusy] = useState(false);
   const queryClient = useQueryClient();
   const organization = useOrganization();
   const sdk = useSdkClient();
@@ -395,6 +398,31 @@ function AgentSettings({
     });
   };
 
+  if (searchParams.get("credential") === "new")
+    return (
+      <FormPage
+        title="Create API key"
+        description={`Choose what ${agentQuery.data.name} can access.`}
+        width="wide"
+        primaryAction={
+          <Button
+            variant="secondary"
+            onClick={() => setSearchParams({ id: agentID })}
+            disabled={credentialBusy}
+          >
+            Back to agent
+          </Button>
+        }
+      >
+        <AgentAPIKeys
+          agent={agentQuery.data}
+          creation
+          onBusy={setCredentialBusy}
+          onDone={() => setSearchParams({ id: agentID })}
+        />
+      </FormPage>
+    );
+
   return (
     <SettingsPage
       title={agentQuery.data.name}
@@ -417,7 +445,10 @@ function AgentSettings({
         key={`policy-${agentQuery.data.id}`}
         agent={agentQuery.data}
       />
-      <AgentAPIKeys agent={agentQuery.data} />
+      <AgentAPIKeys
+        agent={agentQuery.data}
+        onCreate={() => setSearchParams({ id: agentID, credential: "new" })}
+      />
       <ManagedAgentSessions
         key={`sessions-${agentQuery.data.id}`}
         agent={agentQuery.data}

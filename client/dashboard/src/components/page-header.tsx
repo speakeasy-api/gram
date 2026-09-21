@@ -13,6 +13,7 @@ import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "@/components/ui/Heading";
 import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/Breadcrumb";
 import { WorkspaceSwitcher } from "./workspace-switcher.tsx";
+import { SidebarTrigger } from "@/components/ui/Sidebar";
 
 function PageHeaderComponent({
   className,
@@ -37,8 +38,12 @@ function PageHeaderComponent({
         )}
       >
         {/* px-8 matches Page.Body's padding; the switcher pulls back by its own
-            inner padding so its tile lines up with the content edge. */}
-        <div className="flex w-full items-center gap-3 px-8">
+            inner padding so its tile lines up with the content edge. Mobile
+            uses reduced padding (px-4) to fit the sidebar trigger. */}
+        <div className="flex w-full items-center gap-3 px-4 md:px-8">
+          {/* Mobile navigation trigger — opens the sidebar sheet on small
+              screens where the sidebar is hidden. */}
+          <SidebarTrigger className="md:hidden" />
           {/* Project context lives here, in the slot the breadcrumbs used to
               occupy, rather than in the sidebar. The collapse control moved to
               the sidebar header alongside the logo. */}

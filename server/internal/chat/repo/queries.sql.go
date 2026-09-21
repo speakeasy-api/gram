@@ -794,7 +794,7 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.user_account_id, c.litellm_proxied, c.cwd, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.inference_accepted_checkpoint, c.user_account_id, c.litellm_proxied, c.cwd, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
   at.assistant_id, a.name AS assistant_name
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
@@ -809,28 +809,29 @@ type GetChatParams struct {
 }
 
 type GetChatRow struct {
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
-	OrganizationID     string
-	UserID             pgtype.Text
-	ExternalUserID     pgtype.Text
-	ExternalChatID     pgtype.Text
-	Title              pgtype.Text
-	TitleManuallySet   bool
-	PinnedAt           pgtype.Timestamptz
-	Summary            pgtype.Text
-	SummaryGeneratedAt pgtype.Timestamptz
-	UserAccountID      uuid.NullUUID
-	LitellmProxied     bool
-	Cwd                pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DeletedAt          pgtype.Timestamptz
-	Deleted            bool
-	AccountType        string
-	AccountEmail       string
-	AssistantID        uuid.NullUUID
-	AssistantName      pgtype.Text
+	ID                          uuid.UUID
+	ProjectID                   uuid.UUID
+	OrganizationID              string
+	UserID                      pgtype.Text
+	ExternalUserID              pgtype.Text
+	ExternalChatID              pgtype.Text
+	Title                       pgtype.Text
+	TitleManuallySet            bool
+	PinnedAt                    pgtype.Timestamptz
+	Summary                     pgtype.Text
+	SummaryGeneratedAt          pgtype.Timestamptz
+	InferenceAcceptedCheckpoint []byte
+	UserAccountID               uuid.NullUUID
+	LitellmProxied              bool
+	Cwd                         pgtype.Text
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
+	DeletedAt                   pgtype.Timestamptz
+	Deleted                     bool
+	AccountType                 string
+	AccountEmail                string
+	AssistantID                 uuid.NullUUID
+	AssistantName               pgtype.Text
 }
 
 // Loads a chat plus the team/personal classification of the AI account that
@@ -852,6 +853,7 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.PinnedAt,
 		&i.Summary,
 		&i.SummaryGeneratedAt,
+		&i.InferenceAcceptedCheckpoint,
 		&i.UserAccountID,
 		&i.LitellmProxied,
 		&i.Cwd,
@@ -1097,6 +1099,23 @@ func (q *Queries) GetChatTitlesByIDs(ctx context.Context, arg GetChatTitlesByIDs
 	return items, nil
 }
 
+const getInferenceAcceptedCheckpoint = `-- name: GetInferenceAcceptedCheckpoint :one
+SELECT inference_accepted_checkpoint FROM chats
+WHERE project_id = $1 AND external_chat_id = $2
+`
+
+type GetInferenceAcceptedCheckpointParams struct {
+	ProjectID      uuid.UUID
+	ExternalChatID pgtype.Text
+}
+
+func (q *Queries) GetInferenceAcceptedCheckpoint(ctx context.Context, arg GetInferenceAcceptedCheckpointParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getInferenceAcceptedCheckpoint, arg.ProjectID, arg.ExternalChatID)
+	var inference_accepted_checkpoint []byte
+	err := row.Scan(&inference_accepted_checkpoint)
+	return inference_accepted_checkpoint, err
+}
+
 const getLLMClientBreakdownByMessages = `-- name: GetLLMClientBreakdownByMessages :many
 SELECT
   COALESCE(m.source, 'unknown') as client_name,
@@ -1298,6 +1317,31 @@ func (q *Queries) GetTopUsersByMessages(ctx context.Context, arg GetTopUsersByMe
 		return nil, err
 	}
 	return items, nil
+}
+
+const inferencePolicyRevision = `-- name: InferencePolicyRevision :one
+WITH policies AS (
+  SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted FROM risk_policies
+  WHERE project_id = $1 AND enabled IS TRUE AND deleted IS FALSE
+    AND action IN ('block', 'warn', 'quarantine')
+)
+SELECT jsonb_build_object(
+    'policies', (SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY p.id), '[]'::jsonb) FROM policies p),
+    'exclusions', (SELECT coalesce(jsonb_agg(to_jsonb(e) ORDER BY e.id), '[]'::jsonb)
+      FROM risk_exclusions e WHERE e.project_id = $1 AND e.enabled IS TRUE AND e.deleted IS FALSE),
+    'custom_rules', (SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY r.id), '[]'::jsonb)
+      FROM risk_custom_detection_rules r WHERE r.project_id = $1 AND r.deleted IS FALSE)
+  )::text AS revision
+`
+
+// Include mutable exclusions and custom rules, which do not bump policy
+// versions. Strict inference scans cannot accept in-scope prompt-policy
+// content while its feature flag is disabled or its evaluation is incomplete.
+func (q *Queries) InferencePolicyRevision(ctx context.Context, projectID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, inferencePolicyRevision, projectID)
+	var revision string
+	err := row.Scan(&revision)
+	return revision, err
 }
 
 const insertChatResolution = `-- name: InsertChatResolution :one
@@ -2705,6 +2749,50 @@ func (q *Queries) ListClaudeUserMessagesForPromptAttachmentParent(ctx context.Co
 	return items, nil
 }
 
+const listInferenceMessageIdentities = `-- name: ListInferenceMessageIdentities :many
+SELECT external_message_id, content_hash
+FROM chat_messages
+WHERE chat_id = $1 AND project_id = $2
+  AND origin = 'anthropic-inference' AND external_message_id IS NOT NULL
+  AND external_message_id NOT LIKE '%/block:%'
+ORDER BY created_at DESC, seq DESC
+LIMIT $3
+`
+
+type ListInferenceMessageIdentitiesParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.NullUUID
+	RowLimit  int32
+}
+
+type ListInferenceMessageIdentitiesRow struct {
+	ExternalMessageID pgtype.Text
+	ContentHash       []byte
+}
+
+// The newest message-level rows of an inference conversation, used to align
+// an incoming transcript against what is already stored. Block rows share
+// their parent's identity and carry no hash, so they are excluded.
+func (q *Queries) ListInferenceMessageIdentities(ctx context.Context, arg ListInferenceMessageIdentitiesParams) ([]ListInferenceMessageIdentitiesRow, error) {
+	rows, err := q.db.Query(ctx, listInferenceMessageIdentities, arg.ChatID, arg.ProjectID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInferenceMessageIdentitiesRow
+	for rows.Next() {
+		var i ListInferenceMessageIdentitiesRow
+		if err := rows.Scan(&i.ExternalMessageID, &i.ContentHash); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLatestGenerationChatMessages = `-- name: ListLatestGenerationChatMessages :many
 SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
@@ -3451,6 +3539,32 @@ type SetChatPinnedParams struct {
 func (q *Queries) SetChatPinned(ctx context.Context, arg SetChatPinnedParams) error {
 	_, err := q.db.Exec(ctx, setChatPinned, arg.Pinned, arg.ID, arg.ProjectID)
 	return err
+}
+
+const setInferenceAcceptedCheckpoint = `-- name: SetInferenceAcceptedCheckpoint :execrows
+UPDATE chats SET inference_accepted_checkpoint = $1
+WHERE project_id = $2 AND external_chat_id = $3
+  AND inference_accepted_checkpoint IS NOT DISTINCT FROM $4::bytea
+`
+
+type SetInferenceAcceptedCheckpointParams struct {
+	Checkpoint         []byte
+	ProjectID          uuid.UUID
+	ExternalChatID     pgtype.Text
+	ExpectedCheckpoint []byte
+}
+
+func (q *Queries) SetInferenceAcceptedCheckpoint(ctx context.Context, arg SetInferenceAcceptedCheckpointParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setInferenceAcceptedCheckpoint,
+		arg.Checkpoint,
+		arg.ProjectID,
+		arg.ExternalChatID,
+		arg.ExpectedCheckpoint,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const softDeleteChat = `-- name: SoftDeleteChat :one

@@ -154,6 +154,7 @@ type Service struct {
 	vectorToolStore        *rag.ToolsetVectorStore
 	assistantTokens        *assistanttokens.Manager
 	sessions               *sessions.Manager
+	consentBindings        ConsentBindingService
 	identityResolver       IdentityResolver
 	identityValidator      *mcpidentity.ValidatorBoundary
 	chatSessionsManager    *chatsessions.Manager
@@ -425,6 +426,7 @@ func NewService(
 
 	service := &Service{
 		federatedLoginConsumer:    nil,
+		consentBindings:           nil,
 		logger:                    logger,
 		tracer:                    tracer,
 		metrics:                   metrics,
@@ -1788,7 +1790,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 
 	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err == nil {
-		return s.identityValidator.StampAPIKey(ctx), nil
+		return s.stampAuthenticatedAPIKey(ctx)
 	}
 
 	// Strategy 3: Try API key authentication (chat scope fallback)
@@ -1799,7 +1801,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 	}
 	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err == nil {
-		return s.identityValidator.StampAPIKey(ctx), nil
+		return s.stampAuthenticatedAPIKey(ctx)
 	}
 
 	// Strategy 4: Try Chat Sessions Token authentication

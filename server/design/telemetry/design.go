@@ -2497,7 +2497,7 @@ var ToolUsageStatus = Type("ToolUsageStatus", String, func() {
 
 var ToolUsageUserKind = Type("ToolUsageUserKind", String, func() {
 	Description("Tool usage user identity kind")
-	Enum("email", "external_user_id", "user_id", "unknown")
+	Enum("email", "external_user_id", "user_id", "agent_id", "unknown")
 })
 
 var ToolUsageUserFilter = Type("ToolUsageUserFilter", func() {

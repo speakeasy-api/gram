@@ -23,31 +23,38 @@ func TestCatalogValidate(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "valid",
-			catalog: Catalog{
-				PriceIDTUM:            "price_test",
-				PortalConfigurationID: "bpc_test",
-			},
+			name:    "valid",
+			catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_test", PortalConfigurationID: "bpc_test"},
 		},
 		{
 			name:    "missing price",
-			catalog: Catalog{PortalConfigurationID: "bpc_test"},
+			catalog: Catalog{PriceIDTUM: "", PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PortalConfigurationID: "bpc_test"},
 			wantErr: "missing TUM price id",
 		},
 		{
 			name:    "unset price",
-			catalog: Catalog{PriceIDTUM: "unset", PortalConfigurationID: "bpc_test"},
+			catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "unset", PortalConfigurationID: "bpc_test"},
 			wantErr: "missing TUM price id",
 		},
 		{
 			name:    "missing portal configuration",
-			catalog: Catalog{PriceIDTUM: "price_test"},
+			catalog: Catalog{PriceIDTUM: "price_test", PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PortalConfigurationID: ""},
 			wantErr: "missing portal configuration id",
 		},
 		{
 			name:    "unset portal configuration",
-			catalog: Catalog{PriceIDTUM: "price_test", PortalConfigurationID: "unset"},
+			catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_test", PortalConfigurationID: "unset"},
 			wantErr: "missing portal configuration id",
+		},
+		{
+			name:    "missing MCP egress price",
+			catalog: Catalog{PriceIDTUM: "price_test", PriceIDMCPEgress: "", PriceIDRiskScans: "price_risk_scans", PortalConfigurationID: "bpc_test"},
+			wantErr: "missing MCP egress price id",
+		},
+		{
+			name:    "unset risk scans price",
+			catalog: Catalog{PriceIDTUM: "price_test", PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "unset", PortalConfigurationID: "bpc_test"},
+			wantErr: "missing risk scans price id",
 		},
 	}
 
@@ -236,7 +243,7 @@ func TestGetSubscriptionReturnsLiveLifecycleState(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeStripeAPI{subscription: testSubscription()}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
 
 	state, err := c.GetSubscription(t.Context(), "sub_test")
 	require.NoError(t, err)
@@ -281,7 +288,7 @@ func TestGetSubscriptionPaymentFailed(t *testing.T) {
 			subscription.LatestInvoice.Status = tt.invoice
 			subscription.LatestInvoice.AmountRemaining = tt.amountRemaining
 			api := &fakeStripeAPI{subscription: subscription}
-			client := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum"}}
+			client := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PortalConfigurationID: ""}}
 
 			state, err := client.GetSubscription(t.Context(), "sub_test")
 			require.NoError(t, err)
@@ -294,7 +301,7 @@ func TestGetSubscriptionRequiresConfiguredTUMItem(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeStripeAPI{subscription: testSubscription()}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_other", PortalConfigurationID: "bpc_test"}}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_other", PortalConfigurationID: "bpc_test"}}
 
 	_, err := c.GetSubscription(t.Context(), "sub_test")
 	require.ErrorContains(t, err, "missing the configured TUM service period")
@@ -306,7 +313,7 @@ func TestSetSubscriptionCancelAtPeriodEndReturnsUpdatedState(t *testing.T) {
 	subscription := testSubscription()
 	subscription.CancelAtPeriodEnd = false
 	api := &fakeStripeAPI{subscription: subscription}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
 
 	state, err := c.SetSubscriptionCancelAtPeriodEnd(t.Context(), SetSubscriptionCancelAtPeriodEndInput{
 		SubscriptionID:    "sub_test",
@@ -326,7 +333,7 @@ func TestCreatePortalSessionUsesControlledConfiguration(t *testing.T) {
 		Customer: "cus_test",
 		URL:      "https://billing.stripe.test/session",
 	}}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
 
 	session, err := c.CreatePortalSession(t.Context(), CreatePortalSessionInput{
 		CustomerID: "cus_test",
@@ -387,11 +394,8 @@ func TestCreateCheckoutSessionBuildsMeteredSubscription(t *testing.T) {
 
 	api := &fakeStripeAPI{}
 	c := &client{
-		api: api,
-		catalog: Catalog{
-			PriceIDTUM:            "price_tum",
-			PortalConfigurationID: "bpc_test",
-		},
+		api:     api,
+		catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"},
 	}
 	billingCycleAnchor := time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC)
 	expiresAt := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
@@ -421,9 +425,13 @@ func TestCreateCheckoutSessionBuildsMeteredSubscription(t *testing.T) {
 	require.Equal(t, "always", stripesdk.StringValue(params.PaymentMethodCollection))
 	require.Equal(t, "https://app.example.test/the-customer/billing", stripesdk.StringValue(params.SuccessURL))
 	require.Equal(t, "https://app.example.test/the-customer/billing", stripesdk.StringValue(params.CancelURL))
-	require.Len(t, params.LineItems, 1)
+	require.Len(t, params.LineItems, 3)
 	require.Equal(t, "price_tum", stripesdk.StringValue(params.LineItems[0].Price))
-	require.Nil(t, params.LineItems[0].Quantity)
+	require.Equal(t, "price_mcp_egress", stripesdk.StringValue(params.LineItems[1].Price))
+	require.Equal(t, "price_risk_scans", stripesdk.StringValue(params.LineItems[2].Price))
+	for _, item := range params.LineItems {
+		require.Nil(t, item.Quantity)
+	}
 	require.Equal(t, "<ORG_ID>", params.Metadata[organizationIDMetadataKey])
 	require.Equal(t, "the-customer", params.Metadata[organizationSlugMetadataKey])
 	require.NotNil(t, params.SubscriptionData)
@@ -438,7 +446,7 @@ func TestCreateCheckoutSessionWithoutTrialStartsImmediately(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeStripeAPI{}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
 
 	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
 		CustomerID:         "",
@@ -537,7 +545,7 @@ func TestWritesWrapStripeErrors(t *testing.T) {
 
 	apiErr := errors.New("request failed")
 	api := &fakeStripeAPI{err: apiErr}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "", PortalConfigurationID: ""}}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "", PortalConfigurationID: ""}}
 
 	_, err := c.CreateCustomer(t.Context(), CreateCustomerInput{IdempotencyKey: "customer"})
 	require.ErrorIs(t, err, apiErr)
@@ -1043,7 +1051,7 @@ func TestCreateCheckoutSessionStampsContractMetadata(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeStripeAPI{}
-	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
 	anchor := time.Date(2026, time.September, 3, 0, 0, 0, 0, time.UTC)
 
 	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{

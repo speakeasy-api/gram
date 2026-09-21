@@ -51,7 +51,7 @@ export type RemoteSessionClient = {
    * The client_id used to identify this client at the issuer's token and authorization endpoints.
    */
   clientId: string;
-  clientIdIssuedAt: Date;
+  clientIdIssuedAt?: Date | undefined;
   /**
    * When set, the client is in Client ID Metadata Document (CIMD) mode: Gram hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.
    */
@@ -125,9 +125,8 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
   z.object({
     audience: z.optional(z.string()),
     client_id: z.string(),
-    client_id_issued_at: z.pipe(
-      z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
+    client_id_issued_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     client_id_metadata_uri: z.optional(z.string()),
     client_secret_expires_at: z.optional(

@@ -410,24 +410,25 @@ type BusinessMemory struct {
 }
 
 type Chat struct {
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
-	OrganizationID     string
-	UserID             pgtype.Text
-	ExternalUserID     pgtype.Text
-	ExternalChatID     pgtype.Text
-	Title              pgtype.Text
-	TitleManuallySet   bool
-	PinnedAt           pgtype.Timestamptz
-	Summary            pgtype.Text
-	SummaryGeneratedAt pgtype.Timestamptz
-	UserAccountID      uuid.NullUUID
-	LitellmProxied     bool
-	Cwd                pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DeletedAt          pgtype.Timestamptz
-	Deleted            bool
+	ID                          uuid.UUID
+	ProjectID                   uuid.UUID
+	OrganizationID              string
+	UserID                      pgtype.Text
+	ExternalUserID              pgtype.Text
+	ExternalChatID              pgtype.Text
+	Title                       pgtype.Text
+	TitleManuallySet            bool
+	PinnedAt                    pgtype.Timestamptz
+	Summary                     pgtype.Text
+	SummaryGeneratedAt          pgtype.Timestamptz
+	InferenceAcceptedCheckpoint []byte
+	UserAccountID               uuid.NullUUID
+	LitellmProxied              bool
+	Cwd                         pgtype.Text
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
+	DeletedAt                   pgtype.Timestamptz
+	Deleted                     bool
 }
 
 type ChatAnalysisEvaluation struct {
@@ -1556,6 +1557,59 @@ type OauthProxyServer struct {
 	Deleted   bool
 }
 
+type OktaApplication struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	OktaAppID                    string
+	Label                        string
+	Name                         string
+	SignOnMode                   string
+	Status                       string
+	Features                     []string
+	OktaCreatedAt                pgtype.Timestamptz
+	OktaLastUpdatedAt            pgtype.Timestamptz
+	FirstSeenAt                  pgtype.Timestamptz
+	LastSeenAt                   pgtype.Timestamptz
+	RemovedAt                    pgtype.Timestamptz
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+}
+
+type OktaApplicationAssignment struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	OktaAppID                    string
+	PrincipalKind                string
+	OktaPrincipalID              string
+	AssignmentScope              string
+	FirstSeenAt                  pgtype.Timestamptz
+	LastSeenAt                   pgtype.Timestamptz
+	RemovedAt                    pgtype.Timestamptz
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+}
+
+type OktaApplicationReconcileRun struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	Status                       string
+	StartedAt                    pgtype.Timestamptz
+	FinishedAt                   pgtype.Timestamptz
+	ApplicationsSeen             int32
+	ApplicationsAdded            int32
+	ApplicationsRemoved          int32
+	AssignmentsAdded             int32
+	AssignmentsRemoved           int32
+	SkippedAppIds                []string
+	Truncated                    bool
+	Error                        pgtype.Text
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+}
+
 type OktaIdentityProviderConnection struct {
 	IdentityProviderConnectionID        uuid.UUID
 	IdentityProviderConnectionsProvider string
@@ -1573,10 +1627,24 @@ type OktaIdentityProviderConnection struct {
 	ListingMode                         string
 	AgentID                             pgtype.Text
 	AgentAppID                          pgtype.Text
+	ApplicationsSyncedAt                pgtype.Timestamptz
+	ApplicationsSyncRequestedAt         pgtype.Timestamptz
 	CreatedAt                           pgtype.Timestamptz
 	UpdatedAt                           pgtype.Timestamptz
 	DeletedAt                           pgtype.Timestamptz
 	Deleted                             bool
+}
+
+type OktaResourceConnection struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	RemoteSessionIssuerID        uuid.UUID
+	Resource                     string
+	Audience                     string
+	OktaApplicationID            pgtype.Text
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
 }
 
 type OpenrouterApiKey struct {
@@ -2271,6 +2339,20 @@ type PublishOutboxDeadLetter struct {
 	// created_at of the originating publish_outbox row, preserved so the delay before giving up stays visible after the row moves.
 	EnqueuedAt pgtype.Timestamptz
 	CreatedAt  pgtype.Timestamptz
+}
+
+type Query struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Dataset         string
+	Spec            []byte
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type RemoteMcpServer struct {

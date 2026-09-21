@@ -59,7 +59,7 @@ export type CimdClientPresetsQueryError =
  * listPresets userSessionIssuersCimdClients
  *
  * @remarks
- * List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' — the default — admit every enabled entry here automatically, with no per-issuer configuration. The catalog is global and contains no tenant data.
+ * List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' admit every enabled entry here automatically, with no per-issuer configuration. Presets mode is opt-in; an issuer without an explicit mode uses 'open' and evaluates this catalog only for its shadow measurement. The catalog is global and contains no tenant data.
  */
 export function useCimdClientPresets(
   request?: ListCimdClientPresetsRequest | undefined,
@@ -85,7 +85,7 @@ export function useCimdClientPresets(
  * listPresets userSessionIssuersCimdClients
  *
  * @remarks
- * List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' — the default — admit every enabled entry here automatically, with no per-issuer configuration. The catalog is global and contains no tenant data.
+ * List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' admit every enabled entry here automatically, with no per-issuer configuration. Presets mode is opt-in; an issuer without an explicit mode uses 'open' and evaluates this catalog only for its shadow measurement. The catalog is global and contains no tenant data.
  */
 export function useCimdClientPresetsSuspense(
   request?: ListCimdClientPresetsRequest | undefined,

@@ -1,6 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { cn } from "@/lib/utils";
+import { cn, firstPartyConnectUrl, getServerURL } from "@/lib/utils";
+import { AttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { getMcpServerArgs, mcpServerRouteParam } from "@/lib/sources";
@@ -172,6 +173,18 @@ export default function MCPServerDetails(): JSX.Element {
               <ClientsAndSessionsTab
                 issuerId={mcpServer.userSessionIssuerId}
                 originatingMcpServerId={mcpServer.id}
+                attachedSessions={
+                  mcpServer.userSessionIssuerId ? (
+                    <AttachedUserSessions
+                      issuerId={mcpServer.userSessionIssuerId}
+                      connectUrl={firstPartyConnectUrl(
+                        endpoints[0]?.slug
+                          ? `${getServerURL()}/mcp/${endpoints[0].slug}`
+                          : undefined,
+                      )}
+                    />
+                  ) : undefined
+                }
               />
             </RequireScope>
           )

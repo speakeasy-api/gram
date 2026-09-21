@@ -444,6 +444,24 @@ var registry = []Product{
 		}},
 	},
 
+	// Verified 2026-09-21: HTTP 200, a self-referential client_id, and
+	// token_endpoint_auth_method "none". Shorter, invented-segment, and
+	// sibling-file paths return 404, so this is an exact entry, not a pattern.
+	{
+		ID:              "github-copilot-cli",
+		VendorKey:       "github",
+		DisplayName:     "GitHub Copilot CLI",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://github.com/copilot/cli/client-metadata.json",
+			DisplayName: "GitHub Copilot CLI",
+			Enabled:     true,
+		}},
+	},
+
 	// Products below publish no CIMD document. They register dynamically or
 	// do not speak MCP to Gram at all, so an access decision about them is
 	// recorded and enforces nothing — the dashboard says so rather than

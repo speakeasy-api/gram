@@ -17,12 +17,10 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { PluginStatusBanner } from "./PluginStatusBanner";
 import { TopUsersTable } from "./TopUsersTable";
+import { overviewScope } from "./overview-scope";
 
-// Both toolset-backed and remote-MCP-backed servers render through this same
-// dashboard — the telemetry/plugin-membership backends already key off
-// either id generically (see PluginServer.toolsetId/mcpServerId and
-// GetObservabilityOverviewPayload.toolsetSlug's dual-purpose doc comment), so
-// this ref is the minimal shared shape both variants can produce.
+// Both variants share the dashboard, but overview telemetry must use the
+// variant's own scope: toolset slug or remote MCP server ID.
 export type HostedServerRef =
   | { kind: "toolset"; id: string; slug: string; name: string }
   | { kind: "mcp-server"; id: string; slug: string; name: string };
@@ -62,6 +60,8 @@ export function MCPOverviewTab({
     useQuery<GetObservabilityOverviewResult>({
       queryKey: [
         "mcp-detail-overview",
+        server.kind,
+        server.id,
         server.slug,
         from.toISOString(),
         to.toISOString(),
@@ -72,7 +72,7 @@ export function MCPOverviewTab({
             getObservabilityOverviewPayload: {
               from,
               to,
-              toolsetSlug: server.slug,
+              ...overviewScope(server),
               includeTimeSeries: true,
             },
           }),
@@ -231,7 +231,9 @@ export function MCPOverviewTab({
             </div>
           </div>
 
-          <TopUsersTable toolsetSlug={server.slug} from={from} to={to} />
+          {server.kind === "toolset" && (
+            <TopUsersTable toolsetSlug={server.slug} from={from} to={to} />
+          )}
         </>
       )}
     </Stack>

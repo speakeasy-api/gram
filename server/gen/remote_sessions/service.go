@@ -20,8 +20,23 @@ import (
 // /mcp/{slug}/remote_login_callback and the silent-refresh path.
 // access_token_encrypted and refresh_token_encrypted are never returned.
 type Service interface {
-	// List remote_sessions in the caller's project. access_token_encrypted and
-	// refresh_token_encrypted are never returned — only metadata
+	// Manage exact remote session attachments for an agent. Requires an ordinary
+	// human session, agent authorization authority and ownership of the upstream
+	// session. Never returns credentials.
+	ListBindings(context.Context, *ListBindingsPayload) (res *ListBindingsResult, err error)
+	// Manage exact remote session attachments for an agent. Requires an ordinary
+	// human session, agent authorization authority and ownership of the upstream
+	// session. Never returns credentials.
+	AttachBinding(context.Context, *AttachBindingPayload) (res *PrincipalRemoteSessionBinding, err error)
+	// Manage exact remote session attachments for an agent. Requires an ordinary
+	// human session, agent authorization authority and ownership of the upstream
+	// session. Never returns credentials.
+	DetachBinding(context.Context, *DetachBindingPayload) (err error)
+	// List remote_sessions in the caller's project. Supplying both principal_id
+	// and user_session_issuer_id instead lists only the ordinary human caller's
+	// eligible sessions for an agent they own, without requiring project read
+	// permission. Both filters must be supplied together. access_token_encrypted
+	// and refresh_token_encrypted are never returned — only metadata
 	// (access_expires_at, refresh_expires_at, scopes).
 	ListRemoteSessions(context.Context, *ListRemoteSessionsPayload) (res *ListRemoteSessionsResult, err error)
 	// Drop a remote_session row. The next /mcp call by that principal triggers a
@@ -49,11 +64,50 @@ const ServiceName = "remoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"listRemoteSessions", "revokeRemoteSession"}
+var MethodNames = [5]string{"listBindings", "attachBinding", "detachBinding", "listRemoteSessions", "revokeRemoteSession"}
+
+// AttachBindingPayload is the payload type of the remoteSessions service
+// attachBinding method.
+type AttachBindingPayload struct {
+	PrincipalID         string
+	UserSessionIssuerID string
+	RemoteSessionID     string
+	SessionToken        *string
+	ProjectSlugInput    *string
+}
+
+// DetachBindingPayload is the payload type of the remoteSessions service
+// detachBinding method.
+type DetachBindingPayload struct {
+	PrincipalID         string
+	UserSessionIssuerID string
+	ID                  string
+	SessionToken        *string
+	ProjectSlugInput    *string
+}
+
+// ListBindingsPayload is the payload type of the remoteSessions service
+// listBindings method.
+type ListBindingsPayload struct {
+	PrincipalID         string
+	UserSessionIssuerID string
+	SessionToken        *string
+	ProjectSlugInput    *string
+}
+
+// ListBindingsResult is the result type of the remoteSessions service
+// listBindings method.
+type ListBindingsResult struct {
+	Items []*PrincipalRemoteSessionBinding
+}
 
 // ListRemoteSessionsPayload is the payload type of the remoteSessions service
 // listRemoteSessions method.
 type ListRemoteSessionsPayload struct {
+	// Owned agent whose eligible sessions to list; requires user_session_issuer_id.
+	PrincipalID *string
+	// Issuer configuration sessions must be eligible for; requires principal_id.
+	UserSessionIssuerID *string
 	// Exact-match filter on subject URN.
 	SubjectUrn *string
 	// Filter by remote_session_client id.
@@ -73,6 +127,20 @@ type ListRemoteSessionsResult struct {
 	Items []*types.RemoteSession
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
+}
+
+// PrincipalRemoteSessionBinding is the result type of the remoteSessions
+// service attachBinding method.
+type PrincipalRemoteSessionBinding struct {
+	ID                    string
+	PrincipalID           string
+	UserSessionIssuerID   string
+	RemoteSessionClientID string
+	RemoteSessionID       string
+	// The canonical upstream session view, present only while the exact attached
+	// grant is available. Absent for unavailable bindings, which remain detachable
+	// by id. Never includes credentials.
+	RemoteSession *types.RemoteSession
 }
 
 // RevokeRemoteSessionPayload is the payload type of the remoteSessions service

@@ -337,12 +337,14 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, customDomainFlags()...)
 	flags = append(flags, redisFlags()...)
 	flags = append(flags, clickHouseFlags()...)
+	flags = append(flags, clickHouseReadFlags()...)
 	flags = append(flags, functionsFlags()...)
 	flags = append(flags, pulseMCPFlags()...)
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskReconcileFlags()...)
+	flags = append(flags, riskLLMFlags()...)
 	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
@@ -578,6 +580,12 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
 
+			meterReadConn, meterReadShutdown, err := newClickhouseReadClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to connect to clickhouse read replica: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, meterReadShutdown)
+
 			riskFingerprinter, err := parseOptionalPepperKeyRing(ctx, logger, c.String("risk-fingerprint-pepper-keyring"))
 			if err != nil {
 				return err
@@ -592,6 +600,7 @@ func newWorkerCommand() *cli.Command {
 				authz.EngineOpts{
 					AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 					AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
+					AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 					DevMode:                          c.String("environment") == "local",
 				})
 
@@ -833,6 +842,7 @@ func newWorkerCommand() *cli.Command {
 				MCPRegistryClient:            mcpRegistryClient,
 				TelemetryLogger:              telemetryLogger,
 				ClickhouseConn:               chDB,
+				MeterReadConn:                meterReadConn,
 				TelemetryRepo:                telemetryrepo.New(chDB),
 				TriggersApp:                  triggerApp,
 				CacheAdapter:                 remoteSessionsCache,
@@ -853,6 +863,7 @@ func newWorkerCommand() *cli.Command {
 				TrialEmailsService:           trialEmailsService,
 				RiskFingerprinter:            riskFingerprinter,
 				DisableRiskRetroReconcile:    c.Bool("disable-clickhouse-risk-retro-reconcile"),
+				LLMAnalyzerEnabled:           llmAnalyzerConfigFromCLI(c).Enabled(),
 			})
 
 			// Flush the throttle's queued trailing risk signals before this Action

@@ -30,6 +30,14 @@ const (
 	// does not finish inside it keeps its cursor and carries on in the next pass
 	// or the next run, so the bound costs progress nothing.
 	skillEfficacyMaxEnqueuePages = 10
+	// skillEfficacyPublishPasses bounds how many passes, the first included,
+	// one reserved batch gets while its evaluations keep reporting model
+	// failures or throttling. It matches the attempts one evaluation may
+	// spend, so a batch is never re-run past the point its rows can change.
+	// skillEfficacyPublishBackoff is the pause before the second pass,
+	// doubling each time.
+	skillEfficacyPublishPasses  = efficacy.MaxModelAttempts
+	skillEfficacyPublishBackoff = 5 * time.Second
 	// skillEfficacyMaxPasses bounds how many reserve-and-publish rounds one run
 	// makes before handing the rest to a fresh run, which keeps the history a
 	// long backlog writes bounded.
@@ -208,13 +216,26 @@ func SkillEfficacyCoordinatorWorkflow(ctx workflow.Context, params SkillEfficacy
 			break
 		}
 
-		var published activities.PublishSkillEfficacyBatchResult
-		if err := workflow.ExecuteActivity(publishCtx, a.PublishSkillEfficacyBatch, activities.PublishSkillEfficacyBatchParams{
-			ProjectID:  params.ProjectID,
-			ClaimToken: batch.ClaimToken,
-			IDs:        batch.IDs,
-		}).Get(ctx, &published); err != nil {
-			return fmt.Errorf("publish skill efficacy batch: %w", err)
+		// A model failure or a throttled call is a transient judge problem, so
+		// the pass is run again against the same reserved rows after a pause.
+		// The rows already published are skipped on the re-run. Doing this here
+		// rather than through the activity retry policy keeps a rate-limited
+		// judge from being reported as an activity failure.
+		for attempt := range skillEfficacyPublishPasses {
+			var published activities.PublishSkillEfficacyBatchResult
+			if err := workflow.ExecuteActivity(publishCtx, a.PublishSkillEfficacyBatch, activities.PublishSkillEfficacyBatchParams{
+				ProjectID:  params.ProjectID,
+				ClaimToken: batch.ClaimToken,
+				IDs:        batch.IDs,
+			}).Get(ctx, &published); err != nil {
+				return fmt.Errorf("publish skill efficacy batch: %w", err)
+			}
+			if published.ModelFailures == 0 && published.Throttled == 0 || attempt == skillEfficacyPublishPasses-1 {
+				break
+			}
+			if err := workflow.Sleep(ctx, skillEfficacyPublishBackoff<<attempt); err != nil {
+				return fmt.Errorf("wait before retrying skill efficacy model failures: %w", err)
+			}
 		}
 
 		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {

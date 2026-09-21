@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -22,6 +23,9 @@ func BuildRemoteSessionView(row repo.RemoteSession, subjectDisplayName, subjectE
 		SubjectUrn:            row.SubjectUrn.String(),
 		SubjectDisplayName:    subjectDisplayName,
 		SubjectEmail:          subjectEmail,
+		UpstreamEmail:         conv.FromPGText[string](row.UpstreamEmail),
+		UpstreamDisplayName:   conv.FromPGText[string](row.UpstreamDisplayName),
+		IdentitySource:        conv.FromPGText[string](row.IdentitySource),
 		UserSessionIssuerID:   row.UserSessionIssuerID.String(),
 		RemoteSessionClientID: row.RemoteSessionClientID.String(),
 		AccessExpiresAt:       row.AccessExpiresAt.Time.Format(time.RFC3339),

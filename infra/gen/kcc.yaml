@@ -988,6 +988,91 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-llm-analysis
+    name: gram-risk-v1-llm-analysis
+    spec:
+      definition: |
+        edition = "2024";
+        message LLMAnalysis {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          string content = 8;
+          string user_id = 9;
+          string message_type = 10;
+          string body = 11;
+          string tool_name = 12;
+          repeated ToolCall tool_calls = 13;
+          string content_part_id = 14;
+          string chat_id = 15;
+          string parent_chat_message_id = 16;
+          string origin_risk_policy_id = 17;
+          int64 origin_risk_policy_version = 18;
+          string message_link_reason = 19;
+          string execution_path = 20;
+          string tool_call_id = 21;
+          string hook_source = 22;
+          string policy_link_reason = 23;
+          string external_conversation_id = 24;
+          string organization_slug = 25;
+          repeated string sources = 26;
+          bool content_truncated = 27;
+          message ToolCall {
+            string id = 1;
+            string name = 2;
+            string arguments = 3;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-llm-enforcement
+    name: gram-risk-v1-llm-enforcement
+    spec:
+      definition: |
+        edition = "2024";
+        message LLMEnforcement {
+          reserved 8;
+          reserved reply_urn;
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          string content = 9;
+          string content_part_id = 10;
+          string chat_id = 11;
+          string parent_chat_message_id = 12;
+          string origin_risk_policy_id = 13;
+          int64 origin_risk_policy_version = 14;
+          string message_link_reason = 15;
+          string execution_path = 16;
+          string tool_call_id = 17;
+          string tool_name = 18;
+          string hook_source = 19;
+          string user_id = 20;
+          string message_type = 21;
+          string policy_link_reason = 22;
+          string external_conversation_id = 23;
+          bool content_truncated = 24;
+          string body = 25;
+          repeated ToolCall tool_calls = 26;
+          string organization_slug = 27;
+          message ToolCall {
+            string id = 1;
+            string name = 2;
+            string arguments = 3;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-presidio-analysis
     name: gram-risk-v1-presidio-analysis
     spec:
@@ -1254,6 +1339,42 @@ pubsub:
         name: gram-networkingress-v1-reconcile-requested
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-agent-event-log-ch-writer
+      topic_proto_message: gram-otel-v1-log-record
+    name: gram-otel-v1-agent-event-log-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-agent-event-log-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-agent-event-span-ch-writer
+      topic_proto_message: gram-otel-v1-span
+    name: gram-otel-v1-agent-event-span-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-agent-event-span-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-span
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record-transformer
       topic_proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record-transformer
@@ -1512,6 +1633,38 @@ pubsub:
         name: gram-risk-v1-gitleaks-enforcement
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-llm-analyzer
+      topic_proto_message: gram-risk-v1-llm-analysis
+    name: gram-risk-v1-llm-analyzer
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-llm-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-llm-enforcer
+      topic_proto_message: gram-risk-v1-llm-enforcement
+    name: gram-risk-v1-llm-enforcer
+    spec:
+      ackDeadlineSeconds: 30
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-risk-v1-llm-enforcer-dlq
+        maxDeliveryAttempts: 5
+      messageRetentionDuration: 600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-llm-enforcement
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-presidio-analyzer
       topic_proto_message: gram-risk-v1-presidio-analysis
     name: gram-risk-v1-presidio-analyzer
@@ -1586,6 +1739,24 @@ pubsub:
         name: gram-telemetry-v1-log-record
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-tool-call-log-relay
+      topic_proto_message: gram-telemetry-v1-log-record
+    name: gram-telemetry-v1-tool-call-log-relay
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-telemetry-v1-tool-call-log-relay-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-telemetry-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-svix-relay
       topic_proto_message: gram-webhooks-v1-event
     name: gram-webhooks-v1-svix-relay
@@ -1652,6 +1823,20 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-networkingress-v1-reconciler
     name: gram-networkingress-v1-reconciler-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      dlq_for: gram-otel-v1-agent-event-log-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-agent-event-log-ch-writer
+    name: gram-otel-v1-agent-event-log-ch-writer-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      dlq_for: gram-otel-v1-agent-event-span-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-agent-event-span-ch-writer
+    name: gram-otel-v1-agent-event-span-ch-writer-dlq
     spec:
       messageRetentionDuration: 604800s
   - labels:
@@ -1848,6 +2033,33 @@ pubsub:
       messageRetentionDuration: 600s
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-llm-analysis
+    name: gram-risk-v1-llm-analysis
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-llm-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-llm-enforcement
+    name: gram-risk-v1-llm-enforcement
+    spec:
+      messageRetentionDuration: 600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-llm-enforcement
+  - labels:
+      dlq_for: gram-risk-v1-llm-enforcer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-llm-enforcer
+    name: gram-risk-v1-llm-enforcer-dlq
+    spec:
+      messageRetentionDuration: 600s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-presidio-analysis
     name: gram-risk-v1-presidio-analysis
     spec:
@@ -1903,6 +2115,13 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-telemetry-v1-log-record
+  - labels:
+      dlq_for: gram-telemetry-v1-tool-call-log-relay
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-tool-call-log-relay
+    name: gram-telemetry-v1-tool-call-log-relay-dlq
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-event

@@ -54,6 +54,7 @@ trackedFiles:
   src/funcs/adminGetPaygBillingSummary.ts: {}
   src/funcs/adminGetProject.ts: {}
   src/funcs/adminGetSession.ts: {}
+  src/funcs/adminGetSpendBreakdown.ts: {}
   src/funcs/adminGetStripeCustomer.ts: {}
   src/funcs/adminGetStripeSubscription.ts: {}
   src/funcs/adminGetSupportMatrix.ts: {}
@@ -116,6 +117,7 @@ trackedFiles:
   src/models/components/adminproject.ts: {}
   src/models/components/adminprojectdetail.ts: {}
   src/models/components/adminsession.ts: {}
+  src/models/components/adminspendbreakdownresponse.ts: {}
   src/models/components/adminstripecustomer.ts: {}
   src/models/components/adminstripesubscription.ts: {}
   src/models/components/asset.ts: {}
@@ -153,6 +155,8 @@ trackedFiles:
   src/models/components/setorganizationchatanalysissettingsrequestbody.ts: {}
   src/models/components/setorganizationfeaturerequestbody.ts: {}
   src/models/components/setstripecustomerrequestbody.ts: {}
+  src/models/components/spendbucket.ts: {}
+  src/models/components/spendproduct.ts: {}
   src/models/components/starttrialrequestbody.ts: {}
   src/models/components/supportcapability.ts: {}
   src/models/components/supportdraft.ts: {}
@@ -184,6 +188,7 @@ trackedFiles:
   src/models/operations/admingetorganizationfeatures.ts: {}
   src/models/operations/admingetpaygbillingsummary.ts: {}
   src/models/operations/admingetproject.ts: {}
+  src/models/operations/admingetspendbreakdown.ts: {}
   src/models/operations/admingetstripecustomer.ts: {}
   src/models/operations/admingetstripesubscription.ts: {}
   src/models/operations/adminlistglobalissuerconvergencecandidates.ts: {}
@@ -229,6 +234,8 @@ trackedFiles:
   src/react-query/adminGetProject.ts: {}
   src/react-query/adminGetSession.core.ts: {}
   src/react-query/adminGetSession.ts: {}
+  src/react-query/adminGetSpendBreakdown.core.ts: {}
+  src/react-query/adminGetSpendBreakdown.ts: {}
   src/react-query/adminGetStripeCustomer.core.ts: {}
   src/react-query/adminGetStripeCustomer.ts: {}
   src/react-query/adminGetStripeSubscription.core.ts: {}
@@ -624,6 +631,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminGetSpendBreakdown:
+    speakeasy-default-admin-get-spend-breakdown:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"billing_cycles": [], "currency": "USD", "pricing_basis": "current_payg_list_price", "products": [{"buckets": [{"cost_usd": "<value>", "from": "2025-06-14T08:41:19.977Z", "quantity": "<value>", "to": "2024-04-10T19:58:08.347Z"}], "cost_usd": "<value>", "id": "mcp_egress", "label": "<value>", "quantity": "<value>", "rate_quantity": "<value>", "rate_usd": "<value>", "unit": "stokens"}], "queried_at": "2025-05-13T06:47:37.213Z", "total_cost_usd": "<value>", "window": {"from": "2026-02-18T15:43:23.342Z", "to": "2024-09-01T06:20:59.018Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminGetStripeCustomer:
     speakeasy-default-admin-get-stripe-customer:
       parameters:

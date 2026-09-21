@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
@@ -296,7 +297,7 @@ func (m *ChallengeManager) ExchangeFederatedCode(ctx context.Context, p *Federat
 	if err != nil {
 		return nil, err
 	}
-	identity.credentials = &federatedCredentialState{value: EphemeralFederatedCredentials{idToken: tok.IDToken, refreshToken: tok.RefreshToken, expiresIn: tok.ExpiresIn, refreshExpiresIn: tok.RefreshExpiresIn, receivedAt: time.Now()}}
+	identity.credentials = &federatedCredentialState{mu: sync.Mutex{}, value: EphemeralFederatedCredentials{idToken: tok.IDToken, refreshToken: tok.RefreshToken, expiresIn: tok.ExpiresIn, refreshExpiresIn: tok.RefreshExpiresIn, receivedAt: time.Now()}}
 	return identity, nil
 }
 

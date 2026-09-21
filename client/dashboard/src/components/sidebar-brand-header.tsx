@@ -2,7 +2,6 @@ import { Link } from "react-router";
 
 import { HatchRule } from "./hatch-rule";
 import { GramLogo } from "./gram-logo";
-import { DevBrandSlot } from "@/dev/brand-slot";
 import { SidebarHeader, SidebarTrigger } from "@/components/ui/Sidebar";
 
 /**
@@ -10,8 +9,9 @@ import { SidebarHeader, SidebarTrigger } from "@/components/ui/Sidebar";
  * control on one --header-height row, closed by the crosshatch rule so the
  * divider lines up with the page header's.
  *
- * In development the logo gives way to the worktree readout, or to a local dev
- * slot when one exists. Production always renders the logo.
+ * The development worktree readout used to displace the logo here; it now sits
+ * in the sidebar footer above the user menu (see DevSidebarSlot), where it is
+ * out of the way of the brand.
  */
 export function SidebarBrandHeader({
   homeHref,
@@ -21,24 +21,17 @@ export function SidebarBrandHeader({
   return (
     <SidebarHeader className="gap-0 p-0">
       <div className="flex h-(--header-height) items-center justify-between gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-        <BrandSlot homeHref={homeHref} />
+        <Link
+          to={homeHref}
+          className="flex h-full items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
+        >
+          <GramLogo className="w-28" />
+        </Link>
         {/* Collapse control sits beside the logo (WorkOS placement); search
             moved out to the page header. */}
         <SidebarTrigger />
       </div>
       <HatchRule />
     </SidebarHeader>
-  );
-}
-
-function BrandSlot({ homeHref }: { homeHref: string }) {
-  if (DevBrandSlot) return <DevBrandSlot />;
-  return (
-    <Link
-      to={homeHref}
-      className="flex h-full items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
-    >
-      <GramLogo className="w-28" />
-    </Link>
   );
 }

@@ -204,19 +204,25 @@ func (q *Queries) CreateJsonWebKey(ctx context.Context, arg CreateJsonWebKeyPara
 }
 
 const createJsonWebKeySet = `-- name: CreateJsonWebKeySet :one
-INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
-VALUES ($1, $2, $3)
+INSERT INTO json_web_key_sets (organization_id, external_key_id, name, identity_provider_connection_id)
+VALUES ($1, $2, $3, $4)
 RETURNING id, organization_id, project_id, external_key_id, name, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateJsonWebKeySetParams struct {
-	OrganizationID string
-	ExternalKeyID  uuid.UUID
-	Name           string
+	OrganizationID               string
+	ExternalKeyID                uuid.UUID
+	Name                         string
+	IdentityProviderConnectionID uuid.NullUUID
 }
 
 func (q *Queries) CreateJsonWebKeySet(ctx context.Context, arg CreateJsonWebKeySetParams) (JsonWebKeySet, error) {
-	row := q.db.QueryRow(ctx, createJsonWebKeySet, arg.OrganizationID, arg.ExternalKeyID, arg.Name)
+	row := q.db.QueryRow(ctx, createJsonWebKeySet,
+		arg.OrganizationID,
+		arg.ExternalKeyID,
+		arg.Name,
+		arg.IdentityProviderConnectionID,
+	)
 	var i JsonWebKeySet
 	err := row.Scan(
 		&i.ID,
@@ -285,7 +291,10 @@ FROM external_keys AS ek
 LEFT JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
 LEFT JOIN external_credentials AS ec
        ON ec.id = ek.external_credential_id
-      AND ec.organization_id = ek.organization_id
+      AND (
+        ec.organization_id = ek.organization_id
+        OR (ek.identity_provider_connection_id IS NOT NULL AND ec.organization_id IS NULL)
+      )
       AND ec.project_id IS NULL
       AND ec.provider = 'gcp_iam'
       AND ec.deleted IS FALSE
@@ -326,7 +335,8 @@ type GetExternalKeyForMintRow struct {
 // soft-deleted (external_credentials.deleted is a generated column, so a soft
 // delete never fires the external_keys foreign key). The credential join
 // predicate spells out every condition a usable credential must meet so a row
-// failing one reads as an absent credential.
+// failing one reads as an absent credential. A platform-tier credential
+// (organization_id IS NULL) joins only for managed keys.
 func (q *Queries) GetExternalKeyForMint(ctx context.Context, arg GetExternalKeyForMintParams) (GetExternalKeyForMintRow, error) {
 	row := q.db.QueryRow(ctx, getExternalKeyForMint, arg.ID, arg.OrganizationID)
 	var i GetExternalKeyForMintRow
@@ -456,13 +466,22 @@ func (q *Queries) JsonWebKeyKidExistsInSet(ctx context.Context, arg JsonWebKeyKi
 
 const listJsonWebKeySets = `-- name: ListJsonWebKeySets :many
 SELECT id, organization_id, project_id, external_key_id, name, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
-FROM json_web_key_sets
-WHERE organization_id = $1
-  AND project_id IS NULL
-  AND deleted IS FALSE
-ORDER BY id DESC
+FROM json_web_key_sets AS s
+WHERE s.organization_id = $1
+  AND s.project_id IS NULL
+  AND s.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM identity_provider_connections AS ipc
+    WHERE ipc.id = s.identity_provider_connection_id
+      AND ipc.organization_id = s.organization_id
+      AND ipc.deleted IS TRUE
+  )
+ORDER BY s.id DESC
 `
 
+// Sets left behind by a tombstoned identity provider connection are hidden;
+// they stay reachable by id so the organization can delete them.
 func (q *Queries) ListJsonWebKeySets(ctx context.Context, organizationID string) ([]JsonWebKeySet, error) {
 	rows, err := q.db.Query(ctx, listJsonWebKeySets, organizationID)
 	if err != nil {
@@ -558,7 +577,7 @@ func (q *Queries) ListJsonWebKeys(ctx context.Context, arg ListJsonWebKeysParams
 }
 
 const lockExternalKeyForJwksWrite = `-- name: LockExternalKeyForJwksWrite :one
-SELECT id, provider, algorithm
+SELECT id, provider, algorithm, identity_provider_connection_id
 FROM external_keys
 WHERE id = $1
   AND organization_id = $2
@@ -573,9 +592,10 @@ type LockExternalKeyForJwksWriteParams struct {
 }
 
 type LockExternalKeyForJwksWriteRow struct {
-	ID        uuid.UUID
-	Provider  string
-	Algorithm string
+	ID                           uuid.UUID
+	Provider                     string
+	Algorithm                    string
+	IdentityProviderConnectionID uuid.NullUUID
 }
 
 // Locks the backing external key row for the duration of a JWKS write, as the
@@ -593,7 +613,12 @@ type LockExternalKeyForJwksWriteRow struct {
 func (q *Queries) LockExternalKeyForJwksWrite(ctx context.Context, arg LockExternalKeyForJwksWriteParams) (LockExternalKeyForJwksWriteRow, error) {
 	row := q.db.QueryRow(ctx, lockExternalKeyForJwksWrite, arg.ID, arg.OrganizationID)
 	var i LockExternalKeyForJwksWriteRow
-	err := row.Scan(&i.ID, &i.Provider, &i.Algorithm)
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.Algorithm,
+		&i.IdentityProviderConnectionID,
+	)
 	return i, err
 }
 

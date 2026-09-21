@@ -48,7 +48,7 @@ func (i *FederatedIdentity) WithCredentials(consume func(EphemeralFederatedCrede
 	state := i.credentials
 	state.mu.Lock()
 	credentials := state.value
-	state.value = EphemeralFederatedCredentials{}
+	state.value = EphemeralFederatedCredentials{idToken: "", refreshToken: "", expiresIn: 0, refreshExpiresIn: 0, receivedAt: time.Time{}}
 	state.mu.Unlock()
 	if credentials.idToken == "" {
 		return errors.New("federated credentials unavailable")
@@ -69,7 +69,7 @@ func (i *FederatedIdentity) DiscardCredentials() {
 	}
 	state := i.credentials
 	state.mu.Lock()
-	state.value = EphemeralFederatedCredentials{}
+	state.value = EphemeralFederatedCredentials{idToken: "", refreshToken: "", expiresIn: 0, refreshExpiresIn: 0, receivedAt: time.Time{}}
 	state.mu.Unlock()
 }
 

@@ -1,5 +1,38 @@
 # dashboard
 
+## 0.122.0
+
+### Minor Changes
+
+- ddc0c6c: Explore filters pick their values from what the dimension holds inside the window, with a count beside each, instead of being typed blind. A value that is not listed can still be typed.
+- db02c08: Explore runs a query when you press Run: a run scans the dataset across its whole window, so nothing runs as a side effect of editing. The window opens on the last 24 hours, filters sit above the measures in the builder, and the results panel names the query it answers. Timeseries charts draw with a summary table beneath them; tables and number tiles draw the whole-window figures.
+- a5c64f9: Add the Explore page (preview) to the Observability navigation, behind the `gram-explore` rollout flag: a query builder generated from the analytics catalog, so each dataset reconfigures the measures, filters, and breakdowns it offers.
+- 85ad1d0: Add a metered-product spend breakdown endpoint and stacked billing chart for agent session storage, per-scanner risk scanning, and MCP egress. Show exact server-calculated estimates at current PAYG list prices with daily, weekly, monthly, cumulative, product, and date-range controls. Inference, credits, discounts, taxes, and billing adjustments are excluded; these ordinary-usage estimates are not invoices.
+  
+  Restrict spend estimates to PAYG organizations using server-owned availability. Other plans return `unsupported_plan`, empty products, and a `"0"` total without querying usage; the dashboard hides the entire spend section while retaining the ordinary usage explorer.
+- 728a2bb: Label workload sessions on the MCP Sessions page. `userSessions.list` now returns a `workload` object for `workload:` subjects, with the workload issuer's name and URL, the external subject, the assigned agent and its state, and every admission (project or organization tier) currently letting the workload in. The dashboard marks these rows as workloads rather than people. The revoke dialog lists the controls that can stop a workload, from narrowest to widest, and shows which ones stop it from reconnecting. Revoking a workload session ends only that session: the workload can exchange a new token and reconnect.
+
+### Patch Changes
+
+- 7ea4e5b: Adds audit feed phrases for identity provider connection actions.
+- df903af: Adds the audit feed phrase for identity provider applications sync requests.
+- ac147cd: Link the cost breakdown chart to the table beneath it: rows carry their bar segment's swatch, hovering either one spotlights the other, and clicking a bar segment drills into that group without throwing away your scroll position. Retune the shared chart palette so the Costs and MCP & Tools boards read as one system, and give trend colours their own dark-mode steps.
+- f8e5896: Open project links in their owning organization instead of combining the active organization with a project from another workspace.
+- e9df905: Add an optional second step in Platform MCP setup for bringing existing remote MCP servers from Claude Code into Speakeasy management. The reviewed workflow verifies the agent's connection, requests informed discovery consent or a sanitized manual inventory, and prefers catalogue entries matched by endpoint or confirmed provider/name before using custom URLs. It confirms the destination and selected servers and reports each registration separately. Authentication stays in Speakeasy without migrating local credentials.
+- 72128df: Include all PAYG metered prices in Checkout, preserve resumable billing setup, and apply trial conversion only after confirmed completion. Handle delayed completion and subscription deletion without losing inference-key conversion or post-checkout cleanup, preserve existing Checkout sessions, and show setup actions only to eligible users.
+  
+  Remove the obsolete platform-admin TUM contract controls and contract price estimator from the billing page.
+  
+  Show the PAYG risk scanning rate of $0.99 per million tokens scanned and MCP gateway egress rate of $20 per GiB alongside token management pricing.
+  
+  Place Payment beside PAYG pricing on wider screens and stack them on smaller screens. Prioritize payment setup and recovery above usage, keep healthy subscriptions usage-first, and retain the Organization eyebrow at the top of the billing page.
+  
+  Use Agent session storage as the billing product name and Stored sessions for usage labels and charts. Rename the Meter usage section to Usage without changing token-based metering or rates.
+- 5ad2b81: AI integration syncs now stop retrying when the provider rejects the request outright (HTTP 400/401/403/404/422), show the provider's reason on the integration, and pause the schedule after repeated rejections instead of retrying forever. Chat analysis and skill efficacy judging retry transient model failures without failing the background task, and expected API responses such as permission denied or not found are no longer reported as frontend errors.
+- d52b737: Add a structured Remote MCP `probeURL` endpoint with availability, authentication, invalid-response, and unreachable outcomes while retaining the deprecated `verifyURL` endpoint for compatibility.
+- b5e9295: Restore the source management surfaces lost when Sources moved under MCP: source deletion, uploading a new OpenAPI version, the usage, format and deployment-error filters, failed-deployment signalling and row actions on the sources list; the activity panel, editable tools list, versions log and danger zone on the source page; public access, tunnel key rotation, live connections, resource identifier and setup snippets for tunneled servers; upstream URL and source name editing for remote servers; a cascading delete for source-backed servers; and legacy source URLs that resolve to the right page.
+- 9059ae1: Allow staff to enable Tailscale private access for an organization from the admin feature controls without requiring a separate PostHog rollout flag.
+
 ## 0.121.1
 
 ### Patch Changes

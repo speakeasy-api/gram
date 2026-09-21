@@ -27,6 +27,11 @@ import (
 // burning retries every tick.
 const ErrTypeGitHubRepoConflict = "PluginGitHubRepoConflict"
 
+// ErrTypePluginActorNotMember tags the non-retryable Temporal application
+// error returned when the organization has no member the publish could be
+// attributed to: a retry fails the same way.
+const ErrTypePluginActorNotMember = "PluginActorNotMember"
+
 type PluginPublishClient interface {
 	PublishProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error)
 }
@@ -84,15 +89,16 @@ func (p *PluginPublisher) ListCandidates(ctx context.Context, input ListPluginPu
 
 	candidates := make([]PluginPublishCandidate, 0, len(rows))
 	for _, row := range rows {
-		if !plugins.UsableAPIKeyCreatorID(row.CreatedByUserID) {
+		actor := row.CreatedByUserID
+		if !plugins.UsableAPIKeyCreatorID(actor) {
 			p.logger.WarnContext(ctx, "plugin publish candidate has no real actor",
 				attr.SlogProjectID(row.ProjectID.String()),
-				attr.SlogUserID(row.CreatedByUserID),
+				attr.SlogUserID(actor),
 			)
 		}
 		candidates = append(candidates, PluginPublishCandidate{
 			ProjectID:       row.ProjectID,
-			CreatedByUserID: row.CreatedByUserID,
+			CreatedByUserID: actor,
 		})
 	}
 
@@ -136,6 +142,9 @@ func (p *PluginPublisher) PublishProject(ctx context.Context, input plugins.Publ
 				detail = se.String()
 			}
 			return nil, temporal.NewNonRetryableApplicationError(detail, ErrTypeGitHubRepoConflict, err)
+		}
+		if errors.Is(err, plugins.ErrPluginAPIKeyCreatorNotMember) {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), ErrTypePluginActorNotMember, err)
 		}
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}

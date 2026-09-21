@@ -518,6 +518,12 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		return nil, oops.E(oops.CodeUnexpected, err, "lock organization remote session issuer configuration").LogError(ctx, logger)
 	}
 
+	// Advisory lock before the row lock, matching client creation's order, so
+	// the managed-client count below cannot race a provisioning insert.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+	}
+
 	// A tenant must never edit a platform issuer: it is shared across every
 	// organization and curated by platform admins.
 	// UpdateOrganizationRemoteSessionIssuer below is org-scoped and would refuse
@@ -531,6 +537,9 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
+	}
+	if err := requireIssuerWithoutManagedClients(ctx, logger, txRepo, issuerID, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
 	}
 	if v := conv.PtrValOr(tunneledMcpServerID, ""); v != "" {
 		if _, err := resolveIssuerTunnelBinding(ctx, logger, txRepo, authCtx, existing.ProjectID, tunneledMcpServerID); err != nil {
@@ -734,6 +743,9 @@ func (s *Service) RefreshIssuerMetadata(ctx context.Context, payload *orgissuers
 	}
 	if !sameMetadataRefreshSnapshot(locked, existing) {
 		return nil, oops.E(oops.CodeConflict, nil, "%s", refreshConflictMessage).LogError(ctx, logger)
+	}
+	if err := requireIssuerWithoutManagedClients(ctx, logger, txRepo, issuerID, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
 	}
 
 	beforeView := mv.BuildRemoteSessionIssuerView(locked)
@@ -975,6 +987,10 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orgissuersgen.MoveIss
 		return nil, oops.E(oops.CodeUnexpected, err, "recheck organization admin remote session issuer").LogError(ctx, logger)
 	}
 
+	if err := requireIssuerWithoutManagedClients(ctx, logger, txRepo, issuerID, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
+
 	// A tunnel binding is project-scoped, so the issuer cannot leave its
 	// project while bound. Checked after the re-read so it sees the locked row.
 	if existing.TunneledMcpServerID.Valid && (!projectID.Valid || existing.ProjectID.UUID != projectID.UUID) {
@@ -1201,6 +1217,10 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orgissuersgen.Migr
 	// against rows a concurrent transaction could still change before we commit.
 	source, target, err = loadMigrationPair(ctx, txRepo, logger, authCtx.ActiveOrganizationID, payload.SourceID, payload.TargetID, true)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := requireIssuerWithoutManagedClients(ctx, logger, txRepo, source.ID, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 

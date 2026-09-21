@@ -1109,6 +1109,14 @@ WHERE (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id
 -- client was since detached from it: those tokens are still live upstream and
 -- SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer still destroys them,
 -- so hiding them would show an empty page for a revoke that is not a no-op.
+-- Agents instead use the exact live owner attachment relationship from
+-- GetPrincipalRemoteSessionBinding: no direct subject match or provenance-only
+-- fallback, and no credential-specific attachment. Keep its authority, tenant,
+-- client and grant-generation predicates aligned with that canonical lookup.
+-- Expiry is deliberately not filtered: refreshable grants retain lineage and
+-- the existing view computes status without fetching or refreshing tokens.
+-- Only the requesting actor is projected, never the attached owner identity.
+-- EXISTS prevents duplicate rows for the same actor and upstream grant.
 -- The projected user_session_issuer_id is the requesting issuer, which is the
 -- key the caller indexes by.
 -- Takes the page's pairs as parallel arrays rather than two independent IN
@@ -1126,7 +1134,7 @@ WHERE (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id
 -- still match, so a row that somehow paired one project's client with another
 -- project's issuer stays invisible rather than being read as a shared one.
 SELECT rs.id,
-       rs.subject_urn,
+       pair.subject_urn::text AS subject_urn,
        usi.id AS user_session_issuer_id,
        rs.remote_session_client_id,
        rc.remote_session_issuer_id,
@@ -1145,7 +1153,46 @@ JOIN (
        SELECT unnest(@subject_urns::text[]) AS subject_urn,
               unnest(@issuer_ids::uuid[]) AS issuer_id
      ) AS pair
-  ON rs.subject_urn = pair.subject_urn
+  ON (
+    (pair.subject_urn NOT LIKE 'agent:%' AND rs.subject_urn = pair.subject_urn)
+    OR EXISTS (
+      SELECT 1
+      FROM principal_remote_session_bindings AS b
+      JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+        AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
+        AND a.owner_reassignment_required_at IS NULL
+      JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
+      JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
+        AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
+      JOIN remote_sessions AS s ON s.id = b.remote_session_id
+        AND s.subject_urn = 'user:' || a.owner_user_id
+        AND b.attached_by_subject_id = s.subject_urn
+        AND s.grant_generation = b.grant_generation
+        AND s.remote_session_client_id = b.remote_session_client_id
+      JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+      JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
+      JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id
+      JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+      JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = target.id
+      JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
+      WHERE b.project_id = @project_id::uuid
+        AND b.organization_id = @organization_id::text
+        AND 'agent:' || b.principal_id::text = pair.subject_urn
+        AND b.user_session_issuer_id = pair.issuer_id
+        AND b.remote_session_client_id = rs.remote_session_client_id
+        AND b.revoked_at IS NULL
+        AND s.deleted IS FALSE
+        AND c.deleted IS FALSE
+        AND target.deleted IS FALSE
+        AND provenance.deleted IS FALSE
+        AND issuer.deleted IS FALSE
+        AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
+        AND (provenance.project_id = @project_id::uuid OR (provenance.project_id IS NULL AND provenance.organization_id = @organization_id::text))
+        AND (target.project_id = @project_id::uuid OR (target.project_id IS NULL AND target.organization_id = @organization_id::text))
+        AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+        AND s.id = rs.id
+    )
+  )
 JOIN user_session_issuers AS usi ON usi.id = pair.issuer_id
 JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
 JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
@@ -1179,3 +1226,82 @@ RETURNING *;
 -- Test fixture: invalidate in-flight login configuration without changing its identity.
 UPDATE user_session_issuers SET updated_at = updated_at + interval '1 second'
 WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL;
+
+-- name: ListWorkloadSessionLabels :many
+-- Resolves the workloads behind one page of workload sessions into something
+-- an operator can read: the issuer's name and URL, and the agent the workload
+-- inherits its authority from.
+--
+-- Takes the page's workloads as parallel arrays so each issuer stays paired
+-- with its own subject. A workload is the pair (issuer, subject); matching the
+-- two independently would attribute one issuer's subject to another.
+--
+-- The issuer is read at the caller's own tiers only, so a project-tier issuer
+-- belonging to a sibling project stays unnamed. The assignment and agent are
+-- organization-scoped, like the workload principal they describe.
+--
+-- Liveness is a second lookup rather than the named one above: an issuer this
+-- caller may not name can still be live, and deleting an issuer withdraws the
+-- authority of every workload it vouched for. Matching ResolveWorkloadAgentAssignment,
+-- an assignment under a deleted issuer resolves to no agent, so the row cannot
+-- advertise authority the workload has already lost.
+SELECT w.workload_issuer_id::uuid AS workload_issuer_id,
+       w.subject::text AS subject,
+       wi.name AS workload_issuer_name,
+       wi.issuer AS workload_issuer_url,
+       a.id AS agent_id,
+       a.name AS agent_name,
+       a.suspended_at AS agent_suspended_at,
+       a.revoked_at AS agent_revoked_at
+FROM (
+       SELECT unnest(@workload_issuer_ids::uuid[]) AS workload_issuer_id,
+              unnest(@subjects::text[]) AS subject
+     ) AS w
+LEFT JOIN workload_issuers AS wi
+  ON wi.id = w.workload_issuer_id
+  AND wi.organization_id = @organization_id::text
+  AND (wi.project_id = @project_id::uuid OR wi.project_id IS NULL)
+  AND wi.deleted IS FALSE
+LEFT JOIN workload_issuers AS live
+  ON live.id = w.workload_issuer_id
+  AND live.organization_id = @organization_id::text
+  AND live.deleted IS FALSE
+LEFT JOIN workload_agent_assignments AS wa
+  ON wa.organization_id = @organization_id::text
+  AND wa.workload_issuer_id = w.workload_issuer_id
+  AND wa.subject = w.subject
+  AND wa.deleted IS FALSE
+  AND live.id IS NOT NULL
+LEFT JOIN agents AS a
+  ON a.organization_id = wa.organization_id
+  AND a.id = wa.agent_id
+  AND a.deleted IS FALSE;
+
+-- name: ListWorkloadSessionAdmissions :many
+-- The admissions currently letting one page of workloads in, so an operator can
+-- see every row they would have to withdraw to keep a workload out. A workload
+-- admitted at both tiers reconnects through whichever one is left.
+--
+-- Tenancy matches WorkloadIdentityIsAdmitted: the caller's own project tier and
+-- the organization tier, never a sibling project's. Admissions under a deleted
+-- issuer admit nothing, so they are left out.
+SELECT wia.workload_issuer_id,
+       wia.subject,
+       wia.id,
+       wia.project_id,
+       wia.name
+FROM workload_identity_admissions AS wia
+JOIN workload_issuers AS wi
+  ON wi.organization_id = wia.organization_id
+  AND wi.id = wia.workload_issuer_id
+  AND wi.deleted IS FALSE
+JOIN (
+       SELECT unnest(@workload_issuer_ids::uuid[]) AS workload_issuer_id,
+              unnest(@subjects::text[]) AS subject
+     ) AS w
+  ON w.workload_issuer_id = wia.workload_issuer_id
+  AND w.subject = wia.subject
+WHERE wia.organization_id = @organization_id::text
+  AND (wia.project_id = @project_id::uuid OR wia.project_id IS NULL)
+  AND wia.deleted IS FALSE
+ORDER BY wia.project_id NULLS LAST, wia.created_at ASC, wia.id ASC;

@@ -73,6 +73,7 @@ func TestFederatedEd25519TokenHashes(t *testing.T) {
 	now := time.Now()
 	for _, name := range []string{"at_hash", "c_hash"} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			value := "access"
 			if name == "c_hash" {
 				value = "code"

@@ -7,10 +7,13 @@ package remotesessions
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -71,7 +74,8 @@ type Service struct {
 	// of remote_session_client management is not entitlement-gated, and must
 	// not become so: a set is always backed by a customer-provisioned KMS key,
 	// which is what ties this one link to customer_managed_encryption_keys.
-	productFeatures *productfeatures.Client
+	productFeatures   *productfeatures.Client
+	bindingAuthorizer func(context.Context, pgx.Tx, uuid.UUID) error
 }
 
 var (
@@ -96,21 +100,22 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels, refresher.assertions)
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
-		logger:       logger,
-		db:           db,
-		auth:         auth.New(logger, db, sessionManager, authzEngine),
-		sessions:     sessionManager,
-		authz:        authzEngine,
-		enc:          enc,
-		environments: env,
-		policy:       policy,
-		tunnels:      tunnels,
-		auditLogger:  auditLogger,
-		serverURL:    serverURL,
-		refresher:    refresher,
-		jwksResolver: jwks.NewResolver(policy, meterProvider, logger),
-		revoker:      revoker,
+		bindingAuthorizer: nil,
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
+		logger:            logger,
+		db:                db,
+		auth:              auth.New(logger, db, sessionManager, authzEngine),
+		sessions:          sessionManager,
+		authz:             authzEngine,
+		enc:               enc,
+		environments:      env,
+		policy:            policy,
+		tunnels:           tunnels,
+		auditLogger:       auditLogger,
+		serverURL:         serverURL,
+		refresher:         refresher,
+		jwksResolver:      jwks.NewResolver(policy, meterProvider, logger),
+		revoker:           revoker,
 		// The refresher's lease cache single-flights rotations the same way it
 		// single-flights refreshes, so the two never race on one client.
 		rotator: NewClientRotator(logger, db, enc, policy, tunnels, refresher.locks, serverURL, revoker, auditLogger),
@@ -180,5 +185,15 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	// These handlers enforce either project-read or human agent-owner access.
+	switch ctx.Value(goa.MethodKey) {
+	case "listRemoteSessions", "listBindings", "attachBinding", "detachBinding":
+		authorizedCtx, err := s.auth.AuthorizeWithHandlerProjectAccess(ctx, key, schema)
+		if err != nil {
+			return authorizedCtx, fmt.Errorf("authorize remote-session handler access: %w", err)
+		}
+		return authorizedCtx, nil
+	}
+
 	return s.auth.Authorize(ctx, key, schema)
 }
