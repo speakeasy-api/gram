@@ -153,6 +153,30 @@ func (s *Service) authorize(ctx context.Context, mutation bool) (*contextvalues.
 	return authCtx, logger, nil
 }
 
+// readable keeps the servers the caller may read, as the MCP server lists do:
+// org:admin does not imply mcp:read.
+func (s *Service) readable(ctx context.Context, servers []repo.ListEligibleServersRow) ([]repo.ListEligibleServersRow, error) {
+	checks := make([]authz.Check, len(servers))
+	for i, sv := range servers {
+		checks[i] = authz.MCPCheck(authz.ScopeMCPRead, sv.ID.String(), sv.ProjectID.String())
+	}
+	allowedIDs, err := s.authz.Filter(ctx, checks)
+	if err != nil {
+		return nil, fmt.Errorf("filter readable servers: %w", err)
+	}
+	allowed := make(map[string]struct{}, len(allowedIDs))
+	for _, id := range allowedIDs {
+		allowed[id] = struct{}{}
+	}
+	out := make([]repo.ListEligibleServersRow, 0, len(allowedIDs))
+	for _, sv := range servers {
+		if _, ok := allowed[sv.ID.String()]; ok {
+			out = append(out, sv)
+		}
+	}
+	return out, nil
+}
+
 // actor is the canonical principal for the audit log; a principal credential
 // carries no user id, so its URN stands in.
 func actor(ctx context.Context, authCtx *contextvalues.AuthContext) urn.Principal {
@@ -251,6 +275,10 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 	all, err := q.ListEligibleServers(ctx, organizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list servers").LogError(ctx, logger)
+	}
+	all, err = s.readable(ctx, all)
+	if err != nil {
+		return nil, err
 	}
 	snap := &snapshot{
 		connection:   connection,
@@ -555,6 +583,11 @@ func (s *Service) ConfirmConnections(ctx context.Context, payload *srv.ConfirmCo
 			return nil, oops.E(oops.CodeUnexpected, err, "load server").LogError(ctx, logger)
 		}
 		server := repo.ListEligibleServersRow(sv)
+		if visible, err := s.readable(ctx, []repo.ListEligibleServersRow{server}); err != nil {
+			return nil, err
+		} else if len(visible) == 0 {
+			return nil, oops.E(oops.CodeNotFound, nil, "server not found")
+		}
 		resource := resourceIndicator(server)
 		if resource == "" {
 			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server has no resource indicator")
@@ -649,6 +682,11 @@ func (s *Service) ResetConnection(ctx context.Context, payload *srv.ResetConnect
 		return nil, oops.E(oops.CodeUnexpected, err, "load server").LogError(ctx, logger)
 	}
 	server := repo.ListEligibleServersRow(sv)
+	if visible, err := s.readable(ctx, []repo.ListEligibleServersRow{server}); err != nil {
+		return nil, err
+	} else if len(visible) == 0 {
+		return nil, oops.E(oops.CodeNotFound, nil, "server not found")
+	}
 	resource := resourceIndicator(server)
 	before, err := readinessForUpdate(ctx, q, authCtx.ActiveOrganizationID, snap.connection.ID, server.IssuerID, resource)
 	if err != nil {
