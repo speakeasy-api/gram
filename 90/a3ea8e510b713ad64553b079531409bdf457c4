@@ -1,0 +1,39 @@
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_b390d6ce53b276::t_4bb61a854d04a7 549,1462-1463,2220,3226-3227,8700-8711
+client/dashboard/src/sdk/src/funcs/riskPoliciesListForMcpServer.ts
+  s_b390d6ce53b276::t_b0ac4a4e29913d 1-228
+client/dashboard/src/sdk/src/models/components/createriskpolicyrequestbody.ts
+  s_b390d6ce53b276::t_e392dc7dada434 13-17,113,194,228,252
+client/dashboard/src/sdk/src/models/components/riskmcpscope.ts
+  s_b390d6ce53b276::t_5f518184fef215 1-52
+client/dashboard/src/sdk/src/models/components/riskmcpserverscope.ts
+  s_b390d6ce53b276::t_0751c95bccf85d 1-74
+client/dashboard/src/sdk/src/models/components/riskpolicy.ts
+  s_b390d6ce53b276::t_7e9d2ea1cc479f 15,118,223,256
+client/dashboard/src/sdk/src/models/components/updateriskpolicyrequestbody.ts
+  s_b390d6ce53b276::t_da7af391847820 13-17,109,191,225,251
+client/dashboard/src/sdk/src/models/operations/listriskpoliciesformcpserver.ts
+  s_b390d6ce53b276::t_d93675b5c42a2e 1-193
+client/dashboard/src/sdk/src/react-query/riskListPoliciesForMcpServer.core.ts
+  s_b390d6ce53b276::t_81b6de1ae5d03b 1-92
+client/dashboard/src/sdk/src/react-query/riskListPoliciesForMcpServer.ts
+  s_b390d6ce53b276::t_e895b72b1fc80d 1-161
+client/dashboard/src/sdk/src/sdk/policies.ts
+  s_b390d6ce53b276::t_cb6fb561666973 9,37-40,147-165
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "90a3ea8e510b713ad64553b079531409bdf457c4",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
