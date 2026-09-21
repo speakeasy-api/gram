@@ -1373,15 +1373,15 @@ func seedRegistrationLifecycle(t *testing.T, ctx context.Context, conn *pgxpool.
 	require.NoError(t, err)
 
 	return Principal{
-			UserID:         userID,
-			OrganizationID: organizationID,
-			ConnectionID:   connectionID.String(),
-			Generation:     generation.String(),
-		}, ResolvedProject{
-			ID:   projectRow.ID,
-			Name: projectRow.Name,
-			Slug: projectRow.Slug,
-		}
+		UserID:         userID,
+		OrganizationID: organizationID,
+		ConnectionID:   connectionID.String(),
+		Generation:     generation.String(),
+	}, ResolvedProject{
+		ID:   projectRow.ID,
+		Name: projectRow.Name,
+		Slug: projectRow.Slug,
+	}
 }
 
 func TestPlatformMCPInventoryReturnsDashboardManagedRemoteUpstreamURL(t *testing.T) {
