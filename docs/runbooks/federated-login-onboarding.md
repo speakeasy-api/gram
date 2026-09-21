@@ -40,5 +40,5 @@ client; additional, untrusted audiences are rejected even when `azp` matches.
 RSA ID-token signing keys must be at least 2048 bits.
 
 Shared signing-key algorithm binding for JWKs without `alg` remains an explicit
-[open compatibility/security follow-up](../../server/internal/usersessions/jwks/SECURITY_FOLLOWUPS.md).
+[open review discussion](https://github.com/speakeasy-api/gram/pull/6571#discussion_r4050791228).
 This document does not claim that the follow-up is implemented.
