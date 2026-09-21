@@ -257,41 +257,37 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 	return s.withManagedClient(ctx, logger, s.db, row.IdentityProviderConnection, row.OktaIdentityProviderConnection)
 }
 
-// view renders the connection with what the last applications sync saw of the
-// agent's linked app and whether a resource connection is recorded. A failed
-// read leaves those steps unchecked.
+// view renders the connection with what Speakeasy's records say about the
+// agent steps. Callers have already committed and the checklist is advisory,
+// so a failed read leaves those steps unchecked instead of failing the call.
 func (s *Service) view(ctx context.Context, logger *slog.Logger, dbtx repo.DBTX, rows connectionRows) *gen.OktaIdentityProviderConnection {
-	q := repo.New(dbtx)
-	signal := agentSignal{App: nil, ConnectionRecorded: nil}
-
-	recorded, err := q.HasOktaResourceConnection(ctx, repo.HasOktaResourceConnectionParams{
-		OrganizationID:               rows.Connection.OrganizationID,
-		IdentityProviderConnectionID: rows.Connection.ID,
-	})
-	if err != nil {
-		logger.ErrorContext(ctx, "read resource connections", attr.SlogError(err))
-	} else {
-		signal.ConnectionRecorded = &recorded
+	agent := AgentObservation{App: nil, ConnectionRecorded: false}
+	// Revoke deletes the snapshot and the recorded resource connections.
+	if rows.Connection.Status == StatusRevoked {
+		return buildConnectionView(rows, agent)
 	}
+	orgID, id := rows.Connection.OrganizationID, rows.Connection.ID
+
+	recorded, err := xaareadiness.HasConnectionReadiness(ctx, dbtx, orgID, id)
+	if err != nil {
+		logger.WarnContext(ctx, "resource connections unreadable, leaving step unchecked", attr.SlogError(err))
+	}
+	agent.ConnectionRecorded = recorded
 
 	appID := rows.Okta.AgentAppID.String
 	if appID == "" || !rows.Okta.ApplicationsSyncedAt.Valid {
-		return buildConnectionView(rows, signal)
+		return buildConnectionView(rows, agent)
 	}
-	state, err := q.GetOktaAgentAppState(ctx, repo.GetOktaAgentAppStateParams{
-		OrganizationID:               rows.Connection.OrganizationID,
-		IdentityProviderConnectionID: rows.Connection.ID,
-		OktaAppID:                    appID,
-	})
+	state, err := oktaapplications.GetAppState(ctx, dbtx, orgID, id, appID)
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		signal.App = &AgentAppSignal{Found: false, Active: false, Assigned: false}
 	case err != nil:
-		logger.ErrorContext(ctx, "read agent app state", attr.SlogError(err))
+		logger.WarnContext(ctx, "agent app state unreadable, leaving steps unchecked", attr.SlogError(err))
+	case state == nil:
+		agent.App = &AgentAppSignal{Found: false, Active: false, Assigned: false}
 	default:
-		signal.App = &AgentAppSignal{Found: true, Active: state.Status == "ACTIVE", Assigned: state.AssignmentCount > 0}
+		agent.App = &AgentAppSignal{Found: true, Active: state.Active, Assigned: state.Assigned}
 	}
-	return buildConnectionView(rows, signal)
+	return buildConnectionView(rows, agent)
 }
 
 // withManagedClient reads on dbtx so a caller holding a transaction never waits on a second pool connection.
@@ -1126,7 +1122,7 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 	if err != nil {
 		return nil, err
 	}
-	return buildConnectionView(*rows, agentSignal{App: nil, ConnectionRecorded: nil}), nil
+	return s.view(ctx, logger, s.db, *rows), nil
 }
 
 // loadRevocable reads through the tombstone; only a revoked tombstone is visible.
@@ -1152,7 +1148,7 @@ func (s *Service) revokedView(ctx context.Context, logger *slog.Logger, dbtx rep
 	if err != nil {
 		return nil, err
 	}
-	return buildConnectionView(*rows, agentSignal{App: nil, ConnectionRecorded: nil}), nil
+	return s.view(ctx, logger, dbtx, *rows), nil
 }
 
 func orEmpty(values []string) []string {

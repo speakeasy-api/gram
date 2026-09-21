@@ -82,7 +82,6 @@ import OrgAuditLogs from "./pages/org/OrgAuditLogs";
 import OrgDomains from "./pages/org/OrgDomains";
 import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
-import IdentityProviderLegacyRedirect from "./pages/org/identity-provider/IdentityProviderLegacyRedirect";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
 import HeadlessMode from "./pages/org/HeadlessMode";
@@ -1427,13 +1426,6 @@ const ORG_ROUTE_STRUCTURE = {
     url: "identity",
     icon: "fingerprint",
     component: OrgIdentity,
-  },
-  // Okta moved onto the identity page (`identity?tab=okta`); old links land there.
-  legacyOkta: {
-    title: "Okta",
-    url: "okta",
-    legacyRedirect: true,
-    component: IdentityProviderLegacyRedirect,
   },
   // Platform Admin pages — the former floating Developer Toolkit, one page per
   // old tab. Speakeasy staff only (plus local dev); see PlatformAdminGate.

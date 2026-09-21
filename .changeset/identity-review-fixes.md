@@ -2,7 +2,7 @@
 "dashboard": patch
 ---
 
-Make the applications list footer an explicit, centered expand/collapse button and keep empty snapshots within their container. Correct Okta admin-console links, legacy tab fallback, and verification guidance without presenting unrelated edits as verification times. Describe an existing Okta connection without prompting the admin to connect again. Group Cross App Access configuration into compact labelled rows with consistent spacing, aligned copy controls, and quieter confirmation metadata. Long values remain available in full on hover and copy without breaking the table layout. Correct small copy-button padding and accessible labels. Highlight the entire copied value line when its copy button is hovered or keyboard-focused.
+Make the applications list footer an explicit, centered expand/collapse button and keep empty snapshots within their container. Correct Okta admin-console links and verification guidance without presenting unrelated edits as verification times. Describe an existing Okta connection without prompting the admin to connect again. Group Cross App Access configuration into compact labelled rows with consistent spacing, aligned copy controls, and quieter confirmation metadata. Long values remain available in full on hover and copy without breaking the table layout. Correct small copy-button padding and accessible labels. Highlight the entire copied value line when its copy button is hovered or keyboard-focused.
 
 Distinguish saved Cross App Access confirmations from actual Okta connections. Guide admins to review and reuse existing connections before creating new ones, edit saved settings without clearing them first, and recover cleared confirmations with Undo while staying on the page. Preserve recorded application references when editing without a replacement. Vertically center Cross App Access row content alongside the multi-line Okta configuration.
 
@@ -14,9 +14,7 @@ Complete the Connect checklist from existing authentication and API-read verific
 
 Simplify setup, application updates, and Cross App Access wording for organization administrators. Explain permissions and token protection, retain exact Okta field names, and distinguish unverified settings from successful access checks.
 
-Organize Enterprise Managed Auth under Team → IDP and SSO, separate from employee single sign-on. Add a provider overview and an Okta workspace for Setup, Applications, and Cross App Access, with redirects for existing links and independent provider-specific setup flows.
-
-Add a dedicated Cross App Access section to Okta Setup, explaining that it is required for Enterprise Managed Auth and linking to per-server configuration without treating saved confirmations as verified access.
+Organize Enterprise Managed Auth under Team → IDP and SSO, separate from employee single sign-on. Add a provider overview and an Okta workspace for Setup, Applications, and Cross App Access and independent provider-specific setup flows.
 
 Clarify that the AI Agent setup registers Speakeasy in Okta rather than creating a Speakeasy assistant. Restrict Okta console links to HTTPS on supported tenant domains, keep Undo independent across upstream issuer identities, and use consistent application-update labels. Strengthen checklist evidence, provider delegation, and tab navigation regression coverage.
 

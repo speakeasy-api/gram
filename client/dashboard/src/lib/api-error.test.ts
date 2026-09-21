@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { apiErrorAlertVariant, describeApiError } from "./api-error";
+import { describeApiError } from "./api-error";
 
 describe("describeApiError", () => {
   it("maps 412 to a precondition with the API message", () => {
@@ -9,7 +9,6 @@ describe("describeApiError", () => {
       message: "submit the Okta client id before verifying",
     });
     expect(described.kind).toBe("precondition");
-    expect(described.status).toBe(412);
     expect(described.message).toBe(
       "submit the Okta client id before verifying",
     );
@@ -69,19 +68,9 @@ describe("describeApiError", () => {
   it("treats non-HTTP errors as other", () => {
     const described = describeApiError(new Error("network down"));
     expect(described.kind).toBe("other");
-    expect(described.status).toBeUndefined();
     expect(described.message).toBe("network down");
     expect(describeApiError(undefined).message).toBe(
       "The request failed. Try again.",
     );
-  });
-
-  it("picks an alert tone per kind", () => {
-    expect(apiErrorAlertVariant("rate_limited")).toBe("warning");
-    expect(apiErrorAlertVariant("precondition")).toBe("warning");
-    expect(apiErrorAlertVariant("unavailable")).toBe("info");
-    expect(apiErrorAlertVariant("bad_request")).toBe("error");
-    expect(apiErrorAlertVariant("forbidden")).toBe("error");
-    expect(apiErrorAlertVariant("other")).toBe("error");
   });
 });

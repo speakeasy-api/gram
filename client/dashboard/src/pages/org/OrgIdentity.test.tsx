@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router";
+import { MemoryRouter } from "react-router";
 import type { ReactNode } from "react";
 import OrgIdentity from "./OrgIdentity";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -11,32 +11,17 @@ const mocks = vi.hoisted(() => ({
   ema: vi.fn(),
   features: vi.fn(() => ({ data: {} })),
 }));
+vi.mock("nuqs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("nuqs")>()),
+  useQueryState: (await import("./identity-provider/nuqsRouterMock"))
+    .useRouterQueryState,
+}));
 vi.mock("./identity-provider/EnterpriseManagedAuth", () => ({
   EnterpriseManagedAuth: () => {
     mocks.ema();
     return <div>EMA workspace</div>;
   },
 }));
-vi.mock("nuqs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("nuqs")>();
-  return {
-    ...actual,
-    useQueryState: (
-      key: string,
-      parser?: {
-        parse: (value: string) => string | null;
-        defaultValue: string;
-      },
-    ) => {
-      const value = new URLSearchParams(useLocation().search).get(key);
-      return [
-        parser
-          ? ((value ? parser.parse(value) : null) ?? parser.defaultValue)
-          : value,
-      ];
-    },
-  };
-});
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: mocks.enabled ? "enabled" : "disabled" }),
 }));
@@ -95,21 +80,11 @@ afterEach(() => {
   mocks.enabled = true;
 });
 
-function Location() {
-  const location = useLocation();
-  return (
-    <output data-testid="location">
-      {location.search}
-      {location.hash}
-    </output>
-  );
-}
 function show(search = "") {
   render(
     <MemoryRouter initialEntries={[`/example/identity${search}`]}>
       <TooltipProvider>
         <OrgIdentity />
-        <Location />
       </TooltipProvider>
     </MemoryRouter>,
   );
@@ -150,16 +125,6 @@ describe("identity top-level tabs", () => {
     },
   );
 
-  it("canonicalizes a legacy link for non-admins without mounting EMA", () => {
-    mocks.admin = false;
-    show("?tab=applications#connection");
-    expect(screen.getByTestId("location").textContent).toBe(
-      "?tab=enterprise-managed-auth&provider=okta&view=applications#connection",
-    );
-    expect(mocks.ema).not.toHaveBeenCalled();
-    expect(mocks.features).toHaveBeenCalled();
-  });
-
   it("falls back to SSO for arbitrary unsupported tabs", () => {
     show("?tab=bogus");
     expect(mocks.ema).not.toHaveBeenCalled();
@@ -169,23 +134,4 @@ describe("identity top-level tabs", () => {
         .getAttribute("aria-current"),
     ).toBe("page");
   });
-
-  it.each([
-    ["provider", "setup"],
-    ["applications", "applications"],
-    ["cross-app-access", "cross-app-access"],
-    ["okta&okta=connection", "setup"],
-    ["okta&okta=applications", "applications"],
-    ["okta&okta=cross-app-access", "cross-app-access"],
-    ["okta&okta=unknown", "setup"],
-  ])(
-    "canonicalizes legacy %s with query parameters and router hash",
-    (tab, view) => {
-      show(`?tab=${tab}&filter=active#connection`);
-      expect(screen.getByTestId("location").textContent).toBe(
-        `?tab=enterprise-managed-auth&filter=active&provider=okta&view=${view}#connection`,
-      );
-      expect(screen.getByText("EMA workspace")).toBeTruthy();
-    },
-  );
 });

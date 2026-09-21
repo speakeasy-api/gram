@@ -1,13 +1,14 @@
 import type { ComponentType } from "react";
-import { OktaProviderCard, OktaProviderWorkspace } from "./OktaManagedAuth";
+import { OktaProviderCard, OktaWorkspace } from "./OktaWorkspace";
+import type { ProviderId } from "./tabs";
 
 type ProviderIntegration = {
-  id: string;
+  id: ProviderId;
   Card: ComponentType;
   Workspace: ComponentType;
 };
 
 /** Each provider owns its status card and workspace; integrations can coexist. */
 export const PROVIDERS: readonly ProviderIntegration[] = [
-  { id: "okta", Card: OktaProviderCard, Workspace: OktaProviderWorkspace },
+  { id: "okta", Card: OktaProviderCard, Workspace: OktaWorkspace },
 ];

@@ -1,213 +1,191 @@
 package identityproviderconnections_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	idpc "github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 )
 
-func completion(items []identityproviderconnections.ChecklistItem) map[string]*bool {
-	out := make(map[string]*bool, len(items))
-	for _, item := range items {
-		out[item.Key] = item.Completed
-	}
-	return out
+const checklistJWKSURL = "https://example.test/jwks.json"
+
+var agentKeys = []string{
+	idpc.ChecklistKeyRegisterAIAgent,
+	idpc.ChecklistKeyLinkAgentApp,
+	idpc.ChecklistKeyActivateAgentApp,
+	idpc.ChecklistKeyRecordAIAgent,
+	idpc.ChecklistKeyFirstResourceConnection,
 }
 
-func TestOktaChecklist_ShapeIsSixPlusOne(t *testing.T) {
-	t.Parallel()
-	items := identityproviderconnections.OktaChecklist(identityproviderconnections.ListingModeCustomApp, "https://example.test/jwks.json", identityproviderconnections.ChecklistSignal{})
-
-	var connect, xaa int
-	for _, item := range items {
-		switch item.Group {
-		case identityproviderconnections.ChecklistGroupConnect:
-			connect++
-		case identityproviderconnections.ChecklistGroupCrossAppAccess:
-			xaa++
-		default:
-			t.Fatalf("unexpected group %q", item.Group)
-		}
-	}
-	require.Equal(t, 6, connect)
-	require.Equal(t, 5, xaa)
-	require.Equal(t, "first_resource_connection", items[len(items)-1].Key)
-}
-
-func TestOktaChecklist_NothingObservedBeforeVerification(t *testing.T) {
-	t.Parallel()
-	done := completion(identityproviderconnections.OktaChecklist(identityproviderconnections.ListingModeOIN, "https://example.test/jwks.json", identityproviderconnections.ChecklistSignal{}))
-
-	for _, key := range []string{"add_oin_app", "public_key_auth", "dpop", "grant_scopes", "assign_admin_roles", "register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection"} {
-		require.Nil(t, done[key], key)
-	}
-	require.NotNil(t, done["submit_client_id"])
-	require.False(t, *done["submit_client_id"])
-}
-
-func TestOktaChecklist_VerifiedTicksEverythingObservable(t *testing.T) {
-	t.Parallel()
-	done := completion(identityproviderconnections.OktaChecklist(identityproviderconnections.ListingModeCustomApp, "https://example.test/jwks.json", identityproviderconnections.ChecklistSignal{
-		Checked:           true,
-		ClientIDSubmitted: true,
-		DPoPBound:         true,
-		MissingScopes:     []string{},
-	}))
-
-	for _, key := range []string{"create_api_services_app", "public_key_auth", "dpop", "grant_scopes", "assign_admin_roles", "submit_client_id"} {
-		require.NotNil(t, done[key], key)
-		require.True(t, *done[key], key)
-	}
-	require.Nil(t, done["activate_agent_app"], "the agent steps in Okta stay manual")
-	require.Nil(t, done["record_ai_agent"])
-}
-
-func TestOktaChecklist_DegradedReportsWhatVerificationSaw(t *testing.T) {
-	t.Parallel()
-	done := completion(identityproviderconnections.OktaChecklist(identityproviderconnections.ListingModeCustomApp, "https://example.test/jwks.json", identityproviderconnections.ChecklistSignal{
-		Checked:           true,
-		ClientIDSubmitted: true,
-		DPoPBound:         false,
-		MissingScopes:     []string{"okta.users.read"},
-	}))
-
-	require.True(t, *done["public_key_auth"], "a minted token proves the key-based credential")
-	require.True(t, *done["submit_client_id"])
-	require.False(t, *done["dpop"])
-	require.False(t, *done["grant_scopes"])
-}
-
-func TestOktaChecklist_ScopeRefusalDoesNotProveTokenIssued(t *testing.T) {
-	t.Parallel()
-	done := completion(identityproviderconnections.OktaChecklist(identityproviderconnections.ListingModeCustomApp, "https://example.test/jwks.json", identityproviderconnections.ChecklistSignal{
-		Checked:           true,
-		ClientIDSubmitted: true,
-		MissingScopes:     identityproviderconnections.RequiredOktaScopes,
-		Reasons:           []string{identityproviderconnections.ReasonMissingScope, identityproviderconnections.ReasonDPoPNotBound},
-	}))
-	for _, key := range []string{"create_api_services_app", "public_key_auth", "dpop", "assign_admin_roles"} {
-		require.Nil(t, done[key], key)
-	}
-	require.False(t, *done["grant_scopes"])
-	require.True(t, *done["submit_client_id"])
-}
-
-func TestOktaChecklist_AdminInstructions(t *testing.T) {
-	t.Parallel()
-	const keyURL = "https://example.test/jwks.json"
-	items := identityproviderconnections.OktaChecklist(identityproviderconnections.ListingModeCustomApp, keyURL, identityproviderconnections.ChecklistSignal{})
-	byKey := make(map[string]identityproviderconnections.ChecklistItem, len(items))
+func checklist(t *testing.T, signal idpc.ChecklistSignal) map[string]idpc.ChecklistItem {
+	t.Helper()
+	items := idpc.OktaChecklist(idpc.ListingModeCustomApp, checklistJWKSURL, signal)
+	byKey := make(map[string]idpc.ChecklistItem, len(items))
 	for _, item := range items {
 		byKey[item.Key] = item
 	}
-	require.Equal(t, "Create an app for Speakeasy", byKey["create_api_services_app"].Title)
-	require.Contains(t, byKey["create_api_services_app"].Description, "Classic experience if offered, select API Services")
-	require.Contains(t, byKey["create_api_services_app"].Description, "save it")
-	require.Contains(t, byKey["create_api_services_app"].Details[0], "Coming soon")
-	require.Contains(t, byKey["create_api_services_app"].Details[0], "Create App Integration > Classic experience")
-	require.Contains(t, byKey["create_api_services_app"].Details[0], "on the saved app")
-	auth := byKey["public_key_auth"]
-	require.Equal(t, "Let Okta recognize Speakeasy", auth.Title)
-	require.Contains(t, auth.Description, "connection requests come from Speakeasy")
-	require.Equal(t, []string{
-		"On the newly created Speakeasy app's General tab, find Client Credentials, click Edit, and set Client authentication to Public key / Private key.",
-		"Choose Use a URL to fetch keys dynamically.",
-		"Enter this URL: " + keyURL,
-	}, auth.Details)
-	dpop := byKey["dpop"]
-	require.Equal(t, "Keep token protection (DPoP) enabled", dpop.Title)
-	require.Contains(t, dpop.Description, "Require Demonstrating Proof of Possession (DPoP) header in token requests")
-	require.Contains(t, dpop.Description, "someone who copies the token cannot use it on its own")
-	scopes := byKey["grant_scopes"]
-	require.Contains(t, scopes.Description, "Okta API Scopes")
-	for _, scope := range identityproviderconnections.RequiredOktaScopes {
-		require.Contains(t, scopes.Description, scope)
-	}
-	require.Contains(t, scopes.Description, "without changing them")
-	require.Contains(t, byKey["assign_admin_roles"].Description, "Admin roles")
-	require.Contains(t, byKey["submit_client_id"].Description, "Client ID")
-	register := byKey["register_ai_agent"]
-	require.Equal(t, "Register the Speakeasy AI agent", register.Title)
-	require.Contains(t, register.Description, "Directory > AI Agents")
-	require.Contains(t, register.Description, "Name it Speakeasy Agent")
-	link := byKey["link_agent_app"]
-	require.Contains(t, link.Description, "keep Create a new OIDC app linked to this AI agent selected")
-	require.Contains(t, link.Description, "does not change how your people sign in to Speakeasy")
-	require.Contains(t, link.Details[0], "permanent")
-	activate := byKey["activate_agent_app"]
-	require.Contains(t, activate.Description, "Staged")
-	require.Contains(t, activate.Description, "Speakeasy Agent app marked Linked AI Agent")
-	require.Contains(t, activate.Description, "set it to Active")
-	require.Contains(t, activate.Description, "Assignments")
-	require.Contains(t, activate.Description, "only for the users assigned here")
-	require.Contains(t, activate.Details[0], "moves the agent from Staged to Active")
-	require.Contains(t, activate.Details[1], "upcoming release")
-	record := byKey["record_ai_agent"]
-	require.Contains(t, record.Description, "wlp")
-	first := byKey["first_resource_connection"]
-	require.Contains(t, first.Description, "one resource connection per MCP server")
-	require.Contains(t, first.Details[0], "does not create the connection in Okta")
-	for _, item := range []identityproviderconnections.ChecklistItem{register, link, activate, record, first} {
-		for _, text := range append([]string{item.Description}, item.Details...) {
-			require.NotContains(t, text, keyURL, "the management JWKS is never offered as the agent credential")
-			require.NotContains(t, text, "optional")
-			require.NotContains(t, text, "Register manually", "the console has no manual-registration choice")
-			require.NotContains(t, text, "External ID", "the wizard has no platform or external id fields")
-		}
-	}
-	require.Nil(t, activate.Completed)
+	require.Len(t, byKey, len(items), "keys are unique")
+	return byKey
 }
 
-func TestOktaChecklist_RecordedAgentTicksTheRecordStep(t *testing.T) {
+func itemText(item idpc.ChecklistItem) string {
+	return strings.Join(append([]string{item.Title, item.Description}, item.Details...), "\n")
+}
+
+func TestOktaChecklist_ConnectStepsThenAgentSteps(t *testing.T) {
 	t.Parallel()
-	done := completion(identityproviderconnections.OktaChecklist(identityproviderconnections.ListingModeCustomApp, "https://example.test/jwks.json", identityproviderconnections.ChecklistSignal{AgentRecorded: true}))
-
-	require.True(t, *done["record_ai_agent"])
-	require.True(t, *done["register_ai_agent"], "a recorded id implies a registered agent")
-	require.Nil(t, done["link_agent_app"], "no linked app observed")
-	require.Nil(t, done["activate_agent_app"])
+	for mode, appKey := range map[string]string{
+		idpc.ListingModeCustomApp: idpc.ChecklistKeyCreateAPIServicesApp,
+		idpc.ListingModeOIN:       idpc.ChecklistKeyAddOINApp,
+	} {
+		items := idpc.OktaChecklist(mode, checklistJWKSURL, idpc.ChecklistSignal{})
+		keys := make([]string, 0, len(items))
+		for _, item := range items {
+			keys = append(keys, item.Key)
+			want := idpc.ChecklistGroupConnect
+			if len(keys) > len(items)-len(agentKeys) {
+				want = idpc.ChecklistGroupCrossAppAccess
+			}
+			require.Equal(t, want, item.Group, item.Key)
+		}
+		require.Equal(t, append([]string{
+			appKey,
+			idpc.ChecklistKeyPublicKeyAuth,
+			idpc.ChecklistKeyDPoP,
+			idpc.ChecklistKeyGrantScopes,
+			idpc.ChecklistKeyAssignAdminRoles,
+			idpc.ChecklistKeySubmitClientID,
+		}, agentKeys...), keys, mode)
+	}
 }
 
-func TestOktaChecklist_LinkedAppStateDrivesTheAppSteps(t *testing.T) {
+func TestOktaChecklist_Completion(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name     string
-		app      identityproviderconnections.AgentAppSignal
-		linked   bool
-		ready    *bool
-		contains string
+		name   string
+		signal idpc.ChecklistSignal
+		// want lists the observed steps; every other step must be nil.
+		want map[string]bool
 	}{
-		{name: "not in the sync", app: identityproviderconnections.AgentAppSignal{Found: false, Active: false, Assigned: false}, linked: false, ready: nil, contains: ""},
-		{name: "inactive", app: identityproviderconnections.AgentAppSignal{Found: true, Active: false, Assigned: true}, linked: true, ready: new(false), contains: "is not Active"},
-		{name: "unassigned", app: identityproviderconnections.AgentAppSignal{Found: true, Active: true, Assigned: false}, linked: true, ready: new(false), contains: "has no users or groups assigned"},
-		{name: "ready", app: identityproviderconnections.AgentAppSignal{Found: true, Active: true, Assigned: true}, linked: true, ready: new(true), contains: "as of the last applications sync"},
+		{
+			name:   "nothing observed before verification",
+			signal: idpc.ChecklistSignal{},
+			want:   map[string]bool{idpc.ChecklistKeySubmitClientID: false},
+		},
+		{
+			name:   "verified ticks everything observable",
+			signal: idpc.ChecklistSignal{Checked: true, ClientIDSubmitted: true, DPoPBound: true, MissingScopes: []string{}},
+			want: map[string]bool{
+				idpc.ChecklistKeyCreateAPIServicesApp: true,
+				idpc.ChecklistKeyPublicKeyAuth:        true,
+				idpc.ChecklistKeyDPoP:                 true,
+				idpc.ChecklistKeyGrantScopes:          true,
+				idpc.ChecklistKeyAssignAdminRoles:     true,
+				idpc.ChecklistKeySubmitClientID:       true,
+			},
+		},
+		{
+			name:   "degraded reports what verification saw",
+			signal: idpc.ChecklistSignal{Checked: true, ClientIDSubmitted: true, MissingScopes: []string{"okta.users.read"}},
+			want: map[string]bool{
+				idpc.ChecklistKeyCreateAPIServicesApp: true,
+				idpc.ChecklistKeyPublicKeyAuth:        true,
+				idpc.ChecklistKeyDPoP:                 false,
+				idpc.ChecklistKeyGrantScopes:          false,
+				idpc.ChecklistKeySubmitClientID:       true,
+			},
+		},
+		{
+			name: "scope refusal does not prove a token was issued",
+			signal: idpc.ChecklistSignal{
+				Checked:           true,
+				ClientIDSubmitted: true,
+				MissingScopes:     idpc.RequiredOktaScopes,
+				Reasons:           []string{idpc.ReasonMissingScope, idpc.ReasonDPoPNotBound},
+			},
+			want: map[string]bool{idpc.ChecklistKeyGrantScopes: false, idpc.ChecklistKeySubmitClientID: true},
+		},
+		{
+			name:   "a recorded agent id implies a registered agent",
+			signal: idpc.ChecklistSignal{AgentRecorded: true},
+			want: map[string]bool{
+				idpc.ChecklistKeySubmitClientID:  false,
+				idpc.ChecklistKeyRegisterAIAgent: true,
+				idpc.ChecklistKeyRecordAIAgent:   true,
+			},
+		},
+		{
+			name:   "a recorded resource connection ticks the first connection step",
+			signal: idpc.ChecklistSignal{Agent: idpc.AgentObservation{ConnectionRecorded: true}},
+			want:   map[string]bool{idpc.ChecklistKeySubmitClientID: false, idpc.ChecklistKeyFirstResourceConnection: true},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			items := identityproviderconnections.OktaChecklist(identityproviderconnections.ListingModeCustomApp, "https://example.test/jwks.json", identityproviderconnections.ChecklistSignal{AgentRecorded: true, AgentApp: &tt.app})
-			done := completion(items)
-			require.Equal(t, tt.linked, *done["link_agent_app"])
-			require.Equal(t, tt.ready, done["activate_agent_app"])
-			for _, item := range items {
-				if item.Key == "activate_agent_app" {
-					require.Contains(t, item.Description, tt.contains)
+			for key, item := range checklist(t, tt.signal) {
+				want, observed := tt.want[key]
+				if !observed {
+					require.Nil(t, item.Completed, key)
+					continue
 				}
-				if item.Key == "link_agent_app" && !tt.linked {
-					require.Contains(t, item.Description, "found no app with the bound application ID")
-				}
+				require.Equal(t, new(want), item.Completed, key)
 			}
 		})
 	}
 }
 
-func TestOktaChecklist_RecordedConnectionTicksTheFirstConnectionStep(t *testing.T) {
+func TestOktaChecklist_LinkedAppStateDrivesTheAppSteps(t *testing.T) {
 	t.Parallel()
-	none := completion(identityproviderconnections.OktaChecklist(identityproviderconnections.ListingModeCustomApp, "https://example.test/jwks.json", identityproviderconnections.ChecklistSignal{ConnectionRecorded: new(false)}))
-	require.Nil(t, none["first_resource_connection"], "not done yet is not a fault")
+	base := checklist(t, idpc.ChecklistSignal{})
+	tests := []struct {
+		name   string
+		app    idpc.AgentAppSignal
+		linked bool
+		ready  *bool
+		// says is a fragment of the activate step's status sentence.
+		says string
+	}{
+		{name: "not in the sync", app: idpc.AgentAppSignal{}, linked: false, ready: nil},
+		{name: "inactive", app: idpc.AgentAppSignal{Found: true, Assigned: true}, linked: true, ready: new(false), says: "is not Active"},
+		{name: "unassigned", app: idpc.AgentAppSignal{Found: true, Active: true}, linked: true, ready: new(false), says: "no users or groups assigned"},
+		{name: "ready", app: idpc.AgentAppSignal{Found: true, Active: true, Assigned: true}, linked: true, ready: new(true), says: "is Active"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			items := checklist(t, idpc.ChecklistSignal{AgentRecorded: true, Agent: idpc.AgentObservation{App: &tt.app}})
+			link, activate := items[idpc.ChecklistKeyLinkAgentApp], items[idpc.ChecklistKeyActivateAgentApp]
 
-	one := completion(identityproviderconnections.OktaChecklist(identityproviderconnections.ListingModeCustomApp, "https://example.test/jwks.json", identityproviderconnections.ChecklistSignal{ConnectionRecorded: new(true)}))
-	require.True(t, *one["first_resource_connection"])
+			require.Equal(t, new(tt.linked), link.Completed)
+			require.Equal(t, tt.ready, activate.Completed)
+			require.Equal(t, tt.linked, link.Description == base[idpc.ChecklistKeyLinkAgentApp].Description, "only a missing app changes the link step")
+			if tt.says == "" {
+				require.Equal(t, base[idpc.ChecklistKeyActivateAgentApp].Description, activate.Description)
+				return
+			}
+			require.Contains(t, activate.Description, tt.says)
+			// A fault keeps the instruction; done replaces it.
+			keeps := strings.HasSuffix(activate.Description, base[idpc.ChecklistKeyActivateAgentApp].Description)
+			require.Equal(t, !*tt.ready, keeps)
+		})
+	}
+}
+
+func TestOktaChecklist_CopyInvariants(t *testing.T) {
+	t.Parallel()
+	items := checklist(t, idpc.ChecklistSignal{})
+
+	for key, item := range items {
+		offersKeyURL := strings.Contains(itemText(item), checklistJWKSURL)
+		require.Equal(t, key == idpc.ChecklistKeyPublicKeyAuth, offersKeyURL, "%s: the management JWKS is only offered to the service app", key)
+	}
+	for _, scope := range idpc.RequiredOktaScopes {
+		require.Contains(t, items[idpc.ChecklistKeyGrantScopes].Description, scope)
+	}
+	for _, key := range agentKeys {
+		require.NotContains(t, strings.ToLower(itemText(items[key])), "optional", key)
+	}
 }

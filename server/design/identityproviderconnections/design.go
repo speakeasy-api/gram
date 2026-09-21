@@ -11,7 +11,9 @@ import (
 var ChecklistItem = Type("IdentityProviderConnectionChecklistItem", func() {
 	Description("One step the organization administrator completes in the identity provider's console. Ordered; keys are stable across responses.")
 	Required("key", "group", "title", "description", "details")
-	Attribute("key", String, "Stable step identifier.")
+	Attribute("key", String, "Stable step identifier.", func() {
+		Enum("add_oin_app", "create_api_services_app", "public_key_auth", "dpop", "grant_scopes", "assign_admin_roles", "submit_client_id", "register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection")
+	})
 	Attribute("group", String, "Which phase the step belongs to: connect (the service app the connection authenticates with) or cross_app_access (the AI agent).", func() {
 		Enum("connect", "cross_app_access")
 	})

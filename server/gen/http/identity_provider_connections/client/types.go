@@ -7362,6 +7362,11 @@ func ValidateIdentityProviderConnectionChecklistItemResponseBody(body *IdentityP
 	if body.Details == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("details", "body"))
 	}
+	if body.Key != nil {
+		if !(*body.Key == "add_oin_app" || *body.Key == "create_api_services_app" || *body.Key == "public_key_auth" || *body.Key == "dpop" || *body.Key == "grant_scopes" || *body.Key == "assign_admin_roles" || *body.Key == "submit_client_id" || *body.Key == "register_ai_agent" || *body.Key == "link_agent_app" || *body.Key == "activate_agent_app" || *body.Key == "record_ai_agent" || *body.Key == "first_resource_connection") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key", *body.Key, []any{"add_oin_app", "create_api_services_app", "public_key_auth", "dpop", "grant_scopes", "assign_admin_roles", "submit_client_id", "register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection"}))
+		}
+	}
 	if body.Group != nil {
 		if !(*body.Group == "connect" || *body.Group == "cross_app_access") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.group", *body.Group, []any{"connect", "cross_app_access"}))

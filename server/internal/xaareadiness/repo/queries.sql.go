@@ -414,6 +414,27 @@ func (q *Queries) GetReadinessRowForUpdate(ctx context.Context, arg GetReadiness
 	return i, err
 }
 
+const hasReadinessForConnection = `-- name: HasReadinessForConnection :one
+SELECT EXISTS (
+  SELECT 1
+  FROM okta_resource_connections
+  WHERE organization_id = $1
+    AND identity_provider_connection_id = $2
+)
+`
+
+type HasReadinessForConnectionParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) HasReadinessForConnection(ctx context.Context, arg HasReadinessForConnectionParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasReadinessForConnection, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listEMABindings = `-- name: ListEMABindings :many
 SELECT
     b.project_id

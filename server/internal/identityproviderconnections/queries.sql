@@ -337,29 +337,3 @@ WHERE identity_provider_connection_id = @identity_provider_connection_id
   AND organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
-
--- Reads the last applications sync, so it is only as fresh as that sync.
--- name: GetOktaAgentAppState :one
-SELECT
-  a.status,
-  (
-    SELECT count(*)
-    FROM okta_application_assignments s
-    WHERE s.organization_id = a.organization_id
-      AND s.identity_provider_connection_id = a.identity_provider_connection_id
-      AND s.okta_app_id = a.okta_app_id
-      AND s.removed_at IS NULL
-  ) AS assignment_count
-FROM okta_applications a
-WHERE a.organization_id = @organization_id
-  AND a.identity_provider_connection_id = @identity_provider_connection_id
-  AND a.okta_app_id = @okta_app_id
-  AND a.removed_at IS NULL;
-
--- name: HasOktaResourceConnection :one
-SELECT EXISTS (
-  SELECT 1
-  FROM okta_resource_connections
-  WHERE organization_id = @organization_id
-    AND identity_provider_connection_id = @identity_provider_connection_id
-);

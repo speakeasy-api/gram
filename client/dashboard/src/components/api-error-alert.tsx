@@ -1,6 +1,20 @@
 import { Alert } from "@/components/ui/Alert";
 import { Text } from "@/components/ui/Text";
-import { apiErrorAlertVariant, describeApiError } from "@/lib/api-error";
+import { describeApiError, type ApiErrorKind } from "@/lib/api-error";
+
+function alertVariant(kind: ApiErrorKind): "error" | "warning" | "info" {
+  switch (kind) {
+    case "rate_limited":
+    case "precondition":
+      return "warning";
+    case "unavailable":
+      return "info";
+    case "bad_request":
+    case "forbidden":
+    case "other":
+      return "error";
+  }
+}
 
 /** Inline surface for a failed request: the API's message under a short title. */
 export function ApiErrorAlert({
@@ -14,7 +28,7 @@ export function ApiErrorAlert({
   const described = describeApiError(error);
   return (
     <Alert
-      variant={apiErrorAlertVariant(described.kind)}
+      variant={alertVariant(described.kind)}
       alignTop
       className={className}
     >

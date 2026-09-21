@@ -1,4 +1,39 @@
-import { normalizeOktaOrgUrl, oktaAdminConsoleUrl } from "./connectionView";
+const OKTA_ORG_HOST_SUFFIXES = [
+  "okta.com",
+  "oktapreview.com",
+  "okta-emea.com",
+  "okta.mil",
+] as const;
+
+const HOST_LABEL = "[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?";
+const PLAIN_HOSTNAME = new RegExp(`^${HOST_LABEL}(?:\\.${HOST_LABEL})+$`);
+
+/** Mirrors the create API and okta.parseOrgURL: https, an ASCII plain hostname (no userinfo, port, path beyond one trailing slash, query, or fragment) that is a subdomain of an Okta-owned suffix. */
+export function normalizeOktaOrgUrl(input: string): string | undefined {
+  const match = /^https:\/\/([^/?#\s@:]+)\/?$/i.exec(input.trim());
+  const rawHost = match?.[1];
+  if (!rawHost || !PLAIN_HOSTNAME.test(rawHost)) return undefined;
+  const host = rawHost.toLowerCase();
+  const ok = OKTA_ORG_HOST_SUFFIXES.some((suffix) =>
+    host.endsWith(`.${suffix}`),
+  );
+  return ok ? `https://${host}` : undefined;
+}
+
+/** The Okta admin console for an org URL (`acme.okta.com` → `acme-admin.okta.com`). */
+export function oktaAdminConsoleUrl(orgUrl: string): string {
+  const normalized = normalizeOktaOrgUrl(orgUrl);
+  if (!normalized) return orgUrl;
+  for (const suffix of OKTA_ORG_HOST_SUFFIXES) {
+    if (normalized.endsWith(`.${suffix}`)) {
+      const tenant = normalized
+        .slice(0, -(suffix.length + 1))
+        .replace(/-admin$/, "");
+      return `${tenant}-admin.${suffix}`;
+    }
+  }
+  return orgUrl;
+}
 
 /** Only link to HTTPS consoles on the supported Okta tenant domains. */
 export function oktaConsoleUrl(

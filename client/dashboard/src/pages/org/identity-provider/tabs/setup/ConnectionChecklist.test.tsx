@@ -1,0 +1,312 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, Link } from "react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import type { IdentityProviderConnectionChecklistItem } from "@gram/client/models/components/identityproviderconnectionchecklistitem.js";
+
+import { STEP_AFFORDANCES } from "./checklistAffordances";
+import { ConnectionChecklist } from "./ConnectionChecklist";
+import type { LiveConnection } from "../../connectionView";
+import { makeChecklistItem, makeConnection } from "./testFixtures";
+
+const scrollIntoView = vi.fn();
+Object.defineProperty(Element.prototype, "scrollIntoView", {
+  configurable: true,
+  value: scrollIntoView,
+});
+vi.mock(
+  "@gram/client/react-query/recordIdentityProviderConnectionAgent.js",
+  () => ({
+    useRecordIdentityProviderConnectionAgentMutation: () => ({
+      mutate: vi.fn(),
+      isPending: false,
+      error: null,
+    }),
+  }),
+);
+afterEach(() => {
+  cleanup();
+  scrollIntoView.mockClear();
+});
+
+function item(
+  key: IdentityProviderConnectionChecklistItem["key"],
+  group: IdentityProviderConnectionChecklistItem["group"],
+  completed?: boolean,
+): IdentityProviderConnectionChecklistItem {
+  return {
+    ...makeChecklistItem(key, group, completed),
+    details:
+      key === "record_ai_agent" ? ["Create it", "Delegate", "Activate"] : [],
+  };
+}
+
+function connectionWith(
+  status: LiveConnection["status"],
+  checklist: IdentityProviderConnectionChecklistItem[],
+): LiveConnection {
+  return makeConnection({ status, checklist });
+}
+
+const pendingChecklist = [
+  item("create_api_services_app", "connect"),
+  item("public_key_auth", "connect"),
+  item("submit_client_id", "connect", false),
+  item("record_ai_agent", "cross_app_access"),
+];
+
+function renderChecklist(connection: LiveConnection, route = "/identity") {
+  return render(
+    <MemoryRouter initialEntries={[route]}>
+      <QueryClientProvider client={new QueryClient()}>
+        <TooltipProvider>
+          <Link to="?tab=enterprise-managed-auth&provider=okta&view=setup#agent">
+            Set up agent
+          </Link>
+          <ConnectionChecklist
+            connection={connection}
+            affordances={STEP_AFFORDANCES}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+}
+
+describe("ConnectionChecklist", () => {
+  it("expands Connect while pending and collapses the agent phase with a count", () => {
+    renderChecklist(connectionWith("pending", pendingChecklist));
+    expect(screen.getByText("Step create_api_services_app")).toBeTruthy();
+    expect(
+      screen.queryByRole("region", { name: "Save Okta AI agent" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: "Cross App Access setup, 0 of 1 complete",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Open the Okta Admin Console" })
+        .getAttribute("href"),
+    ).toBe("https://acme-admin.okta.com");
+  });
+
+  it("expands the agent phase once verified and ticks observed steps", () => {
+    renderChecklist(
+      connectionWith("verified", [
+        item("public_key_auth", "connect", true),
+        item("dpop", "connect", true),
+        item("assign_admin_roles", "connect"),
+        item("submit_client_id", "connect", true),
+        item("record_ai_agent", "cross_app_access"),
+      ]),
+    );
+    expect(screen.getByText("Step record_ai_agent")).toBeTruthy();
+    expect(screen.getByText("Activate")).toBeTruthy();
+    const connect = screen.getByRole("button", {
+      name: "Connect, 3 of 4 complete",
+    });
+    fireEvent.click(connect);
+    expect(screen.getByText("Step dpop").textContent).toContain("(done)");
+    expect(
+      screen.getByText("Step assign_admin_roles").textContent,
+    ).not.toContain("(done)");
+  });
+
+  it("exposes agent settings after a degraded verification", () => {
+    renderChecklist(
+      connectionWith("degraded", [
+        item("grant_scopes", "connect", false),
+        item("record_ai_agent", "cross_app_access"),
+      ]),
+    );
+    expect(
+      screen
+        .getByRole("button", {
+          name: "Cross App Access setup, 0 of 1 complete",
+        })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(
+      screen.getByRole("region", { name: "Save Okta AI agent" }),
+    ).toBeTruthy();
+  });
+
+  it("distinguishes unobserved steps from steps that need attention", () => {
+    renderChecklist(connectionWith("pending", pendingChecklist));
+    const unknown = screen
+      .getByText("Step create_api_services_app")
+      .closest("li")!;
+    const incomplete = screen.getByText("Step submit_client_id").closest("li")!;
+    expect(unknown.textContent).toContain("Not checked");
+    expect(unknown.textContent).not.toContain("Needs attention");
+    expect(incomplete.textContent).toContain("Needs attention");
+    expect(incomplete.textContent).not.toContain("Not checked");
+  });
+
+  it("shows six of six complete and starts Connect collapsed after verification", () => {
+    const checklist = (
+      [
+        "create_api_services_app",
+        "public_key_auth",
+        "dpop",
+        "grant_scopes",
+        "assign_admin_roles",
+        "submit_client_id",
+      ] as const
+    ).map((key) => item(key, "connect", true));
+    renderChecklist(
+      connectionWith("verified", [
+        ...checklist,
+        item("record_ai_agent", "cross_app_access"),
+      ]),
+    );
+    const connect = screen.getByRole("button", {
+      name: "Connect, 6 of 6 complete",
+    });
+    expect(connect.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      screen.getByText("Okta connection and required access verified."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Step create_api_services_app").closest("[hidden]"),
+    ).not.toBeNull();
+    expect(screen.getByText("Step record_ai_agent")).toBeTruthy();
+    fireEvent.click(connect);
+    expect(
+      screen.getByText("Step create_api_services_app").textContent,
+    ).toContain("(done)");
+    expect(screen.queryByText("Needs attention")).toBeNull();
+    expect(
+      within(
+        screen.getByText("Step create_api_services_app").closest("ol")!,
+      ).queryByText("Not checked"),
+    ).toBeNull();
+  });
+
+  it("links the first connection step to the Cross App Access tab", () => {
+    renderChecklist(
+      connectionWith("verified", [
+        ...pendingChecklist,
+        item("first_resource_connection", "cross_app_access"),
+      ]),
+    );
+    const step = screen
+      .getByText("Step first_resource_connection")
+      .closest("li")!;
+    expect(
+      within(step)
+        .getByRole("link", { name: "Configure Cross App Access" })
+        .getAttribute("href"),
+    ).toBe(
+      "/identity?tab=enterprise-managed-auth&provider=okta&view=cross-app-access",
+    );
+  });
+
+  it("places the save form inside the agent checklist step and preserves drafts when collapsed", () => {
+    renderChecklist(connectionWith("verified", pendingChecklist));
+    const step = screen.getByText("Step record_ai_agent").closest("li")!;
+    const form = within(step).getByRole("region", {
+      name: "Save Okta AI agent",
+    });
+    expect(
+      within(form).getByRole("button", { name: "Save agent" }),
+    ).toBeTruthy();
+    expect(screen.getAllByLabelText("Agent ID")).toHaveLength(1);
+    fireEvent.change(within(form).getByLabelText("Agent ID"), {
+      target: { value: "draft-agent" },
+    });
+    const toggle = screen.getByRole("button", {
+      name: "Cross App Access setup, 0 of 1 complete",
+    });
+    fireEvent.click(toggle);
+    expect(
+      screen.queryByRole("region", { name: "Save Okta AI agent" }),
+    ).toBeNull();
+    fireEvent.click(toggle);
+    expect((screen.getByLabelText("Agent ID") as HTMLInputElement).value).toBe(
+      "draft-agent",
+    );
+  });
+
+  it("opens the agent step for an initial hash link even while pending", () => {
+    renderChecklist(
+      connectionWith("pending", pendingChecklist),
+      "/identity#agent",
+    );
+    expect(
+      screen.getByRole("region", { name: "Save Okta AI agent" }),
+    ).toBeTruthy();
+    expect(scrollIntoView).toHaveBeenCalled();
+  });
+
+  it("opens a collapsed agent step when following an in-page setup link", () => {
+    renderChecklist(connectionWith("pending", pendingChecklist));
+    expect(
+      screen.queryByRole("region", { name: "Save Okta AI agent" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("link", { name: "Set up agent" }));
+    expect(
+      screen.getByRole("region", { name: "Save Okta AI agent" }),
+    ).toBeTruthy();
+    expect(scrollIntoView).toHaveBeenCalled();
+  });
+
+  it("keeps an agent draft and the admin's toggle across a status change", () => {
+    const tree = (connection: LiveConnection) => (
+      <MemoryRouter>
+        <QueryClientProvider client={new QueryClient()}>
+          <TooltipProvider>
+            <ConnectionChecklist
+              connection={connection}
+              affordances={STEP_AFFORDANCES}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>
+    );
+    const { rerender } = render(
+      tree(connectionWith("verified", pendingChecklist)),
+    );
+    fireEvent.change(screen.getByLabelText("Agent ID"), {
+      target: { value: "draft-agent" },
+    });
+    rerender(tree(connectionWith("degraded", pendingChecklist)));
+    expect((screen.getByLabelText("Agent ID") as HTMLInputElement).value).toBe(
+      "draft-agent",
+    );
+  });
+
+  it("follows the active group until the admin toggles one", () => {
+    const tree = (connection: LiveConnection) => (
+      <MemoryRouter>
+        <ConnectionChecklist connection={connection} />
+      </MemoryRouter>
+    );
+    const expandedGroups = () =>
+      screen
+        .getAllByRole("button", { expanded: true })
+        .map((button) => button.getAttribute("aria-label"));
+    const { rerender } = render(
+      tree(connectionWith("pending", pendingChecklist)),
+    );
+    expect(expandedGroups()).toEqual(["Connect, 0 of 3 complete"]);
+    rerender(tree(connectionWith("verified", pendingChecklist)));
+    expect(expandedGroups()).toEqual([
+      "Cross App Access setup, 0 of 1 complete",
+    ]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect, 0 of 3 complete" }),
+    );
+    rerender(tree(connectionWith("degraded", pendingChecklist)));
+    expect(expandedGroups()).toEqual(["Connect, 0 of 3 complete"]);
+  });
+});

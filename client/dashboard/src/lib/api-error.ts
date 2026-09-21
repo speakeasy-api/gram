@@ -10,7 +10,6 @@ export type ApiErrorKind =
 
 export type ApiErrorDescription = {
   kind: ApiErrorKind;
-  status?: number;
   title: string;
   message: string;
 };
@@ -28,8 +27,8 @@ const FALLBACK_MESSAGES: Record<ApiErrorKind, string> = {
   bad_request: "Speakeasy could not accept that value.",
   precondition: "This is not possible in the current state.",
   rate_limited: "Too many attempts. Wait a minute and try again.",
-  forbidden: "You need the org:admin role to do this.",
-  unavailable: "The upstream service could not be reached. Try again shortly.",
+  forbidden: "You do not have permission to do this.",
+  unavailable: "The service could not be reached. Try again shortly.",
   other: "The request failed. Try again.",
 };
 
@@ -62,28 +61,10 @@ function readMessage(error: unknown): string | undefined {
 
 /** Turn an SDK error into inline copy; the API's own message wins when it has one. */
 export function describeApiError(error: unknown): ApiErrorDescription {
-  const status = getHttpStatusCode(error);
-  const kind = kindForStatus(status);
+  const kind = kindForStatus(getHttpStatusCode(error));
   return {
     kind,
-    status,
     title: TITLES[kind],
     message: readMessage(error) ?? FALLBACK_MESSAGES[kind],
   };
-}
-
-export function apiErrorAlertVariant(
-  kind: ApiErrorKind,
-): "error" | "warning" | "info" {
-  switch (kind) {
-    case "rate_limited":
-    case "precondition":
-      return "warning";
-    case "unavailable":
-      return "info";
-    case "bad_request":
-    case "forbidden":
-    case "other":
-      return "error";
-  }
 }

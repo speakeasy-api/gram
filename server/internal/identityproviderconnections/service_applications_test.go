@@ -517,24 +517,20 @@ func TestChecklist_LinkedAgentAppIsReadFromTheSync(t *testing.T) {
 	step := func() map[string]*bool {
 		got, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: nil})
 		require.NoError(t, err)
-		done := map[string]*bool{}
-		for _, item := range got.Connection.Checklist {
-			done[item.Key] = item.Completed
-		}
-		return done
+		return checklistCompletion(got.Connection.Checklist)
 	}
 	before := step()
-	require.True(t, *before["register_ai_agent"])
-	require.Nil(t, before["link_agent_app"], "nothing synced yet")
-	require.Nil(t, before["first_resource_connection"])
+	require.True(t, *before[identityproviderconnections.ChecklistKeyRegisterAIAgent])
+	require.Nil(t, before[identityproviderconnections.ChecklistKeyLinkAgentApp], "nothing synced yet")
+	require.Nil(t, before[identityproviderconnections.ChecklistKeyFirstResourceConnection])
 
 	setFixtures(si, []okta.App{fixtureApp(appA, "Speakeasy Agent", "oidc_client")}, nil, nil)
 	runSync(t, ctx, newSyncer(t, si), id)
 	unassigned := step()
-	require.True(t, *unassigned["link_agent_app"])
-	require.False(t, *unassigned["activate_agent_app"], "an app nobody is assigned to cannot issue assertions")
+	require.True(t, *unassigned[identityproviderconnections.ChecklistKeyLinkAgentApp])
+	require.False(t, *unassigned[identityproviderconnections.ChecklistKeyActivateAgentApp], "an app nobody is assigned to cannot issue assertions")
 
 	setFixtures(si, []okta.App{fixtureApp(appA, "Speakeasy Agent", "oidc_client")}, map[string][]okta.AppUser{appA: {{ID: "00uone", Scope: "USER"}}}, nil)
 	runSync(t, ctx, newSyncer(t, si), id)
-	require.True(t, *step()["activate_agent_app"])
+	require.True(t, *step()[identityproviderconnections.ChecklistKeyActivateAgentApp])
 }

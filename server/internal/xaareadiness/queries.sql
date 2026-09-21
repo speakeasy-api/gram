@@ -199,6 +199,14 @@ LEFT JOIN okta_applications AS a
 WHERE r.organization_id = @organization_id
   AND r.identity_provider_connection_id = @identity_provider_connection_id;
 
+-- name: HasReadinessForConnection :one
+SELECT EXISTS (
+  SELECT 1
+  FROM okta_resource_connections
+  WHERE organization_id = @organization_id
+    AND identity_provider_connection_id = @identity_provider_connection_id
+);
+
 -- name: GetOktaApplicationLabel :one
 SELECT label
 FROM okta_applications

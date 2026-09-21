@@ -375,43 +375,6 @@ func (q *Queries) GetManagedClient(ctx context.Context, arg GetManagedClientPara
 	return i, err
 }
 
-const getOktaAgentAppState = `-- name: GetOktaAgentAppState :one
-SELECT
-  a.status,
-  (
-    SELECT count(*)
-    FROM okta_application_assignments s
-    WHERE s.organization_id = a.organization_id
-      AND s.identity_provider_connection_id = a.identity_provider_connection_id
-      AND s.okta_app_id = a.okta_app_id
-      AND s.removed_at IS NULL
-  ) AS assignment_count
-FROM okta_applications a
-WHERE a.organization_id = $1
-  AND a.identity_provider_connection_id = $2
-  AND a.okta_app_id = $3
-  AND a.removed_at IS NULL
-`
-
-type GetOktaAgentAppStateParams struct {
-	OrganizationID               string
-	IdentityProviderConnectionID uuid.UUID
-	OktaAppID                    string
-}
-
-type GetOktaAgentAppStateRow struct {
-	Status          string
-	AssignmentCount int64
-}
-
-// Reads the last applications sync, so it is only as fresh as that sync.
-func (q *Queries) GetOktaAgentAppState(ctx context.Context, arg GetOktaAgentAppStateParams) (GetOktaAgentAppStateRow, error) {
-	row := q.db.QueryRow(ctx, getOktaAgentAppState, arg.OrganizationID, arg.IdentityProviderConnectionID, arg.OktaAppID)
-	var i GetOktaAgentAppStateRow
-	err := row.Scan(&i.Status, &i.AssignmentCount)
-	return i, err
-}
-
 const getOktaIdentityProviderConnection = `-- name: GetOktaIdentityProviderConnection :one
 SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.issuer_url_override_reason, o.ownership_claimed, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.applications_synced_at, o.applications_sync_requested_at, o.created_at, o.updated_at, o.deleted_at, o.deleted
 FROM identity_provider_connections AS c
@@ -656,27 +619,6 @@ func (q *Queries) GetPlatformGcpIamCredentialForProvisioning(ctx context.Context
 		&i.GcpIamCredential.UpdatedAt,
 	)
 	return i, err
-}
-
-const hasOktaResourceConnection = `-- name: HasOktaResourceConnection :one
-SELECT EXISTS (
-  SELECT 1
-  FROM okta_resource_connections
-  WHERE organization_id = $1
-    AND identity_provider_connection_id = $2
-)
-`
-
-type HasOktaResourceConnectionParams struct {
-	OrganizationID               string
-	IdentityProviderConnectionID uuid.UUID
-}
-
-func (q *Queries) HasOktaResourceConnection(ctx context.Context, arg HasOktaResourceConnectionParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasOktaResourceConnection, arg.OrganizationID, arg.IdentityProviderConnectionID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }
 
 const lockIdentityProviderConnectionCreate = `-- name: LockIdentityProviderConnectionCreate :one

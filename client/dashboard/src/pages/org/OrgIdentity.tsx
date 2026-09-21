@@ -1,5 +1,4 @@
 import { parseAsStringLiteral, useQueryState } from "nuqs";
-import { Navigate, useLocation } from "react-router";
 
 import { TabbedPage, type PageTab } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
@@ -22,13 +21,10 @@ import { toast } from "sonner";
 
 import { EnterpriseManagedAuth } from "./identity-provider/EnterpriseManagedAuth";
 import {
-  IDENTITY_TABS,
-  identityTabHref,
-  legacyOktaTab,
   enterpriseManagedAuthHref,
-  legacyIdentityProviderSearch,
+  IDENTITY_TABS,
   type IdentityPageTab,
-} from "./identity-provider/identityProviderQueries";
+} from "./identity-provider/tabs";
 
 const UPSELL_COPY = "Contact our team to setup SSO and Directory Sync";
 
@@ -302,42 +298,21 @@ function IdentitySection({
 }
 
 export default function OrgIdentity(): JSX.Element {
-  const location = useLocation();
-  const [rawTab] = useQueryState("tab");
-  const [legacySub] = useQueryState("okta");
   const [requestedTab] = useQueryState(
     "tab",
     parseAsStringLiteral(IDENTITY_TABS).withDefault("sso"),
   );
-  // EMA keeps the gates the old provider tabs had: rollout flag and org:admin.
+  // The only read of the rollout flag: without it (or org:admin) the tab does not exist.
   const providerFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
   const { hasScope } = useRBAC();
   const showEnterpriseManagedAuth =
     providerFlag.status === "enabled" && hasScope("org:admin");
 
-  // Preserve both generations of identity links, including filters and fragments.
-  const legacyTab =
-    rawTab === "okta"
-      ? legacyOktaTab(legacySub)
-      : rawTab === "provider" ||
-          rawTab === "applications" ||
-          rawTab === "cross-app-access"
-        ? rawTab
-        : null;
-  if (legacyTab) {
-    return (
-      <Navigate
-        to={`${legacyIdentityProviderSearch(new URLSearchParams(location.search), legacyTab)}${location.hash}`}
-        replace
-      />
-    );
-  }
-
   const activeTab: IdentityPageTab =
     requestedTab !== "sso" && !showEnterpriseManagedAuth ? "sso" : requestedTab;
 
   const tabs: PageTab[] = [
-    { value: "sso", label: "Single sign-on", href: identityTabHref("sso") },
+    { value: "sso", label: "Single sign-on", href: "?tab=sso" },
     ...(showEnterpriseManagedAuth
       ? [
           {

@@ -21,6 +21,30 @@ export const Group = {
 export type Group = ClosedEnum<typeof Group>;
 
 /**
+ * Stable step identifier.
+ */
+export const IdentityProviderConnectionChecklistItemKey = {
+  AddOinApp: "add_oin_app",
+  CreateApiServicesApp: "create_api_services_app",
+  PublicKeyAuth: "public_key_auth",
+  Dpop: "dpop",
+  GrantScopes: "grant_scopes",
+  AssignAdminRoles: "assign_admin_roles",
+  SubmitClientId: "submit_client_id",
+  RegisterAiAgent: "register_ai_agent",
+  LinkAgentApp: "link_agent_app",
+  ActivateAgentApp: "activate_agent_app",
+  RecordAiAgent: "record_ai_agent",
+  FirstResourceConnection: "first_resource_connection",
+} as const;
+/**
+ * Stable step identifier.
+ */
+export type IdentityProviderConnectionChecklistItemKey = ClosedEnum<
+  typeof IdentityProviderConnectionChecklistItemKey
+>;
+
+/**
  * One step the organization administrator completes in the identity provider's console. Ordered; keys are stable across responses.
  */
 export type IdentityProviderConnectionChecklistItem = {
@@ -43,7 +67,7 @@ export type IdentityProviderConnectionChecklistItem = {
   /**
    * Stable step identifier.
    */
-  key: string;
+  key: IdentityProviderConnectionChecklistItemKey;
   /**
    * Short step title.
    */
@@ -54,13 +78,19 @@ export type IdentityProviderConnectionChecklistItem = {
 export const Group$inboundSchema: z.ZodMiniEnum<typeof Group> = z.enum(Group);
 
 /** @internal */
+export const IdentityProviderConnectionChecklistItemKey$inboundSchema:
+  z.ZodMiniEnum<typeof IdentityProviderConnectionChecklistItemKey> = z.enum(
+    IdentityProviderConnectionChecklistItemKey,
+  );
+
+/** @internal */
 export const IdentityProviderConnectionChecklistItem$inboundSchema:
   z.ZodMiniType<IdentityProviderConnectionChecklistItem, unknown> = z.object({
     completed: z.optional(z.boolean()),
     description: z.string(),
     details: z.array(z.string()),
     group: Group$inboundSchema,
-    key: z.string(),
+    key: IdentityProviderConnectionChecklistItemKey$inboundSchema,
     title: z.string(),
   });
 

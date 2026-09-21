@@ -1,13 +1,11 @@
-import { Link, useSearchParams } from "react-router";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 
 import { RequireScope } from "@/components/require-scope";
-import { InlineEmptyState } from "@/components/inline-empty-state";
-import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 
-import { enterpriseManagedAuthHref } from "./identityProviderQueries";
 import { PROVIDERS } from "./providers";
+import { PROVIDER_IDS } from "./tabs";
 
 /** EMA is a collection of integrations, not an organization-wide provider choice. */
 export function EnterpriseManagedAuth(): JSX.Element {
@@ -19,28 +17,12 @@ export function EnterpriseManagedAuth(): JSX.Element {
 }
 
 function ProviderContent(): JSX.Element {
-  const [search] = useSearchParams();
-  const providerId = search.get("provider");
-  if (providerId) {
-    const provider = PROVIDERS.find((provider) => provider.id === providerId);
-    if (!provider) {
-      return (
-        <InlineEmptyState
-          icon="plug"
-          heading="Identity provider not supported"
-          description="Choose a supported provider to set up Enterprise Managed Auth."
-          action={
-            <Button asChild variant="secondary">
-              <Link to={enterpriseManagedAuthHref()}>
-                View identity providers
-              </Link>
-            </Button>
-          }
-        />
-      );
-    }
-    return <provider.Workspace />;
-  }
+  const [providerId] = useQueryState(
+    "provider",
+    parseAsStringLiteral(PROVIDER_IDS),
+  );
+  const provider = PROVIDERS.find((provider) => provider.id === providerId);
+  if (provider) return <provider.Workspace />;
   return (
     <section
       className="flex min-w-0 flex-col gap-6"

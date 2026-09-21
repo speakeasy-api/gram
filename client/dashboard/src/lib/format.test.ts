@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCompact } from "./format";
+import { formatCompact, pluralize } from "./format";
 
 describe("formatCompact", () => {
   it("passes through small numbers unchanged", () => {
@@ -33,5 +33,13 @@ describe("formatCompact", () => {
   it("handles negative numbers", () => {
     expect(formatCompact(-1_500)).toBe("-1.5K");
     expect(formatCompact(-1_000_000)).toBe("-1M");
+  });
+});
+
+describe("pluralize", () => {
+  it("keeps the noun singular for one", () => {
+    expect(pluralize(1, "selected server")).toBe("1 selected server");
+    expect(pluralize(2, "server")).toBe("2 servers");
+    expect(pluralize(0, "server")).toBe("0 servers");
   });
 });
