@@ -900,7 +900,7 @@ func TestServePublic_MetaEndpoint_ToolSelectionSessionRejected(t *testing.T) {
 		UserSessionClientID: uuid.NullUUID{},
 		SubjectUrn:          subject,
 		Jti:                 jti,
-		RefreshTokenHash:    "test-selection-" + uuid.NewString(),
+		RefreshTokenHash:    conv.ToPGText("test-selection-" + uuid.NewString()),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
 		ToolSelection:       selection,

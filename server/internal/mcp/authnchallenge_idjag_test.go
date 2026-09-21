@@ -238,7 +238,7 @@ func TestTokenIDJAGExchangeMintsResourceBoundAccessOnlySession(t *testing.T) {
 		Jti:                 validated.JTI(),
 	})
 	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(session.RefreshTokenHash, "id-jag:"))
+	require.True(t, strings.HasPrefix(session.RefreshTokenHash.String, "id-jag:"))
 
 	replay := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion)
 	require.Equal(t, http.StatusBadRequest, replay.Code, replay.Body.String())
