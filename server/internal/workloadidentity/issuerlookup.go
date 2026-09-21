@@ -39,8 +39,8 @@ type ResolveIssuerParams struct {
 // ResolveIssuerByURL returns the workload issuer row this tenant trusts for an
 // issuer identifier, or ErrIssuerNotFound.
 //
-// A plain-http issuer is refused before the store, so a hand-written http row
-// can never resolve.
+// A plain-http issuer is refused before the store, so a stored http row can
+// never resolve.
 //
 // Nothing here fetches, probes, or discovers. A caller holding an unresolvable
 // URL learns only that we have no row for it, which is what stops a
