@@ -337,6 +337,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, customDomainFlags()...)
 	flags = append(flags, redisFlags()...)
 	flags = append(flags, clickHouseFlags()...)
+	flags = append(flags, clickHouseReadFlags()...)
 	flags = append(flags, functionsFlags()...)
 	flags = append(flags, pulseMCPFlags()...)
 	flags = append(flags, assistantRuntimeFlags()...)
@@ -578,6 +579,12 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
+
+			meterReadConn, meterReadShutdown, err := newClickhouseReadClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to connect to clickhouse read replica: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, meterReadShutdown)
 
 			riskFingerprinter, err := parseOptionalPepperKeyRing(ctx, logger, c.String("risk-fingerprint-pepper-keyring"))
 			if err != nil {
@@ -835,6 +842,7 @@ func newWorkerCommand() *cli.Command {
 				MCPRegistryClient:            mcpRegistryClient,
 				TelemetryLogger:              telemetryLogger,
 				ClickhouseConn:               chDB,
+				MeterReadConn:                meterReadConn,
 				TelemetryRepo:                telemetryrepo.New(chDB),
 				TriggersApp:                  triggerApp,
 				CacheAdapter:                 remoteSessionsCache,

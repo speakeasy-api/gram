@@ -792,8 +792,22 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
 			return oops.E(oops.CodeForbidden, nil, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
-		if _, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID); err != nil {
+		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
+		if err != nil {
 			return oops.E(oops.CodeForbidden, err, "selected agent is not eligible").LogWarn(ctx, logger)
+		}
+		// Keep the challenge retryable while the human connects and attaches
+		// required services. Human-owned tokens alone do not authorize an agent.
+		subject := urn.NewAgentSubject(selectedAgent.AgentID)
+		agentCtx, err := s.contextForSessionSubject(ctx, endpoint, subject, "", "")
+		if err != nil {
+			return oops.E(oops.CodeUnavailable, err, "resolve selected agent identity").LogWarn(ctx, logger)
+		}
+		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); err != nil {
+			if !errors.Is(err, remotesessions.ErrNoValidToken) {
+				return oops.E(oops.CodeUnavailable, err, "check agent connections").LogError(ctx, logger)
+			}
+			return oops.E(oops.CodeConflict, err, "connect and attach the required services before authorizing this agent").LogWarn(ctx, logger)
 		}
 	}
 

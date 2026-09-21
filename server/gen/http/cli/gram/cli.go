@@ -165,14 +165,14 @@ func UsageCommands() []string {
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|update-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
-		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
+		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|probe-url|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|rotate-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|attach-key-set|detach-key-set|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
-		"remote-sessions (list-remote-sessions|revoke-remote-session)",
+		"remote-sessions (list-bindings|attach-binding|detach-binding|list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
@@ -497,6 +497,7 @@ func ParseEndpoint(
 
 		agentsListDelegableGrantsFlags            = flag.NewFlagSet("list-delegable-grants", flag.ExitOnError)
 		agentsListDelegableGrantsAgentIDFlag      = agentsListDelegableGrantsFlags.String("agent-id", "REQUIRED", "")
+		agentsListDelegableGrantsToolsetIDFlag    = agentsListDelegableGrantsFlags.String("toolset-id", "", "")
 		agentsListDelegableGrantsSessionTokenFlag = agentsListDelegableGrantsFlags.String("session-token", "", "")
 
 		agentsListPolicyGrantsFlags            = flag.NewFlagSet("list-policy-grants", flag.ExitOnError)
@@ -2334,6 +2335,12 @@ func ParseEndpoint(
 		remoteMcpDiscoverProtectedResourceMetadataApikeyTokenFlag      = remoteMcpDiscoverProtectedResourceMetadataFlags.String("apikey-token", "", "")
 		remoteMcpDiscoverProtectedResourceMetadataProjectSlugInputFlag = remoteMcpDiscoverProtectedResourceMetadataFlags.String("project-slug-input", "", "")
 
+		remoteMcpProbeURLFlags                = flag.NewFlagSet("probe-url", flag.ExitOnError)
+		remoteMcpProbeURLBodyFlag             = remoteMcpProbeURLFlags.String("body", "REQUIRED", "")
+		remoteMcpProbeURLSessionTokenFlag     = remoteMcpProbeURLFlags.String("session-token", "", "")
+		remoteMcpProbeURLApikeyTokenFlag      = remoteMcpProbeURLFlags.String("apikey-token", "", "")
+		remoteMcpProbeURLProjectSlugInputFlag = remoteMcpProbeURLFlags.String("project-slug-input", "", "")
+
 		remoteMcpVerifyURLFlags                = flag.NewFlagSet("verify-url", flag.ExitOnError)
 		remoteMcpVerifyURLBodyFlag             = remoteMcpVerifyURLFlags.String("body", "REQUIRED", "")
 		remoteMcpVerifyURLSessionTokenFlag     = remoteMcpVerifyURLFlags.String("session-token", "", "")
@@ -2720,7 +2727,25 @@ func ParseEndpoint(
 
 		remoteSessionsFlags = flag.NewFlagSet("remote-sessions", flag.ContinueOnError)
 
+		remoteSessionsListBindingsFlags                   = flag.NewFlagSet("list-bindings", flag.ExitOnError)
+		remoteSessionsListBindingsPrincipalIDFlag         = remoteSessionsListBindingsFlags.String("principal-id", "REQUIRED", "")
+		remoteSessionsListBindingsUserSessionIssuerIDFlag = remoteSessionsListBindingsFlags.String("user-session-issuer-id", "REQUIRED", "")
+		remoteSessionsListBindingsSessionTokenFlag        = remoteSessionsListBindingsFlags.String("session-token", "", "")
+		remoteSessionsListBindingsProjectSlugInputFlag    = remoteSessionsListBindingsFlags.String("project-slug-input", "", "")
+
+		remoteSessionsAttachBindingFlags                = flag.NewFlagSet("attach-binding", flag.ExitOnError)
+		remoteSessionsAttachBindingBodyFlag             = remoteSessionsAttachBindingFlags.String("body", "REQUIRED", "")
+		remoteSessionsAttachBindingSessionTokenFlag     = remoteSessionsAttachBindingFlags.String("session-token", "", "")
+		remoteSessionsAttachBindingProjectSlugInputFlag = remoteSessionsAttachBindingFlags.String("project-slug-input", "", "")
+
+		remoteSessionsDetachBindingFlags                = flag.NewFlagSet("detach-binding", flag.ExitOnError)
+		remoteSessionsDetachBindingBodyFlag             = remoteSessionsDetachBindingFlags.String("body", "REQUIRED", "")
+		remoteSessionsDetachBindingSessionTokenFlag     = remoteSessionsDetachBindingFlags.String("session-token", "", "")
+		remoteSessionsDetachBindingProjectSlugInputFlag = remoteSessionsDetachBindingFlags.String("project-slug-input", "", "")
+
 		remoteSessionsListRemoteSessionsFlags                     = flag.NewFlagSet("list-remote-sessions", flag.ExitOnError)
+		remoteSessionsListRemoteSessionsPrincipalIDFlag           = remoteSessionsListRemoteSessionsFlags.String("principal-id", "", "")
+		remoteSessionsListRemoteSessionsUserSessionIssuerIDFlag   = remoteSessionsListRemoteSessionsFlags.String("user-session-issuer-id", "", "")
 		remoteSessionsListRemoteSessionsSubjectUrnFlag            = remoteSessionsListRemoteSessionsFlags.String("subject-urn", "", "")
 		remoteSessionsListRemoteSessionsRemoteSessionClientIDFlag = remoteSessionsListRemoteSessionsFlags.String("remote-session-client-id", "", "")
 		remoteSessionsListRemoteSessionsCursorFlag                = remoteSessionsListRemoteSessionsFlags.String("cursor", "", "")
@@ -4843,6 +4868,7 @@ func ParseEndpoint(
 	remoteMcpGetServerFlags.Usage = remoteMcpGetServerUsage
 	remoteMcpUpdateServerFlags.Usage = remoteMcpUpdateServerUsage
 	remoteMcpDiscoverProtectedResourceMetadataFlags.Usage = remoteMcpDiscoverProtectedResourceMetadataUsage
+	remoteMcpProbeURLFlags.Usage = remoteMcpProbeURLUsage
 	remoteMcpVerifyURLFlags.Usage = remoteMcpVerifyURLUsage
 	remoteMcpDeleteServerFlags.Usage = remoteMcpDeleteServerUsage
 	remoteMcpListServerHeadersFlags.Usage = remoteMcpListServerHeadersUsage
@@ -4926,6 +4952,9 @@ func ParseEndpoint(
 	organizationRemoteSessionsRevokeAllClientSessionsFlags.Usage = organizationRemoteSessionsRevokeAllClientSessionsUsage
 
 	remoteSessionsFlags.Usage = remoteSessionsUsage
+	remoteSessionsListBindingsFlags.Usage = remoteSessionsListBindingsUsage
+	remoteSessionsAttachBindingFlags.Usage = remoteSessionsAttachBindingUsage
+	remoteSessionsDetachBindingFlags.Usage = remoteSessionsDetachBindingUsage
 	remoteSessionsListRemoteSessionsFlags.Usage = remoteSessionsListRemoteSessionsUsage
 	remoteSessionsRevokeRemoteSessionFlags.Usage = remoteSessionsRevokeRemoteSessionUsage
 
@@ -6889,6 +6918,9 @@ func ParseEndpoint(
 			case "discover-protected-resource-metadata":
 				epf = remoteMcpDiscoverProtectedResourceMetadataFlags
 
+			case "probe-url":
+				epf = remoteMcpProbeURLFlags
+
 			case "verify-url":
 				epf = remoteMcpVerifyURLFlags
 
@@ -7124,6 +7156,15 @@ func ParseEndpoint(
 
 		case "remote-sessions":
 			switch epn {
+			case "list-bindings":
+				epf = remoteSessionsListBindingsFlags
+
+			case "attach-binding":
+				epf = remoteSessionsAttachBindingFlags
+
+			case "detach-binding":
+				epf = remoteSessionsDetachBindingFlags
+
 			case "list-remote-sessions":
 				epf = remoteSessionsListRemoteSessionsFlags
 
@@ -8267,7 +8308,7 @@ func ParseEndpoint(
 				data, err = agentsc.BuildRenamePayload(*agentsRenameBodyFlag, *agentsRenameSessionTokenFlag)
 			case "list-delegable-grants":
 				endpoint = c.ListDelegableGrants()
-				data, err = agentsc.BuildListDelegableGrantsPayload(*agentsListDelegableGrantsAgentIDFlag, *agentsListDelegableGrantsSessionTokenFlag)
+				data, err = agentsc.BuildListDelegableGrantsPayload(*agentsListDelegableGrantsAgentIDFlag, *agentsListDelegableGrantsToolsetIDFlag, *agentsListDelegableGrantsSessionTokenFlag)
 			case "list-policy-grants":
 				endpoint = c.ListPolicyGrants()
 				data, err = agentsc.BuildListPolicyGrantsPayload(*agentsListPolicyGrantsAgentIDFlag, *agentsListPolicyGrantsSessionTokenFlag)
@@ -9540,6 +9581,9 @@ func ParseEndpoint(
 			case "discover-protected-resource-metadata":
 				endpoint = c.DiscoverProtectedResourceMetadata()
 				data, err = remotemcpc.BuildDiscoverProtectedResourceMetadataPayload(*remoteMcpDiscoverProtectedResourceMetadataBodyFlag, *remoteMcpDiscoverProtectedResourceMetadataSessionTokenFlag, *remoteMcpDiscoverProtectedResourceMetadataApikeyTokenFlag, *remoteMcpDiscoverProtectedResourceMetadataProjectSlugInputFlag)
+			case "probe-url":
+				endpoint = c.ProbeURL()
+				data, err = remotemcpc.BuildProbeURLPayload(*remoteMcpProbeURLBodyFlag, *remoteMcpProbeURLSessionTokenFlag, *remoteMcpProbeURLApikeyTokenFlag, *remoteMcpProbeURLProjectSlugInputFlag)
 			case "verify-url":
 				endpoint = c.VerifyURL()
 				data, err = remotemcpc.BuildVerifyURLPayload(*remoteMcpVerifyURLBodyFlag, *remoteMcpVerifyURLSessionTokenFlag, *remoteMcpVerifyURLApikeyTokenFlag, *remoteMcpVerifyURLProjectSlugInputFlag)
@@ -9775,9 +9819,18 @@ func ParseEndpoint(
 		case "remote-sessions":
 			c := remotesessionsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "list-bindings":
+				endpoint = c.ListBindings()
+				data, err = remotesessionsc.BuildListBindingsPayload(*remoteSessionsListBindingsPrincipalIDFlag, *remoteSessionsListBindingsUserSessionIssuerIDFlag, *remoteSessionsListBindingsSessionTokenFlag, *remoteSessionsListBindingsProjectSlugInputFlag)
+			case "attach-binding":
+				endpoint = c.AttachBinding()
+				data, err = remotesessionsc.BuildAttachBindingPayload(*remoteSessionsAttachBindingBodyFlag, *remoteSessionsAttachBindingSessionTokenFlag, *remoteSessionsAttachBindingProjectSlugInputFlag)
+			case "detach-binding":
+				endpoint = c.DetachBinding()
+				data, err = remotesessionsc.BuildDetachBindingPayload(*remoteSessionsDetachBindingBodyFlag, *remoteSessionsDetachBindingSessionTokenFlag, *remoteSessionsDetachBindingProjectSlugInputFlag)
 			case "list-remote-sessions":
 				endpoint = c.ListRemoteSessions()
-				data, err = remotesessionsc.BuildListRemoteSessionsPayload(*remoteSessionsListRemoteSessionsSubjectUrnFlag, *remoteSessionsListRemoteSessionsRemoteSessionClientIDFlag, *remoteSessionsListRemoteSessionsCursorFlag, *remoteSessionsListRemoteSessionsLimitFlag, *remoteSessionsListRemoteSessionsSessionTokenFlag, *remoteSessionsListRemoteSessionsApikeyTokenFlag, *remoteSessionsListRemoteSessionsProjectSlugInputFlag)
+				data, err = remotesessionsc.BuildListRemoteSessionsPayload(*remoteSessionsListRemoteSessionsPrincipalIDFlag, *remoteSessionsListRemoteSessionsUserSessionIssuerIDFlag, *remoteSessionsListRemoteSessionsSubjectUrnFlag, *remoteSessionsListRemoteSessionsRemoteSessionClientIDFlag, *remoteSessionsListRemoteSessionsCursorFlag, *remoteSessionsListRemoteSessionsLimitFlag, *remoteSessionsListRemoteSessionsSessionTokenFlag, *remoteSessionsListRemoteSessionsApikeyTokenFlag, *remoteSessionsListRemoteSessionsProjectSlugInputFlag)
 			case "revoke-remote-session":
 				endpoint = c.RevokeRemoteSession()
 				data, err = remotesessionsc.BuildRevokeRemoteSessionPayload(*remoteSessionsRevokeRemoteSessionIDFlag, *remoteSessionsRevokeRemoteSessionSessionTokenFlag, *remoteSessionsRevokeRemoteSessionApikeyTokenFlag, *remoteSessionsRevokeRemoteSessionProjectSlugInputFlag)
@@ -12019,6 +12072,7 @@ func agentsListDelegableGrantsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] agents list-delegable-grants", os.Args[0])
 	fmt.Fprint(os.Stderr, " -agent-id STRING")
+	fmt.Fprint(os.Stderr, " -toolset-id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -12028,11 +12082,12 @@ func agentsListDelegableGrantsUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -agent-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -toolset-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-delegable-grants --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-delegable-grants --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 func agentsListPolicyGrantsUsage() {
@@ -20348,7 +20403,10 @@ func remoteMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    get-server: Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.`)
 	fmt.Fprintln(os.Stderr, `    update-server: Update a remote MCP server`)
 	fmt.Fprintln(os.Stderr, `    discover-protected-resource-metadata: Probe the remote MCP server's origin for an RFC 9728 .well-known/oauth-protected-resource document and return either the parsed metadata or a typed unavailability reason. Runs server-side under guardian.Policy so production resource servers without CORS can still be inspected.`)
-	fmt.Fprintln(os.Stderr, `    verify-url: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.`)
+	fmt.Fprintln(os.Stderr, `    probe-url: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.`)
+	fmt.Fprintln(os.Stderr, `    verify-url: Probe a candidate remote MCP server URL and return the legacy boolean verification result.
+	
+	Deprecated: use probeURL instead.`)
 	fmt.Fprintln(os.Stderr, `    delete-server: Delete a remote MCP server`)
 	fmt.Fprintln(os.Stderr, `    list-server-headers: List the headers configured for a remote MCP server`)
 	fmt.Fprintln(os.Stderr, `    get-server-header: Get a remote MCP server header by ID`)
@@ -20503,6 +20561,30 @@ func remoteMcpDiscoverProtectedResourceMetadataUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp discover-protected-resource-metadata --body '{\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+func remoteMcpProbeURLUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp probe-url", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp probe-url --body '{\n      \"url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func remoteMcpVerifyURLUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp verify-url", os.Args[0])
@@ -20514,7 +20596,9 @@ func remoteMcpVerifyURLUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.`)
+	fmt.Fprintln(os.Stderr, `Probe a candidate remote MCP server URL and return the legacy boolean verification result.
+	
+	Deprecated: use probeURL instead.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -22235,15 +22319,88 @@ func remoteSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-sessions COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list-remote-sessions: List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
+	fmt.Fprintln(os.Stderr, `    list-bindings: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `    attach-binding: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `    detach-binding: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `    list-remote-sessions: List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
 	fmt.Fprintln(os.Stderr, `    revoke-remote-session: Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s remote-sessions COMMAND --help\n", os.Args[0])
 }
+func remoteSessionsListBindingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions list-bindings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -principal-id STRING")
+	fmt.Fprint(os.Stderr, " -user-session-issuer-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -principal-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions list-bindings --principal-id \"550e8400-e29b-41d4-a716-446655440000\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionsAttachBindingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions attach-binding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions attach-binding --body '{\n      \"principal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionsDetachBindingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions detach-binding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions detach-binding --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func remoteSessionsListRemoteSessionsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions list-remote-sessions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -principal-id STRING")
+	fmt.Fprint(os.Stderr, " -user-session-issuer-id STRING")
 	fmt.Fprint(os.Stderr, " -subject-urn STRING")
 	fmt.Fprint(os.Stderr, " -remote-session-client-id STRING")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
@@ -22255,9 +22412,11 @@ func remoteSessionsListRemoteSessionsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
+	fmt.Fprintln(os.Stderr, `List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -principal-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -subject-urn STRING: `)
 	fmt.Fprintln(os.Stderr, `    -remote-session-client-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
@@ -22268,7 +22427,7 @@ func remoteSessionsListRemoteSessionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions list-remote-sessions --subject-urn \"abc123\" --remote-session-client-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions list-remote-sessions --principal-id \"550e8400-e29b-41d4-a716-446655440000\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --subject-urn \"abc123\" --remote-session-client-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionsRevokeRemoteSessionUsage() {
@@ -28372,7 +28531,7 @@ func userSessionIssuersCimdClientsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] user-session-issuers-cimd-clients COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list-presets: List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' — the default — admit every enabled entry here automatically, with no per-issuer configuration. The catalog is global and contains no tenant data.`)
+	fmt.Fprintln(os.Stderr, `    list-presets: List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' admit every enabled entry here automatically, with no per-issuer configuration. Presets mode is opt-in; an issuer without an explicit mode uses 'open' and evaluates this catalog only for its shadow measurement. The catalog is global and contains no tenant data.`)
 	fmt.Fprintln(os.Stderr, `    create-user-session-issuer-cimd-client: Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. The document itself is deliberately NOT fetched here: a vendor's host being briefly unreachable must not block configuration, and an advisory warning nobody can act on is not worth an outbound request on every write. Call verifyURL first to check that the document is reachable and valid.`)
 	fmt.Fprintln(os.Stderr, `    verify-url: Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Gram fetch a caller-chosen URL.`)
 	fmt.Fprintln(os.Stderr, `    list-user-session-issuer-cimd-clients: List the custom CIMD document URLs configured on a user_session_issuer. Does not include the preset catalog — call listPresets for that.`)
@@ -28392,7 +28551,7 @@ func userSessionIssuersCimdClientsListPresetsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' — the default — admit every enabled entry here automatically, with no per-issuer configuration. The catalog is global and contains no tenant data.`)
+	fmt.Fprintln(os.Stderr, `List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' admit every enabled entry here automatically, with no per-issuer configuration. Presets mode is opt-in; an issuer without an explicit mode uses 'open' and evaluates this catalog only for its shadow measurement. The catalog is global and contains no tenant data.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)

@@ -13,49 +13,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 const (
-	millionRateQuantity              = "1000000"
-	gibRateQuantity                  = "1073741824"
 	spendAvailabilityAvailable       = "available"
 	spendAvailabilityUnsupportedPlan = "unsupported_plan"
 )
-
-type spendProductSpec struct {
-	id           string
-	label        string
-	unit         string
-	rateQuantity string
-	rateUSD      string
-}
-
-var spendProductSpecs = [...]spendProductSpec{
-	{
-		id:           "agent_session_storage",
-		label:        "Agent session storage",
-		unit:         string(metering.UnitSTokens),
-		rateQuantity: millionRateQuantity,
-		rateUSD:      billing.TUMPricePerMillionUSD,
-	},
-	{
-		id:           "risk_content_scans",
-		label:        "Risk scanning",
-		unit:         string(metering.UnitSTokens),
-		rateQuantity: millionRateQuantity,
-		rateUSD:      billing.RiskScanPricePerMillionUSD,
-	},
-	{
-		id:           "mcp_egress",
-		label:        "MCP gateway",
-		unit:         string(metering.UnitBytes),
-		rateQuantity: gibRateQuantity,
-		rateUSD:      billing.MCPEgressPricePerGiBUSD,
-	},
-}
 
 // GetSpendBreakdown reports availability of server-owned spend for the active
 // organization and returns exact current PAYG list-price estimates when available.
@@ -169,8 +134,8 @@ func buildSpendBreakdownResponse(from, to, queriedAt time.Time, cycles []Billing
 	products := make([]*gen.SpendProduct, 0, len(spendProductSpecs))
 	quantities := make(map[string][]*big.Int, len(spendProductSpecs))
 	productTotals := make(map[string]*big.Int, len(spendProductSpecs))
-	productSpecs := make(map[string]spendProductSpec, len(spendProductSpecs))
-	for _, spec := range spendProductSpecs {
+	productSpecs := make(map[string]SpendProductSpec, len(spendProductSpecs))
+	for _, spec := range SpendProductSpecs() {
 		buckets := make([]*gen.SpendBucket, 0, bucketCount)
 		bucketQuantities := make([]*big.Int, 0, bucketCount)
 		for day := from; day.Before(to); day = day.AddDate(0, 0, 1) {
@@ -183,18 +148,18 @@ func buildSpendBreakdownResponse(from, to, queriedAt time.Time, cycles []Billing
 			bucketQuantities = append(bucketQuantities, new(big.Int))
 		}
 		products = append(products, &gen.SpendProduct{
-			ID:           spec.id,
-			Label:        spec.label,
-			Unit:         spec.unit,
+			ID:           spec.ID,
+			Label:        spec.Label,
+			Unit:         spec.Unit,
 			Quantity:     "0",
-			RateQuantity: spec.rateQuantity,
-			RateUsd:      spec.rateUSD,
+			RateQuantity: spec.RateQuantity,
+			RateUsd:      spec.RateUSD,
 			CostUsd:      "0",
 			Buckets:      buckets,
 		})
-		quantities[spec.id] = bucketQuantities
-		productTotals[spec.id] = new(big.Int)
-		productSpecs[spec.id] = spec
+		quantities[spec.ID] = bucketQuantities
+		productTotals[spec.ID] = new(big.Int)
+		productSpecs[spec.ID] = spec
 	}
 
 	for _, row := range rows {
@@ -218,7 +183,7 @@ func buildSpendBreakdownResponse(from, to, queriedAt time.Time, cycles []Billing
 	for _, product := range products {
 		spec := productSpecs[product.ID]
 		for index, quantity := range quantities[product.ID] {
-			cost, err := priceSpendQuantity(quantity, spec)
+			cost, err := PriceSpendQuantity(quantity, spec)
 			if err != nil {
 				return nil, err
 			}
@@ -229,7 +194,7 @@ func buildSpendBreakdownResponse(from, to, queriedAt time.Time, cycles []Billing
 			}
 		}
 		product.Quantity = productTotals[product.ID].String()
-		cost, err := priceSpendQuantity(productTotals[product.ID], spec)
+		cost, err := PriceSpendQuantity(productTotals[product.ID], spec)
 		if err != nil {
 			return nil, err
 		}
@@ -247,18 +212,6 @@ func buildSpendBreakdownResponse(from, to, queriedAt time.Time, cycles []Billing
 	response.TotalCostUsd = totalCostUSD
 	response.Products = products
 	return response, nil
-}
-
-func priceSpendQuantity(quantity *big.Int, spec spendProductSpec) (*big.Rat, error) {
-	rate, ok := new(big.Rat).SetString(spec.rateUSD)
-	if !ok {
-		return nil, fmt.Errorf("invalid spend rate %q", spec.rateUSD)
-	}
-	rateQuantity, ok := new(big.Int).SetString(spec.rateQuantity, 10)
-	if !ok || rateQuantity.Sign() <= 0 {
-		return nil, fmt.Errorf("invalid spend rate quantity %q", spec.rateQuantity)
-	}
-	return new(big.Rat).Quo(new(big.Rat).Mul(new(big.Rat).SetInt(quantity), rate), new(big.Rat).SetInt(rateQuantity)), nil
 }
 
 func exactDecimal(value *big.Rat) (string, error) {

@@ -17,9 +17,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -360,4 +364,143 @@ func TestListDelegableGrantsAuthenticatesBeforeCredentialGate(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 	require.Nil(t, result)
 	require.Empty(t, flags.flag, "unauthenticated callers must not evaluate tenant flags")
+}
+
+func (f delegableFixture) toolset(t *testing.T, org, slug string) toolsetsrepo.Toolset {
+	t.Helper()
+	project, err := projectsrepo.New(f.db).CreateProject(t.Context(), projectsrepo.CreateProjectParams{
+		OrganizationID: org, Name: slug, Slug: slug,
+	})
+	require.NoError(t, err)
+	toolset, err := toolsetsrepo.New(f.db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{
+		OrganizationID: org, ProjectID: project.ID, Name: slug, Slug: slug, McpEnabled: true,
+	})
+	require.NoError(t, err)
+	return toolset
+}
+
+func TestListDelegableGrantsScopedToolset(t *testing.T) {
+	t.Parallel()
+	for _, excludedBy := range []string{"owner", "caller"} {
+		t.Run(excludedBy, func(t *testing.T) {
+			t.Parallel()
+			f := newDelegableFixture(t)
+			selected := f.toolset(t, "org-delegable", "selected")
+			other := f.toolset(t, "org-delegable", "other")
+			for _, principal := range []string{"agent", "owner", "caller"} {
+				f.grant(t, principal, authz.ScopeMCPWrite, authz.NewSelector(authz.ScopeMCPWrite, "*"))
+			}
+			// Both server and project exclusions on unrelated resources must be disjoint.
+			f.grant(t, excludedBy, authz.ScopeMCPBlockedConnect, authz.NewSelector(authz.ScopeMCPBlockedConnect, other.ID.String()))
+			exclusion := authz.NewSelector(authz.ScopeMCPBlockedConnect, "*")
+			exclusion[authz.SelectorKeyProjectID] = other.ProjectID.String()
+			f.grant(t, excludedBy, authz.ScopeMCPBlockedConnect, exclusion)
+			require.Empty(t, f.list(t, "caller"), "unscoped broad grants still overlap exclusions")
+			ctx := validatedHumanContext(t, "org-delegable", "caller")
+			grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+				AgentID: f.agentID.String(), ToolsetID: new(selected.ID.String()),
+			})
+			require.NoError(t, err)
+			require.Len(t, grants, 3)
+			for _, grant := range grants {
+				require.Equal(t, "allow", grant.Effect)
+				require.Equal(t, selected.ID.String(), grant.Selector.ResourceID)
+				require.Equal(t, new(selected.ProjectID.String()), grant.Selector.ProjectID)
+			}
+			grants, err = f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+				AgentID: f.agentID.String(), ToolsetID: new(other.ID.String()),
+			})
+			require.NoError(t, err)
+			require.Empty(t, grants)
+		})
+	}
+}
+
+func TestListDelegableGrantsScopedToolsetRejectsInvalidResources(t *testing.T) {
+	t.Parallel()
+	f := newDelegableFixture(t)
+	seedOrganization(t, f.db, "org-other-delegable")
+	foreign := f.toolset(t, "org-other-delegable", "foreign")
+	for _, tc := range []struct {
+		name string
+		id   string
+		code oops.Code
+	}{
+		{name: "malformed", id: "invalid", code: oops.CodeBadRequest},
+		{name: "empty", id: "", code: oops.CodeBadRequest},
+		{name: "missing", id: uuid.NewString(), code: oops.CodeNotFound},
+		{name: "foreign organization", id: foreign.ID.String(), code: oops.CodeNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			grants, err := f.service.ListDelegableGrants(validatedHumanContext(t, "org-delegable", "caller"), &gen.ListDelegableGrantsPayload{
+				AgentID: f.agentID.String(), ToolsetID: &tc.id,
+			})
+			requireOopsCode(t, err, tc.code)
+			require.Nil(t, grants)
+		})
+	}
+}
+
+func (f delegableFixture) modernServer(t *testing.T, projectID uuid.UUID, toolsetID uuid.NullUUID) mcpserversrepo.McpServer {
+	t.Helper()
+	var remoteID uuid.NullUUID
+	if !toolsetID.Valid {
+		remote, err := remotemcprepo.New(f.db).CreateServer(t.Context(), remotemcprepo.CreateServerParams{
+			ID: uuid.New(), ProjectID: projectID, TransportType: "streamable-http", Url: "https://mcp.example.test/mcp",
+		})
+		require.NoError(t, err)
+		remoteID = uuid.NullUUID{UUID: remote.ID, Valid: true}
+	}
+	server, err := mcpserversrepo.New(f.db).CreateMCPServer(t.Context(), mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: projectID, ToolsetID: toolsetID, RemoteMcpServerID: remoteID, Visibility: "private",
+	})
+	require.NoError(t, err)
+	return server
+}
+
+func TestListDelegableGrantsNormalizedMCPResourceIdentity(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"legacy toolset", "modern toolset backed", "modern remote"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			f := newDelegableFixture(t)
+			toolset := f.toolset(t, "org-delegable", "selected")
+			resourceID := toolset.ID
+			switch kind {
+			case "modern toolset backed":
+				server := f.modernServer(t, toolset.ProjectID, uuid.NullUUID{UUID: toolset.ID, Valid: true})
+				require.NotEqual(t, resourceID, server.ID, "inventory uses toolsetId, not the wrapper ID")
+			case "modern remote":
+				server := f.modernServer(t, toolset.ProjectID, uuid.NullUUID{})
+				resourceID = server.ID
+			}
+			for _, principal := range []string{"agent", "owner", "caller"} {
+				f.grant(t, principal, authz.ScopeMCPConnect, authz.NewSelector(authz.ScopeMCPConnect, resourceID.String()))
+			}
+			grants, err := f.service.ListDelegableGrants(validatedHumanContext(t, "org-delegable", "caller"), &gen.ListDelegableGrantsPayload{
+				AgentID: f.agentID.String(), ToolsetID: new(resourceID.String()),
+			})
+			require.NoError(t, err)
+			require.Len(t, grants, 1)
+			require.Equal(t, resourceID.String(), grants[0].Selector.ResourceID)
+			require.Equal(t, new(toolset.ProjectID.String()), grants[0].Selector.ProjectID)
+		})
+	}
+}
+
+func TestListDelegableGrantsModernResourceFailsClosed(t *testing.T) {
+	t.Parallel()
+	f := newDelegableFixture(t)
+	seedOrganization(t, f.db, "org-foreign-discovery")
+	foreign := f.toolset(t, "org-foreign-discovery", "foreign")
+	remote := f.modernServer(t, foreign.ProjectID, uuid.NullUUID{})
+	backed := f.modernServer(t, foreign.ProjectID, uuid.NullUUID{UUID: foreign.ID, Valid: true})
+	for _, resourceID := range []uuid.UUID{remote.ID, backed.ID, foreign.ID, uuid.New()} {
+		grants, err := f.service.ListDelegableGrants(validatedHumanContext(t, "org-delegable", "caller"), &gen.ListDelegableGrantsPayload{
+			AgentID: f.agentID.String(), ToolsetID: new(resourceID.String()),
+		})
+		requireOopsCode(t, err, oops.CodeNotFound)
+		require.Nil(t, grants)
+	}
 }

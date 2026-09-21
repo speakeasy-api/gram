@@ -297,3 +297,44 @@ func TestHandleTokenRefresh_ResourceIndicator(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Contains(t, w.Body.String(), "access_token")
 }
+
+func TestHandleTokenCode_AgentRequiresConnectionsAtExchange(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx := newAgentConsentFixture(t, ctx, ti)
+	agent := createConsentAgent(t, ctx, ti, fx, "Token subject agent")
+	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
+	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
+
+	verifier := "verifier-" + uuid.NewString()
+	sum := sha256.Sum256([]byte(verifier))
+	code := "agent-v1." + uuid.NewString()
+	grantCache := cache.NewTypedObjectCache[mcp.UserSessionGrant](ti.logger, ti.cacheAdapter, cache.SuffixNone)
+	require.NoError(t, grantCache.Store(ctx, mcp.UserSessionGrant{
+		Code:                        code,
+		UserSessionIssuerID:         fx.target.UserSessionIssuerID,
+		UserSessionClientID:         fx.client.ID,
+		ClientID:                    fx.client.ClientID,
+		RedirectURI:                 fx.client.RedirectUris[0],
+		CodeChallenge:               base64.RawURLEncoding.EncodeToString(sum[:]),
+		CodeChallengeMethod:         "S256",
+		Subject:                     urn.NewUserSubject(fx.userID),
+		AgentAuthorization:          &mcp.AgentAuthorizationResult{AgentID: agent.ID, AuthorizerUserID: fx.userID, Target: fx.target},
+		DesiredSessionDurationHours: 0,
+		CreatedAt:                   time.Now(),
+	}))
+
+	createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "exchange-required", "", []uuid.UUID{fx.target.UserSessionIssuerID})
+
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("redirect_uri", fx.client.RedirectUris[0])
+	form.Set("client_id", fx.client.ClientID)
+	form.Set("code_verifier", verifier)
+	w := postForm(t, ti, fx.toolset.McpSlug.String, "token", form)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), "required agent connections are no longer available")
+
+}

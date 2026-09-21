@@ -14,11 +14,14 @@ var _ = Service("remoteSessions", func() {
 		Scope("producer")
 	})
 	shared.DeclareErrorResponses()
+	principalBindingMethods()
 
 	Method("listRemoteSessions", func() {
-		Description("List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).")
+		Description("List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).")
 
 		Payload(func() {
+			Attribute("principal_id", String, "Owned agent whose eligible sessions to list; requires user_session_issuer_id.", func() { Format(FormatUUID) })
+			Attribute("user_session_issuer_id", String, "Issuer configuration sessions must be eligible for; requires principal_id.", func() { Format(FormatUUID) })
 			Attribute("subject_urn", String, "Exact-match filter on subject URN.")
 			Attribute("remote_session_client_id", String, "Filter by remote_session_client id.", func() {
 				Format(FormatUUID)
@@ -34,6 +37,8 @@ var _ = Service("remoteSessions", func() {
 
 		HTTP(func() {
 			GET("/rpc/remoteSessions.list")
+			Param("principal_id")
+			Param("user_session_issuer_id")
 			Param("subject_urn")
 			Param("remote_session_client_id")
 			Param("cursor")
@@ -215,6 +220,9 @@ var RemoteSession = Type("RemoteSession", func() {
 	Attribute("subject_urn", String, "The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).")
 	Attribute("subject_display_name", String, "Resolved display name when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.")
 	Attribute("subject_email", String, "Resolved email when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.")
+	Attribute("upstream_email", String, "Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Gram subject.")
+	Attribute("upstream_display_name", String, "Stored display name of the account at the upstream provider. Absent when no upstream identity interface supplied it.")
+	Attribute("identity_source", String, "The upstream identity interface that supplied the stored account identity, such as an ID token or userinfo response. Absent when upstream identity is unknown.")
 	Attribute("user_session_issuer_id", String, "The user_session_issuer this session is bound to.", func() {
 		Format(FormatUUID)
 	})

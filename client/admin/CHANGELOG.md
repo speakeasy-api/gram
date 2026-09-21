@@ -1,5 +1,22 @@
 # admin
 
+## 0.5.0
+
+### Minor Changes
+
+- 52ebc1b: Add an admin spend breakdown API and organization billing visualization for every account type, including organizations without a Stripe subscription. Reuse exact server-calculated storage, per-scanner risk, and MCP egress estimates at current PAYG list prices, with product selection, billing-cycle and custom date ranges, daily/weekly/monthly grouping, and cumulative views. These usage comparisons are not invoices or contracted charges.
+  
+  Display USD amounts rounded to two decimals while retaining exact arithmetic. Use consistent, theme-aware product colors across spend and usage graphs: blue for storage, purple for risk scanning, and amber for MCP.
+  
+  Preserve the last successful estimate while changing date ranges and if a new range fails to load. Distinguish nonzero amounts that round to zero with a sub-cent marker rather than displaying them as zero.
+  
+  Keep the customer spend endpoint restricted to PAYG organizations. Admin requests require the existing admin authentication and resolve the requested organization by ID or slug.
+- 8fa1872: Add a shared admin support matrix with CSV import, editable coverage, and integration recommendations that include remaining coverage gaps.
+
+### Patch Changes
+
+- 9059ae1: Allow staff to enable Tailscale private access for an organization from the admin feature controls without requiring a separate PostHog rollout flag.
+
 ## 0.4.3
 
 ### Patch Changes

@@ -13,7 +13,7 @@ import (
 )
 
 // LoadAgentPolicy resolves one exact tenant-scoped agent principal and loads its
-// allow-only, agent-runtime-safe policy: the agent's own grants plus the grants
+// agent-runtime-safe policy and MCP restrictions: its own grants plus the grants
 // of the roles it has been assigned. It deliberately does not add user:all,
 // owner, email, or WorkOS-backed principals — only roles the agent itself holds.
 // Invalid or unsafe rows fail closed independently so unrelated valid grants
@@ -130,7 +130,11 @@ func LoadKnownAgentPolicies(ctx context.Context, db accessrepo.DBTX, organizatio
 func normalizeAgentPolicyGrant(row accessrepo.GetPrincipalGrantsRow) (authz.Grant, bool) {
 	var invalid authz.Grant
 	scope := authz.Scope(row.Scope)
-	if ValidateRuntimeScope(CurrentRuntimeScopeRegistryVersion, scope) != nil {
+	// MCP exclusions restrict live parent policy; they never become delegated
+	// allow grants. Keep them so broad direct or role allows can be revoked
+	// on one server without disabling the agent on every other server.
+	isMCPRestriction := scope == authz.ScopeMCPBlockedConnect || scope == authz.ScopeMCPBlockedRead || scope == authz.ScopeMCPBlockedWrite
+	if !isMCPRestriction && ValidateRuntimeScope(CurrentRuntimeScopeRegistryVersion, scope) != nil {
 		return invalid, false
 	}
 	selector, err := authz.SelectorFromRow(row.Selectors)

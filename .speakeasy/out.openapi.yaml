@@ -7331,6 +7331,14 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
+          description: 'Optional MCP authorization resource identifier: the toolset ID when present, otherwise the MCP server ID. Narrows discovery to this server and its project before evaluating exclusions.'
+          in: query
+          name: toolset_id
+          schema:
+            description: 'Optional MCP authorization resource identifier: the toolset ID when present, otherwise the MCP server ID. Narrows discovery to this server and its project before evaluating exclusions.'
+            format: uuid
+            type: string
+        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
@@ -44661,6 +44669,111 @@ paths:
       x-speakeasy-name-override: listServers
       x-speakeasy-react-hook:
         name: RemoteMcpServers
+  /rpc/remoteMcp.probeURL:
+    post:
+      description: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.
+      operationId: probeRemoteMcpURL
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbeURLForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeURLResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: probeURL remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: probeURL
+      x-speakeasy-react-hook:
+        name: ProbeRemoteMcpURL
   /rpc/remoteMcp.updateServer:
     post:
       description: Update a remote MCP server
@@ -44873,7 +44986,11 @@ paths:
         name: UpdateRemoteMcpServerHeader
   /rpc/remoteMcp.verifyURL:
     post:
-      description: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.
+      deprecated: true
+      description: |-
+        Probe a candidate remote MCP server URL and return the legacy boolean verification result.
+
+        Deprecated: use probeURL instead.
       operationId: verifyRemoteMcpURL
       parameters:
         - allowEmptyValue: true
@@ -46959,11 +47076,211 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateRemoteSessionIssuer
+  /rpc/remoteSessions.attachBinding:
+    post:
+      description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+      operationId: attachBinding
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachBindingRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalRemoteSessionBinding'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: attachBinding remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: attachBinding
+  /rpc/remoteSessions.detachBinding:
+    post:
+      description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+      operationId: detachBinding
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetachBindingRequestBody'
+        required: true
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: detachBinding remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: detachBinding
   /rpc/remoteSessions.list:
     get:
-      description: List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
+      description: List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
       operationId: listRemoteSessions
       parameters:
+        - allowEmptyValue: true
+          description: Owned agent whose eligible sessions to list; requires user_session_issuer_id.
+          in: query
+          name: principal_id
+          schema:
+            description: Owned agent whose eligible sessions to list; requires user_session_issuer_id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Issuer configuration sessions must be eligible for; requires principal_id.
+          in: query
+          name: user_session_issuer_id
+          schema:
+            description: Issuer configuration sessions must be eligible for; requires principal_id.
+            format: uuid
+            type: string
         - allowEmptyValue: true
           description: Exact-match filter on subject URN.
           in: query
@@ -47096,6 +47413,108 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: RemoteSessions
+  /rpc/remoteSessions.listBindings:
+    get:
+      description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+      operationId: listBindings
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: principal_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: user_session_issuer_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListBindingsResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listBindings remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: listBindings
   /rpc/remoteSessions.revoke:
     post:
       description: Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.
@@ -68476,7 +68895,7 @@ paths:
         name: UserSessionIssuerCimdClients
   /rpc/userSessionIssuersCimdClients.listPresets:
     get:
-      description: List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' — the default — admit every enabled entry here automatically, with no per-issuer configuration. The catalog is global and contains no tenant data.
+      description: List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' admit every enabled entry here automatically, with no per-issuer configuration. Presets mode is opt-in; an issuer without an explicit mode uses 'open' and evaluates this catalog only for its shadow measurement. The catalog is global and contains no tenant data.
       operationId: listCimdClientPresets
       parameters:
         - allowEmptyValue: true
@@ -71878,6 +72297,22 @@ components:
           description: The toolset slug exposed to the assistant.
       required:
         - toolset_slug
+    AttachBindingRequestBody:
+      type: object
+      properties:
+        principal_id:
+          type: string
+          format: uuid
+        remote_session_id:
+          type: string
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          format: uuid
+      required:
+        - principal_id
+        - user_session_issuer_id
+        - remote_session_id
     AttachKeySetForm:
       type: object
       properties:
@@ -75934,6 +76369,22 @@ components:
         - sensitive_data
         - created_at
         - updated_at
+    DetachBindingRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        principal_id:
+          type: string
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          format: uuid
+      required:
+        - principal_id
+        - user_session_issuer_id
+        - id
     DeviceAgentConfiguration:
       type: object
       properties:
@@ -80926,6 +81377,15 @@ components:
           description: The cursor to be used for the next page of results.
       required:
         - logs
+    ListBindingsResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrincipalRemoteSessionBinding'
+      required:
+        - items
     ListBuiltinExclusionsResult:
       type: object
       properties:
@@ -85682,6 +86142,67 @@ components:
         - window_start
         - window_end
         - actors
+    PrincipalRemoteSessionBinding:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        principal_id:
+          type: string
+          format: uuid
+        remote_session:
+          $ref: '#/components/schemas/RemoteSession'
+        remote_session_client_id:
+          type: string
+          format: uuid
+        remote_session_id:
+          type: string
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          format: uuid
+      required:
+        - id
+        - principal_id
+        - user_session_issuer_id
+        - remote_session_client_id
+        - remote_session_id
+    ProbeURLForm:
+      type: object
+      properties:
+        url:
+          type: string
+          description: The URL of the remote MCP server to probe
+          format: uri
+      description: Form for probing a remote MCP server URL
+      required:
+        - url
+    ProbeURLResult:
+      type: object
+      properties:
+        http_status:
+          type: integer
+          description: HTTP status returned by the remote server. Required for invalid_mcp_response and present for HTTP-based unreachable outcomes.
+          format: int64
+        outcome:
+          type: string
+          description: Probe outcome.
+          enum:
+            - mcp_available
+            - authentication_required
+            - invalid_mcp_response
+            - unreachable
+        protected_resource_metadata_url:
+          type: string
+          description: Absolute HTTP(S) protected resource metadata URL advertised by a WWW-Authenticate challenge. Present only when authentication is required and the advertised URL is valid.
+          format: uri
+        reason:
+          type: string
+          description: Stable machine-readable reason code. Present only when outcome is unreachable; currently timeout, rate_limited, server_error, dns_error, tls_error, guardian_rejected, or transport_error.
+      description: Structured outcome of probing a remote MCP server URL. Variant-specific fields are populated only when applicable.
+      required:
+        - outcome
     ProductFeatures:
       type: object
       properties:
@@ -86897,6 +87418,9 @@ components:
           type: string
           description: The remote_session id.
           format: uuid
+        identity_source:
+          type: string
+          description: The upstream identity interface that supplied the stored account identity, such as an ID token or userinfo response. Absent when upstream identity is unknown.
         refresh_expires_at:
           type: string
           description: Upstream refresh-token expiry. Null when the session has no refresh token.
@@ -86922,6 +87446,12 @@ components:
         updated_at:
           type: string
           format: date-time
+        upstream_display_name:
+          type: string
+          description: Stored display name of the account at the upstream provider. Absent when no upstream identity interface supplied it.
+        upstream_email:
+          type: string
+          description: Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Gram subject.
         user_session_issuer_id:
           type: string
           description: The user_session_issuer this session is bound to.
@@ -87017,7 +87547,6 @@ components:
         - remote_session_issuer_id
         - user_session_issuer_ids
         - client_id
-        - client_id_issued_at
         - created_at
         - updated_at
     RemoteSessionIssuer:
@@ -94007,6 +94536,7 @@ components:
             - email
             - external_user_id
             - user_id
+            - agent_id
             - unknown
         user_label:
           type: string
@@ -94048,6 +94578,7 @@ components:
             - email
             - external_user_id
             - user_id
+            - agent_id
             - unknown
       description: Typed user identity filter
       required:
@@ -94070,6 +94601,7 @@ components:
             - email
             - external_user_id
             - user_id
+            - agent_id
             - unknown
         user_label:
           type: string
@@ -94113,6 +94645,7 @@ components:
             - email
             - external_user_id
             - user_id
+            - agent_id
             - unknown
         user_label:
           type: string
@@ -94151,6 +94684,7 @@ components:
             - email
             - external_user_id
             - user_id
+            - agent_id
             - unknown
         user_label:
           type: string
@@ -94207,6 +94741,7 @@ components:
             - email
             - external_user_id
             - user_id
+            - agent_id
             - unknown
         user_label:
           type: string
@@ -97950,7 +98485,7 @@ components:
           type: string
           description: The URL of the remote MCP server to probe
           format: uri
-      description: Form for probing a remote MCP server URL
+      description: Legacy form for probing a remote MCP server URL
       required:
         - url
         - transport_type
@@ -97975,7 +98510,7 @@ components:
         verified:
           type: boolean
           description: Whether the URL responded in a way consistent with a remote MCP server
-      description: Outcome of a remote MCP server URL verification
+      description: Legacy outcome of a remote MCP server URL verification
       required:
         - verified
         - message

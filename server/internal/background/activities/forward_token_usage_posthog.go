@@ -146,11 +146,10 @@ func (f *ForwardTokenUsageToPostHog) forwardOrganization(ctx context.Context, qu
 		// Release the day's claim so the activity retry (or the next hourly
 		// run) can re-emit the point — otherwise a transient enqueue failure
 		// silently drops this org's trend point for the whole day. The
-		// release runs on a bounded non-cancelable context (same pattern as
-		// tum_usage_alerts.go): the capture may have failed BECAUSE the
-		// parent ctx was cancelled, and a release on that same ctx would fail
-		// with it, stranding the marker. If the delete still fails the point
-		// is lost; log so the gap is traceable.
+		// release runs on a bounded non-cancelable context: the capture may
+		// have failed because the parent ctx was cancelled, and a release on
+		// that same ctx would fail with it, stranding the marker. If the delete
+		// still fails the point is lost; log so the gap is traceable.
 		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
 		if delErr := f.cache.Delete(releaseCtx, dedupeKey); delErr != nil {

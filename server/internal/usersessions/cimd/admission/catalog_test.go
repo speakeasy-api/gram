@@ -46,6 +46,29 @@ func TestCatalogAdmits_IsExactMatch(t *testing.T) {
 	}
 }
 
+// TestCatalogAdmits_GitHubCopilotCLIExactly pins the narrow rule for a client
+// hosted on github.com, where admitting a path namespace would also trust
+// unrelated user-controlled content on the same host.
+func TestCatalogAdmits_GitHubCopilotCLIExactly(t *testing.T) {
+	t.Parallel()
+
+	const clientID = "https://github.com/copilot/cli/client-metadata.json"
+
+	reason, ok := CatalogMatch(clientID)
+	require.True(t, ok)
+	require.Equal(t, AdmitCatalogExact, reason)
+
+	nearMisses := []string{
+		clientID + "/",
+		"https://github.com/copilot/client-metadata.json",
+		"https://github.com/copilot/zzz-not-real/client-metadata.json",
+		"https://github.com/copilot/cli/zzz.json",
+	}
+	for _, url := range nearMisses {
+		require.Falsef(t, catalogAdmits(url), "near-miss %q must not be admitted", url)
+	}
+}
+
 // TestCatalog_EntriesAreWellFormed guards the constant itself: every entry
 // must be a syntactically valid CIMD client_id, or it is dead policy that
 // can never match a real presentation.

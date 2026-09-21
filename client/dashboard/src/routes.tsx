@@ -58,6 +58,7 @@ import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
+import Explore from "./pages/explore/Explore";
 import IdentitiesIndex, {
   IdentityDetailIndexRedirect,
   IdentitiesRoot,
@@ -782,6 +783,13 @@ const ROUTE_STRUCTURE = {
         component: Costs,
       },
     },
+  },
+  explore: {
+    title: "Explore",
+    url: "explore",
+    icon: "telescope",
+    component: Explore,
+    stage: "preview",
   },
   logs: {
     title: "Tool Logs",

@@ -235,7 +235,7 @@ func BuildRenamePayload(agentsRenameBody string, agentsRenameSessionToken string
 
 // BuildListDelegableGrantsPayload builds the payload for the agents
 // listDelegableGrants endpoint from CLI flags.
-func BuildListDelegableGrantsPayload(agentsListDelegableGrantsAgentID string, agentsListDelegableGrantsSessionToken string) (*agents.ListDelegableGrantsPayload, error) {
+func BuildListDelegableGrantsPayload(agentsListDelegableGrantsAgentID string, agentsListDelegableGrantsToolsetID string, agentsListDelegableGrantsSessionToken string) (*agents.ListDelegableGrantsPayload, error) {
 	var err error
 	var agentID string
 	{
@@ -243,6 +243,16 @@ func BuildListDelegableGrantsPayload(agentsListDelegableGrantsAgentID string, ag
 		err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", agentID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
+		}
+	}
+	var toolsetID *string
+	{
+		if agentsListDelegableGrantsToolsetID != "" {
+			toolsetID = &agentsListDelegableGrantsToolsetID
+			err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", *toolsetID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var sessionToken *string
@@ -253,6 +263,7 @@ func BuildListDelegableGrantsPayload(agentsListDelegableGrantsAgentID string, ag
 	}
 	v := &agents.ListDelegableGrantsPayload{}
 	v.AgentID = agentID
+	v.ToolsetID = toolsetID
 	v.SessionToken = sessionToken
 
 	return v, nil

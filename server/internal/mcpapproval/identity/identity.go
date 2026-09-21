@@ -205,6 +205,27 @@ const redactedValue = "<redacted>"
 // same way, which the dedupe key depends on.
 var secretMarkers = []string{"token", "secret", "key", "pass", "auth", "cred", "header", "bearer"}
 
+// ContainsPlaintextHTTPURL reports whether a command includes an absolute
+// plaintext HTTP URL in a standalone or flag value. It intentionally uses the
+// same tokenization and quoting rules as RedactCommand so a URL cannot pass
+// admission in a shape evidence gathering later recognizes.
+func ContainsPlaintextHTTPURL(raw string) bool {
+	fields := strings.FieldsSeq(raw)
+	for field := range fields {
+		candidates := []string{unquoted(field)}
+		if _, value, joined := splitFlag(field); joined {
+			candidates = append(candidates, unquoted(value))
+		}
+		for _, candidate := range candidates {
+			u, err := url.Parse(candidate)
+			if err == nil && strings.EqualFold(u.Scheme, "http") && u.Hostname() != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // RedactCommand renders a stdio launch command with credential-shaped
 // material removed, keeping the structure that identifies the server. Real
 // commands routinely carry secrets — `npx -y mcp-remote https://h/sse

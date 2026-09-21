@@ -93,7 +93,7 @@ func TestSignedWebhookPersistsTranscriptAndEnforcesPolicy(t *testing.T) {
 	result := new(risk.ScanResult)
 	result.Action = "block"
 	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
-	service := &Service{store: store, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
 	key := []byte("EXAMPLE-signing-secret")
 	config.SigningSecrets = []string{"whsec_" + base64.StdEncoding.EncodeToString(key)}
 	mux := goahttp.NewMuxer()
