@@ -12,9 +12,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	extkeysrepo "github.com/speakeasy-api/gram/server/internal/externalkeys/repo"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
+	resourceconnectionsrepo "github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
-	readinessrepo "github.com/speakeasy-api/gram/server/internal/xaareadiness/repo"
 )
 
 // managedLeftovers reports whether each of the connection's managed rows is
@@ -102,8 +102,8 @@ func TestRevoke_WithResourceConnectionReferencingSnapshotApp(t *testing.T) {
 	runSync(t, ctx, newSyncer(t, si), id)
 	managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, id)
 	require.NoError(t, err)
-	q := readinessrepo.New(si.conn.conn)
-	_, err = q.ConfirmConnection(ctx, readinessrepo.ConfirmConnectionParams{
+	q := resourceconnectionsrepo.New(si.conn.conn)
+	_, err = q.UpsertResourceConnection(ctx, resourceconnectionsrepo.UpsertResourceConnectionParams{
 		OrganizationID: si.orgID, IdentityProviderConnectionID: id, RemoteSessionIssuerID: managed.IssuerID,
 		Resource: "https://resource.example.com/mcp", Audience: "https://audience.example.com",
 		OktaApplicationID: pgtype.Text{String: appA, Valid: true},
@@ -113,7 +113,7 @@ func TestRevoke_WithResourceConnectionReferencingSnapshotApp(t *testing.T) {
 	_, err = si.svc.Revoke(ctx, &gen.RevokePayload{SessionToken: nil, ID: verified.ID})
 	require.NoError(t, err)
 
-	rows, err := q.ListReadinessRows(ctx, readinessrepo.ListReadinessRowsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id})
+	rows, err := q.ListResourceConnections(ctx, resourceconnectionsrepo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id})
 	require.NoError(t, err)
 	require.Empty(t, rows)
 	require.Zero(t, countRows(t, ctx, si, "okta_applications", id))

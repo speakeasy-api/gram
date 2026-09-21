@@ -50,6 +50,7 @@ import { McpServers } from "./mcpservers.js";
 import { MetaMcp } from "./metamcp.js";
 import { ModelKeys } from "./modelkeys.js";
 import { NetworkIngress } from "./networkingress.js";
+import { OktaResourceConnections } from "./oktaresourceconnections.js";
 import { OrganizationAssets } from "./organizationassets.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
@@ -86,7 +87,6 @@ import { UserSessionIssuers } from "./usersessionissuers.js";
 import { UserSessionIssuersCimdClients } from "./usersessionissuerscimdclients.js";
 import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
-import { XaaReadiness } from "./xaareadiness.js";
 
 export class Gram extends ClientSDK {
   private _otel?: Otel;
@@ -333,6 +333,13 @@ export class Gram extends ClientSDK {
     return (this._networkIngress ??= new NetworkIngress(this._options));
   }
 
+  private _oktaResourceConnections?: OktaResourceConnections;
+  get oktaResourceConnections(): OktaResourceConnections {
+    return (this._oktaResourceConnections ??= new OktaResourceConnections(
+      this._options,
+    ));
+  }
+
   private _organizationAssets?: OrganizationAssets;
   get organizationAssets(): OrganizationAssets {
     return (this._organizationAssets ??= new OrganizationAssets(this._options));
@@ -525,10 +532,5 @@ export class Gram extends ClientSDK {
   private _variations?: Variations;
   get variations(): Variations {
     return (this._variations ??= new Variations(this._options));
-  }
-
-  private _xaaReadiness?: XaaReadiness;
-  get xaaReadiness(): XaaReadiness {
-    return (this._xaaReadiness ??= new XaaReadiness(this._options));
   }
 }

@@ -8,10 +8,10 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/identity_provider_connections"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	readinessrepo "github.com/speakeasy-api/gram/server/internal/xaareadiness/repo"
+	resourceconnectionsrepo "github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 )
 
-func TestRecordAgent_InvalidatesReadinessOnlyOnChange(t *testing.T) {
+func TestRecordAgent_DeletesResourceConnectionsOnlyOnChange(t *testing.T) {
 	t.Parallel()
 	const agentID = "0oaagent000000000001"
 	const agentAppID = "0oassoapp00000000001"
@@ -36,21 +36,21 @@ func TestRecordAgent_InvalidatesReadinessOnlyOnChange(t *testing.T) {
 			require.NoError(t, err)
 			managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, id)
 			require.NoError(t, err)
-			q := readinessrepo.New(si.conn.conn)
+			q := resourceconnectionsrepo.New(si.conn.conn)
 			for _, resource := range []string{"https://resource.example.com/one", "https://resource.example.com/two"} {
-				_, err := q.ConfirmConnection(ctx, readinessrepo.ConfirmConnectionParams{
+				_, err := q.UpsertResourceConnection(ctx, resourceconnectionsrepo.UpsertResourceConnectionParams{
 					OrganizationID: si.orgID, IdentityProviderConnectionID: id, RemoteSessionIssuerID: managed.IssuerID,
 					Resource: resource, Audience: "https://audience.example.com",
 				})
 				require.NoError(t, err)
 			}
-			params := readinessrepo.ListReadinessRowsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id}
-			before, err := q.ListReadinessRows(ctx, params)
+			params := resourceconnectionsrepo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: id}
+			before, err := q.ListResourceConnections(ctx, params)
 			require.NoError(t, err)
 			require.Len(t, before, 2)
 			_, err = si.svc.RecordAgent(ctx, &gen.RecordAgentPayload{ID: created.ID, AgentID: conv.PtrEmpty(tt.agentID), AgentAppID: conv.PtrEmpty(tt.agentAppID)})
 			require.NoError(t, err)
-			after, err := q.ListReadinessRows(ctx, params)
+			after, err := q.ListResourceConnections(ctx, params)
 			require.NoError(t, err)
 			if tt.preserve {
 				require.Equal(t, before, after, "a no-op must preserve confirmations without rewriting them")

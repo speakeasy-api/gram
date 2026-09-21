@@ -47,6 +47,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/metamcp"
 	_ "github.com/speakeasy-api/gram/server/design/modelkeys"
 	_ "github.com/speakeasy-api/gram/server/design/networkingress"
+	_ "github.com/speakeasy-api/gram/server/design/oktaresourceconnections"
 	_ "github.com/speakeasy-api/gram/server/design/organizations"
 	_ "github.com/speakeasy-api/gram/server/design/otel"
 	_ "github.com/speakeasy-api/gram/server/design/packages"
@@ -84,7 +85,6 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/usersessionissuerscimdclients"
 	_ "github.com/speakeasy-api/gram/server/design/usersessions"
 	_ "github.com/speakeasy-api/gram/server/design/variations"
-	_ "github.com/speakeasy-api/gram/server/design/xaareadiness"
 )
 
 var _ = API("gram", func() {
