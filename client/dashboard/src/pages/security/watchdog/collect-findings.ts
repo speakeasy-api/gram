@@ -18,7 +18,7 @@ type RiskResultsFilter = Omit<
  * enough has been collected. `complete` is false when it stopped early, so a
  * caller that needs the whole set can tell a partial one apart.
  */
-export async function pageRiskResults(
+async function pageRiskResults(
   client: ReturnType<typeof useSdkClient>,
   filter: RiskResultsFilter,
   done: (collected: RiskResult[]) => boolean,

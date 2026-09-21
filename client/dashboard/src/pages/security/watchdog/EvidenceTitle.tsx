@@ -30,10 +30,11 @@ import { collectChatFindings } from "./collect-findings";
  * Agent Sessions in a new tab, and the chevron swaps the title for the whole
  * message the finding was flagged in, in place. The card otherwise shows only
  * the matched span, and the title is a session label cut to 80 runes, so the
- * message itself never reaches this list and has to be loaded. Findings with
- * no chat, viewers without chat:read, and messages that turn out not to be
- * showable only get the chevron when the title visually overflows, and it just
- * un-clips the title.
+ * message itself never reaches this list and has to be loaded. A message that
+ * turns out not to be showable says why under the title, which stays in place.
+ * Findings with no chat or message, and viewers without chat:read, only get
+ * the chevron when the title visually overflows, and it just un-clips the
+ * title.
  */
 export function EvidenceTitle({
   title,
@@ -72,66 +73,71 @@ export function EvidenceTitle({
     setClipped(el.scrollWidth > el.clientWidth);
   }, [title, expanded]);
   const flaggedMessage = useFlaggedMessage(chatId, chatMessageId, expanded);
-  // No chevron promising a message that can't be shown: once the load settles
-  // without one, the header falls back to the plain-title behavior.
-  const expandsToMessage = Boolean(chatId) && !flaggedMessage.unavailable;
+  const expandsToMessage = Boolean(chatId) && Boolean(chatMessageId);
   const titleClassName = cn(
     "text-muted-foreground min-w-0 font-mono text-xs",
     expanded ? "break-words whitespace-pre-wrap" : "truncate",
   );
   return (
     <div className="flex items-start justify-between gap-4 px-3 py-2">
-      <div className="flex min-w-0 items-start gap-1">
-        {chatId ? (
-          <button
-            ref={titleRef as React.Ref<HTMLButtonElement>}
-            type="button"
-            title="Open session"
-            className={cn(titleClassName, "hover:text-foreground text-left")}
-            onClick={() => onOpenChat(chatId)}
-          >
-            {(expanded && flaggedMessage.content) || title}
-          </button>
-        ) : (
-          <span ref={titleRef} className={titleClassName}>
-            {title}
-          </span>
-        )}
-        {(expandsToMessage || clipped) && (
-          <button
-            type="button"
-            aria-expanded={expanded}
-            aria-label={
-              expanded
-                ? "Collapse message"
-                : expandsToMessage
-                  ? "Show flagged message"
-                  : "Show full title"
-            }
-            className="text-muted-foreground hover:text-foreground shrink-0"
-            onClick={() => setExpanded((prev) => !prev)}
-          >
-            {flaggedMessage.loading ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Icon
-                name={expanded ? "chevron-up" : "chevron-down"}
-                className="size-4"
-              />
-            )}
-          </button>
-        )}
-        {chatId && (
-          <Link
-            to={agentSessionHref(routes.agentSessions.href(), chatId)}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Open session in Agent Sessions"
-            title="Open in Agent Sessions"
-            className="text-muted-foreground hover:text-foreground shrink-0"
-          >
-            <Icon name="external-link" className="size-3.5" />
-          </Link>
+      <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex min-w-0 items-start gap-1">
+          {chatId ? (
+            <button
+              ref={titleRef as React.Ref<HTMLButtonElement>}
+              type="button"
+              title="Open session"
+              className={cn(titleClassName, "hover:text-foreground text-left")}
+              onClick={() => onOpenChat(chatId)}
+            >
+              {(expanded && flaggedMessage.content) || title}
+            </button>
+          ) : (
+            <span ref={titleRef} className={titleClassName}>
+              {title}
+            </span>
+          )}
+          {(expandsToMessage || clipped) && (
+            <button
+              type="button"
+              aria-expanded={expanded}
+              aria-label={
+                expanded
+                  ? "Collapse message"
+                  : expandsToMessage
+                    ? "Show flagged message"
+                    : "Show full title"
+              }
+              className="text-muted-foreground hover:text-foreground shrink-0"
+              onClick={() => setExpanded((prev) => !prev)}
+            >
+              {flaggedMessage.loading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Icon
+                  name={expanded ? "chevron-up" : "chevron-down"}
+                  className="size-4"
+                />
+              )}
+            </button>
+          )}
+          {chatId && (
+            <Link
+              to={agentSessionHref(routes.agentSessions.href(), chatId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open session in Agent Sessions"
+              title="Open in Agent Sessions"
+              className="text-muted-foreground hover:text-foreground shrink-0"
+            >
+              <Icon name="external-link" className="size-3.5" />
+            </Link>
+          )}
+        </div>
+        {expanded && flaggedMessage.error && (
+          <p role="alert" className="text-destructive text-xs">
+            {flaggedMessage.error}
+          </p>
         )}
       </div>
       <span className="text-muted-foreground shrink-0 font-mono text-xs">
@@ -144,16 +150,16 @@ export function EvidenceTitle({
 /**
  * The message this finding was flagged in, loaded once the header is expanded.
  * Flagged secrets in it stay dotted out, as in the transcript: revealing one
- * is an audited action this preview must not bypass. `unavailable` is set
- * once the load settles without a showable message (it is outside the first
- * risk window, or the findings needed for masking failed to load or could not
- * be fully paged), leaving the title in place.
+ * is an audited action this preview must not bypass. `error` is set once the
+ * load settles without a showable message (a request failed, the message is
+ * outside the first risk window, or the findings needed for masking could not
+ * be fully paged), and says which.
  */
 function useFlaggedMessage(
   chatId: string | undefined,
   chatMessageId: string | undefined,
   enabled: boolean,
-): { content: React.ReactNode; loading: boolean; unavailable: boolean } {
+): { content: React.ReactNode; loading: boolean; error: string | null } {
   const client = useSdkClient();
   const active = enabled && Boolean(chatId) && Boolean(chatMessageId);
   // The risk transcript's own first request (windows of messages around every
@@ -174,19 +180,32 @@ function useFlaggedMessage(
     enabled: active,
     throwOnError: false,
   });
-  const none = { content: null, loading: false, unavailable: false };
+  const none = { content: null, loading: false, error: null };
   if (!active) return none;
   if (messageQuery.isPending || findingsQuery.isPending) {
     return { ...none, loading: true };
   }
-  if (!messageQuery.data || !findingsQuery.data) {
-    return { ...none, unavailable: true };
+  if (messageQuery.isError || findingsQuery.isError || !messageQuery.data) {
+    return { ...none, error: "Couldn't load this message. Try again." };
+  }
+  if (!findingsQuery.data) {
+    return {
+      ...none,
+      error:
+        "This session has too many findings to mask the message here. Open the session to read it.",
+    };
   }
   const flagged = messageQuery.data.messages.find(
     (m) => m.id === chatMessageId,
   );
   const text = flagged ? flaggedMessageText(flagged) : "";
-  if (!text) return { ...none, unavailable: true };
+  if (!text) {
+    return {
+      ...none,
+      error:
+        "This message is outside the part of the session loaded here. Open the session to read it.",
+    };
+  }
   // The transcript's masking rule: literal secrets and PII (gitleaks, presidio)
   // are dotted out, other matches such as a flagged command are highlighted but
   // readable. Judged against every finding in the chat, so a secret flagged on
@@ -204,7 +223,7 @@ function useFlaggedMessage(
       masked,
     ),
     loading: false,
-    unavailable: false,
+    error: null,
   };
 }
 

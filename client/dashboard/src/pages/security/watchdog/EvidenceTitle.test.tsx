@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   QueryClient,
@@ -48,7 +48,11 @@ function renderTitle(
   onOpenChat = vi.fn<(chatId: string) => void>(),
 ) {
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
       <MemoryRouter>
         <EvidenceTitle
           title={TITLE}
@@ -186,7 +190,7 @@ describe("EvidenceTitle", () => {
     expect(message.textContent).not.toContain("hun");
   });
 
-  it("drops the chevron, keeping the session link, when the message can't be shown", async () => {
+  it("says why under the title when the message is outside the loaded window", async () => {
     hasScope.mockReturnValue(true);
     loadChat.mockResolvedValue({
       messages: [{ id: "msg-other", role: "user", content: "Elsewhere." }],
@@ -197,13 +201,30 @@ describe("EvidenceTitle", () => {
       .setup()
       .click(screen.getByRole("button", { name: "Show flagged message" }));
 
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: /message/ })).toBeNull(),
-    );
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("outside the part of the session");
+    expect(screen.queryByText(/Elsewhere/)).toBeNull();
     expect(screen.getByRole("button", { name: TITLE })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Collapse message" }),
+    ).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Open session in Agent Sessions" }),
     ).toBeTruthy();
+  });
+
+  it("shows an error, and never the message, when the findings fail to load", async () => {
+    hasScope.mockReturnValue(true);
+    listFindings.mockRejectedValue(new Error("boom"));
+    renderTitle("chat-1");
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Show flagged message" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Couldn't load this message");
+    expect(screen.queryByText(/4111/)).toBeNull();
   });
 
   it("stays plain text for findings with no chat", () => {
