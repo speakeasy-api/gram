@@ -1,0 +1,18 @@
+server/database/schema.sql
+  h_e404c1a6a54184 6520-6521
+server/migrations/20260921200025_risk-policies-add-mcp-scope.sql
+  h_e404c1a6a54184 1-2
+server/migrations/atlas.sum
+  h_e404c1a6a54184 1,424
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6ef4a7f80651c7d4fe2d7e1d2f553892fc48f720",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
