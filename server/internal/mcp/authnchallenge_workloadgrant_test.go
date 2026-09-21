@@ -1,12 +1,17 @@
 package mcp_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
@@ -17,7 +22,9 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -46,10 +53,24 @@ type workloadGrantFixture struct {
 func newWorkloadGrantFixture(t *testing.T) workloadGrantFixture {
 	t.Helper()
 
+	return newWorkloadGrantFixtureWithLogger(t, testenv.NewLogger(t))
+}
+
+// newWorkloadGrantFixtureWithLogger builds the fixture with every service log
+// line written to logger.
+func newWorkloadGrantFixtureWithLogger(t *testing.T, logger *slog.Logger) workloadGrantFixture {
+	t.Helper()
+
 	issuer := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil, TLS: true})
 	jwksURI := oauthtest.DiscoverWorkloadJWKSURI(t, issuer)
 
-	ctx, ti := newTestMCPServiceWithMeterProviderAndGuardianOptions(t, testenv.NewMeterProvider(t), guardian.WithTLSRootCAs(issuer.RootCAs()))
+	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, logger, testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+		SessionTTL:         0,
+		LiveSessionCap:     0,
+		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		MaxRequestLifetime: 0,
+	}, nil, guardian.WithTLSRootCAs(issuer.RootCAs()))
 	fx := newAgentConsentFixture(t, ctx, ti)
 	ti.features.SetFlag(feature.FlagWorkloadAssertionGrant, fx.orgID, true)
 
@@ -318,4 +339,109 @@ func TestWorkloadAssertionGrant_AuthenticationHostIssuer(t *testing.T) {
 	form.Set("assertion", f.assertion(t, authenticationHostTokenURL(slug)))
 	w = harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", form)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+// syncBuffer is a bytes.Buffer safe for the concurrent writes a service's
+// logger makes.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	n, err := b.buf.Write(p)
+	if err != nil {
+		return n, fmt.Errorf("write log buffer: %w", err)
+	}
+	return n, nil
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// Neither the assertion nor the minted access token reaches any log line, on
+// the success path or any refusal. The refusal line names the presented
+// subject and a reason; the success line records the issuance.
+func TestWorkloadAssertionGrant_NoTokenBytesInLogs(t *testing.T) {
+	t.Parallel()
+
+	var logs syncBuffer
+	f := newWorkloadGrantFixtureWithLogger(t, slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug, AddSource: false, ReplaceAttr: nil})))
+
+	var secrets []string
+	present := func(assertion string) *httptest.ResponseRecorder {
+		secrets = append(secrets, assertion)
+		// The signature is checked on its own too, so a log line carrying a
+		// truncated token is still caught.
+		secrets = append(secrets, assertion[strings.LastIndex(assertion, ".")+1:])
+		return f.exchange(t, assertion, f.resource)
+	}
+
+	issued := present(f.assertion(t, f.advertisedIssuer))
+	require.Equal(t, http.StatusOK, issued.Code, issued.Body.String())
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(issued.Body.Bytes(), &resp))
+	accessToken, ok := resp["access_token"].(string)
+	require.True(t, ok)
+	secrets = append(secrets, accessToken)
+
+	// A replay, a subject never admitted, and an audience naming another URL.
+	requireWorkloadGrantRefused(t, present(secrets[0]))
+	outsider := "repo:someone-else/app:ref:refs/heads/main"
+	requireWorkloadGrantRefused(t, present(oauthtest.MintWorkloadAssertion(t, f.issuer, oauthtest.WorkloadClaims(f.issuer, outsider, f.advertisedIssuer))))
+	requireWorkloadGrantRefused(t, present(f.assertion(t, f.advertisedIssuer+"/revoke")))
+
+	written := logs.String()
+	for _, secret := range secrets {
+		require.NotContains(t, written, secret)
+	}
+	require.Contains(t, written, "workload session issued")
+	require.Contains(t, written, "workload assertion grant refused")
+	require.Contains(t, written, outsider, "the refusal line names the presented subject so an operator can admit it")
+	require.Contains(t, written, "subject_not_admitted")
+	require.Contains(t, written, "assertion_replayed")
+}
+
+// A cold exchange, which fetches the issuer's key set before admitting the
+// workload, completes well inside the roughly ten seconds Claude Tag waits.
+func TestWorkloadAssertionGrant_ColdExchangeFitsTheClientTimeout(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadGrantFixture(t)
+
+	started := time.Now()
+	w := f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource)
+	elapsed := time.Since(started)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Less(t, elapsed, 5*time.Second, "a cold exchange must leave headroom under a 10 s client timeout")
+}
+
+// The grant is advertised in the authorization server metadata only where it
+// would be accepted.
+func TestWorkloadAssertionGrant_AdvertisedOnlyWhenAccepted(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadGrantFixture(t)
+	slug := f.fx.toolset.McpSlug.String
+
+	advertised := func() []any {
+		grants, ok := fetchASMetadata(t, f.ti, slug)["grant_types_supported"].([]any)
+		require.True(t, ok)
+		return grants
+	}
+
+	require.ElementsMatch(t, []any{"authorization_code", "refresh_token", workloadGrantJWTBearer}, advertised())
+
+	f.ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, f.fx.orgID, false)
+	require.ElementsMatch(t, []any{"authorization_code", "refresh_token"}, advertised(), "not advertised while the agent rollout is off")
+
+	f.ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, f.fx.orgID, true)
+	f.ti.features.SetFlag(feature.FlagWorkloadAssertionGrant, f.fx.orgID, false)
+	require.ElementsMatch(t, []any{"authorization_code", "refresh_token"}, advertised(), "not advertised while the grant's flag is off")
 }

@@ -293,6 +293,29 @@ func (s *Service) workloadAssertionGrantEnabled(ctx context.Context, endpoint *R
 	return evaluation == feature.EvaluationEnabled, nil
 }
 
+// workloadAssertionGrantAdvertised reports whether the endpoint's metadata
+// lists the grant, which it does only where the grant would be accepted. A
+// flag or rollout state that cannot be read counts as off: the metadata is
+// advisory, and the token endpoint makes its own decision on every request.
+func (s *Service) workloadAssertionGrantAdvertised(ctx context.Context, endpoint *ResolvedMcpEndpoint) bool {
+	if s.workloadGrant == nil {
+		return false
+	}
+	if _, ok := agentAuthorizationTarget(endpoint); !ok {
+		return false
+	}
+	enabled, err := s.workloadAssertionGrantEnabled(ctx, endpoint)
+	if err != nil {
+		s.logger.WarnContext(ctx, "workload assertion grant flag unavailable, not advertising the grant", attr.SlogError(err))
+		return false
+	}
+	if !enabled {
+		return false
+	}
+	rolloutEnabled, _, err := s.agentAuthorizationRollout(ctx, s.logger, endpoint)
+	return err == nil && rolloutEnabled
+}
+
 // handleWorkloadAssertionGrant exchanges a workload's platform-issued
 // identity token for a resource-scoped session. It is the JWT bearer grant's
 // clientless branch: a request presenting client authentication is the ID-JAG
