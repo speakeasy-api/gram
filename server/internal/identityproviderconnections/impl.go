@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
+	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -993,6 +994,10 @@ func (s *Service) RecordAgent(ctx context.Context, payload *gen.RecordAgentPaylo
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record agent").LogError(ctx, logger)
 	}
+	// Resource confirmations belong to the recorded agent, not its replacement.
+	if err := oktaresourceconnections.DeleteForConnection(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "delete resource connections").LogError(ctx, logger)
+	}
 	after := connectionRows{Connection: before.Connection, Okta: oktaRow, Managed: before.Managed}
 	if err := s.audit.LogIdentityProviderConnectionRecordAgent(ctx, dbtx, s.auditEvent(authCtx, id, snapshot(*before), snapshot(after))); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log agent record").LogError(ctx, logger)
@@ -1063,6 +1068,10 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "tombstone okta connection details").LogError(ctx, logger)
+	}
+	// Resource connections reference snapshot rows, so they go first.
+	if err := oktaresourceconnections.DeleteForConnection(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "delete resource connections").LogError(ctx, logger)
 	}
 	if err := oktaapplications.DeleteConnectionSnapshot(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "delete applications snapshot").LogError(ctx, logger)

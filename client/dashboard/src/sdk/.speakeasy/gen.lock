@@ -372,6 +372,9 @@ trackedFiles:
   src/funcs/networkIngressGetIngress.ts: {}
   src/funcs/networkIngressRotateCredentials.ts: {}
   src/funcs/networkIngressUpdateIngress.ts: {}
+  src/funcs/oktaResourceConnectionsConfirm.ts: {}
+  src/funcs/oktaResourceConnectionsList.ts: {}
+  src/funcs/oktaResourceConnectionsReset.ts: {}
   src/funcs/organizationAssetsUploadImage.ts: {}
   src/funcs/organizationRemoteSessionClientsAttachKeySet.ts: {}
   src/funcs/organizationRemoteSessionClientsCreate.ts: {}
@@ -856,6 +859,8 @@ trackedFiles:
   src/models/components/cloneenvironmentrequestbody.ts: {}
   src/models/components/codexhookpayload.ts: {}
   src/models/components/codexhookresult.ts: {}
+  src/models/components/confirmoktaresourceconnectionsrequestbody.ts: {}
+  src/models/components/confirmoktaresourceconnectionsresult.ts: {}
   src/models/components/createagentform.ts: {}
   src/models/components/createagentpolicygrantform.ts: {}
   src/models/components/createassistantform.ts: {}
@@ -1200,6 +1205,7 @@ trackedFiles:
   src/models/components/listmembersresult.ts: {}
   src/models/components/listmetamcpmembersresult.ts: {}
   src/models/components/listmetamcpserversresult.ts: {}
+  src/models/components/listoktaresourceconnectionsresult.ts: {}
   src/models/components/listorganizationmcpserversresult.ts: {}
   src/models/components/listorganizationremotesessionclientsresult.ts: {}
   src/models/components/listorganizationremotesessionissuersresult.ts: {}
@@ -1323,6 +1329,8 @@ trackedFiles:
   src/models/components/oauthenablementmetadata.ts: {}
   src/models/components/observabilitysummary.ts: {}
   src/models/components/oktaidentityproviderconnection.ts: {}
+  src/models/components/oktaresourceconnectionconfirmation.ts: {}
+  src/models/components/oktaresourceconnectionserver.ts: {}
   src/models/components/onboardinghookevent.ts: {}
   src/models/components/onboardingstatusresult.ts: {}
   src/models/components/openapiv3deploymentasset.ts: {}
@@ -1435,6 +1443,7 @@ trackedFiles:
   src/models/components/researchreport.ts: {}
   src/models/components/researchtoolcall.ts: {}
   src/models/components/researchwebsearchcall.ts: {}
+  src/models/components/resetoktaresourceconnectionrequestbody.ts: {}
   src/models/components/resolvechallengeform.ts: {}
   src/models/components/resolvechallengesresult.ts: {}
   src/models/components/resolveshadowmcpinventoryrequestform.ts: {}
@@ -1826,6 +1835,7 @@ trackedFiles:
   src/models/operations/cloneenvironment.ts: {}
   src/models/operations/clonetoolset.ts: {}
   src/models/operations/compileexpr.ts: {}
+  src/models/operations/confirmoktaresourceconnections.ts: {}
   src/models/operations/createagent.ts: {}
   src/models/operations/createagentpolicygrant.ts: {}
   src/models/operations/createagentsessionhandoff.ts: {}
@@ -2192,6 +2202,7 @@ trackedFiles:
   src/models/operations/listmetamcpmembers.ts: {}
   src/models/operations/listmetamcpservers.ts: {}
   src/models/operations/listmodelproviderkeys.ts: {}
+  src/models/operations/listoktaresourceconnections.ts: {}
   src/models/operations/listorganizationremotesessionclientmcpservers.ts: {}
   src/models/operations/listorganizationremotesessionclients.ts: {}
   src/models/operations/listorganizationremotesessionclientsessions.ts: {}
@@ -2316,6 +2327,7 @@ trackedFiles:
   src/models/operations/reportagentaiscan.ts: {}
   src/models/operations/reportagentsessionmoved.ts: {}
   src/models/operations/requestaccess.ts: {}
+  src/models/operations/resetoktaresourceconnection.ts: {}
   src/models/operations/resolvechallenge.ts: {}
   src/models/operations/resolveidentity.ts: {}
   src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
@@ -2589,6 +2601,7 @@ trackedFiles:
   src/react-query/cliAuthRedeem.ts: {}
   src/react-query/cloneEnvironment.ts: {}
   src/react-query/cloneToolset.ts: {}
+  src/react-query/confirmOktaResourceConnections.ts: {}
   src/react-query/createAPIKey.ts: {}
   src/react-query/createAgent.ts: {}
   src/react-query/createAgentSessionHandoff.ts: {}
@@ -3042,6 +3055,8 @@ trackedFiles:
   src/react-query/networkIngressDeleteIngress.ts: {}
   src/react-query/networkIngressGetDeleteImpact.core.ts: {}
   src/react-query/networkIngressGetDeleteImpact.ts: {}
+  src/react-query/oktaResourceConnections.core.ts: {}
+  src/react-query/oktaResourceConnections.ts: {}
   src/react-query/onboardingStatus.core.ts: {}
   src/react-query/onboardingStatus.ts: {}
   src/react-query/organization.core.ts: {}
@@ -3163,6 +3178,7 @@ trackedFiles:
   src/react-query/reportAgentAIScan.ts: {}
   src/react-query/reportAgentSessionMoved.ts: {}
   src/react-query/requestAccess.ts: {}
+  src/react-query/resetOktaResourceConnection.ts: {}
   src/react-query/resolveChallenge.ts: {}
   src/react-query/resolveShadowMCPInventoryRequest.ts: {}
   src/react-query/resourceAudience.core.ts: {}
@@ -3546,6 +3562,7 @@ trackedFiles:
   src/sdk/metamcp.ts: {}
   src/sdk/modelkeys.ts: {}
   src/sdk/networkingress.ts: {}
+  src/sdk/oktaresourceconnections.ts: {}
   src/sdk/organizationassets.ts: {}
   src/sdk/organizationremotesessionclients.ts: {}
   src/sdk/organizationremotesessionissuers.ts: {}
@@ -4060,6 +4077,28 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  confirmOktaResourceConnections:
+    speakeasy-default-confirm-okta-resource-connections:
+      requestBody:
+        application/json: {"connections": [{"audience": "https://pink-accelerator.com", "mcp_server_id": "14e72370-3baf-430c-9b89-f1da31e5d6ea"}]}
+      responses:
+        "200":
+          application/json: {"servers": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  confirmXaaConnections:
+    speakeasy-default-confirm-xaa-connections:
+      requestBody:
+        application/json: {"connections": [{"audience": "<value>", "mcp_server_id": "d8013368-7046-4832-bcc1-d7c90706216e"}]}
+      responses:
+        "200":
+          application/json: {"servers": [{"client_binding": "missing", "mcp_server_id": "80133687-0468-432c-9c1d-7c90706216ef", "pending": false, "project_id": "2500dce4-e2c0-487e-adb8-e6ac7a1b9bf9", "project_slug": "<value>", "resource_indicator": "<value>", "scopes": [], "server_name": "<value>", "server_slug": "<value>", "state": "needs_agent"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   createAPIKey:
     speakeasy-default-create-API-key:
       requestBody:
@@ -5744,6 +5783,34 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  exportOktaResourceConnectionsChecklist:
+    speakeasy-default-export-okta-resource-connections-checklist:
+      parameters:
+        query:
+          format: "csv"
+          include_all: false
+      responses:
+        "200":
+          text/*: "x-file: example.file"
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  exportXaaChecklist:
+    speakeasy-default-export-xaa-checklist:
+      parameters:
+        query:
+          format: "csv"
+          include_all: false
+      responses:
+        "200":
+          text/csv: "x-file: example.file"
+          application/json: "x-file: example.file"
+          text/*: "x-file: example.file"
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   fetchGlobalRemoteSessionIssuerMetadata:
     speakeasy-default-fetch-global-remote-session-issuer-metadata:
       requestBody:
@@ -8417,6 +8484,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listOktaResourceConnections:
+    speakeasy-default-list-okta-resource-connections:
+      parameters:
+        query:
+          include_all: false
+      responses:
+        "200":
+          application/json: {"agent_recorded": false, "pending_count": 382200, "servers": [], "total_count": 358029, "undiscovered_count": 530596}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listOrganizationRemoteSessionClientMcpServers:
     speakeasy-default-list-organization-remote-session-client-mcp-servers:
       parameters:
@@ -9233,6 +9312,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listXaaReadiness:
+    speakeasy-default-list-xaa-readiness:
+      parameters:
+        query:
+          include_all: false
+      responses:
+        "200":
+          application/json: {"agent_recorded": false, "pending_count": 421724, "servers": [{"client_binding": "single", "mcp_server_id": "a335e973-7ddc-40bc-a7be-347d344fe85f", "pending": false, "project_id": "c2e9a9d6-54d9-45c5-98b3-af99a31ac284", "project_slug": "<value>", "resource_indicator": "<value>", "scopes": [], "server_name": "<value>", "server_slug": "<value>", "state": "needs_connection"}], "total_count": 110524, "undiscovered_count": 358387}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   loadChat:
     speakeasy-default-load-chat:
       parameters:
@@ -9890,6 +9981,28 @@ examples:
       responses:
         "200":
           application/json: {"sent_to_count": 769567}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  resetOktaResourceConnection:
+    speakeasy-default-reset-okta-resource-connection:
+      requestBody:
+        application/json: {"mcp_server_id": "f156b5bd-e0b9-4530-bccb-76ba794390b8"}
+      responses:
+        "200":
+          application/json: {"client_binding": "bound", "mcp_server_id": "c5060175-589f-4e58-b4f2-2d837e80c518", "pending": false, "project_id": "7cc40928-c374-46ce-873f-49e1cf359c22", "project_slug": "<value>", "resource_indicator": "<value>", "scopes": ["<value 1>"], "server_name": "<value>", "server_slug": "<value>", "state": "not_applicable"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  resetXaaConnection:
+    speakeasy-default-reset-xaa-connection:
+      requestBody:
+        application/json: {"mcp_server_id": "1699e2a3-68bb-48ae-a7b4-8b9484b719dd"}
+      responses:
+        "200":
+          application/json: {"client_binding": "missing", "mcp_server_id": "b1d4974b-2eae-4bb3-9114-e40dcbd6689b", "pending": true, "project_id": "c8c831db-e4a1-4498-9b28-1f9ab439063f", "project_slug": "<value>", "resource_indicator": "<value>", "scopes": ["<value 1>"], "server_name": "<value>", "server_slug": "<value>", "state": "not_applicable"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
