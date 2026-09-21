@@ -109,20 +109,22 @@ type WorkerOptions struct {
 	MCPRegistryClient   *externalmcp.RegistryClient
 	TelemetryLogger     *telemetry.Logger
 	ClickhouseConn      clickhouse.Conn
-	TelemetryRepo       *telemetryrepo.Queries
-	TriggersApp         *bgtriggers.App
-	AssistantsCore      *assistants.ServiceCore
-	TemporalEnv         *tenv.Environment
-	PIIScanner          risk_analysis.PIIScanner
-	PIScanner           *promptinjection.Scanner
-	CustomRuleScanner   *customruleanalyzer.Scanner
-	BuiltinPresets      *presetlib.Library
-	ShadowMCPClient     *shadowmcp.Client
-	AuditLogger         *audit.Logger
-	WorkOSClient        activities.WorkOSClient
-	ProductFeatures     *productfeatures.Client
-	PluginPublisher     *plugins.Service
-	Publishers          *Publishers
+	// MeterReadConn uses the least-privilege ClickHouse reader for billing summaries.
+	MeterReadConn     clickhouse.Conn
+	TelemetryRepo     *telemetryrepo.Queries
+	TriggersApp       *bgtriggers.App
+	AssistantsCore    *assistants.ServiceCore
+	TemporalEnv       *tenv.Environment
+	PIIScanner        risk_analysis.PIIScanner
+	PIScanner         *promptinjection.Scanner
+	CustomRuleScanner *customruleanalyzer.Scanner
+	BuiltinPresets    *presetlib.Library
+	ShadowMCPClient   *shadowmcp.Client
+	AuditLogger       *audit.Logger
+	WorkOSClient      activities.WorkOSClient
+	ProductFeatures   *productfeatures.Client
+	PluginPublisher   *plugins.Service
+	Publishers        *Publishers
 
 	// IssuerMetadataRefresher is optional. Share it with every in-process producer;
 	// the constructing caller owns it and must call Wait after those producers stop.
@@ -201,6 +203,7 @@ func ForDeploymentProcessing(
 		RedisClient:                  nil,
 		PosthogClient:                nil,
 		TelemetryLogger:              nil,
+		MeterReadConn:                nil,
 		TelemetryRepo:                nil,
 		TriggersApp:                  nil,
 		CacheAdapter:                 nil,
@@ -290,6 +293,7 @@ func NewTemporalWorker(
 		RagService:                   nil,
 		MCPRegistryClient:            nil,
 		TelemetryLogger:              nil,
+		MeterReadConn:                nil,
 		TelemetryRepo:                nil,
 		TriggersApp:                  nil,
 		CacheAdapter:                 nil,
@@ -343,6 +347,7 @@ func NewTemporalWorker(
 			RagService:                   conv.Default(o.RagService, opts.RagService),
 			MCPRegistryClient:            conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
 			TelemetryLogger:              conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
+			MeterReadConn:                conv.Default(o.MeterReadConn, opts.MeterReadConn),
 			TelemetryRepo:                conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
 			TriggersApp:                  conv.Default(o.TriggersApp, opts.TriggersApp),
 			CacheAdapter:                 conv.Default(o.CacheAdapter, opts.CacheAdapter),
@@ -447,6 +452,7 @@ func NewTemporalWorker(
 		opts.TemporalEnv,
 		opts.TelemetryLogger,
 		opts.ClickhouseConn,
+		opts.MeterReadConn,
 		opts.TelemetryRepo,
 		opts.TriggersApp,
 		opts.CacheAdapter,
