@@ -13,7 +13,7 @@ afterEach(cleanup);
 
 describe("AgentLink", () => {
   it("selects the authorized agent at the project management destination", () => {
-    const onRowClick = vi.fn();
+    const onRowClick = vi.fn<() => void>();
     render(
       <MemoryRouter>
         <div onClick={onRowClick}>
