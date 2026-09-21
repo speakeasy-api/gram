@@ -120,7 +120,7 @@ function EvidenceRow({
   result: RiskResult;
   onExclude: (result: RiskResult) => void;
   onDismiss: (result: RiskResult) => void;
-  onOpenChat: (chatId: string) => void;
+  onOpenChat: (chatId: string, chatMessageId?: string) => void;
 }): JSX.Element {
   // A judge finding's "match" is the entire flagged event (often absent on
   // the realtime path), and its description carries the verdict rationale —
@@ -217,6 +217,7 @@ export function SignalDrawer({
   const [openChat, setOpenChat] = useState<{
     signalKey: string;
     chatId: string;
+    chatMessageId: string | undefined;
   } | null>(null);
   // Set when leaving the exclusion editor so the remounting detail view
   // slides back in from the left — but never on the drawer's first open,
@@ -228,8 +229,8 @@ export function SignalDrawer({
     setReturningFromEditor(true);
   };
 
-  const openChatId =
-    openChat && openChat.signalKey === signal?.key ? openChat.chatId : null;
+  const shownChat =
+    openChat && openChat.signalKey === signal?.key ? openChat : null;
 
   const ruleId = signal?.ruleId ?? "";
   // The list endpoint's rule filter is substring-match, so an id that is a
@@ -595,8 +596,12 @@ export function SignalDrawer({
                                 })
                               }
                               onDismiss={(r) => dismiss([r])}
-                              onOpenChat={(chatId) =>
-                                setOpenChat({ signalKey: signal.key, chatId })
+                              onOpenChat={(chatId, chatMessageId) =>
+                                setOpenChat({
+                                  signalKey: signal.key,
+                                  chatId,
+                                  chatMessageId,
+                                })
                               }
                             />
                           )}
@@ -608,11 +613,13 @@ export function SignalDrawer({
               </div>
             </RevealAllProvider>
           )}
-          {/* The risk-focused transcript Risk Events opens. Nested inside this
+          {/* The risk-focused transcript Risk Events opens, scrolled to the
+              finding that was clicked rather than the chat's first. Nested inside this
               sheet's content so closing it leaves the signal drawer open
               instead of reading as an outside click. */}
           <ChatDetailSheet
-            chatId={openChatId}
+            chatId={shownChat?.chatId ?? null}
+            focusedMessageId={shownChat?.chatMessageId}
             onClose={() => setOpenChat(null)}
             onDelete={() => setOpenChat(null)}
             riskFocus

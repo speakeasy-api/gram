@@ -27,8 +27,8 @@ import { collectChatFindings } from "./collect-findings";
  * Evidence card header: the session title with a chevron and a session link
  * right after it, and the finding's age on the right. Clicking the title opens
  * the session transcript over the drawer, the link opens the same session in
- * Agent Sessions in a new tab, and the chevron swaps the title for the whole
- * message the finding was flagged in, in place. The card otherwise shows only
+ * Agent Sessions in a new tab, and the chevron shows the whole message the
+ * finding was flagged in under the title. The card otherwise shows only
  * the matched span, and the title is a session label cut to 80 runes, so the
  * message itself never reaches this list and has to be loaded. A message that
  * turns out not to be showable says why under the title, which stays in place.
@@ -48,7 +48,7 @@ export function EvidenceTitle({
   chatId: string | undefined;
   /** The message the finding was flagged in; what the chevron expands to. */
   chatMessageId: string | undefined;
-  onOpenChat: (chatId: string) => void;
+  onOpenChat: (chatId: string, chatMessageId?: string) => void;
 }): JSX.Element {
   const routes = useRoutes();
   const { hasScope } = useRBAC();
@@ -88,9 +88,9 @@ export function EvidenceTitle({
               type="button"
               title="Open session"
               className={cn(titleClassName, "hover:text-foreground text-left")}
-              onClick={() => onOpenChat(chatId)}
+              onClick={() => onOpenChat(chatId, chatMessageId)}
             >
-              {(expanded && flaggedMessage.content) || title}
+              {title}
             </button>
           ) : (
             <span ref={titleRef} className={titleClassName}>
@@ -134,9 +134,24 @@ export function EvidenceTitle({
             </Link>
           )}
         </div>
-        {expanded && flaggedMessage.error && (
-          <p role="alert" className="text-destructive text-xs">
-            {flaggedMessage.error}
+        {/* Outside the title button so the message can be selected and
+            copied, and a click on it doesn't open the session. */}
+        {expanded && flaggedMessage.content && (
+          <div className="text-muted-foreground font-mono text-xs break-words whitespace-pre-wrap">
+            {flaggedMessage.content}
+          </div>
+        )}
+        {expanded && flaggedMessage.problem && (
+          <p
+            role="alert"
+            className={cn(
+              "text-xs",
+              flaggedMessage.problem.failed
+                ? "text-destructive"
+                : "text-warning",
+            )}
+          >
+            {flaggedMessage.problem.text}
           </p>
         )}
       </div>
@@ -150,22 +165,27 @@ export function EvidenceTitle({
 /**
  * The message this finding was flagged in, loaded once the header is expanded.
  * Flagged secrets in it stay dotted out, as in the transcript: revealing one
- * is an audited action this preview must not bypass. `error` is set once the
- * load settles without a showable message (a request failed, the message is
- * outside the first risk window, or the findings needed for masking could not
- * be fully paged), and says which.
+ * is an audited action this preview must not bypass. `problem` is set once the
+ * load settles without a showable message and says why: a request failed
+ * (`failed`), or, as warnings, the message is not in the chat's latest
+ * generation, the finding is no longer active, or the findings needed for
+ * masking could not be fully paged.
  */
 function useFlaggedMessage(
   chatId: string | undefined,
   chatMessageId: string | undefined,
   enabled: boolean,
-): { content: React.ReactNode; loading: boolean; error: string | null } {
+): {
+  content: React.ReactNode;
+  loading: boolean;
+  problem: { text: string; failed: boolean } | null;
+} {
   const client = useSdkClient();
   const active = enabled && Boolean(chatId) && Boolean(chatMessageId);
-  // The risk transcript's own first request (windows of messages around every
-  // flagged one), so opening the session afterwards reuses this response. It is
-  // the cheapest load that includes this finding's message for all but very
-  // long sessions.
+  // The risk transcript's own first request (every actively flagged message in
+  // the latest generation, with context around each), so opening the session
+  // afterwards reuses this response. A finding carries no generation, so one
+  // flagged before the chat was compacted or edited can't be asked for.
   const messageQuery = useLoadChat(
     { id: chatId ?? "", limit: WINDOW_INITIAL_LIMIT, riskOnly: true },
     undefined,
@@ -180,19 +200,24 @@ function useFlaggedMessage(
     enabled: active,
     throwOnError: false,
   });
-  const none = { content: null, loading: false, error: null };
+  const none = { content: null, loading: false, problem: null };
   if (!active) return none;
   if (messageQuery.isPending || findingsQuery.isPending) {
     return { ...none, loading: true };
   }
   if (messageQuery.isError || findingsQuery.isError || !messageQuery.data) {
-    return { ...none, error: "Couldn't load this message. Try again." };
+    return {
+      ...none,
+      problem: { text: "Couldn't load this message. Try again.", failed: true },
+    };
   }
   if (!findingsQuery.data) {
     return {
       ...none,
-      error:
-        "This session has too many findings to mask the message here. Open the session to read it.",
+      problem: {
+        text: "This session has too many findings to mask the message here. Open the session to read it.",
+        failed: false,
+      },
     };
   }
   const flagged = messageQuery.data.messages.find(
@@ -202,13 +227,19 @@ function useFlaggedMessage(
   if (!text) {
     return {
       ...none,
-      error:
-        "This message is outside the part of the session loaded here. Open the session to read it.",
+      problem: {
+        text:
+          messageQuery.data.maxGeneration > 0
+            ? "This message is from an earlier version of the session, before it was compacted or edited, and can't be shown here."
+            : "This message is no longer flagged in the session, so it can't be shown here.",
+        failed: false,
+      },
     };
   }
-  // The transcript's masking rule: literal secrets and PII (gitleaks, presidio)
-  // are dotted out, other matches such as a flagged command are highlighted but
-  // readable. Judged against every finding in the chat, so a secret flagged on
+  // The transcript's masking rule: once the message holds a literal secret or
+  // PII (gitleaks, presidio), every match in it is dotted out; otherwise
+  // matches such as a flagged command are highlighted but readable. Judged
+  // against every finding in the chat, so a secret flagged on
   // another message is still masked if it recurs in this one.
   const findings = findingsQuery.data;
   const secretMatches = withJsonEscaped(
@@ -223,7 +254,7 @@ function useFlaggedMessage(
       masked,
     ),
     loading: false,
-    error: null,
+    problem: null,
   };
 }
 

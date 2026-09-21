@@ -121,6 +121,9 @@ interface ChatDetailPanelProps {
   onDelete: (chatId: string) => void;
   /** One-based raw transcript message index to load, center, and highlight. */
   focusedMessageTurn?: number;
+  /** Message to center and highlight, for callers that hold its id rather than
+   * its turn. Only found when the active transcript has it loaded. */
+  focusedMessageId?: string;
   /** Risk-focused view: collapse the transcript to the flagged messages plus a
    * few of context either side, expandable via "show more". Implies dimming. */
   riskFocus?: boolean;
@@ -209,6 +212,7 @@ export function ChatDetailSheet({
   onClose,
   onDelete,
   focusedMessageTurn,
+  focusedMessageId,
   riskFocus,
   dimNonRisk,
   onOpenChat,
@@ -236,6 +240,7 @@ export function ChatDetailSheet({
                   onClose={onClose}
                   onDelete={onDelete}
                   focusedMessageTurn={focusedMessageTurn}
+                  focusedMessageId={focusedMessageId}
                   riskFocus={riskFocus}
                   dimNonRisk={dimNonRisk}
                   onOpenChat={onOpenChat}
@@ -1078,6 +1083,7 @@ function ChatDetailPanel({
   onClose,
   onDelete,
   focusedMessageTurn,
+  focusedMessageId: focusedMessageIdProp,
   riskFocus = false,
   dimNonRisk: dimNonRiskProp = false,
   onOpenChat,
@@ -1225,7 +1231,7 @@ function ChatDetailPanel({
   ]);
   const focusedMessageId =
     validFocusedMessageTurn === undefined
-      ? null
+      ? (focusedMessageIdProp ?? null)
       : (transcript.messages[validFocusedMessageTurn - 1]?.id ?? null);
   const { data: membersData } = useMembers();
   const userLabel = chat

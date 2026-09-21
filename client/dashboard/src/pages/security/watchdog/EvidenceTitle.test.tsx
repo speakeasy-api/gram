@@ -45,7 +45,7 @@ const FULL = "Please refund order #4023. Customer card 4111 1111 1111 1111.";
 
 function renderTitle(
   chatId: string | undefined,
-  onOpenChat = vi.fn<(chatId: string) => void>(),
+  onOpenChat = vi.fn<(chatId: string, chatMessageId?: string) => void>(),
 ) {
   render(
     <QueryClientProvider
@@ -107,7 +107,7 @@ describe("EvidenceTitle", () => {
     const onOpenChat = renderTitle("chat-1");
 
     await userEvent.setup().click(screen.getByRole("button", { name: TITLE }));
-    expect(onOpenChat).toHaveBeenCalledWith("chat-1");
+    expect(onOpenChat).toHaveBeenCalledWith("chat-1", "msg-flagged");
     expect(
       screen
         .getByRole("link", { name: "Open session in Agent Sessions" })
@@ -185,14 +185,17 @@ describe("EvidenceTitle", () => {
 
     const mark = await screen.findByText(/^•+$/);
     expect(mark.tagName).toBe("MARK");
-    const message = screen.getByRole("button", { name: /Logging in now/ });
+    // Beside the title button, not inside it, so it can be selected and copied.
+    const message = screen.getByText(/Logging in now/);
+    expect(message.closest("button")).toBeNull();
     expect(message.textContent).toContain("login");
     expect(message.textContent).not.toContain("hun");
   });
 
-  it("says why under the title when the message is outside the loaded window", async () => {
+  it("warns that the message is from an earlier generation when the chat has moved on", async () => {
     hasScope.mockReturnValue(true);
     loadChat.mockResolvedValue({
+      maxGeneration: 1,
       messages: [{ id: "msg-other", role: "user", content: "Elsewhere." }],
     });
     renderTitle("chat-1");
@@ -202,7 +205,7 @@ describe("EvidenceTitle", () => {
       .click(screen.getByRole("button", { name: "Show flagged message" }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("outside the part of the session");
+    expect(alert.textContent).toContain("earlier version of the session");
     expect(screen.queryByText(/Elsewhere/)).toBeNull();
     expect(screen.getByRole("button", { name: TITLE })).toBeTruthy();
     expect(
@@ -211,6 +214,22 @@ describe("EvidenceTitle", () => {
     expect(
       screen.getByRole("link", { name: "Open session in Agent Sessions" }),
     ).toBeTruthy();
+  });
+
+  it("says the message is no longer flagged when the chat has a single generation", async () => {
+    hasScope.mockReturnValue(true);
+    loadChat.mockResolvedValue({
+      maxGeneration: 0,
+      messages: [{ id: "msg-other", role: "user", content: "Elsewhere." }],
+    });
+    renderTitle("chat-1");
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Show flagged message" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("no longer flagged");
   });
 
   it("shows an error, and never the message, when the findings fail to load", async () => {
