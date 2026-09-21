@@ -16,6 +16,9 @@ const orgSlug = vi.hoisted(() => ({ current: "acme" }));
 const isPlatformAdmin = vi.hoisted(() => vi.fn(() => true));
 const exploreDemoGoTo = vi.hoisted(() => vi.fn());
 const logout = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const hasAnyScope = vi.hoisted(() =>
+  vi.fn((): ((scopes: string[]) => boolean) => () => true),
+);
 
 vi.mock("@/contexts/Auth", () => ({
   useUser: () => ({
@@ -34,7 +37,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "proj",
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasAnyScope: () => true, isLoading: false }),
+  useRBAC: () => ({ hasAnyScope: hasAnyScope(), isLoading: false }),
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
@@ -132,6 +135,8 @@ afterEach(() => {
   isPlatformAdmin.mockReset();
   isPlatformAdmin.mockReturnValue(true);
   exploreDemoGoTo.mockReset();
+  hasAnyScope.mockReset();
+  hasAnyScope.mockReturnValue(() => true);
   logout.mockReset().mockResolvedValue(undefined);
   restoreLocation();
 });
@@ -141,6 +146,27 @@ describe("SidebarUserMenu", () => {
     render(<SidebarUserMenu />);
     expect(screen.getByTestId("theme-switcher")).toBeTruthy();
     expect(screen.getAllByText("Sagar").length).toBeGreaterThan(0);
+  });
+
+  it("links View user profile to the signed-in user's identity page", () => {
+    render(<SidebarUserMenu />);
+
+    expect(
+      screen
+        .getByRole("link", { name: "View user profile" })
+        .getAttribute("href"),
+    ).toBe("/identities/user%3Auser_01h8x");
+  });
+
+  it("hides View user profile from a reader without org:read", () => {
+    hasAnyScope.mockReturnValue(
+      (scopes: string[]) => !scopes.includes("org:read"),
+    );
+    render(<SidebarUserMenu />);
+
+    expect(
+      screen.queryByRole("link", { name: "View user profile" }),
+    ).toBeNull();
   });
 
   it("links the crown icon to Platform admin in a new tab", () => {
