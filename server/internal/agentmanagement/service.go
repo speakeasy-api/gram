@@ -146,10 +146,18 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		if err != nil {
 			return err
 		}
+		// The agent belongs to the project it was created in. Older agents
+		// predate project scoping and carry none, so this stays nullable
+		// rather than rejecting a caller with no active project.
+		projectID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		if authCtx.ProjectID != nil {
+			projectID = uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+		}
 		agent, err := repo.New(tx).CreateAgentWithID(ctx, repo.CreateAgentWithIDParams{
 			ID:             agentID,
 			OrganizationID: human.Auth.ActiveOrganizationID,
 			OwnerUserID:    ownerUserID,
+			ProjectID:      projectID,
 			Name:           name,
 		})
 		if err != nil {
