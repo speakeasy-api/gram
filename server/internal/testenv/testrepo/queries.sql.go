@@ -3122,6 +3122,22 @@ func (q *Queries) SetUserSessionIssuerOrganizationID(ctx context.Context, arg Se
 	return err
 }
 
+const setUserSessionIssuerUseAuthenticationHostFixture = `-- name: SetUserSessionIssuerUseAuthenticationHostFixture :exec
+UPDATE user_session_issuers
+SET use_authentication_host = $1
+WHERE id = $2
+`
+
+type SetUserSessionIssuerUseAuthenticationHostFixtureParams struct {
+	UseAuthenticationHost bool
+	ID                    uuid.UUID
+}
+
+func (q *Queries) SetUserSessionIssuerUseAuthenticationHostFixture(ctx context.Context, arg SetUserSessionIssuerUseAuthenticationHostFixtureParams) error {
+	_, err := q.db.Exec(ctx, setUserSessionIssuerUseAuthenticationHostFixture, arg.UseAuthenticationHost, arg.ID)
+	return err
+}
+
 const setWorkosLastEventIDFixture = `-- name: SetWorkosLastEventIDFixture :exec
 UPDATE organization_metadata
 SET workos_last_event_id = $1

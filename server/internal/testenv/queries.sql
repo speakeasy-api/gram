@@ -1088,3 +1088,8 @@ SELECT
    WHERE at.project_id = @project_id AND at.assistant_id = @assistant_id) AS toolsets,
   (SELECT count(*) FROM assistant_mcp_servers ams
    WHERE ams.project_id = @project_id AND ams.assistant_id = @assistant_id) AS mcp_servers;
+
+-- name: SetUserSessionIssuerUseAuthenticationHostFixture :exec
+UPDATE user_session_issuers
+SET use_authentication_host = @use_authentication_host
+WHERE id = @id;

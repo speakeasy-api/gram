@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -71,8 +72,10 @@ func authenticationHostTokenURL(mcpSlug string) string {
 func useAuthenticationHost(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID) {
 	t.Helper()
 
-	_, err := ti.conn.Exec(ctx, "UPDATE user_session_issuers SET use_authentication_host = true WHERE id = $1", issuerID)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(ti.conn).SetUserSessionIssuerUseAuthenticationHostFixture(ctx, testrepo.SetUserSessionIssuerUseAuthenticationHostFixtureParams{
+		UseAuthenticationHost: true,
+		ID:                    issuerID,
+	}))
 }
 
 func wellKnownRequest(t *testing.T, prefix, mcpSlug string) *http.Request {
