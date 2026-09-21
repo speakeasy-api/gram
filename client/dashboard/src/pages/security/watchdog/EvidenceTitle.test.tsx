@@ -192,6 +192,45 @@ describe("EvidenceTitle", () => {
     expect(message.textContent).not.toContain("hun");
   });
 
+  it("refuses to show a message whose flagged secret can't be found in its text", async () => {
+    hasScope.mockReturnValue(true);
+    loadChat.mockResolvedValue({
+      messages: [
+        {
+          id: "msg-flagged",
+          role: "assistant",
+          content: "Logging in now.",
+          toolCalls: JSON.stringify([
+            {
+              id: "call-1",
+              function: {
+                name: "login",
+                // The provider escaped the secret in a form JSON.stringify
+                // wouldn't, so neither the match nor its escaped form lines up.
+                arguments: '{"password":"caf\\u00e9/pw"}',
+              },
+            },
+          ]),
+        },
+      ],
+    });
+    listFindings.mockResolvedValue({
+      results: [
+        { source: "gitleaks", match: "café/pw", chatMessageId: "msg-flagged" },
+      ],
+    });
+    renderTitle("chat-1");
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Show flagged message" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("can't be masked here");
+    expect(screen.queryByText(/Logging in now/)).toBeNull();
+    expect(screen.queryByText(/u00e9/)).toBeNull();
+  });
+
   it("warns that the message is from an earlier generation when the chat has moved on", async () => {
     hasScope.mockReturnValue(true);
     loadChat.mockResolvedValue({

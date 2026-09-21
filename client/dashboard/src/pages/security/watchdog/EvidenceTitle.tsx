@@ -6,14 +6,21 @@ import { agentSessionHref } from "@/pages/chatLogs/agentSessionLink";
 import {
   getMatchStrings,
   highlightMatches,
+  jsonEscaped,
   matchRanges,
   resultsAreSensitive,
+  withJsonEscaped,
 } from "@/pages/chatLogs/chatHelpers";
 import { parseToolCalls } from "@/pages/chatLogs/traceEntries";
-import { argsToString, messageText } from "@/pages/chatLogs/transcript";
+import {
+  argsToString,
+  messageEnvelope,
+  messageText,
+} from "@/pages/chatLogs/transcript";
 import { WINDOW_INITIAL_LIMIT } from "@/pages/chatLogs/useWindowedTranscript";
 import { useRoutes } from "@/routes";
 import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useLoadChat } from "@gram/client/react-query/loadChat.js";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
@@ -168,8 +175,9 @@ export function EvidenceTitle({
  * is an audited action this preview must not bypass. `problem` is set once the
  * load settles without a showable message and says why: a request failed
  * (`failed`), or, as warnings, the message is not in the chat's latest
- * generation, the finding is no longer active, or the findings needed for
- * masking could not be fully paged.
+ * generation, the finding is no longer active, the findings needed for masking
+ * could not be fully paged, or a secret flagged in the message can't be found
+ * in its text to mask.
  */
 function useFlaggedMessage(
   chatId: string | undefined,
@@ -236,12 +244,21 @@ function useFlaggedMessage(
       },
     };
   }
+  const findings = findingsQuery.data;
+  if (flagged && hasUnlocatedSecret(findings, flagged, text)) {
+    return {
+      ...none,
+      problem: {
+        text: "A secret flagged in this message can't be located in its text, so it can't be masked here. Open the session to read it.",
+        failed: false,
+      },
+    };
+  }
   // The transcript's masking rule: once the message holds a literal secret or
   // PII (gitleaks, presidio), every match in it is dotted out; otherwise
   // matches such as a flagged command are highlighted but readable. Judged
   // against every finding in the chat, so a secret flagged on
   // another message is still masked if it recurs in this one.
-  const findings = findingsQuery.data;
   const secretMatches = withJsonEscaped(
     getMatchStrings(findings.filter((r) => resultsAreSensitive([r]))),
   );
@@ -272,11 +289,25 @@ function flaggedMessageText(message: ChatMessage): string {
   return parts.filter(Boolean).join("\n\n");
 }
 
-/** Adds each match as it reads inside a JSON string, longest first. Tool call
- * arguments are JSON, so a secret holding a quote, backslash or newline
- * appears there escaped and the literal match alone would leave it unmasked. */
-function withJsonEscaped(matches: string[]): string[] {
-  const all = new Set(matches);
-  for (const match of matches) all.add(JSON.stringify(match).slice(1, -1));
-  return [...all].sort((a, b) => b.length - a.length);
+/** Whether a secret or PII match flagged on this very message can't be found in
+ * the text about to be shown. Tool call arguments arrive as the provider wrote
+ * them, so a secret can sit there in an escaping (`\u00e9`, `\/`) that neither
+ * the literal match nor its JSON-escaped form lines up with, and it would print
+ * in the clear. A match inside the harness envelope is fine: the envelope is
+ * stripped from the text, so the secret isn't shown at all. */
+function hasUnlocatedSecret(
+  findings: RiskResult[],
+  message: ChatMessage,
+  text: string,
+): boolean {
+  const envelope = messageEnvelope(message.content);
+  const onMessage = findings.filter(
+    (r) => r.chatMessageId === message.id && resultsAreSensitive([r]),
+  );
+  return getMatchStrings(onMessage).some(
+    (match) =>
+      !text.includes(match) &&
+      !text.includes(jsonEscaped(match)) &&
+      !envelope.includes(match),
+  );
 }

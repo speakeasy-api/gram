@@ -2,7 +2,8 @@
 export const AGENT_SESSION_CHAT_PARAM = "chatId";
 
 /** Link to Agent Sessions with `chatId`'s transcript open. `agentSessionsHref`
- * is `routes.agentSessions.href()`. */
+ * is the page's own path: `routes.agentSessions.href()`, or one built for
+ * another project. */
 export function agentSessionHref(
   agentSessionsHref: string,
   chatId: string,

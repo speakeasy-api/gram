@@ -129,6 +129,20 @@ export function getMatchStrings(results: RiskResult[] | undefined): string[] {
   return [...set].sort((a, b) => b.length - a.length);
 }
 
+/** `match` as it reads inside a JSON string. Tool call arguments are JSON, so a
+ * secret holding a quote, backslash or newline appears there escaped and the
+ * literal match alone would leave it unmasked. */
+export function jsonEscaped(match: string): string {
+  return JSON.stringify(match).slice(1, -1);
+}
+
+/** `matches` plus each one's JSON-escaped form, longest first. */
+export function withJsonEscaped(matches: string[]): string[] {
+  const all = new Set(matches);
+  for (const match of matches) all.add(jsonEscaped(match));
+  return [...all].sort((a, b) => b.length - a.length);
+}
+
 export function maskValue(value: string): string {
   // Mask character-for-character so revealing/hiding doesn't change the text
   // length (and thus doesn't shift surrounding layout).
