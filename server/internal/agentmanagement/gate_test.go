@@ -3,6 +3,7 @@ package agentmanagement
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,6 +31,7 @@ func (a staticSessionAuthorizer) AuthorizeWithPostAuthenticationCheck(
 }
 
 type recordingAgentManagementFeatures struct {
+	mu         sync.Mutex
 	evaluation feature.Evaluation
 	err        error
 	flag       feature.Flag
@@ -50,6 +52,9 @@ func (*recordingAgentManagementFeatures) FlagPayload(context.Context, feature.Fl
 }
 
 func (f *recordingAgentManagementFeatures) EvaluateFlag(_ context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
+	// Parallel service calls share this recorder; assertions read it after calls finish.
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.flag = flag
 	f.distinctID = distinctID
 	f.groups = groups

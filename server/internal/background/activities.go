@@ -225,6 +225,7 @@ func NewActivities(
 	temporalEnv *tenv.Environment,
 	telemetryLogger *telemetry.Logger,
 	chConn clickhouse.Conn,
+	meterReadConn clickhouse.Conn,
 	telemetryRepo *telemetryrepo.Queries,
 	triggerApp *bgtriggers.App,
 	cacheAdapter cache.Cache,
@@ -440,8 +441,8 @@ func NewActivities(
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                      activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:              activities.NewRefreshBillingUsage(logger, db, billingRepo),
-		snapshotBillingCycleUsage:        activities.NewSnapshotBillingCycleUsage(logger, db, chConn, cacheAdapter, emailService),
-		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, chConn, emailService, siteURL),
+		snapshotBillingCycleUsage:        activities.NewSnapshotBillingCycleUsage(logger, db, chConn),
+		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, meterReadConn, emailService, siteURL),
 		forwardTokenUsageToPostHog:       activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
 		refreshOpenRouterKey:             activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		setOpenRouterSpendCap:            activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, cacheAdapter),
@@ -1038,11 +1039,11 @@ func (a *Activities) RepairOrphanedAPIKeyCreators(ctx context.Context) error {
 }
 
 func (a *Activities) PublishPluginProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
-	result, err := a.pluginPublisher.PublishProject(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf("publish plugin project: %w", err)
-	}
-	return result, nil
+	// Returned unwrapped: the Temporal SDK serializes only a top-level
+	// *ApplicationError's non-retryable flag and type, so any wrapper here would
+	// turn PluginPublisher's permanent rejections back into retried failures
+	// the workflow can no longer match on.
+	return a.pluginPublisher.PublishProject(ctx, input) //nolint:wrapcheck // PluginPublisher already prefixes its errors; see above
 }
 
 func (a *Activities) ListSpendRuleOrgs(ctx context.Context) ([]string, error) {

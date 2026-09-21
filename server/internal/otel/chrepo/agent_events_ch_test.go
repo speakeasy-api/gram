@@ -2,6 +2,7 @@ package chrepo
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -13,13 +14,14 @@ func TestInsertAgentEvents(t *testing.T) {
 	conn := newTestClickhouse(t)
 	queries := New(conn)
 	orgID := "org-" + uuid.NewString()
+	now := time.Now().UnixNano()
 
 	row := func(recordID, eventID, eventType string, roles []string) AgentEventRow {
 		return AgentEventRow{
 			OrganizationID:     orgID,
 			ProjectID:          "project-1",
-			OccurredAtUnixNano: 1_724_500_000_000_000_001,
-			ObservedAtUnixNano: 1_724_500_000_000_000_002,
+			OccurredAtUnixNano: now,
+			ObservedAtUnixNano: now,
 			RecordID:           recordID,
 			SessionID:          "session-1",
 			TurnID:             "turn-1",

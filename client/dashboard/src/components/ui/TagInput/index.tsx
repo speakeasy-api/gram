@@ -11,6 +11,8 @@ import {
 export interface TagInputProps {
   /** Id of the inner text input, so a label's htmlFor can target it. */
   id?: string;
+  /** Accessible name for the inner text input, where no label targets it. */
+  ariaLabel?: string;
   /** The tags currently entered. */
   value: string[];
   /** Called with the new tag list whenever a tag is added or removed. */
@@ -45,6 +47,7 @@ function splitTagText(text: string, onSpace = false): string[] {
 // still pending when the field loses focus is added rather than lost.
 export function TagInput({
   id,
+  ariaLabel,
   value,
   onChange,
   placeholder,
@@ -130,6 +133,7 @@ export function TagInput({
       ))}
       <input
         id={id}
+        aria-label={ariaLabel}
         type="text"
         value={draft}
         disabled={disabled}

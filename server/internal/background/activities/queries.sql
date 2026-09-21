@@ -748,11 +748,11 @@ WHERE om.id = ANY(@organization_ids::text[])
   );
 
 -- name: ListWeeklyUsageSummaryTargets :many
--- Organizations that receive the weekly tokens-under-management usage
--- summary email: enabled enterprise organizations with an explicit billing
--- alert email and enabled PAYG organizations (whose fallback audience is
--- resolved by the activity). The anchor day determines the billing cycle
--- window; the slug builds the billing page link.
+-- Organizations that receive the weekly metered usage summary email: enabled
+-- enterprise organizations with an explicit billing alert email and enabled
+-- PAYG organizations (whose fallback audience is resolved by the activity).
+-- The anchor day determines the billing-cycle windows; the slug builds the
+-- billing page link.
 SELECT
     om.id AS organization_id,
     om.name AS organization_name,

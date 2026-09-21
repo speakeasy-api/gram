@@ -72,10 +72,9 @@ type PluginGeneratorRolloutResult struct {
 	// unchanged-fingerprint skips and go unnoticed. logSummary always
 	// reports a non-zero count here.
 	Conflicted int
-	// Rejected counts candidates whose publish actor is no longer a member of
-	// the organization (see ErrTypePluginActorNotMember). The candidate query
-	// picks a current member on the next tick, so this is a warning, not a
-	// failure.
+	// Rejected counts candidates whose organization has no member left to
+	// attribute the publish to (see ErrTypePluginActorNotMember). Nothing a
+	// retry can fix, so this is a warning, not a failure.
 	Rejected int
 	Failed   int
 }
@@ -201,7 +200,7 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 					}
 					if errors.As(err, &appErr) && appErr.Type() == bgactivities.ErrTypePluginActorNotMember {
 						result.Rejected++
-						workflow.GetLogger(ctx).Warn("plugin project publish skipped: actor is not an organization member", "error", err)
+						workflow.GetLogger(ctx).Warn("plugin project publish skipped: no organization member to publish as", "error", err)
 						continue
 					}
 					result.Failed++

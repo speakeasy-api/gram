@@ -133,8 +133,13 @@ func TestCreateRequest_RejectsBadInput(t *testing.T) {
 	_, err = ti.service.CreateRequest(ctx, createPayload("stdio_command", "   ", ""))
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
-	// Only a server the MCP backend could actually reach gets a review.
+	// Proactive review intake probes external evidence, so it accepts only
+	// authenticated transport and rejects plaintext URLs before any gather starts.
 	_, err = ti.service.CreateRequest(ctx, createPayload("server_url", "ftp://server.example/mcp", ""))
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = ti.service.CreateRequest(ctx, createPayload("server_url", "http://server.example/mcp", ""))
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = ti.service.CreateRequest(ctx, createPayload("stdio_command", "npx -y mcp-remote http://server.example/mcp", ""))
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
 	// The justification is the one input no automated evidence supplies.

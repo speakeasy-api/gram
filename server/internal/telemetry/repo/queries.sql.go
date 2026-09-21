@@ -4010,6 +4010,7 @@ const (
 	toolUsageTargetKindSkill      = "skill"
 
 	toolUsageUserKindEmail          = "email"
+	toolUsageUserKindAgentID        = "agent_id"
 	toolUsageUserKindExternalUserID = "external_user_id"
 	toolUsageUserKindUserID         = "user_id"
 	toolUsageUserKindUnknown        = "unknown"
@@ -5572,6 +5573,9 @@ func appendMetaMCPTargetBranch(typeArgs, kindArgs, idArgs, labelArgs *[]string, 
 // The gateway an event belongs to: the target itself, else the gateway that dispatched it.
 const toolUsageGatewayIDExpr = "if(target_type = '" + ToolUsageTargetTypeMetaMCP + "', target_id, meta_mcp_server_id)"
 
+// Match trusted server attribution from trace_summaries_mv on raw-log reads.
+const toolUsageAgentIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')"
+
 // toolUsageTraceRowsFromSummariesCTE builds the normalized_traces CTE from the
 // trace_summaries materialized view (one row per trace) for the common case where no
 // free-text query or arbitrary attribute filters are active. It emits the same output
@@ -5590,6 +5594,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		"max(toolset_slug) AS g_toolset_slug",
 		"any(skill_name) AS g_skill_name",
 		"any(user_email) AS g_user_email",
+		"max(agent_id) AS g_agent_id",
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
 		"any(hook_source) AS g_hook_source",
@@ -5738,8 +5743,9 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		)
 	}
 
-	userKey := chFirstNonEmpty("g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
+	userKey := chFirstNonEmpty("g_agent_id", "g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
 	userKind := chMultiIf(
+		"g_agent_id != ''", "'"+toolUsageUserKindAgentID+"'",
 		"g_user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"g_external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
 		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",
@@ -5852,6 +5858,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"tool_source",
 		"skill_name",
 		"user_email",
+		toolUsageAgentIDExpr+" AS agent_id",
 		"external_user_id",
 		"user_id",
 		"account_type",
@@ -5946,12 +5953,13 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 	}
 
 	userKind := chMultiIf(
+		"agent_id != ''", "'"+toolUsageUserKindAgentID+"'",
 		"user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
 		"user_id != ''", "'"+toolUsageUserKindUserID+"'",
 		"'"+toolUsageUserKindUnknown+"'",
 	)
-	userKey := chFirstNonEmpty("user_email", "external_user_id", "user_id", "'Unknown'")
+	userKey := chFirstNonEmpty("agent_id", "user_email", "external_user_id", "user_id", "'Unknown'")
 	logGroupKind := chMultiIf(
 		"trace_id != ''", "'trace_id'",
 		"trigger_correlation_id != ''", "'correlation_id'",
@@ -6250,12 +6258,13 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	// aggregate, which nests any()/sum() and fails with ILLEGAL_AGGREGATION once a
 	// caller (uniqExact(tool_name), sum(success), ...) aggregates over normalized_events.
 	userKind := chMultiIf(
+		"g_agent_id != ''", "'"+toolUsageUserKindAgentID+"'",
 		"g_user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"g_external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
 		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",
 		"'"+toolUsageUserKindUnknown+"'",
 	)
-	userKey := chFirstNonEmpty("g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
+	userKey := chFirstNonEmpty("g_agent_id", "g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
 
 	// The MCP client is self-reported at the initialize handshake, so it is only
 	// present on traffic Gram terminated as an MCP server. Hook-observed calls,
@@ -6273,6 +6282,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"max(tool_name) AS g_tool_name",
 		"any(gram_urn) AS g_gram_urn",
 		"any(user_email) AS g_user_email",
+		"max(agent_id) AS g_agent_id",
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
 		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
@@ -6296,6 +6306,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"max(tool_name) AS g_tool_name",
 		"any(tool_source) AS g_tool_source",
 		"any(user_email) AS g_user_email",
+		"max(agent_id) AS g_agent_id",
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
 		"any(skill_name) AS g_skill_name",

@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Outcome of a remote MCP server URL verification
+ * Legacy outcome of a remote MCP server URL verification
  */
 export type VerifyURLResult = {
   /**
