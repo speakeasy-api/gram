@@ -829,9 +829,11 @@ const (
 
 	GitHubUsernameKey = attribute.Key("gram.github.username")
 
-	AIIntegrationConfigIDKey           = attribute.Key("gram.ai_integration.config_id")
-	AIIntegrationSyncScheduleKey       = attribute.Key("gram.ai_integration.sync_schedule")
-	AIIntegrationUsagePollNextAfterKey = attribute.Key("gram.ai_integration.usage_poll.next_after")
+	AIIntegrationConfigIDKey                = attribute.Key("gram.ai_integration.config_id")
+	AIIntegrationSyncScheduleKey            = attribute.Key("gram.ai_integration.sync_schedule")
+	AIIntegrationUsagePollNextAfterKey      = attribute.Key("gram.ai_integration.usage_poll.next_after")
+	AIIntegrationPollProviderRejectedKey    = attribute.Key("gram.ai_integration.poll.provider_rejected")
+	AIIntegrationPollProviderUnavailableKey = attribute.Key("gram.ai_integration.poll.provider_unavailable")
 
 	ResilienceBreakerStateKey           = attribute.Key("gram.circuit_breaker.state")
 	ResilienceBreakerPreviousStateKey   = attribute.Key("gram.circuit_breaker.previous_state")
@@ -2914,6 +2916,20 @@ func AIIntegrationSyncSchedule(v string) attribute.KeyValue {
 }
 func SlogAIIntegrationSyncSchedule(v string) slog.Attr {
 	return slog.String(string(AIIntegrationSyncScheduleKey), v)
+}
+
+func AIIntegrationPollProviderRejected(v bool) attribute.KeyValue {
+	return AIIntegrationPollProviderRejectedKey.Bool(v)
+}
+func SlogAIIntegrationPollProviderRejected(v bool) slog.Attr {
+	return slog.Bool(string(AIIntegrationPollProviderRejectedKey), v)
+}
+
+func AIIntegrationPollProviderUnavailable(v bool) attribute.KeyValue {
+	return AIIntegrationPollProviderUnavailableKey.Bool(v)
+}
+func SlogAIIntegrationPollProviderUnavailable(v bool) slog.Attr {
+	return slog.Bool(string(AIIntegrationPollProviderUnavailableKey), v)
 }
 
 func AIIntegrationUsagePollNextAfter(v time.Time) attribute.KeyValue {

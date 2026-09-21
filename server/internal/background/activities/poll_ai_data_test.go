@@ -402,6 +402,37 @@ func TestNewPollFailureErrorExpandsShareableCauses(t *testing.T) {
 	require.Contains(t, appErr.Message(), "import cost logs: download failed")
 }
 
+// A provider rejection or outage that reached the schedule row is the
+// provider's failure, not Gram's: the activity succeeds so one misconfigured
+// integration cannot fill activity failure alerting, which is there for our
+// own unexpected errors.
+func TestFinalizePollFailureKeepsProviderFailuresOffTheActivity(t *testing.T) {
+	t.Parallel()
+
+	configID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	rejection := fmt.Errorf("sync chatgpt conversation data: %w",
+		&codexapi.HTTPError{StatusCode: 403, Status: "403 Forbidden", Body: `{"detail":"API key not authorized for enterprise logs"}`})
+	outage := fmt.Errorf("sync codex cost data: %w",
+		&guardian.RetriesExhaustedError{Method: "GET", URL: "https://api.chatgpt.com", Attempts: 5, StatusCode: 500, Body: "", Err: nil})
+
+	require.NoError(t, finalizePollFailure(configID, aiintegrations.ProviderChatGPTCompliance, 1, true, false, true, rejection))
+	require.NoError(t, finalizePollFailure(configID, aiintegrations.ProviderCodexCompliance, 1, false, true, true, outage))
+
+	// Unrecorded failures still fail: the schedule row says nothing, so
+	// Temporal is the only place the failure would show up at all.
+	var appErr *temporal.ApplicationError
+	err := finalizePollFailure(configID, aiintegrations.ProviderChatGPTCompliance, 1, true, false, false, rejection)
+	require.ErrorAs(t, err, &appErr)
+	require.True(t, appErr.NonRetryable())
+
+	// So do failures that are ours to explain, on every attempt.
+	ours := errors.New("decode codex compliance cost log")
+	require.Error(t, finalizePollFailure(configID, aiintegrations.ProviderCodexCompliance, 1, false, false, false, ours))
+	err = finalizePollFailure(configID, aiintegrations.ProviderCodexCompliance, PollUsageMaxAttempts, false, false, true, ours)
+	require.ErrorAs(t, err, &appErr)
+	require.False(t, appErr.NonRetryable())
+}
+
 func TestNewPollFailureErrorMarksAuthFailuresNonRetryable(t *testing.T) {
 	t.Parallel()
 
