@@ -932,6 +932,15 @@ func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, 
 	return s.RecordSchedulePollFailure(ctx, configID, provider, t, shareableErr, 0)
 }
 
+// PauseScheduleForRejectedCredentials records a save-time credential refusal
+// on one schedule and pauses it immediately. It lands the same state a poll
+// rejection reaches after AutoPauseAfterRejectedPolls failures, minus the
+// polls: the provider already gave its answer for this feed, and repeating the
+// question cannot change it until the user saves different credentials.
+func (s *Store) PauseScheduleForRejectedCredentials(ctx context.Context, configID uuid.UUID, schedule string, shareableErr error) error {
+	return s.RecordSchedulePollFailure(ctx, configID, schedule, time.Now().UTC(), shareableErr, 1)
+}
+
 // epochTime is the never-synced watermark sentinel for time-kind schedules
 // and the "due immediately" next_poll_after for newly created ones.
 func epochTime() time.Time {
