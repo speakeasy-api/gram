@@ -3228,6 +3228,96 @@ func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {
 	}
 }
 
+func TestGeneratePlatformMCPPackageEmitsMigrateWorkflow(t *testing.T) {
+	t.Parallel()
+
+	files, err := PublicPlatformMCPFiles("https://app.getgram.ai", "17")
+	require.NoError(t, err)
+
+	const skillPath = "skills/migrate-mcp-between-projects/SKILL.md"
+	claudeSkill := files["speakeasy/"+skillPath]
+	require.NotEmpty(t, claudeSkill)
+	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/"+skillPath])
+
+	workflow := string(claudeSkill)
+	cursor := 0
+	for _, tool := range []string{
+		"list_projects",
+		"find_mcp",
+		"get_mcp",
+		"get_mcp_access",
+		"get_mcp_client_admission",
+		"list_plugins",
+		"get_plugin",
+		"inspect_mcp_candidate",
+		"inspect_mcp_candidate",
+		"register_catalog_mcp",
+		"register_remote_mcp",
+		"find_mcp",
+		"get_mcp",
+		"update_mcp_metadata",
+		"get_mcp_readiness",
+		"get_mcp_readiness",
+		"attach_platform_mcp_identity_provider",
+		"attach_platform_mcp_identity_provider",
+		"get_setup_handoff",
+		"get_mcp_readiness",
+		"get_mcp_client_admission",
+		"set_mcp_client_admission",
+		"list_plugins",
+		"get_plugin",
+		"list_plugin_assignments",
+		"set_plugin_assignments",
+		"get_mcp_readiness",
+		"distribute_mcp_to_plugin",
+		"get_plugin",
+		"get_mcp",
+		"get_mcp",
+		"disable_mcp",
+		"get_mcp",
+		"get_mcp",
+		"enable_mcp",
+		"remove_mcp_from_plugin",
+	} {
+		token := "`" + tool + "`"
+		index := strings.Index(workflow[cursor:], token)
+		require.NotEqual(t, -1, index, "%s must appear in the required workflow order", tool)
+		cursor += index + len(token)
+	}
+	for _, guardrail := range []string{
+		"report that project discovery is incomplete and hand off to the AICP dashboard",
+		"Secrets never enter chat.",
+		"never let the source and target be the same project",
+		"Nothing is dropped silently.",
+		"a fresh idempotency key",
+		"`confirmed: true`",
+		"`force: true`",
+		"immediately preceding `expected_version`",
+		"Registration is private and does not distribute the MCP.",
+		"Do not choose for them and do not assume the default plugin.",
+		"never disable the source to make the target succeed",
+		"Do not claim that users have the MCP unless the returned live state supports that conclusion.",
+		"Never delete anything.",
+		"It is not available to managed project assistants",
+		"never disable the source until the target's live state has been verified and the user confirms retirement",
+		"Never retry a mutation automatically",
+		"Use `send_platform_mcp_feedback` only after asking for consent",
+	} {
+		require.Contains(t, workflow, guardrail)
+	}
+	for _, forbidden := range []string{
+		"Gram",
+		"api key",
+		"client_secret",
+		"Authorization:",
+		"hooks",
+		"speakeasy-skill-feedback",
+		"app.getgram.ai",
+	} {
+		require.NotContains(t, workflow, forbidden)
+	}
+}
+
 func TestGenerateMCPFilesEmitsDistributedSkills(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{

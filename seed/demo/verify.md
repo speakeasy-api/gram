@@ -83,14 +83,26 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     field. The organization **MCP Sessions** page shows the same five
     connections and the same two badges.
 
-11. **External OAuth settings** — open **MCP → Acme OAuth Discovery →
+11. **Workload sessions** — on the project **MCP Sessions** page, two rows show
+    a workflow icon instead of an avatar and a blue **Workload** badge reading
+    `Acme CI · Agent …`. One names the active managed agent, the other the
+    suspended one, which the badge says in parentheses. Hovering a badge shows
+    the issuer URL on `ci-identity.example.com`, the full `repo:acme/…` subject,
+    and an **Admitted by** line: the payments workload lists two admissions
+    (this project and the organization), the docs workload one. Opening a row's
+    **Revoke** dialog lists the stop controls narrowest first, marks
+    **Withdraw the admission** and **Delete the issuer** as the two that stop
+    the workload reconnecting, and says the rest are not yet available in the
+    dashboard.
+
+12. **External OAuth settings** — open **MCP → Acme OAuth Discovery →
     Authentication** (`/mcp/acme-oauth-discovery/authentication`). The page
     shows the existing Gram-hosted metadata configuration, recommends
     provider-hosted metadata, and offers **Review update**. Opening the review
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
 
-12. **Killswitches on the identity Access tab (local rewritten seed only)** —
+13. **Killswitches on the identity Access tab (local rewritten seed only)** —
     Killswitch management intentionally rejects demo/support sessions. Verify this
     contract in the local organization after `mise run seed`, not through the
     demo-org impersonation flow. **Secure** carries no Killswitch entry: open
@@ -115,13 +127,13 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     `/<org>/killswitch` forwards to **Identities**; and
     `/<org>/killswitch/<killswitchId>?range=…` forwards onto its subject's
     Access tab with that record open and the range still applied.
-13. **Audit logs** — Killswitch history contributes nine rows: six
+14. **Audit logs** — Killswitch history contributes nine rows: six
     **activated**, one **changed**, one **lifted/deactivated**, and one
     **expired**. Mutation rows name the same fictional operator and prescription
     version as their Killswitch history entries; the expiry row is attributed to
     **System**, follows the bounded row's deadline, and exposes no internal note
     in the organization-visible audit snapshot.
-14. **Employee Shadow AI** — open **Employee Enrollment**, then Priya's detail
+15. **Employee Shadow AI** — open **Employee Enrollment**, then Priya's detail
     page. The Shadow AI section lists Claude Code, Cursor, Codex, and Ollama in
     deterministic last-seen order, spans Harness and Local model categories,
     and shows two devices where applicable. Installed / Running signals,
@@ -129,7 +141,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     hardware identifiers. Jonas's detail shows Claude Code, Cursor, and Aider,
     proving each page is filtered to its canonical enrolled-user identity.
 
-15. **Gateway overview Activity** — open MCP → **Acme Agent Gateway** → Overview.
+16. **Gateway overview Activity** — open MCP → **Acme Agent Gateway** → Overview.
     The Activity section shows non-zero tool calls over the last 7 days, a
     Gateway tool usage chart with all four tools populated, the three discovery tools
     decreasing (list_servers > describe_server > describe_tools) and
@@ -143,7 +155,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Gateway (not Shadow MCP) and link back to the gateway, and each member
     dispatch carries a "via Acme Agent Gateway" marker. Back on the MCP
     listing, the gateway card shows no "never used" marker.
-16. **Organization setup board** — with the `gram-setup-board` flag enabled,
+17. **Organization setup board** — with the `gram-setup-board` flag enabled,
     open `/acme-demo/setup/board`. Confirm all four columns render, Priya owns
     Set up observability in other platforms, `security-owner@demo.getgram.ai` owns Configure
     integrations in Awaiting Support, and Set up identity provider and Set up
@@ -152,7 +164,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     four tasks. As a platform admin, enable **Show hidden tasks** and confirm
     all three appear with a Hidden badge.
 
-17. **Managed agents (local rewritten seed only)** — run `mise run seed` and
+18. **Managed agents (local rewritten seed only)** — run `mise run seed` and
     use an ordinary human session in the local organization, with permission to
     view all agents and authorize credentials (for example, the local seeded
     admin). Shared demo impersonation remains intentionally restricted by the
@@ -260,7 +272,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       shared SQL. Local-only developer keys may be restored by
       `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
 
-18. **Billing meter usage** — select a custom trailing 14-day window. Storage
+19. **Billing meter usage** — select a custom trailing 14-day window. Storage
     shows s-tokens of stored content, bandwidth shows ingress and egress bytes,
     and risk content shows all six scanners. Department breakdown includes
     missing attribution and a remainder. Chart series and table totals sum to
@@ -273,6 +285,66 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     across all nine meters. The nine intentional duplicate physical deliveries
     must not increase API usage, while the incremental summary records all 873
     deliveries. Run the seed twice and repeat.
+
+20. **Billing spend availability** — in the enterprise demo organization, open
+    Billing. The spend heading, controls, chart, and product table must be absent,
+    while the ordinary usage explorer stays visible. `usage.getSpendBreakdown`
+    must return `availability: "unsupported_plan"`, `products: []`, and
+    `total_cost_usd: "0"` with reporting-window metadata.
+    For the available visualization, use a PAYG organization in the local stack
+    only; restore any temporary local tier change afterward. Never change the
+    shared demo tier to exercise this path. Select a custom trailing 14-day
+    window and confirm `availability: "available"` with non-zero estimated costs
+    for storage, per-scanner risk, and MCP egress only; inference must not appear.
+    Compare quantities against `billing_meter_daily_summaries` ordinary-usage
+    totals (including physical duplicate deliveries). Apply current PAYG rates
+    and verify exact product costs sum to the response total; display rounds only
+    at presentation. A PAYG period with no usage remains `available`, with three
+    zero-filled product series and a visible zero-spend visualization.
+    Switch daily/weekly/monthly and cumulative modes, preserving the total.
+    Remove a product and confirm its stack, table row, and cost contribution
+    disappear together; clear the selection and confirm the selection prompt.
+    Restore all products, check the current in-progress bucket, and select an
+    empty historical range. Check desktop and mobile layouts and confirm Usage,
+    Rate, and Estimated cost values share their respective column's right edge.
+    Repeat after reseeding. Local rewritten-seed checks alone do not qualify
+    this shared-demo row for `[x]`.
+
+21. **Admin billing spend by product** — sign in to the admin dashboard and open
+    the enterprise demo organization's **Billing** page without impersonation or
+    changing its account type. Select a trailing 14-day window. The spend section
+    and `/admin/organization.spendBreakdown` must report non-zero storage,
+    per-scanner risk, and MCP egress estimates from the existing meter fixtures,
+    even without a Stripe subscription. These are current PAYG list-price
+    comparisons, not the organization's actual invoice or contracted charges.
+    Open both `/organizations/<ORG_ID>/billing` and
+    `/organizations/<ORG_SLUG>/billing` with the same explicit date range. Call
+    the spend API with each identifier too: the reports must match apart from
+    `queried_at`, and both routes must render the same product table.
+    Check that API product costs sum exactly to the total, displayed USD amounts
+    round to two decimals (nonzero amounts rounding to zero show `<$0.01`), and
+    ingress and inference are excluded. Changing the
+    product selection must update the chart, table, and selected total together.
+    Storage is blue, risk scanning purple, and MCP amber in both the spend and
+    usage graphs, including cumulative views and light/dark themes. Check
+    billing-cycle selection, custom dates, an empty historical range,
+    refresh/error recovery, and desktop/mobile layouts. Delay and then fail a
+    new-range request: retain the previous chart, table, and total while loading
+    and after failure; retry must replace them with the requested range.
+    Switch organizations and confirm no previous organization's values remain.
+    An unauthenticated request must be rejected; the customer-facing enterprise
+    spend endpoint must still return `unsupported_plan`.
+
+    Verification recorded 2026-09-19 on the local admin UI against the
+    shared-demo tenant, not the rewritten developer organization. Enterprise
+    tier and absence of a Stripe subscription were retained. Browser checks
+    covered selection, date ranges, grouping, cumulative mode, empty states,
+    retry, organization switching, mobile width, and both themes; API checks
+    covered exact arithmetic, dense buckets, invalid bounds, missing
+    organizations, and authentication. ID/slug API reports and rendered tables
+    matched; delayed and failed range changes retained the prior estimate and
+    recovered on retry.
+    [Visual evidence on PR #6602](https://github.com/speakeasy-api/gram/pull/6602#issuecomment-5742380327).
 
 ## On failure
 

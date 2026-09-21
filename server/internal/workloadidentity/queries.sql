@@ -55,3 +55,31 @@ SELECT EXISTS (
     AND (project_id = @project_id OR project_id IS NULL)
     AND deleted IS FALSE
 );
+
+-- name: ResolveWorkloadAgentAssignment :one
+-- The agent a workload principal inherits its permission policy from.
+--
+-- Keyed on the workload principal itself — (organization, issuer row, subject) —
+-- and deliberately not on an admission row. Admissions are tiered by project
+-- while the principal is organization-scoped, so withdrawing one tier's
+-- admission must not change what the workload may do under another. That is
+-- also why no project arm appears here, unlike WorkloadIdentityIsAdmitted.
+--
+-- At most one row can match: workload_agent_assignments_workload_key is unique
+-- on these three columns for live rows, which is where "one agent per workload"
+-- is enforced. Unassigning is a soft delete, so deleted rows are excluded or the
+-- workload would keep the authority an administrator believes they removed.
+--
+-- The issuer must be live too. Deleting an issuer soft-deletes only its own
+-- row, so without the join a session minted before the delete would keep the
+-- authority of an identity the organization no longer trusts.
+SELECT a.agent_id
+FROM workload_agent_assignments a
+JOIN workload_issuers i
+  ON i.organization_id = a.organization_id
+  AND i.id = a.workload_issuer_id
+WHERE a.organization_id = @organization_id
+  AND a.workload_issuer_id = @workload_issuer_id
+  AND a.subject = @subject
+  AND a.deleted IS FALSE
+  AND i.deleted IS FALSE;

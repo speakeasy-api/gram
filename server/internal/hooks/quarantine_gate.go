@@ -154,6 +154,9 @@ func quarantineTriggerUserReason(scanResult *risk.ScanResult, fallback string) s
 	if scanResult == nil {
 		return fallback
 	}
+	if scanResult.AnalysisUnavailable() {
+		return analysisUnavailableReason(scanResult) + " This session has been quarantined; contact your org admin to release it."
+	}
 	if scanResult.UserMessage != nil && strings.TrimSpace(*scanResult.UserMessage) != "" {
 		return renderWarnBody(scanResult)
 	}

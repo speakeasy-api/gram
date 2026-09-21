@@ -507,6 +507,15 @@ const (
 	WorkOSSCIMEnabledKey              = attribute.Key("gram.workos.scim_enabled")
 	WorkOSDirectoryUserIDKey          = attribute.Key("gram.workos.directory_user_id")
 	ExternalCredentialIDKey           = attribute.Key("gram.external_credential.id")
+	GcpKmsKeyVersionKey               = attribute.Key("gram.gcp_kms.key_version")
+	IdentityProviderConnectionIDKey   = attribute.Key("gram.identity_provider_connection.id")
+	OktaApplicationsSeenKey           = attribute.Key("gram.okta_applications.seen")
+	OktaApplicationsAddedKey          = attribute.Key("gram.okta_applications.added")
+	OktaApplicationsRemovedKey        = attribute.Key("gram.okta_applications.removed")
+	OktaAssignmentsAddedKey           = attribute.Key("gram.okta_applications.assignments_added")
+	OktaAssignmentsRemovedKey         = attribute.Key("gram.okta_applications.assignments_removed")
+	OktaApplicationsTruncatedKey      = attribute.Key("gram.okta_applications.truncated")
+	OktaReconcileRunIDKey             = attribute.Key("gram.okta_applications.run_id")
 	GCPImpersonateServiceAccountKey   = attribute.Key("gram.gcp.impersonate_service_account")
 	WorkOSDirectoryGroupIDKey         = attribute.Key("gram.workos.directory_group_id")
 	OutcomeKey                        = attribute.Key("gram.outcome")
@@ -565,6 +574,10 @@ const (
 	RiskStartPosKey                = attribute.Key("gram.risk.start_pos")
 	RiskEndPosKey                  = attribute.Key("gram.risk.end_pos")
 	RiskEnforcementTruncatedKey    = attribute.Key("gram.risk.enforcement_truncated")
+	RiskEnforcementFailModeKey     = attribute.Key("gram.risk.enforcement.fail_mode")
+	RiskScanModeKey                = attribute.Key("gram.risk.scan_mode")
+	RiskLLMTokenKindKey            = attribute.Key("gram.risk.llm.token_kind")
+	RiskLLMModelKey                = attribute.Key("gram.risk.llm.model")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -689,9 +702,13 @@ const (
 	TelemetryPublishFailedCountKey = attribute.Key("gram.telemetry.publish_failed_count")
 	TelemetryCHOperationKey        = attribute.Key("gram.telemetry.ch.operation")
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
-	OTELSpanEnricherNameKey        = attribute.Key("gram.otel.span_enricher_name")
-	OTELLogEnricherNameKey         = attribute.Key("gram.otel.log_enricher_name")
-	OTELMetricEnricherNameKey      = attribute.Key("gram.otel.metric_enricher_name")
+	// TelemetryLogIDKey carries the telemetry_logs row id on records relayed
+	// to a customer OTLP destination. Delivery is at-least-once, so this is
+	// the key a destination dedupes redeliveries on.
+	TelemetryLogIDKey         = attribute.Key("gram.telemetry.log.id")
+	OTELSpanEnricherNameKey   = attribute.Key("gram.otel.span_enricher_name")
+	OTELLogEnricherNameKey    = attribute.Key("gram.otel.log_enricher_name")
+	OTELMetricEnricherNameKey = attribute.Key("gram.otel.metric_enricher_name")
 
 	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
 	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
@@ -1990,6 +2007,33 @@ func SlogWorkOSOrganizationID(v string) slog.Attr {
 func WorkOSUserID(v string) attribute.KeyValue { return WorkOSUserIDKey.String(v) }
 func SlogWorkOSUserID(v string) slog.Attr      { return slog.String(string(WorkOSUserIDKey), v) }
 
+func GcpKmsKeyVersion(v string) attribute.KeyValue { return GcpKmsKeyVersionKey.String(v) }
+func SlogGcpKmsKeyVersion(v string) slog.Attr {
+	return slog.String(string(GcpKmsKeyVersionKey), v)
+}
+
+func IdentityProviderConnectionID(v string) attribute.KeyValue {
+	return IdentityProviderConnectionIDKey.String(v)
+}
+func SlogIdentityProviderConnectionID(v string) slog.Attr {
+	return slog.String(string(IdentityProviderConnectionIDKey), v)
+}
+func SlogOktaApplicationsSeen(v int) slog.Attr  { return slog.Int(string(OktaApplicationsSeenKey), v) }
+func SlogOktaApplicationsAdded(v int) slog.Attr { return slog.Int(string(OktaApplicationsAddedKey), v) }
+func SlogOktaApplicationsRemoved(v int) slog.Attr {
+	return slog.Int(string(OktaApplicationsRemovedKey), v)
+}
+func SlogOktaAssignmentsAdded(v int) slog.Attr { return slog.Int(string(OktaAssignmentsAddedKey), v) }
+func SlogOktaAssignmentsRemoved(v int) slog.Attr {
+	return slog.Int(string(OktaAssignmentsRemovedKey), v)
+}
+func SlogOktaApplicationsTruncated(v bool) slog.Attr {
+	return slog.Bool(string(OktaApplicationsTruncatedKey), v)
+}
+func SlogOktaReconcileRunID(v string) slog.Attr {
+	return slog.String(string(OktaReconcileRunIDKey), v)
+}
+
 func ExternalCredentialID(v string) attribute.KeyValue { return ExternalCredentialIDKey.String(v) }
 func SlogExternalCredentialID(v string) slog.Attr {
 	return slog.String(string(ExternalCredentialIDKey), v)
@@ -2264,6 +2308,15 @@ func RiskEnforcementTruncated(v bool) attribute.KeyValue {
 	return RiskEnforcementTruncatedKey.Bool(v)
 }
 
+// RiskEnforcementFailMode is what a realtime scan does after a Pub/Sub
+// enforcement lane degrades: "open" allows the event, "closed" denies it.
+func RiskEnforcementFailMode(v string) attribute.KeyValue {
+	return RiskEnforcementFailModeKey.String(v)
+}
+func SlogRiskEnforcementFailMode(v string) slog.Attr {
+	return slog.String(string(RiskEnforcementFailModeKey), v)
+}
+
 func RiskScanRequestID(v string) attribute.KeyValue { return RiskScanRequestIDKey.String(v) }
 func SlogRiskScanRequestID(v string) slog.Attr {
 	return slog.String(string(RiskScanRequestIDKey), v)
@@ -2309,6 +2362,21 @@ func SlogRiskStartPos(v int64) slog.Attr      { return slog.Int64(string(RiskSta
 
 func RiskEndPos(v int64) attribute.KeyValue { return RiskEndPosKey.Int64(v) }
 func SlogRiskEndPos(v int64) slog.Attr      { return slog.Int64(string(RiskEndPosKey), v) }
+
+// RiskScanMode is how a risk scan was invoked: "sync" for realtime
+// enforcement, "async" for batch scans. Distinct from the enforcement
+// dispatcher's lane (scanner + policy).
+func RiskScanMode(v string) attribute.KeyValue { return RiskScanModeKey.String(v) }
+func SlogRiskScanMode(v string) slog.Attr      { return slog.String(string(RiskScanModeKey), v) }
+
+// RiskLLMTokenKind distinguishes "input" from "output" tokens on risk model
+// token counters.
+func RiskLLMTokenKind(v string) attribute.KeyValue { return RiskLLMTokenKindKey.String(v) }
+func SlogRiskLLMTokenKind(v string) slog.Attr      { return slog.String(string(RiskLLMTokenKindKey), v) }
+
+// RiskLLMModel is the served model name the risk analyzer called.
+func RiskLLMModel(v string) attribute.KeyValue { return RiskLLMModelKey.String(v) }
+func SlogRiskLLMModel(v string) slog.Attr      { return slog.String(string(RiskLLMModelKey), v) }
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }

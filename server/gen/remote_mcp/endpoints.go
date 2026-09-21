@@ -22,6 +22,7 @@ type Endpoints struct {
 	GetServer                         goa.Endpoint
 	UpdateServer                      goa.Endpoint
 	DiscoverProtectedResourceMetadata goa.Endpoint
+	ProbeURL                          goa.Endpoint
 	VerifyURL                         goa.Endpoint
 	DeleteServer                      goa.Endpoint
 	ListServerHeaders                 goa.Endpoint
@@ -42,6 +43,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetServer:                         NewGetServerEndpoint(s, a.APIKeyAuth),
 		UpdateServer:                      NewUpdateServerEndpoint(s, a.APIKeyAuth),
 		DiscoverProtectedResourceMetadata: NewDiscoverProtectedResourceMetadataEndpoint(s, a.APIKeyAuth),
+		ProbeURL:                          NewProbeURLEndpoint(s, a.APIKeyAuth),
 		VerifyURL:                         NewVerifyURLEndpoint(s, a.APIKeyAuth),
 		DeleteServer:                      NewDeleteServerEndpoint(s, a.APIKeyAuth),
 		ListServerHeaders:                 NewListServerHeadersEndpoint(s, a.APIKeyAuth),
@@ -60,6 +62,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetServer = m(e.GetServer)
 	e.UpdateServer = m(e.UpdateServer)
 	e.DiscoverProtectedResourceMetadata = m(e.DiscoverProtectedResourceMetadata)
+	e.ProbeURL = m(e.ProbeURL)
 	e.VerifyURL = m(e.VerifyURL)
 	e.DeleteServer = m(e.DeleteServer)
 	e.ListServerHeaders = m(e.ListServerHeaders)
@@ -421,6 +424,65 @@ func NewDiscoverProtectedResourceMetadataEndpoint(s Service, authAPIKeyFn securi
 			return nil, err
 		}
 		return s.DiscoverProtectedResourceMetadata(ctx, p)
+	}
+}
+
+// NewProbeURLEndpoint returns an endpoint function that calls the method
+// "probeURL" of service "remoteMcp".
+func NewProbeURLEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ProbeURLPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ProbeURL(ctx, p)
 	}
 }
 

@@ -16,6 +16,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import { SidebarBrandHeader } from "./sidebar-brand-header";
+import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
@@ -302,6 +303,7 @@ export function OrgSidebar({
             labelClassName="mode-shimmer"
           />
         )}
+        {DevSidebarSlot && <DevSidebarSlot />}
         <SidebarUserMenu />
       </SidebarFooter>
     </Sidebar>

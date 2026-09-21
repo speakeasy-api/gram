@@ -287,22 +287,6 @@ const IDENTITY_COLUMNS: Column<Employee>[] = [
     },
   },
   {
-    key: "status",
-    header: "Enrollment",
-    width: "150px",
-    sortable: true,
-    sortValue: (identity) => identity.status,
-    render: (identity) => (
-      <Text muted small className="truncate">
-        {identity.registeredAgentId
-          ? "—"
-          : identity.status === "enrolled"
-            ? "Enrolled"
-            : "Not enrolled"}
-      </Text>
-    ),
-  },
-  {
     key: "role",
     header: "Roles",
     width: "1fr",

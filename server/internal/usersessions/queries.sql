@@ -1174,3 +1174,82 @@ UPDATE user_session_clients
 SET token_endpoint_auth_method = NULL
 WHERE id = @id
 RETURNING *;
+
+-- name: ListWorkloadSessionLabels :many
+-- Resolves the workloads behind one page of workload sessions into something
+-- an operator can read: the issuer's name and URL, and the agent the workload
+-- inherits its authority from.
+--
+-- Takes the page's workloads as parallel arrays so each issuer stays paired
+-- with its own subject. A workload is the pair (issuer, subject); matching the
+-- two independently would attribute one issuer's subject to another.
+--
+-- The issuer is read at the caller's own tiers only, so a project-tier issuer
+-- belonging to a sibling project stays unnamed. The assignment and agent are
+-- organization-scoped, like the workload principal they describe.
+--
+-- Liveness is a second lookup rather than the named one above: an issuer this
+-- caller may not name can still be live, and deleting an issuer withdraws the
+-- authority of every workload it vouched for. Matching ResolveWorkloadAgentAssignment,
+-- an assignment under a deleted issuer resolves to no agent, so the row cannot
+-- advertise authority the workload has already lost.
+SELECT w.workload_issuer_id::uuid AS workload_issuer_id,
+       w.subject::text AS subject,
+       wi.name AS workload_issuer_name,
+       wi.issuer AS workload_issuer_url,
+       a.id AS agent_id,
+       a.name AS agent_name,
+       a.suspended_at AS agent_suspended_at,
+       a.revoked_at AS agent_revoked_at
+FROM (
+       SELECT unnest(@workload_issuer_ids::uuid[]) AS workload_issuer_id,
+              unnest(@subjects::text[]) AS subject
+     ) AS w
+LEFT JOIN workload_issuers AS wi
+  ON wi.id = w.workload_issuer_id
+  AND wi.organization_id = @organization_id::text
+  AND (wi.project_id = @project_id::uuid OR wi.project_id IS NULL)
+  AND wi.deleted IS FALSE
+LEFT JOIN workload_issuers AS live
+  ON live.id = w.workload_issuer_id
+  AND live.organization_id = @organization_id::text
+  AND live.deleted IS FALSE
+LEFT JOIN workload_agent_assignments AS wa
+  ON wa.organization_id = @organization_id::text
+  AND wa.workload_issuer_id = w.workload_issuer_id
+  AND wa.subject = w.subject
+  AND wa.deleted IS FALSE
+  AND live.id IS NOT NULL
+LEFT JOIN agents AS a
+  ON a.organization_id = wa.organization_id
+  AND a.id = wa.agent_id
+  AND a.deleted IS FALSE;
+
+-- name: ListWorkloadSessionAdmissions :many
+-- The admissions currently letting one page of workloads in, so an operator can
+-- see every row they would have to withdraw to keep a workload out. A workload
+-- admitted at both tiers reconnects through whichever one is left.
+--
+-- Tenancy matches WorkloadIdentityIsAdmitted: the caller's own project tier and
+-- the organization tier, never a sibling project's. Admissions under a deleted
+-- issuer admit nothing, so they are left out.
+SELECT wia.workload_issuer_id,
+       wia.subject,
+       wia.id,
+       wia.project_id,
+       wia.name
+FROM workload_identity_admissions AS wia
+JOIN workload_issuers AS wi
+  ON wi.organization_id = wia.organization_id
+  AND wi.id = wia.workload_issuer_id
+  AND wi.deleted IS FALSE
+JOIN (
+       SELECT unnest(@workload_issuer_ids::uuid[]) AS workload_issuer_id,
+              unnest(@subjects::text[]) AS subject
+     ) AS w
+  ON w.workload_issuer_id = wia.workload_issuer_id
+  AND w.subject = wia.subject
+WHERE wia.organization_id = @organization_id::text
+  AND (wia.project_id = @project_id::uuid OR wia.project_id IS NULL)
+  AND wia.deleted IS FALSE
+ORDER BY wia.project_id NULLS LAST, wia.created_at ASC, wia.id ASC;

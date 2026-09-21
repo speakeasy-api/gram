@@ -12,6 +12,7 @@ import { AdminRemoteSessions } from "./adminremotesessions.js";
 import { Agent } from "./agent.js";
 import { Agents } from "./agents.js";
 import { AiIntegrations } from "./aiintegrations.js";
+import { Analytics } from "./analytics.js";
 import { Assets } from "./assets.js";
 import { AssistantMemories } from "./assistantmemories.js";
 import { Assistants } from "./assistants.js";
@@ -26,6 +27,7 @@ import { Deployments } from "./deployments.js";
 import { DeviceIntegrations } from "./deviceintegrations.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
+import { Explore } from "./explore.js";
 import { External } from "./external.js";
 import { ExternalCredentials } from "./externalcredentials.js";
 import { ExternalKeys } from "./externalkeys.js";
@@ -33,6 +35,7 @@ import { Features } from "./features.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
 import { Identity } from "./identity.js";
+import { IdentityProviderConnections } from "./identityproviderconnections.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
@@ -141,6 +144,11 @@ export class Gram extends ClientSDK {
     return (this._aiIntegrations ??= new AiIntegrations(this._options));
   }
 
+  private _analytics?: Analytics;
+  get analytics(): Analytics {
+    return (this._analytics ??= new Analytics(this._options));
+  }
+
   private _assets?: Assets;
   get assets(): Assets {
     return (this._assets ??= new Assets(this._options));
@@ -211,6 +219,11 @@ export class Gram extends ClientSDK {
     return (this._environments ??= new Environments(this._options));
   }
 
+  private _explore?: Explore;
+  get explore(): Explore {
+    return (this._explore ??= new Explore(this._options));
+  }
+
   private _external?: External;
   get external(): External {
     return (this._external ??= new External(this._options));
@@ -241,6 +254,12 @@ export class Gram extends ClientSDK {
   private _identity?: Identity;
   get identity(): Identity {
     return (this._identity ??= new Identity(this._options));
+  }
+
+  private _identityProviderConnections?: IdentityProviderConnections;
+  get identityProviderConnections(): IdentityProviderConnections {
+    return (this._identityProviderConnections ??=
+      new IdentityProviderConnections(this._options));
   }
 
   private _instances?: Instances;

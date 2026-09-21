@@ -82,6 +82,7 @@ func realtimeScanRequest(organizationID string, projectID uuid.UUID, userID, tex
 		},
 		Text:        text,
 		MessageType: messageType,
+		ToolCallID:  "",
 		ToolName:    toolName,
 	}
 }

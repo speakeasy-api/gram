@@ -5,6 +5,7 @@ import (
 	"crypto"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	jose "github.com/go-jose/go-jose/v4"
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
+	"github.com/speakeasy-api/gram/server/internal/managedrows"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
@@ -106,6 +108,9 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 	if row.ExternalKey.Provider != externalKeyProviderGcpKms {
 		return nil, oops.E(oops.CodeBadRequest, nil, "AWS KMS keys cannot back a JSON Web Key Set yet; choose a GCP KMS key").LogError(ctx, logger)
 	}
+	if err := managedrows.RequireUnmanaged(row.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
+		return nil, err
+	}
 	if !row.ResourceName.Valid {
 		return nil, oops.E(oops.CodeUnexpected, nil, "gcp kms key is missing its resource name").LogError(ctx, logger)
 	}
@@ -167,6 +172,20 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 		return nil, oops.E(oops.CodeBadRequest, nil, "key signs with %s but is configured as %s; update the key's configuration or point at a %s key", public.Algorithm, want, want).LogError(ctx, logger)
 	}
 
+	kid, doc, err := BuildPublishedJWK(public)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error encoding public jwk").LogError(ctx, logger)
+	}
+
+	return &mintedJWK{
+		externalKeyID: row.ExternalKey.ID,
+		kid:           kid,
+		publicJWK:     doc,
+	}, nil
+}
+
+// BuildPublishedJWK returns the RFC 7638 thumbprint kid and the JWK document.
+func BuildPublishedJWK(public *gcpkms.PublicKey) (string, []byte, error) {
 	jwk := jose.JSONWebKey{
 		Key:                         public.Key,
 		KeyID:                       "",
@@ -180,24 +199,17 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 
 	thumbprint, err := jwk.Thumbprint(crypto.SHA256)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error deriving key thumbprint").LogError(ctx, logger)
+		return "", nil, fmt.Errorf("derive key thumbprint: %w", err)
 	}
 
-	// KeyID is set before marshaling so the stored document carries the same
-	// kid as the row it lands in. Thumbprints are unpadded base64url per RFC
-	// 7638's kid convention.
 	jwk.KeyID = base64.RawURLEncoding.EncodeToString(thumbprint)
 
 	doc, err := jwk.MarshalJSON()
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error encoding public jwk").LogError(ctx, logger)
+		return "", nil, fmt.Errorf("encode public jwk: %w", err)
 	}
 
-	return &mintedJWK{
-		externalKeyID: row.ExternalKey.ID,
-		kid:           jwk.KeyID,
-		publicJWK:     doc,
-	}, nil
+	return jwk.KeyID, doc, nil
 }
 
 // mintPublicKeyError maps a GetPublicKey failure onto an error code by the same

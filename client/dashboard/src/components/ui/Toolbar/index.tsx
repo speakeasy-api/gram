@@ -100,7 +100,7 @@ function ToolbarClusters({ children }: { children: ReactNode }): JSX.Element {
   return (
     <>
       {hasLeft && (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
           {search}
           {search != null && filters != null && (
             <div className="bg-border h-6 w-px shrink-0" />

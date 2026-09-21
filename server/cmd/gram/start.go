@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/agent"
@@ -63,6 +64,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/explore"
 	"github.com/speakeasy-api/gram/server/internal/external"
 	"github.com/speakeasy-api/gram/server/internal/externalcredentials"
 	"github.com/speakeasy-api/gram/server/internal/externalkeys"
@@ -70,6 +72,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets"
@@ -145,10 +148,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -618,7 +623,9 @@ func serverFlags() []cli.Flag {
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, pulseMCPFlags()...)
 	flags = append(flags, svixFlags()...)
+	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, riskReconcileFlags()...)
+	flags = append(flags, riskLLMFlags()...)
 	return flags
 }
 
@@ -916,7 +923,12 @@ func newStartCommand() *cli.Command {
 				logger.ErrorContext(ctx, "pub/sub enforcement disabled: create reply inbox", attr.SlogError(inboxErr))
 			} else {
 				var dispatcherErr error
-				enforcementDispatcher, dispatcherErr = enforcereply.NewDispatcher(ctx, logger, meterProvider, psbroker, enforcementInbox, enforcereply.DispatcherConfig{WaitTimeout: 0})
+				enforcementDispatcher, dispatcherErr = enforcereply.NewDispatcher(ctx, logger, meterProvider, psbroker, enforcementInbox, enforcereply.DispatcherConfig{
+					WaitTimeout: 0,
+					LaneWaitTimeout: map[riskv1.EnforcementScanner]time.Duration{ //nolint:exhaustive // an override list is partial by definition; other lanes use WaitTimeout
+						riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER: enforcereply.DefaultLLMAnalyzerWaitTimeout,
+					},
+				})
 				if dispatcherErr != nil {
 					logger.ErrorContext(ctx, "pub/sub enforcement disabled: create dispatcher", attr.SlogError(dispatcherErr))
 					_ = enforcementInbox.Close()
@@ -931,6 +943,7 @@ func newStartCommand() *cli.Command {
 				authz.EngineOpts{
 					AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 					AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
+					AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 					DevMode:                          c.String("environment") == "local",
 				})
 
@@ -940,6 +953,7 @@ func newStartCommand() *cli.Command {
 			telemetryLoggerShutdown = shutdown
 
 			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
+			analyticsSvc := analytics.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine)
 
 			// Wrap cache for hooks service in local development
 			var hooksCache cache.Cache = cache.NewRedisCacheAdapter(redisClient)
@@ -1550,6 +1564,11 @@ func newStartCommand() *cli.Command {
 			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, productFeatures, ratelimit.NewRedisStore(redisClient)))
 			externalkeys.Attach(mux, externalkeys.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient)))
 			jsonwebkeysets.Attach(mux, jsonwebkeysets.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient)))
+			identityProviderProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, serverURL)
+			if err != nil {
+				return err
+			}
+			identityproviderconnections.Attach(mux, identityproviderconnections.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, featureFlags, identityProviderProvisioner, okta.NewClientFactory(logger, guardianPolicy, clientAssertionSigner), identityproviderconnections.NewDiscoverer(guardianPolicy), ratelimit.NewRedisStore(redisClient), &background.OktaApplicationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}))
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
@@ -1706,6 +1725,8 @@ func newStartCommand() *cli.Command {
 			))
 			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier, meterReadConn))
 			tm.Attach(mux, telemSvc)
+			analytics.Attach(mux, analyticsSvc)
+			explore.Attach(mux, explore.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 			otelService := otelsvc.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, otelsvc.FeatureChecker(logsEnabled), publishers.OTELSpans, publishers.OTELLogs, publishers.OTELMetrics)
 			// Exports accepted on /otel/v1/* also run the hooks telemetry
@@ -1903,6 +1924,7 @@ func newStartCommand() *cli.Command {
 						TrialEmailsService:           trialEmailsService,
 						RiskFingerprinter:            riskFingerprinter,
 						DisableRiskRetroReconcile:    c.Bool("disable-clickhouse-risk-retro-reconcile"),
+						LLMAnalyzerEnabled:           llmAnalyzerConfigFromCLI(c).Enabled(),
 					})
 					executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, networkIngressConfig)
 					if err != nil {

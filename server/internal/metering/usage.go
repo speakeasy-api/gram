@@ -82,6 +82,8 @@ func LookupRiskScannerLabel(id MeterID) (string, bool) {
 		return "Custom rules", true
 	case MeterRiskCLIDestructive:
 		return "CLI destructive", true
+	case MeterRiskLLMAnalyzer:
+		return "LLM analyzer", true
 	case MeterAgentSessionStorage, MeterMCPBandwidthIngress, MeterMCPBandwidthEgress:
 		return "", false
 	default:

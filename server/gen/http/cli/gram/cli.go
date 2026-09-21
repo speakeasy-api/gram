@@ -24,6 +24,7 @@ import (
 	agentc "github.com/speakeasy-api/gram/server/gen/http/agent/client"
 	agentsc "github.com/speakeasy-api/gram/server/gen/http/agents/client"
 	aiintegrationsc "github.com/speakeasy-api/gram/server/gen/http/ai_integrations/client"
+	analyticsc "github.com/speakeasy-api/gram/server/gen/http/analytics/client"
 	assetsc "github.com/speakeasy-api/gram/server/gen/http/assets/client"
 	assistantmemoriesc "github.com/speakeasy-api/gram/server/gen/http/assistant_memories/client"
 	assistantsc "github.com/speakeasy-api/gram/server/gen/http/assistants/client"
@@ -38,6 +39,7 @@ import (
 	deviceintegrationsc "github.com/speakeasy-api/gram/server/gen/http/device_integrations/client"
 	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
+	explorec "github.com/speakeasy-api/gram/server/gen/http/explore/client"
 	externalc "github.com/speakeasy-api/gram/server/gen/http/external/client"
 	externalcredentialsc "github.com/speakeasy-api/gram/server/gen/http/external_credentials/client"
 	externalkeysc "github.com/speakeasy-api/gram/server/gen/http/external_keys/client"
@@ -46,6 +48,7 @@ import (
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
 	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
 	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
+	identityproviderconnectionsc "github.com/speakeasy-api/gram/server/gen/http/identity_provider_connections/client"
 	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	jsonwebkeysetsc "github.com/speakeasy-api/gram/server/gen/http/json_web_key_sets/client"
@@ -112,6 +115,7 @@ func UsageCommands() []string {
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
+		"analytics (query|describe|dimension-values)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"organization-assets upload-organization-image",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
@@ -127,6 +131,7 @@ func UsageCommands() []string {
 		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage)",
 		"domains (get-domain|list-domains|create-domain|update-domain|set-root-mcp-endpoint|list-root-mcp-servers|check-health|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
+		"explore (list-queries|create-query|update-query|delete-query)",
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|verify-gcp-iam-credential|get-gcp-setup-info|delete-aws-iam-credential|delete-gcp-iam-credential)",
 		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|verify-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details|get-setup-docs)",
@@ -134,6 +139,7 @@ func UsageCommands() []string {
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics)",
 		"identity resolve",
+		"identity-provider-connections (create|submit-client-id|verify|get|record-agent|revoke|sync-applications|list-applications)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
@@ -158,7 +164,7 @@ func UsageCommands() []string {
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|update-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
-		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
+		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|probe-url|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|rotate-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|attach-key-set|detach-key-set|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
@@ -179,8 +185,8 @@ func UsageCommands() []string {
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
-		"usage (get-period-usage|get-meter-usage|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-support-matrix|update-support-matrix)",
+		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -575,6 +581,22 @@ func ParseEndpoint(
 		aiIntegrationsRetryScheduleBodyFlag         = aiIntegrationsRetryScheduleFlags.String("body", "REQUIRED", "")
 		aiIntegrationsRetryScheduleApikeyTokenFlag  = aiIntegrationsRetryScheduleFlags.String("apikey-token", "", "")
 		aiIntegrationsRetryScheduleSessionTokenFlag = aiIntegrationsRetryScheduleFlags.String("session-token", "", "")
+
+		analyticsFlags = flag.NewFlagSet("analytics", flag.ContinueOnError)
+
+		analyticsQueryFlags                = flag.NewFlagSet("query", flag.ExitOnError)
+		analyticsQueryBodyFlag             = analyticsQueryFlags.String("body", "REQUIRED", "")
+		analyticsQuerySessionTokenFlag     = analyticsQueryFlags.String("session-token", "", "")
+		analyticsQueryProjectSlugInputFlag = analyticsQueryFlags.String("project-slug-input", "", "")
+
+		analyticsDescribeFlags                = flag.NewFlagSet("describe", flag.ExitOnError)
+		analyticsDescribeSessionTokenFlag     = analyticsDescribeFlags.String("session-token", "", "")
+		analyticsDescribeProjectSlugInputFlag = analyticsDescribeFlags.String("project-slug-input", "", "")
+
+		analyticsDimensionValuesFlags                = flag.NewFlagSet("dimension-values", flag.ExitOnError)
+		analyticsDimensionValuesBodyFlag             = analyticsDimensionValuesFlags.String("body", "REQUIRED", "")
+		analyticsDimensionValuesSessionTokenFlag     = analyticsDimensionValuesFlags.String("session-token", "", "")
+		analyticsDimensionValuesProjectSlugInputFlag = analyticsDimensionValuesFlags.String("project-slug-input", "", "")
 
 		assetsFlags = flag.NewFlagSet("assets", flag.ContinueOnError)
 
@@ -1175,6 +1197,27 @@ func ParseEndpoint(
 		environmentsGetToolsetEnvironmentSessionTokenFlag     = environmentsGetToolsetEnvironmentFlags.String("session-token", "", "")
 		environmentsGetToolsetEnvironmentProjectSlugInputFlag = environmentsGetToolsetEnvironmentFlags.String("project-slug-input", "", "")
 
+		exploreFlags = flag.NewFlagSet("explore", flag.ContinueOnError)
+
+		exploreListQueriesFlags                = flag.NewFlagSet("list-queries", flag.ExitOnError)
+		exploreListQueriesSessionTokenFlag     = exploreListQueriesFlags.String("session-token", "", "")
+		exploreListQueriesProjectSlugInputFlag = exploreListQueriesFlags.String("project-slug-input", "", "")
+
+		exploreCreateQueryFlags                = flag.NewFlagSet("create-query", flag.ExitOnError)
+		exploreCreateQueryBodyFlag             = exploreCreateQueryFlags.String("body", "REQUIRED", "")
+		exploreCreateQuerySessionTokenFlag     = exploreCreateQueryFlags.String("session-token", "", "")
+		exploreCreateQueryProjectSlugInputFlag = exploreCreateQueryFlags.String("project-slug-input", "", "")
+
+		exploreUpdateQueryFlags                = flag.NewFlagSet("update-query", flag.ExitOnError)
+		exploreUpdateQueryBodyFlag             = exploreUpdateQueryFlags.String("body", "REQUIRED", "")
+		exploreUpdateQuerySessionTokenFlag     = exploreUpdateQueryFlags.String("session-token", "", "")
+		exploreUpdateQueryProjectSlugInputFlag = exploreUpdateQueryFlags.String("project-slug-input", "", "")
+
+		exploreDeleteQueryFlags                = flag.NewFlagSet("delete-query", flag.ExitOnError)
+		exploreDeleteQueryIDFlag               = exploreDeleteQueryFlags.String("id", "REQUIRED", "")
+		exploreDeleteQuerySessionTokenFlag     = exploreDeleteQueryFlags.String("session-token", "", "")
+		exploreDeleteQueryProjectSlugInputFlag = exploreDeleteQueryFlags.String("project-slug-input", "", "")
+
 		externalCredentialsFlags = flag.NewFlagSet("external-credentials", flag.ContinueOnError)
 
 		externalCredentialsCreateAwsIamCredentialFlags            = flag.NewFlagSet("create-aws-iam-credential", flag.ExitOnError)
@@ -1390,6 +1433,41 @@ func ParseEndpoint(
 		identityResolveUrnFlag          = identityResolveFlags.String("urn", "REQUIRED", "")
 		identityResolveApikeyTokenFlag  = identityResolveFlags.String("apikey-token", "", "")
 		identityResolveSessionTokenFlag = identityResolveFlags.String("session-token", "", "")
+
+		identityProviderConnectionsFlags = flag.NewFlagSet("identity-provider-connections", flag.ContinueOnError)
+
+		identityProviderConnectionsCreateFlags            = flag.NewFlagSet("create", flag.ExitOnError)
+		identityProviderConnectionsCreateBodyFlag         = identityProviderConnectionsCreateFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsCreateSessionTokenFlag = identityProviderConnectionsCreateFlags.String("session-token", "", "")
+
+		identityProviderConnectionsSubmitClientIDFlags            = flag.NewFlagSet("submit-client-id", flag.ExitOnError)
+		identityProviderConnectionsSubmitClientIDBodyFlag         = identityProviderConnectionsSubmitClientIDFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsSubmitClientIDSessionTokenFlag = identityProviderConnectionsSubmitClientIDFlags.String("session-token", "", "")
+
+		identityProviderConnectionsVerifyFlags            = flag.NewFlagSet("verify", flag.ExitOnError)
+		identityProviderConnectionsVerifyBodyFlag         = identityProviderConnectionsVerifyFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsVerifySessionTokenFlag = identityProviderConnectionsVerifyFlags.String("session-token", "", "")
+
+		identityProviderConnectionsGetFlags            = flag.NewFlagSet("get", flag.ExitOnError)
+		identityProviderConnectionsGetIDFlag           = identityProviderConnectionsGetFlags.String("id", "", "")
+		identityProviderConnectionsGetSessionTokenFlag = identityProviderConnectionsGetFlags.String("session-token", "", "")
+
+		identityProviderConnectionsRecordAgentFlags            = flag.NewFlagSet("record-agent", flag.ExitOnError)
+		identityProviderConnectionsRecordAgentBodyFlag         = identityProviderConnectionsRecordAgentFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsRecordAgentSessionTokenFlag = identityProviderConnectionsRecordAgentFlags.String("session-token", "", "")
+
+		identityProviderConnectionsRevokeFlags            = flag.NewFlagSet("revoke", flag.ExitOnError)
+		identityProviderConnectionsRevokeBodyFlag         = identityProviderConnectionsRevokeFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsRevokeSessionTokenFlag = identityProviderConnectionsRevokeFlags.String("session-token", "", "")
+
+		identityProviderConnectionsSyncApplicationsFlags            = flag.NewFlagSet("sync-applications", flag.ExitOnError)
+		identityProviderConnectionsSyncApplicationsBodyFlag         = identityProviderConnectionsSyncApplicationsFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsSyncApplicationsSessionTokenFlag = identityProviderConnectionsSyncApplicationsFlags.String("session-token", "", "")
+
+		identityProviderConnectionsListApplicationsFlags              = flag.NewFlagSet("list-applications", flag.ExitOnError)
+		identityProviderConnectionsListApplicationsIDFlag             = identityProviderConnectionsListApplicationsFlags.String("id", "REQUIRED", "")
+		identityProviderConnectionsListApplicationsIncludeRemovedFlag = identityProviderConnectionsListApplicationsFlags.String("include-removed", "", "")
+		identityProviderConnectionsListApplicationsSessionTokenFlag   = identityProviderConnectionsListApplicationsFlags.String("session-token", "", "")
 
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
 
@@ -2253,6 +2331,12 @@ func ParseEndpoint(
 		remoteMcpDiscoverProtectedResourceMetadataSessionTokenFlag     = remoteMcpDiscoverProtectedResourceMetadataFlags.String("session-token", "", "")
 		remoteMcpDiscoverProtectedResourceMetadataApikeyTokenFlag      = remoteMcpDiscoverProtectedResourceMetadataFlags.String("apikey-token", "", "")
 		remoteMcpDiscoverProtectedResourceMetadataProjectSlugInputFlag = remoteMcpDiscoverProtectedResourceMetadataFlags.String("project-slug-input", "", "")
+
+		remoteMcpProbeURLFlags                = flag.NewFlagSet("probe-url", flag.ExitOnError)
+		remoteMcpProbeURLBodyFlag             = remoteMcpProbeURLFlags.String("body", "REQUIRED", "")
+		remoteMcpProbeURLSessionTokenFlag     = remoteMcpProbeURLFlags.String("session-token", "", "")
+		remoteMcpProbeURLApikeyTokenFlag      = remoteMcpProbeURLFlags.String("apikey-token", "", "")
+		remoteMcpProbeURLProjectSlugInputFlag = remoteMcpProbeURLFlags.String("project-slug-input", "", "")
 
 		remoteMcpVerifyURLFlags                = flag.NewFlagSet("verify-url", flag.ExitOnError)
 		remoteMcpVerifyURLBodyFlag             = remoteMcpVerifyURLFlags.String("body", "REQUIRED", "")
@@ -3714,6 +3798,11 @@ func ParseEndpoint(
 		usageGetMeterUsageBreakdownFlag    = usageGetMeterUsageFlags.String("breakdown", "", "")
 		usageGetMeterUsageSessionTokenFlag = usageGetMeterUsageFlags.String("session-token", "", "")
 
+		usageGetSpendBreakdownFlags            = flag.NewFlagSet("get-spend-breakdown", flag.ExitOnError)
+		usageGetSpendBreakdownFromFlag         = usageGetSpendBreakdownFlags.String("from", "", "")
+		usageGetSpendBreakdownToFlag           = usageGetSpendBreakdownFlags.String("to", "", "")
+		usageGetSpendBreakdownSessionTokenFlag = usageGetSpendBreakdownFlags.String("session-token", "", "")
+
 		usageGetTokensUnderManagementFlags            = flag.NewFlagSet("get-tokens-under-management", flag.ExitOnError)
 		usageGetTokensUnderManagementSessionTokenFlag = usageGetTokensUnderManagementFlags.String("session-token", "", "")
 
@@ -3988,6 +4077,12 @@ func ParseEndpoint(
 		adminGetMeterUsageFromFlag              = adminGetMeterUsageFlags.String("from", "", "")
 		adminGetMeterUsageToFlag                = adminGetMeterUsageFlags.String("to", "", "")
 		adminGetMeterUsageAdminSessionTokenFlag = adminGetMeterUsageFlags.String("admin-session-token", "", "")
+
+		adminGetSpendBreakdownFlags                 = flag.NewFlagSet("get-spend-breakdown", flag.ExitOnError)
+		adminGetSpendBreakdownOrganizationIDFlag    = adminGetSpendBreakdownFlags.String("organization-id", "REQUIRED", "")
+		adminGetSpendBreakdownFromFlag              = adminGetSpendBreakdownFlags.String("from", "", "")
+		adminGetSpendBreakdownToFlag                = adminGetSpendBreakdownFlags.String("to", "", "")
+		adminGetSpendBreakdownAdminSessionTokenFlag = adminGetSpendBreakdownFlags.String("admin-session-token", "", "")
 
 		adminGetSupportMatrixFlags                 = flag.NewFlagSet("get-support-matrix", flag.ExitOnError)
 		adminGetSupportMatrixAdminSessionTokenFlag = adminGetSupportMatrixFlags.String("admin-session-token", "", "")
@@ -4306,6 +4401,11 @@ func ParseEndpoint(
 	aiIntegrationsSetScheduleEnabledFlags.Usage = aiIntegrationsSetScheduleEnabledUsage
 	aiIntegrationsRetryScheduleFlags.Usage = aiIntegrationsRetryScheduleUsage
 
+	analyticsFlags.Usage = analyticsUsage
+	analyticsQueryFlags.Usage = analyticsQueryUsage
+	analyticsDescribeFlags.Usage = analyticsDescribeUsage
+	analyticsDimensionValuesFlags.Usage = analyticsDimensionValuesUsage
+
 	assetsFlags.Usage = assetsUsage
 	assetsServeImageFlags.Usage = assetsServeImageUsage
 	assetsUploadImageFlags.Usage = assetsUploadImageUsage
@@ -4438,6 +4538,12 @@ func ParseEndpoint(
 	environmentsDeleteToolsetEnvironmentLinkFlags.Usage = environmentsDeleteToolsetEnvironmentLinkUsage
 	environmentsGetToolsetEnvironmentFlags.Usage = environmentsGetToolsetEnvironmentUsage
 
+	exploreFlags.Usage = exploreUsage
+	exploreListQueriesFlags.Usage = exploreListQueriesUsage
+	exploreCreateQueryFlags.Usage = exploreCreateQueryUsage
+	exploreUpdateQueryFlags.Usage = exploreUpdateQueryUsage
+	exploreDeleteQueryFlags.Usage = exploreDeleteQueryUsage
+
 	externalCredentialsFlags.Usage = externalCredentialsUsage
 	externalCredentialsCreateAwsIamCredentialFlags.Usage = externalCredentialsCreateAwsIamCredentialUsage
 	externalCredentialsUpdateAwsIamCredentialFlags.Usage = externalCredentialsUpdateAwsIamCredentialUsage
@@ -4494,6 +4600,16 @@ func ParseEndpoint(
 
 	identityFlags.Usage = identityUsage
 	identityResolveFlags.Usage = identityResolveUsage
+
+	identityProviderConnectionsFlags.Usage = identityProviderConnectionsUsage
+	identityProviderConnectionsCreateFlags.Usage = identityProviderConnectionsCreateUsage
+	identityProviderConnectionsSubmitClientIDFlags.Usage = identityProviderConnectionsSubmitClientIDUsage
+	identityProviderConnectionsVerifyFlags.Usage = identityProviderConnectionsVerifyUsage
+	identityProviderConnectionsGetFlags.Usage = identityProviderConnectionsGetUsage
+	identityProviderConnectionsRecordAgentFlags.Usage = identityProviderConnectionsRecordAgentUsage
+	identityProviderConnectionsRevokeFlags.Usage = identityProviderConnectionsRevokeUsage
+	identityProviderConnectionsSyncApplicationsFlags.Usage = identityProviderConnectionsSyncApplicationsUsage
+	identityProviderConnectionsListApplicationsFlags.Usage = identityProviderConnectionsListApplicationsUsage
 
 	instancesFlags.Usage = instancesUsage
 	instancesGetInstanceFlags.Usage = instancesGetInstanceUsage
@@ -4712,6 +4828,7 @@ func ParseEndpoint(
 	remoteMcpGetServerFlags.Usage = remoteMcpGetServerUsage
 	remoteMcpUpdateServerFlags.Usage = remoteMcpUpdateServerUsage
 	remoteMcpDiscoverProtectedResourceMetadataFlags.Usage = remoteMcpDiscoverProtectedResourceMetadataUsage
+	remoteMcpProbeURLFlags.Usage = remoteMcpProbeURLUsage
 	remoteMcpVerifyURLFlags.Usage = remoteMcpVerifyURLUsage
 	remoteMcpDeleteServerFlags.Usage = remoteMcpDeleteServerUsage
 	remoteMcpListServerHeadersFlags.Usage = remoteMcpListServerHeadersUsage
@@ -4993,6 +5110,7 @@ func ParseEndpoint(
 	usageFlags.Usage = usageUsage
 	usageGetPeriodUsageFlags.Usage = usageGetPeriodUsageUsage
 	usageGetMeterUsageFlags.Usage = usageGetMeterUsageUsage
+	usageGetSpendBreakdownFlags.Usage = usageGetSpendBreakdownUsage
 	usageGetTokensUnderManagementFlags.Usage = usageGetTokensUnderManagementUsage
 	usageSetBillingMetadataFlags.Usage = usageSetBillingMetadataUsage
 	usageGetBillingEmailFlags.Usage = usageGetBillingEmailUsage
@@ -5061,6 +5179,7 @@ func ParseEndpoint(
 	adminStartTrialFlags.Usage = adminStartTrialUsage
 	adminChangeTrialEndDateFlags.Usage = adminChangeTrialEndDateUsage
 	adminGetMeterUsageFlags.Usage = adminGetMeterUsageUsage
+	adminGetSpendBreakdownFlags.Usage = adminGetSpendBreakdownUsage
 	adminGetSupportMatrixFlags.Usage = adminGetSupportMatrixUsage
 	adminUpdateSupportMatrixFlags.Usage = adminUpdateSupportMatrixUsage
 
@@ -5143,6 +5262,8 @@ func ParseEndpoint(
 			svcf = agentsFlags
 		case "ai-integrations":
 			svcf = aiIntegrationsFlags
+		case "analytics":
+			svcf = analyticsFlags
 		case "assets":
 			svcf = assetsFlags
 		case "organization-assets":
@@ -5173,6 +5294,8 @@ func ParseEndpoint(
 			svcf = domainsFlags
 		case "environments":
 			svcf = environmentsFlags
+		case "explore":
+			svcf = exploreFlags
 		case "external-credentials":
 			svcf = externalCredentialsFlags
 		case "external-keys":
@@ -5187,6 +5310,8 @@ func ParseEndpoint(
 			svcf = hooksFlags
 		case "identity":
 			svcf = identityFlags
+		case "identity-provider-connections":
+			svcf = identityProviderConnectionsFlags
 		case "instances":
 			svcf = instancesFlags
 		case "integrations":
@@ -5560,6 +5685,19 @@ func ParseEndpoint(
 
 			}
 
+		case "analytics":
+			switch epn {
+			case "query":
+				epf = analyticsQueryFlags
+
+			case "describe":
+				epf = analyticsDescribeFlags
+
+			case "dimension-values":
+				epf = analyticsDimensionValuesFlags
+
+			}
+
 		case "assets":
 			switch epn {
 			case "serve-image":
@@ -5926,6 +6064,22 @@ func ParseEndpoint(
 
 			}
 
+		case "explore":
+			switch epn {
+			case "list-queries":
+				epf = exploreListQueriesFlags
+
+			case "create-query":
+				epf = exploreCreateQueryFlags
+
+			case "update-query":
+				epf = exploreUpdateQueryFlags
+
+			case "delete-query":
+				epf = exploreDeleteQueryFlags
+
+			}
+
 		case "external-credentials":
 			switch epn {
 			case "create-aws-iam-credential":
@@ -6080,6 +6234,34 @@ func ParseEndpoint(
 			switch epn {
 			case "resolve":
 				epf = identityResolveFlags
+
+			}
+
+		case "identity-provider-connections":
+			switch epn {
+			case "create":
+				epf = identityProviderConnectionsCreateFlags
+
+			case "submit-client-id":
+				epf = identityProviderConnectionsSubmitClientIDFlags
+
+			case "verify":
+				epf = identityProviderConnectionsVerifyFlags
+
+			case "get":
+				epf = identityProviderConnectionsGetFlags
+
+			case "record-agent":
+				epf = identityProviderConnectionsRecordAgentFlags
+
+			case "revoke":
+				epf = identityProviderConnectionsRevokeFlags
+
+			case "sync-applications":
+				epf = identityProviderConnectionsSyncApplicationsFlags
+
+			case "list-applications":
+				epf = identityProviderConnectionsListApplicationsFlags
 
 			}
 
@@ -6684,6 +6866,9 @@ func ParseEndpoint(
 
 			case "discover-protected-resource-metadata":
 				epf = remoteMcpDiscoverProtectedResourceMetadataFlags
+
+			case "probe-url":
+				epf = remoteMcpProbeURLFlags
 
 			case "verify-url":
 				epf = remoteMcpVerifyURLFlags
@@ -7486,6 +7671,9 @@ func ParseEndpoint(
 			case "get-meter-usage":
 				epf = usageGetMeterUsageFlags
 
+			case "get-spend-breakdown":
+				epf = usageGetSpendBreakdownFlags
+
 			case "get-tokens-under-management":
 				epf = usageGetTokensUnderManagementFlags
 
@@ -7687,6 +7875,9 @@ func ParseEndpoint(
 
 			case "get-meter-usage":
 				epf = adminGetMeterUsageFlags
+
+			case "get-spend-breakdown":
+				epf = adminGetSpendBreakdownFlags
 
 			case "get-support-matrix":
 				epf = adminGetSupportMatrixFlags
@@ -8104,6 +8295,19 @@ func ParseEndpoint(
 				endpoint = c.RetrySchedule()
 				data, err = aiintegrationsc.BuildRetrySchedulePayload(*aiIntegrationsRetryScheduleBodyFlag, *aiIntegrationsRetryScheduleApikeyTokenFlag, *aiIntegrationsRetryScheduleSessionTokenFlag)
 			}
+		case "analytics":
+			c := analyticsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "query":
+				endpoint = c.Query()
+				data, err = analyticsc.BuildQueryPayload(*analyticsQueryBodyFlag, *analyticsQuerySessionTokenFlag, *analyticsQueryProjectSlugInputFlag)
+			case "describe":
+				endpoint = c.Describe()
+				data, err = analyticsc.BuildDescribePayload(*analyticsDescribeSessionTokenFlag, *analyticsDescribeProjectSlugInputFlag)
+			case "dimension-values":
+				endpoint = c.DimensionValues()
+				data, err = analyticsc.BuildDimensionValuesPayload(*analyticsDimensionValuesBodyFlag, *analyticsDimensionValuesSessionTokenFlag, *analyticsDimensionValuesProjectSlugInputFlag)
+			}
 		case "assets":
 			c := assetsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -8485,6 +8689,22 @@ func ParseEndpoint(
 				endpoint = c.GetToolsetEnvironment()
 				data, err = environmentsc.BuildGetToolsetEnvironmentPayload(*environmentsGetToolsetEnvironmentToolsetIDFlag, *environmentsGetToolsetEnvironmentSessionTokenFlag, *environmentsGetToolsetEnvironmentProjectSlugInputFlag)
 			}
+		case "explore":
+			c := explorec.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-queries":
+				endpoint = c.ListQueries()
+				data, err = explorec.BuildListQueriesPayload(*exploreListQueriesSessionTokenFlag, *exploreListQueriesProjectSlugInputFlag)
+			case "create-query":
+				endpoint = c.CreateQuery()
+				data, err = explorec.BuildCreateQueryPayload(*exploreCreateQueryBodyFlag, *exploreCreateQuerySessionTokenFlag, *exploreCreateQueryProjectSlugInputFlag)
+			case "update-query":
+				endpoint = c.UpdateQuery()
+				data, err = explorec.BuildUpdateQueryPayload(*exploreUpdateQueryBodyFlag, *exploreUpdateQuerySessionTokenFlag, *exploreUpdateQueryProjectSlugInputFlag)
+			case "delete-query":
+				endpoint = c.DeleteQuery()
+				data, err = explorec.BuildDeleteQueryPayload(*exploreDeleteQueryIDFlag, *exploreDeleteQuerySessionTokenFlag, *exploreDeleteQueryProjectSlugInputFlag)
+			}
 		case "external-credentials":
 			c := externalcredentialsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -8641,6 +8861,34 @@ func ParseEndpoint(
 			case "resolve":
 				endpoint = c.Resolve()
 				data, err = identityc.BuildResolvePayload(*identityResolveUrnFlag, *identityResolveApikeyTokenFlag, *identityResolveSessionTokenFlag)
+			}
+		case "identity-provider-connections":
+			c := identityproviderconnectionsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create":
+				endpoint = c.Create()
+				data, err = identityproviderconnectionsc.BuildCreatePayload(*identityProviderConnectionsCreateBodyFlag, *identityProviderConnectionsCreateSessionTokenFlag)
+			case "submit-client-id":
+				endpoint = c.SubmitClientID()
+				data, err = identityproviderconnectionsc.BuildSubmitClientIDPayload(*identityProviderConnectionsSubmitClientIDBodyFlag, *identityProviderConnectionsSubmitClientIDSessionTokenFlag)
+			case "verify":
+				endpoint = c.Verify()
+				data, err = identityproviderconnectionsc.BuildVerifyPayload(*identityProviderConnectionsVerifyBodyFlag, *identityProviderConnectionsVerifySessionTokenFlag)
+			case "get":
+				endpoint = c.Get()
+				data, err = identityproviderconnectionsc.BuildGetPayload(*identityProviderConnectionsGetIDFlag, *identityProviderConnectionsGetSessionTokenFlag)
+			case "record-agent":
+				endpoint = c.RecordAgent()
+				data, err = identityproviderconnectionsc.BuildRecordAgentPayload(*identityProviderConnectionsRecordAgentBodyFlag, *identityProviderConnectionsRecordAgentSessionTokenFlag)
+			case "revoke":
+				endpoint = c.Revoke()
+				data, err = identityproviderconnectionsc.BuildRevokePayload(*identityProviderConnectionsRevokeBodyFlag, *identityProviderConnectionsRevokeSessionTokenFlag)
+			case "sync-applications":
+				endpoint = c.SyncApplications()
+				data, err = identityproviderconnectionsc.BuildSyncApplicationsPayload(*identityProviderConnectionsSyncApplicationsBodyFlag, *identityProviderConnectionsSyncApplicationsSessionTokenFlag)
+			case "list-applications":
+				endpoint = c.ListApplications()
+				data, err = identityproviderconnectionsc.BuildListApplicationsPayload(*identityProviderConnectionsListApplicationsIDFlag, *identityProviderConnectionsListApplicationsIncludeRemovedFlag, *identityProviderConnectionsListApplicationsSessionTokenFlag)
 			}
 		case "instances":
 			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -9257,6 +9505,9 @@ func ParseEndpoint(
 			case "discover-protected-resource-metadata":
 				endpoint = c.DiscoverProtectedResourceMetadata()
 				data, err = remotemcpc.BuildDiscoverProtectedResourceMetadataPayload(*remoteMcpDiscoverProtectedResourceMetadataBodyFlag, *remoteMcpDiscoverProtectedResourceMetadataSessionTokenFlag, *remoteMcpDiscoverProtectedResourceMetadataApikeyTokenFlag, *remoteMcpDiscoverProtectedResourceMetadataProjectSlugInputFlag)
+			case "probe-url":
+				endpoint = c.ProbeURL()
+				data, err = remotemcpc.BuildProbeURLPayload(*remoteMcpProbeURLBodyFlag, *remoteMcpProbeURLSessionTokenFlag, *remoteMcpProbeURLApikeyTokenFlag, *remoteMcpProbeURLProjectSlugInputFlag)
 			case "verify-url":
 				endpoint = c.VerifyURL()
 				data, err = remotemcpc.BuildVerifyURLPayload(*remoteMcpVerifyURLBodyFlag, *remoteMcpVerifyURLSessionTokenFlag, *remoteMcpVerifyURLApikeyTokenFlag, *remoteMcpVerifyURLProjectSlugInputFlag)
@@ -10058,6 +10309,9 @@ func ParseEndpoint(
 			case "get-meter-usage":
 				endpoint = c.GetMeterUsage()
 				data, err = usagec.BuildGetMeterUsagePayload(*usageGetMeterUsageFamilyFlag, *usageGetMeterUsageFromFlag, *usageGetMeterUsageToFlag, *usageGetMeterUsageBreakdownFlag, *usageGetMeterUsageSessionTokenFlag)
+			case "get-spend-breakdown":
+				endpoint = c.GetSpendBreakdown()
+				data, err = usagec.BuildGetSpendBreakdownPayload(*usageGetSpendBreakdownFromFlag, *usageGetSpendBreakdownToFlag, *usageGetSpendBreakdownSessionTokenFlag)
 			case "get-tokens-under-management":
 				endpoint = c.GetTokensUnderManagement()
 				data, err = usagec.BuildGetTokensUnderManagementPayload(*usageGetTokensUnderManagementSessionTokenFlag)
@@ -10262,6 +10516,9 @@ func ParseEndpoint(
 			case "get-meter-usage":
 				endpoint = c.GetMeterUsage()
 				data, err = adminc.BuildGetMeterUsagePayload(*adminGetMeterUsageOrganizationIDFlag, *adminGetMeterUsageFamilyFlag, *adminGetMeterUsageFromFlag, *adminGetMeterUsageToFlag, *adminGetMeterUsageAdminSessionTokenFlag)
+			case "get-spend-breakdown":
+				endpoint = c.GetSpendBreakdown()
+				data, err = adminc.BuildGetSpendBreakdownPayload(*adminGetSpendBreakdownOrganizationIDFlag, *adminGetSpendBreakdownFromFlag, *adminGetSpendBreakdownToFlag, *adminGetSpendBreakdownAdminSessionTokenFlag)
 			case "get-support-matrix":
 				endpoint = c.GetSupportMatrix()
 				data, err = adminc.BuildGetSupportMatrixPayload(*adminGetSupportMatrixAdminSessionTokenFlag)
@@ -12141,6 +12398,83 @@ func aiIntegrationsRetryScheduleUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations retry-schedule --body '{\n      \"provider\": \"abc123\",\n      \"schedule\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+// analyticsUsage displays the usage of the analytics command and its
+// subcommands.
+func analyticsUsage() {
+	fmt.Fprintln(os.Stderr, `Query agent session data by dataset and field, never by table or SQL. The catalog describe serves is the contract.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] analytics COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    query: Run a query against one dataset. Grouped: aggregate over dimensions, optionally bucketed by time. Ungrouped: rows at the dataset's grain, newest first.`)
+	fmt.Fprintln(os.Stderr, `    describe: Describe every dataset and the fields it exposes, with the operators and aggregations each admits.`)
+	fmt.Fprintln(os.Stderr, `    dimension-values: List the values a dimension holds inside a window, most frequent first, for filter pickers. Values are resolved after the dataset collapses its observations, so every value returned is one a query would match.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s analytics COMMAND --help\n", os.Args[0])
+}
+func analyticsQueryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] analytics query", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Run a query against one dataset. Grouped: aggregate over dimensions, optionally bucketed by time. Ungrouped: rows at the dataset's grain, newest first.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "analytics query --body '{\n      \"dataset\": \"sessions\",\n      \"dimensions\": [\n         \"abc123\"\n      ],\n      \"filters\": [\n         {\n            \"field\": \"surface\",\n            \"operator\": \"in\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2026-09-01T00:00:00Z\",\n      \"grain\": \"hour\",\n      \"limit\": 2,\n      \"measures\": [\n         {\n            \"alias\": \"tool_calls\",\n            \"field\": \"tool_call_count\",\n            \"op\": \"sum\"\n         }\n      ],\n      \"order_by\": [\n         {\n            \"direction\": \"desc\",\n            \"measure\": \"tool_calls\"\n         }\n      ],\n      \"to\": \"2026-09-08T00:00:00Z\",\n      \"ungrouped\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func analyticsDescribeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] analytics describe", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Describe every dataset and the fields it exposes, with the operators and aggregations each admits.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "analytics describe --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func analyticsDimensionValuesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] analytics dimension-values", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the values a dimension holds inside a window, most frequent first, for filter pickers. Values are resolved after the dataset collapses its observations, so every value returned is one a query would match.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "analytics dimension-values --body '{\n      \"dataset\": \"sessions\",\n      \"dimension\": \"model\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"to\": \"1970-01-01T00:00:01Z\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // assetsUsage displays the usage of the assets command and its subcommands.
@@ -14752,6 +15086,105 @@ func environmentsGetToolsetEnvironmentUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "environments get-toolset-environment --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+// exploreUsage displays the usage of the explore command and its subcommands.
+func exploreUsage() {
+	fmt.Fprintln(os.Stderr, `Queries: the saved questions Explore keeps. Explore's only server-side surface; everything it shows comes from the analytics service.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] explore COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-queries: List the project's saved queries, most recently updated first. Each is validated against the catalog on read, so a query a catalog change broke says so.`)
+	fmt.Fprintln(os.Stderr, `    create-query: Save a query. Any member of the project can. The spec is validated against the catalog before it is stored.`)
+	fmt.Fprintln(os.Stderr, `    update-query: Replace a saved query's name, dataset and spec. Any member of the project can.`)
+	fmt.Fprintln(os.Stderr, `    delete-query: Delete a saved query. Its creator can; deleting someone else's needs project write access.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s explore COMMAND --help\n", os.Args[0])
+}
+func exploreListQueriesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] explore list-queries", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the project's saved queries, most recently updated first. Each is validated against the catalog on read, so a query a catalog change broke says so.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "explore list-queries --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func exploreCreateQueryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] explore create-query", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Save a query. Any member of the project can. The spec is validated against the catalog before it is stored.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "explore create-query --body '{\n      \"dataset\": \"aa\",\n      \"name\": \"aa\",\n      \"spec\": {\n         \"abc123\": \"abc123\"\n      }\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func exploreUpdateQueryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] explore update-query", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace a saved query's name, dataset and spec. Any member of the project can.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "explore update-query --body '{\n      \"dataset\": \"aa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"spec\": {\n         \"abc123\": \"abc123\"\n      }\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func exploreDeleteQueryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] explore delete-query", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a saved query. Its creator can; deleting someone else's needs project write access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "explore delete-query --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 // externalCredentialsUsage displays the usage of the external-credentials
 // command and its subcommands.
 func externalCredentialsUsage() {
@@ -15781,6 +16214,186 @@ func identityResolveUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity resolve --urn \"user:user_01abc\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+// identityProviderConnectionsUsage displays the usage of the
+// identity-provider-connections command and its subcommands.
+func identityProviderConnectionsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage the organization's Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] identity-provider-connections COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create: Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin and the okta-connections rollout. One live connection per organization; creation is rate limited.`)
+	fmt.Fprintln(os.Stderr, `    submit-client-id: Record the client ID of the Okta API Services application and verify it. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    verify: Re-verify the connection against Okta: mint a token, confirm each required scope with a read, and record the outcome. Rate limited per organization. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    get: Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    record-agent: Record the Okta AI agent ID and the application it is bound to, for display. Okta does not expose these through its API. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    revoke: Revoke the connection: withdraw every signing key from the JWKS, disable the key material, and tombstone the connection so a new one can be created. Idempotent. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    sync-applications: Run the applications snapshot on the next coordinator pass, within minutes, instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    list-applications: List the applications snapshot for the connection with live assignment counts and the last reconcile run. The connection must be verified. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s identity-provider-connections COMMAND --help\n", os.Args[0])
+}
+func identityProviderConnectionsCreateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections create", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin and the okta-connections rollout. One live connection per organization; creation is rate limited.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections create --body '{\n      \"listing_mode\": \"oin\",\n      \"org_url\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsSubmitClientIDUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections submit-client-id", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record the client ID of the Okta API Services application and verify it. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections submit-client-id --body '{\n      \"client_id\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsVerifyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections verify", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Re-verify the connection against Okta: mint a token, confirm each required scope with a read, and record the outcome. Rate limited per organization. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections verify --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsGetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections get", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections get --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsRecordAgentUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections record-agent", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record the Okta AI agent ID and the application it is bound to, for display. Okta does not expose these through its API. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections record-agent --body '{\n      \"agent_app_id\": \"abc123\",\n      \"agent_id\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsRevokeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections revoke", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Revoke the connection: withdraw every signing key from the JWKS, disable the key material, and tombstone the connection so a new one can be created. Idempotent. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections revoke --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsSyncApplicationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections sync-applications", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Run the applications snapshot on the next coordinator pass, within minutes, instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections sync-applications --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsListApplicationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections list-applications", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -include-removed BOOL")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the applications snapshot for the connection with live assignment counts and the last reconcile run. The connection must be verified. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -include-removed BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections list-applications --id \"550e8400-e29b-41d4-a716-446655440000\" --include-removed false --session-token \"abc123\"")
 }
 
 // instancesUsage displays the usage of the instances command and its
@@ -19687,7 +20300,10 @@ func remoteMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    get-server: Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.`)
 	fmt.Fprintln(os.Stderr, `    update-server: Update a remote MCP server`)
 	fmt.Fprintln(os.Stderr, `    discover-protected-resource-metadata: Probe the remote MCP server's origin for an RFC 9728 .well-known/oauth-protected-resource document and return either the parsed metadata or a typed unavailability reason. Runs server-side under guardian.Policy so production resource servers without CORS can still be inspected.`)
-	fmt.Fprintln(os.Stderr, `    verify-url: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.`)
+	fmt.Fprintln(os.Stderr, `    probe-url: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.`)
+	fmt.Fprintln(os.Stderr, `    verify-url: Probe a candidate remote MCP server URL and return the legacy boolean verification result.
+	
+	Deprecated: use probeURL instead.`)
 	fmt.Fprintln(os.Stderr, `    delete-server: Delete a remote MCP server`)
 	fmt.Fprintln(os.Stderr, `    list-server-headers: List the headers configured for a remote MCP server`)
 	fmt.Fprintln(os.Stderr, `    get-server-header: Get a remote MCP server header by ID`)
@@ -19842,6 +20458,30 @@ func remoteMcpDiscoverProtectedResourceMetadataUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp discover-protected-resource-metadata --body '{\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+func remoteMcpProbeURLUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp probe-url", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp probe-url --body '{\n      \"url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func remoteMcpVerifyURLUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp verify-url", os.Args[0])
@@ -19853,7 +20493,9 @@ func remoteMcpVerifyURLUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.`)
+	fmt.Fprintln(os.Stderr, `Probe a candidate remote MCP server URL and return the legacy boolean verification result.
+	
+	Deprecated: use probeURL instead.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -25966,6 +26608,7 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-period-usage: Get the usage for an organization for a given period`)
 	fmt.Fprintln(os.Stderr, `    get-meter-usage: Get incrementally aggregated ordinary meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer.`)
+	fmt.Fprintln(os.Stderr, `    get-spend-breakdown: Report spend availability and estimate PAYG organizations' three metered products at current list prices over a maximum of three calendar months. Other plans return unsupported_plan, empty products, and a zero total without calculating estimates. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.`)
 	fmt.Fprintln(os.Stderr, `    get-tokens-under-management: Get tokens under management for the active billing cycle alongside the contracted terms`)
 	fmt.Fprintln(os.Stderr, `    set-billing-metadata: Set an organization's billing contract terms. Restricted to platform admins.`)
 	fmt.Fprintln(os.Stderr, `    get-billing-email: Get the billing notification email for a PAYG organization`)
@@ -26028,6 +26671,28 @@ func usageGetMeterUsageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage get-meter-usage --family \"mcp_bandwidth\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --breakdown \"abc123\" --session-token \"abc123\"")
+}
+
+func usageGetSpendBreakdownUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage get-spend-breakdown", os.Args[0])
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Report spend availability and estimate PAYG organizations' three metered products at current list prices over a maximum of three calendar months. Other plans return unsupported_plan, empty products, and a zero total without calculating estimates. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage get-spend-breakdown --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --session-token \"abc123\"")
 }
 
 func usageGetTokensUnderManagementUsage() {
@@ -26381,6 +27046,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    start-trial: Starts a new enterprise trial for an organization that has never trialled, or restarts one that has expired without converting or being demoted. Sets the account type, whitelist flag, trial entitlements and a fresh runway counted from now. A running, demoted or converted trial is rejected: those are extend, re-arm and a contract.`)
 	fmt.Fprintln(os.Stderr, `    change-trial-end-date: Sets a running trial's end date to a future instant, shortening or extending it without restarting the trial.`)
 	fmt.Fprintln(os.Stderr, `    get-meter-usage: Returns totals-only ordinary meter usage for an organization over a bounded UTC-day window.`)
+	fmt.Fprintln(os.Stderr, `    get-spend-breakdown: Returns exact current PAYG list-price estimates for an organization's three metered products over a maximum of three calendar months. Available for every organization regardless of account type or subscription state.`)
 	fmt.Fprintln(os.Stderr, `    get-support-matrix: Read the shared support catalog and product coverage.`)
 	fmt.Fprintln(os.Stderr, `    update-support-matrix: Save coverage against the last read revision; rejects concurrent changes.`)
 	fmt.Fprintln(os.Stderr)
@@ -27435,6 +28101,30 @@ func adminGetMeterUsageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-meter-usage --organization-id \"abc123\" --family \"mcp_bandwidth\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --admin-session-token \"abc123\"")
+}
+
+func adminGetSpendBreakdownUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-spend-breakdown", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns exact current PAYG list-price estimates for an organization's three metered products over a maximum of three calendar months. Available for every organization regardless of account type or subscription state.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-spend-breakdown --organization-id \"abc123\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --admin-session-token \"abc123\"")
 }
 
 func adminGetSupportMatrixUsage() {
