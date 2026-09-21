@@ -538,7 +538,7 @@ func normalizeAudience(raw string) (string, error) {
 	}
 	audience := strings.TrimSpace(raw)
 	u, err := url.Parse(audience)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.ForceQuery || strings.ContainsAny(audience, "?#") || u.Opaque != "" {
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.ForceQuery || strings.ContainsAny(audience, "?#") || u.Opaque != "" {
 		return "", oops.E(oops.CodeBadRequest, nil, "audience must be an https URL without query or fragment")
 	}
 	return audience, nil
