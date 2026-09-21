@@ -117,3 +117,16 @@ func TestResolveClientAggregatesEffectiveBindingScopes(t *testing.T) {
 		require.Equal(t, []string{"openid", "read", "write"}, scopes)
 	}
 }
+
+func TestResolveClientIgnoresBindingsToAnotherProjectsClient(t *testing.T) {
+	t.Parallel()
+	issuer, project, otherProject := uuid.New(), uuid.New(), uuid.New()
+	server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project}
+	foreign := repo.ListIssuerClientsRow{ID: uuid.New(), RemoteSessionIssuerID: issuer, ProjectID: uuid.NullUUID{UUID: otherProject, Valid: true}, ClientID: "other-project"}
+	binding := repo.ListEMABindingsRow{ProjectID: project, RemoteSessionIssuerID: issuer, Resource: "https://mcp.example", RemoteSessionClientID: uuid.NullUUID{UUID: foreign.ID, Valid: true}, RequestedScopes: []string{"read"}}
+
+	id, scopes, state := resolveClient(server, binding.Resource, []repo.ListIssuerClientsRow{foreign}, []repo.ListEMABindingsRow{binding})
+	require.Empty(t, id)
+	require.Empty(t, scopes)
+	require.Equal(t, ClientBindingMissing, state)
+}

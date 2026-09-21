@@ -382,10 +382,10 @@ func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []re
 		if sv.UserSessionIssuerID.Valid && b.UserSessionIssuerID != sv.UserSessionIssuerID.UUID {
 			continue
 		}
-		if _, ok := byID[b.RemoteSessionClientID.UUID]; !ok {
+		c, ok := byID[b.RemoteSessionClientID.UUID]
+		if !ok || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
 			continue
 		}
-		c := byID[b.RemoteSessionClientID.UUID]
 		for _, scope := range scopesOr(b.RequestedScopes, requestedScopes(c)) {
 			if !slices.Contains(boundScopes, scope) {
 				boundScopes = append(boundScopes, scope)
