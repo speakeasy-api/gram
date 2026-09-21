@@ -181,6 +181,8 @@ func TestConfirmAndReset(t *testing.T) {
 	// Validation.
 	_, err = confirm(t, ctx, si, "http://auth.example.com", nil, a.serverID)
 	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = confirm(t, ctx, si, "https://:443", nil, a.serverID)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 	_, err = confirm(t, ctx, si, audience+"?x=1", nil, a.serverID)
 	requireOopsCode(t, err, oops.CodeBadRequest)
 	bad := "not-an-app"

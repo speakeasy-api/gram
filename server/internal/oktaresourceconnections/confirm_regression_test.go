@@ -62,6 +62,9 @@ func TestConfirm_SharedResourceBatch(t *testing.T) {
 	count, err := audittest.AuditLogCountByAction(ctx, si.conn, audit.ActionOktaResourceConnectionConfirm)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count, "one write/audit for the actual upstream")
+	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "servers that share an upstream share one row")
 }
 
 func TestConfirm_AgentChangesWhileWaitingForConnectionLock(t *testing.T) {
