@@ -216,9 +216,9 @@ func (s *Service) servesAuthorizationServerMetadata(ctx context.Context, endpoin
 
 // requestAuthorizationServerURLs is AuthorizationServerURLs for the host the
 // request arrived on. Issuer is the endpoint's issuer; Token and Revoke name
-// the host the request was actually sent to. That keeps an assertion's
-// accepted audiences an exact pair for the addressed endpoint: the issuer, or
-// the URL the request was actually sent to.
+// the host the request was sent to. That keeps an assertion's accepted
+// audiences an exact pair for the addressed endpoint: the issuer, or the URL
+// the request was sent to.
 func (s *Service) requestAuthorizationServerURLs(ctx context.Context, endpoint *ResolvedMcpEndpoint, resourceBaseURL string) (AuthorizationServerURLs, error) {
 	urls, err := endpoint.AuthorizationServerURLs(s.authorizationServerBaseURL(endpoint, resourceBaseURL))
 	if err != nil {

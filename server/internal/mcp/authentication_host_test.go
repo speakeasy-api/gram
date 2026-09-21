@@ -247,8 +247,8 @@ func TestAuthenticationHost_IDJAGExchangeRefused(t *testing.T) {
 }
 
 // A JWT bearer request presenting no client reaches the clientless branch on
-// the authentication host rather than being turned away by the host itself, so
-// it gets that branch's answer rather than unsupported_grant_type.
+// the authentication host and gets that branch's answer, not
+// unsupported_grant_type.
 func TestAuthenticationHost_ClientlessAssertionGrantReachesClientlessBranch(t *testing.T) {
 	t.Parallel()
 
