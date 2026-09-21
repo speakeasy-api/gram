@@ -180,9 +180,10 @@ function useFlaggedMessage(
     { enabled: active, throwOnError: false },
   );
   // Every finding in the chat, since an unseen match would print in the clear.
-  // Null when the chat has too many to collect.
+  // Null when the chat has too many to collect. Keyed under ["risk", "results"]
+  // so dismissing or restoring a finding refetches it.
   const findingsQuery = useQuery({
-    queryKey: ["chat", chatId, "all-findings"],
+    queryKey: ["risk", "results", "chat", chatId],
     queryFn: () => collectChatFindings(client, chatId ?? ""),
     enabled: active,
     throwOnError: false,
