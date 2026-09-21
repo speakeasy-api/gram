@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS organizations (
   -- organization response. Gram writes its organization id here and then reads
   -- it back through the WorkOS event sync.
   external_id TEXT,
+  domains TEXT NOT NULL DEFAULT '[]',
 
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP

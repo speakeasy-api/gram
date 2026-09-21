@@ -79315,12 +79315,16 @@ components:
         CreateOrganizationRequestBody:
             type: object
             properties:
-                name:
+                ownership_confirmed:
+                    type: boolean
+                    description: The operator confirms that domain ownership was established outside this form.
+                url:
                     type: string
-                    description: Display name for the new organization.
+                    description: Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.
                     minLength: 1
             required:
-                - name
+                - url
+                - ownership_confirmed
         CreateOrganizationUserSessionIssuerForm:
             type: object
             properties:

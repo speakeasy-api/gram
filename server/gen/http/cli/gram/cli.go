@@ -27761,7 +27761,7 @@ func adminCreateOrganizationUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin create-organization --body '{\n      \"name\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin create-organization --body '{\n      \"ownership_confirmed\": false,\n      \"url\": \"aa\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminRearmTrialUsage() {

@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState, type FormEvent, type JSX } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -22,14 +23,16 @@ import {
 import {
   createOrganization,
   errorMessage,
+  GramAdminError,
   type AdminOrganization,
   type CreateOrganizationRequest,
 } from "@/lib/gramAdminApi";
 
 import type { WriteReporter } from "./OrganizationActions";
+import { organizationUrlPreview } from "./organizationUrl";
 
 /**
- * Creates one organization from a name.
+ * Creates one organization from an operator-confirmed domain.
  *
  * The confirmation is worded from the response, because the server normalises
  * the name it stores.
@@ -43,16 +46,20 @@ export function CreateOrganization({
 }): JSX.Element {
   const { announce, showFailure } = reporter;
   const qc = useQueryClient();
-  const nameField = useId();
+  const urlField = useId();
+  const ownershipField = useId();
+  const previewID = useId();
   const messageID = useId();
 
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
+  const [url, setURL] = useState("");
+  const [ownershipConfirmed, setOwnershipConfirmed] = useState(false);
   // What the toolbar shows after a create lands. It is spoken through the
   // page's region, which is the only live region on this page.
   const [created, setCreated] = useState("");
 
   const create = useMutation({
+    retry: false,
     mutationFn: (body: CreateOrganizationRequest) => createOrganization(body),
     // A list read already in flight was asked before this write and lands
     // after it, so it would answer the refetch below with pre-write rows.
@@ -66,7 +73,8 @@ export function CreateOrganization({
       // Ahead of the close, so the order the two reach the accessibility tree
       // in is never a question.
       setOpen(false);
-      setName("");
+      setURL("");
+      setOwnershipConfirmed(false);
       // The page's banner belongs to the last write that failed, and this one
       // succeeded. Every sibling write clears it the same way.
       showFailure(null);
@@ -88,17 +96,21 @@ export function CreateOrganization({
     onError: () => invalidateOrganizations(qc),
   });
 
-  // The server normalises whitespace itself, so the trim only decides what
-  // counts as empty and keeps the request the same as the check.
-  const trimmed = name.trim();
-  const canSubmit = trimmed !== "" && !create.isPending;
+  const preview = organizationUrlPreview(url);
+  const canSubmit =
+    Boolean(preview.hostname) && ownershipConfirmed && !create.isPending;
+  const failure = create.error
+    ? create.error instanceof GramAdminError && create.error.status < 500
+      ? errorMessage(create.error)
+      : "Creation could not be confirmed. Check existing organizations before retrying."
+    : preview.error;
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     // Not the button's `disabled` alone: Enter in the field submits the form,
     // so a second press mid-write would create a second organization.
     if (!canSubmit) return;
-    create.mutate({ name: trimmed });
+    create.mutate({ url: url.trim(), ownership_confirmed: ownershipConfirmed });
   };
 
   return (
@@ -119,7 +131,8 @@ export function CreateOrganization({
           // take the dialog away from a write that is still open.
           if (!next && create.isPending) return;
           if (next) {
-            setName("");
+            setURL("");
+            setOwnershipConfirmed(false);
             create.reset();
             // The last create's confirmation would otherwise sit beside this
             // one's refusal.
@@ -145,32 +158,68 @@ export function CreateOrganization({
             </DialogHeader>
 
             <div className="my-4 grid gap-2">
-              <label htmlFor={nameField} className="text-sm font-medium">
-                Organization name
+              <label htmlFor={urlField} className="text-sm font-medium">
+                Company URL
               </label>
               <Input
-                id={nameField}
-                value={name}
+                id={urlField}
+                value={url}
+                type="text"
+                inputMode="url"
+                placeholder="https://example.com"
+                disabled={create.isPending}
                 required
                 autoComplete="off"
-                aria-invalid={Boolean(create.error)}
-                // The alert fires once. An operator who tabs back to edit the
-                // rejected name would otherwise be told nothing at all.
-                aria-describedby={create.error ? messageID : undefined}
-                onChange={(event) => setName(event.target.value)}
+                autoCapitalize="none"
+                spellCheck={false}
+                aria-invalid={Boolean(failure)}
+                aria-describedby={
+                  failure ? `${previewID} ${messageID}` : previewID
+                }
+                onChange={(event) => {
+                  setURL(event.target.value);
+                  setOwnershipConfirmed(false);
+                  create.reset();
+                }}
               />
+              <div id={previewID} className="text-muted-foreground text-sm">
+                <p className="break-all">
+                  Trusted email domain:{" "}
+                  {preview.hostname || "Enter a company URL"}
+                </p>
+                <p>Invitations must match this domain exactly.</p>
+              </div>
             </div>
 
-            {/* Assertive and beside the field it belongs to, which is where
-                the operator is. The name stays put: a rejected name is one they
-                want to edit, not retype. */}
-            {create.error && (
+            <div className="my-4 grid gap-2">
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id={ownershipField}
+                  className="mt-0.5"
+                  checked={ownershipConfirmed}
+                  disabled={create.isPending}
+                  required
+                  onCheckedChange={(checked) =>
+                    setOwnershipConfirmed(checked === true)
+                  }
+                />
+                <label htmlFor={ownershipField} className="text-sm leading-5">
+                  I have confirmed that this organization owns this domain.
+                </label>
+              </div>
+              <p className="text-muted-foreground text-sm">
+                Establish ownership outside this form. Entering a URL does not
+                prove ownership.
+              </p>
+            </div>
+
+            {failure && (
               <p
                 id={messageID}
                 role="alert"
                 className="text-destructive text-sm"
               >
-                {errorMessage(create.error)}
+                {failure}
               </p>
             )}
 
