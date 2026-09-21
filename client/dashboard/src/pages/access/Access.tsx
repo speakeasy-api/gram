@@ -76,12 +76,14 @@ function AccessInner() {
   const grantUserId = searchParams.get("grant_user");
   const grantScope = searchParams.get("scope");
   const grantResourceId = searchParams.get("resource_id") || undefined;
+  const grantProjectId = searchParams.get("project_id") || undefined;
 
   const closeGrantDialog = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("grant_user");
     next.delete("scope");
     next.delete("resource_id");
+    next.delete("project_id");
     setSearchParams(next, { replace: true });
   };
   const organization = useOrganization();
@@ -150,6 +152,7 @@ function AccessInner() {
           userId={grantUserId}
           scope={grantScope}
           resourceId={grantResourceId}
+          projectId={grantProjectId}
           onClose={closeGrantDialog}
         />
       )}

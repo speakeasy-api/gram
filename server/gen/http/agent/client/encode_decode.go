@@ -2684,13 +2684,13 @@ func unmarshalAiScanTargetResponseBodyToAgentAiScanTarget(v *AiScanTargetRespons
 		DisplayName:     *v.DisplayName,
 		Category:        *v.Category,
 		VersionPlistKey: v.VersionPlistKey,
-		Enabled:         *v.Enabled,
 		Origin:          *v.Origin,
 		Customized:      *v.Customized,
 		CreatedAt:       v.CreatedAt,
 		UpdatedAt:       v.UpdatedAt,
 	}
 	res.Signatures = unmarshalAiScanTargetSignaturesResponseBodyToAgentAiScanTargetSignatures(v.Signatures)
+	res.GatewayClient = unmarshalAiScanTargetGatewayClientResponseBodyToAgentAiScanTargetGatewayClient(v.GatewayClient)
 
 	return res
 }
@@ -2715,6 +2715,27 @@ func unmarshalAiScanTargetSignaturesResponseBodyToAgentAiScanTargetSignatures(v 
 	res.ProcessNames = make([]string, len(v.ProcessNames))
 	for i, val := range v.ProcessNames {
 		res.ProcessNames[i] = val
+	}
+
+	return res
+}
+
+// unmarshalAiScanTargetGatewayClientResponseBodyToAgentAiScanTargetGatewayClient
+// builds a value of type *agent.AiScanTargetGatewayClient from a value of type
+// *AiScanTargetGatewayClientResponseBody.
+func unmarshalAiScanTargetGatewayClientResponseBodyToAgentAiScanTargetGatewayClient(v *AiScanTargetGatewayClientResponseBody) *agent.AiScanTargetGatewayClient {
+	res := &agent.AiScanTargetGatewayClient{}
+	res.CimdVendorKeys = make([]string, len(v.CimdVendorKeys))
+	for i, val := range v.CimdVendorKeys {
+		res.CimdVendorKeys[i] = val
+	}
+	res.OauthClientIds = make([]string, len(v.OauthClientIds))
+	for i, val := range v.OauthClientIds {
+		res.OauthClientIds[i] = val
+	}
+	res.ClientInfoNames = make([]string, len(v.ClientInfoNames))
+	for i, val := range v.ClientInfoNames {
+		res.ClientInfoNames[i] = val
 	}
 
 	return res
@@ -2761,6 +2782,42 @@ func marshalAgentAiScanTargetSignaturesToAiScanTargetSignaturesRequestBody(v *ag
 	return res
 }
 
+// marshalAgentAiScanTargetGatewayClientToAiScanTargetGatewayClientRequestBody
+// builds a value of type *AiScanTargetGatewayClientRequestBody from a value of
+// type *agent.AiScanTargetGatewayClient.
+func marshalAgentAiScanTargetGatewayClientToAiScanTargetGatewayClientRequestBody(v *agent.AiScanTargetGatewayClient) *AiScanTargetGatewayClientRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AiScanTargetGatewayClientRequestBody{}
+	if v.CimdVendorKeys != nil {
+		res.CimdVendorKeys = make([]string, len(v.CimdVendorKeys))
+		for i, val := range v.CimdVendorKeys {
+			res.CimdVendorKeys[i] = val
+		}
+	} else {
+		res.CimdVendorKeys = []string{}
+	}
+	if v.OauthClientIds != nil {
+		res.OauthClientIds = make([]string, len(v.OauthClientIds))
+		for i, val := range v.OauthClientIds {
+			res.OauthClientIds[i] = val
+		}
+	} else {
+		res.OauthClientIds = []string{}
+	}
+	if v.ClientInfoNames != nil {
+		res.ClientInfoNames = make([]string, len(v.ClientInfoNames))
+		for i, val := range v.ClientInfoNames {
+			res.ClientInfoNames[i] = val
+		}
+	} else {
+		res.ClientInfoNames = []string{}
+	}
+
+	return res
+}
+
 // marshalAiScanTargetSignaturesRequestBodyToAgentAiScanTargetSignatures builds
 // a value of type *agent.AiScanTargetSignatures from a value of type
 // *AiScanTargetSignaturesRequestBody.
@@ -2797,6 +2854,42 @@ func marshalAiScanTargetSignaturesRequestBodyToAgentAiScanTargetSignatures(v *Ai
 		}
 	} else {
 		res.ProcessNames = []string{}
+	}
+
+	return res
+}
+
+// marshalAiScanTargetGatewayClientRequestBodyToAgentAiScanTargetGatewayClient
+// builds a value of type *agent.AiScanTargetGatewayClient from a value of type
+// *AiScanTargetGatewayClientRequestBody.
+func marshalAiScanTargetGatewayClientRequestBodyToAgentAiScanTargetGatewayClient(v *AiScanTargetGatewayClientRequestBody) *agent.AiScanTargetGatewayClient {
+	if v == nil {
+		return nil
+	}
+	res := &agent.AiScanTargetGatewayClient{}
+	if v.CimdVendorKeys != nil {
+		res.CimdVendorKeys = make([]string, len(v.CimdVendorKeys))
+		for i, val := range v.CimdVendorKeys {
+			res.CimdVendorKeys[i] = val
+		}
+	} else {
+		res.CimdVendorKeys = []string{}
+	}
+	if v.OauthClientIds != nil {
+		res.OauthClientIds = make([]string, len(v.OauthClientIds))
+		for i, val := range v.OauthClientIds {
+			res.OauthClientIds[i] = val
+		}
+	} else {
+		res.OauthClientIds = []string{}
+	}
+	if v.ClientInfoNames != nil {
+		res.ClientInfoNames = make([]string, len(v.ClientInfoNames))
+		for i, val := range v.ClientInfoNames {
+			res.ClientInfoNames[i] = val
+		}
+	} else {
+		res.ClientInfoNames = []string{}
 	}
 
 	return res

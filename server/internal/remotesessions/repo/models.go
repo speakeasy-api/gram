@@ -12,6 +12,7 @@ import (
 
 type RemoteSession struct {
 	ID                     uuid.UUID
+	GrantGeneration        int64
 	SubjectUrn             urn.SessionSubject
 	UserSessionIssuerID    uuid.UUID
 	RemoteSessionClientID  uuid.UUID
@@ -43,6 +44,7 @@ type RemoteSessionClient struct {
 	ID                              uuid.UUID
 	ProjectID                       uuid.NullUUID
 	OrganizationID                  pgtype.Text
+	AttachmentScope                 pgtype.Text
 	RemoteSessionIssuerID           uuid.UUID
 	ClientID                        string
 	ClientSecretEncrypted           pgtype.Text
@@ -51,6 +53,7 @@ type RemoteSessionClient struct {
 	TokenEndpointAuthMethod         pgtype.Text
 	JsonWebKeySetID                 uuid.NullUUID
 	Scope                           []string
+	GrantTypes                      []string
 	Audience                        pgtype.Text
 	TokenEndpointAuthAudienceFormat pgtype.Text
 	ClientIDMetadataUri             pgtype.Text
@@ -61,6 +64,7 @@ type RemoteSessionClient struct {
 	ResourcePolicyUri               pgtype.Text
 	ResourceTosUri                  pgtype.Text
 	UpstreamRejectedAt              pgtype.Timestamptz
+	IdentityProviderConnectionID    uuid.NullUUID
 	CreatedAt                       pgtype.Timestamptz
 	UpdatedAt                       pgtype.Timestamptz
 	DeletedAt                       pgtype.Timestamptz
@@ -71,6 +75,7 @@ type RemoteSessionIssuer struct {
 	ID                                         uuid.UUID
 	ProjectID                                  uuid.NullUUID
 	OrganizationID                             pgtype.Text
+	AttachmentScope                            pgtype.Text
 	Slug                                       string
 	Issuer                                     string
 	AuthorizationEndpoint                      pgtype.Text
@@ -80,6 +85,8 @@ type RemoteSessionIssuer struct {
 	JwksUri                                    pgtype.Text
 	Jwks                                       []byte
 	JwksFetchedAt                              pgtype.Timestamptz
+	JwksLastError                              pgtype.Text
+	JwksLastErrorAt                            pgtype.Timestamptz
 	JwksCacheExpiresAt                         pgtype.Timestamptz
 	JwksEtag                                   pgtype.Text
 	ServiceDocumentation                       pgtype.Text
@@ -87,6 +94,7 @@ type RemoteSessionIssuer struct {
 	OpTosUri                                   pgtype.Text
 	ScopesSupported                            []string
 	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
 	ResponseTypesSupported                     []string
 	TokenEndpointAuthMethodsSupported          []string
 	CodeChallengeMethodsSupported              []string

@@ -14,10 +14,12 @@ import {
 import {
   canExtendTrial,
   canRearmTrial,
+  canStartTrial,
   useDisableOrganization,
   useEnableOrganization,
   useExtendTrial,
   useRearmTrial,
+  useStartTrial,
 } from "./rowActions";
 
 const mocks = vi.hoisted(() => ({
@@ -29,16 +31,19 @@ const mocks = vi.hoisted(() => ({
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
   rearmTrial:
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
+  startTrial:
+    vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
 }));
 
-vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
+vi.mock("@/lib/gramAdminClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gramAdminClient")>();
   return {
     ...actual,
     disableOrganization: mocks.disableOrganization,
     enableOrganization: mocks.enableOrganization,
     extendTrial: mocks.extendTrial,
     rearmTrial: mocks.rearmTrial,
+    startTrial: mocks.startTrial,
   };
 });
 
@@ -65,6 +70,22 @@ const REARMED_ORG: AdminOrganization = {
   trial_ends_at: "2026-08-28T00:00:00Z",
 };
 
+// Never trialled: the one record a start acts on.
+const NONE_ORG: AdminOrganization = {
+  ...DEMOTED_ORG,
+  trial_state: "none",
+};
+
+// What the endpoint answers with: the granted account type, the whitelist
+// flag and a trial running from now.
+const STARTED_ORG: AdminOrganization = {
+  ...NONE_ORG,
+  account_type: "enterprise",
+  whitelisted: true,
+  trial_state: "running",
+  trial_ends_at: "2026-08-28T00:00:00Z",
+};
+
 beforeEach(() => {
   mocks.disableOrganization.mockReset();
   mocks.disableOrganization.mockResolvedValue(REARMED_ORG);
@@ -74,6 +95,8 @@ beforeEach(() => {
   mocks.extendTrial.mockResolvedValue(REARMED_ORG);
   mocks.rearmTrial.mockReset();
   mocks.rearmTrial.mockResolvedValue(REARMED_ORG);
+  mocks.startTrial.mockReset();
+  mocks.startTrial.mockResolvedValue(STARTED_ORG);
 });
 
 describe("the trial predicates", () => {
@@ -82,16 +105,21 @@ describe("the trial predicates", () => {
   // pass while the menu offered both actions on one record, and a seventh
   // state added later would be walked by neither.
   it.each([...TRIAL_STATES, undefined])(
-    "offers at most one of extend and re-arm for the %s trial",
+    "offers at most one of extend, re-arm and start for the %s trial",
     (state) => {
       const org = { ...DEMOTED_ORG, trial_state: state };
 
-      const offered = [canExtendTrial(org), canRearmTrial(org)].filter(Boolean);
+      const offered = [
+        canExtendTrial(org),
+        canRearmTrial(org),
+        canStartTrial(org),
+      ].filter(Boolean);
 
       expect(offered.length).toBeLessThanOrEqual(1);
       // Named as well as counted: "at most one" alone is satisfied by an
       // action that is never offered at all.
       expect(canRearmTrial(org)).toBe(state === "demoted");
+      expect(canStartTrial(org)).toBe(state === "none" || state === "expired");
     },
   );
 
@@ -110,6 +138,19 @@ describe("the trial predicates", () => {
       ).toBe(false);
     },
   );
+
+  it.each([...TRIAL_STATES, undefined])(
+    "keeps start off a disabled organization on the %s trial",
+    (state) => {
+      expect(
+        canStartTrial({
+          ...NONE_ORG,
+          trial_state: state,
+          disabled_at: "2026-03-04T00:00:00Z",
+        }),
+      ).toBe(false);
+    },
+  );
 });
 
 describe("audited organization lifecycle mutations", () => {
@@ -119,7 +160,7 @@ describe("audited organization lifecycle mutations", () => {
     };
   }
 
-  it.each(["disable", "enable", "extend", "rearm"] as const)(
+  it.each(["disable", "enable", "extend", "rearm", "start"] as const)(
     "invalidates organization activity after a successful %s",
     async (action) => {
       const qc = new QueryClient({
@@ -138,6 +179,7 @@ describe("audited organization lifecycle mutations", () => {
           enable: useEnableOrganization(),
           extend: useExtendTrial(),
           rearm: useRearmTrial(),
+          start: useStartTrial(),
         }),
         { wrapper: wrapper(qc) },
       );
@@ -154,6 +196,9 @@ describe("audited organization lifecycle mutations", () => {
           break;
         case "rearm":
           result.current.rearm.mutate({ id: DEMOTED_ORG.id, days: 14 });
+          break;
+        case "start":
+          result.current.start.mutate({ id: DEMOTED_ORG.id, days: 14 });
           break;
       }
 
@@ -254,6 +299,93 @@ describe("useRearmTrial", () => {
     expect(qc.getQueryData<ListOrganizationsResult>(listKey)).toEqual({
       total: 1,
       organizations: [DEMOTED_ORG],
+    });
+  });
+});
+
+describe("useStartTrial", () => {
+  function wrapper(qc: QueryClient) {
+    return function Wrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+    };
+  }
+
+  function seededClient(): QueryClient {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    // The list as the operator filtered it: organizations with no trial. The
+    // started record no longer matches it, which is exactly why this write
+    // repaints rather than refetching.
+    qc.setQueryData<ListOrganizationsResult>(
+      organizationsListQuery({ trial_states: ["none"] }).queryKey,
+      { total: 1, organizations: [NONE_ORG] },
+    );
+    return qc;
+  }
+
+  it("repaints the row from the response instead of refetching the list", async () => {
+    const qc = seededClient();
+    const listKey = organizationsListQuery({
+      trial_states: ["none"],
+    }).queryKey;
+
+    const { result } = renderHook(() => useStartTrial(), {
+      wrapper: wrapper(qc),
+    });
+    result.current.mutate({ id: NONE_ORG.id, days: 14 });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+    expect(mocks.startTrial).toHaveBeenCalledWith({
+      id: NONE_ORG.id,
+      days: 14,
+    });
+    expect(qc.getQueryData<ListOrganizationsResult>(listKey)).toEqual({
+      total: 1,
+      organizations: [STARTED_ORG],
+    });
+    expect(qc.getQueryState(listKey)?.isInvalidated).toBe(false);
+  });
+
+  it("writes the record under both keys the detail route can be reached by", async () => {
+    const qc = seededClient();
+
+    const { result } = renderHook(() => useStartTrial(), {
+      wrapper: wrapper(qc),
+    });
+    result.current.mutate({ id: NONE_ORG.id, days: 14 });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+    expect(qc.getQueryData(organizationQuery(NONE_ORG.id).queryKey)).toEqual(
+      STARTED_ORG,
+    );
+    expect(qc.getQueryData(organizationQuery(NONE_ORG.slug).queryKey)).toEqual(
+      STARTED_ORG,
+    );
+  });
+
+  it("leaves the cached row alone when the write fails", async () => {
+    mocks.startTrial.mockRejectedValue(new Error("gram admin 409 Conflict"));
+    const qc = seededClient();
+    const listKey = organizationsListQuery({
+      trial_states: ["none"],
+    }).queryKey;
+
+    const { result } = renderHook(() => useStartTrial(), {
+      wrapper: wrapper(qc),
+    });
+    result.current.mutate({ id: NONE_ORG.id, days: 14 });
+
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
+    expect(qc.getQueryData<ListOrganizationsResult>(listKey)).toEqual({
+      total: 1,
+      organizations: [NONE_ORG],
     });
   });
 });

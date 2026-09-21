@@ -44,12 +44,13 @@ import (
 // mockGitHubPublisher records calls for testing. Set the *Err fields to
 // simulate GitHub-side failures.
 type mockGitHubPublisher struct {
-	createRepoCalled      bool
-	pushFilesCalled       bool
-	addCollaboratorCalled bool
-	getRepoFilesCalled    bool
-	collaborators         []string
-	lastPushedFiles       map[string][]byte
+	createRepoCalled        bool
+	pushFilesCalled         bool
+	addCollaboratorCalled   bool
+	getRepoFilesCalled      bool
+	collaborators           []string
+	collaboratorPermissions []string
+	lastPushedFiles         map[string][]byte
 	// repoFiles, when set, is returned by GetRepoFiles; otherwise it falls back
 	// to lastPushedFiles so a second publish carries the first publish's files.
 	repoFiles       map[string][]byte
@@ -110,9 +111,10 @@ func (m *mockGitHubPublisher) PushFiles(_ context.Context, _ int64, _, _, _, _ s
 	return "abc123", nil
 }
 
-func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, _, username, _ string) error {
+func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, _, username, permission string) error {
 	m.addCollaboratorCalled = true
 	m.collaborators = append(m.collaborators, username)
+	m.collaboratorPermissions = append(m.collaboratorPermissions, permission)
 	return nil
 }
 
@@ -953,6 +955,25 @@ func TestPluginsService_SetPluginAssignments_SystemURNReturnsBadRequest(t *testi
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
+func TestPluginsService_SetPluginAssignments_WorkloadURNReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Workload URN Validation"})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{urn.NewWorkloadPrincipal(uuid.New(), "repo:acme/api:ref:refs/heads/main").String()},
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
 func TestPluginsService_SetPluginAssignments_LegacyRoleURNReturnsBadRequest(t *testing.T) {
 	t.Parallel()
 
@@ -1785,6 +1806,7 @@ func TestPluginsService_PublishPlugins_WithCollaborators(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, mock.addCollaboratorCalled)
 	require.Equal(t, []string{"octocat", "hubot", "monalisa"}, mock.collaborators)
+	require.Equal(t, []string{"admin", "admin", "admin"}, mock.collaboratorPermissions)
 }
 
 func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.T) {

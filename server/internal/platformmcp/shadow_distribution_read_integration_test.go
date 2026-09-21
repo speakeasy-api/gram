@@ -25,7 +25,7 @@ func TestShadowDistributionReadReportsRepairForPluginAndTarget(t *testing.T) {
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_shadow_distribution_read")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	inventory, err := platformrepo.New(conn).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{OrganizationID: principal.OrganizationID, ProjectID: uuid.NullUUID{UUID: project.ID, Valid: true}, LimitValue: 10})
+	inventory, err := platformrepo.New(conn).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{OrganizationID: principal.OrganizationID, SkipAuthorizationFilter: true, ProjectID: uuid.NullUUID{UUID: project.ID, Valid: true}, LimitValue: 10})
 	require.NoError(t, err)
 	require.NotEmpty(t, inventory)
 	target := inventory[0]

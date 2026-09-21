@@ -34,7 +34,7 @@ import (
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 )
 
 // ResolvedMcpEndpoint carries everything the issuer-gated OAuth handlers
@@ -50,7 +50,7 @@ type ResolvedMcpEndpoint struct {
 	// CIMDAdmissionModeRaw is the issuer's stored
 	// client_id_metadata_admission_mode, carried verbatim so that
 	// admission.ResolveMode stays the single place deciding what it means:
-	// NULL resolves to "presets", and a value outside the enum fails closed
+	// NULL resolves to "open", and a value outside the enum fails closed
 	// to "disabled".
 	//
 	// Raw rather than a resolved admission.Mode so that resolution stays in
@@ -58,10 +58,10 @@ type ResolvedMcpEndpoint struct {
 	// stamping site, which is exactly what admission.ResolveMode exists to
 	// prevent.
 	//
-	// The cost is that an unstamped endpoint reads as NULL and therefore as
-	// "presets" — the default, not a denial. Callers must ensure this is
-	// populated before enforcement; RequireUserSessionIssuer is the one
-	// place that does so.
+	// The cost is that an unstamped endpoint reads as NULL and therefore uses
+	// the permissive "open" default. Callers must populate this before
+	// enforcement so an explicit issuer policy is not lost;
+	// RequireUserSessionIssuer is the one place that does so.
 	CIMDAdmissionModeRaw pgtype.Text
 
 	// CustomDomainID, when valid, scopes the endpoint to a custom domain.
@@ -70,6 +70,12 @@ type ResolvedMcpEndpoint struct {
 	// IsPublic mirrors toolsets.mcp_is_public — controls
 	// HandleAuthorize's anonymous-vs-IDP path selection.
 	IsPublic bool
+
+	// idJAGConfigured reports whether this endpoint's organization-level user
+	// session issuer has an explicit trusted remote issuer link. It controls
+	// capability discovery only; the token exchange validates the live linked
+	// issuer and its JWKS configuration independently.
+	idJAGConfigured bool
 
 	// McpServerID is populated when the endpoint resolves through an
 	// mcp_endpoints → mcp_servers pair. Zero (Valid=false) for the
@@ -160,7 +166,7 @@ func (e *ResolvedMcpEndpoint) AuthorizationServerURLs(baseURL string) (Authoriza
 // value. Only the addressed endpoint's URL is accepted, so an assertion
 // minted for the revocation endpoint does not authenticate a token request or
 // the reverse.
-func (u AuthorizationServerURLs) clientAssertionAudiences(at clientAssertionEndpoint) clientauth.Audiences {
+func (u AuthorizationServerURLs) clientAssertionAudiences(at clientAssertionEndpoint) privatekeyjwt.Audiences {
 	endpoint := ""
 	switch at {
 	case clientAssertionAtToken:
@@ -168,7 +174,7 @@ func (u AuthorizationServerURLs) clientAssertionAudiences(at clientAssertionEndp
 	case clientAssertionAtRevoke:
 		endpoint = u.Revoke
 	}
-	return clientauth.Audiences{
+	return privatekeyjwt.Audiences{
 		Issuer:   u.Issuer,
 		Endpoint: endpoint,
 	}
@@ -411,6 +417,7 @@ func NewResolvedMcpEndpointFromMcpServer(
 		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
 		CustomDomainID:       mcpEndpoint.CustomDomainID,
 		IsPublic:             mcpServer.Visibility == mcpservers.VisibilityPublic,
+		idJAGConfigured:      false,
 		McpServerID:          uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		MetaMcpServerID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:       organizationID,
@@ -423,11 +430,14 @@ func NewResolvedMcpEndpointFromMcpServer(
 	}
 }
 
-// connectResourceID is the mcp:connect resource id: the wrapper's id when one
-// fronts the endpoint, else the toolset id.
+// connectResourceID is the mcp:connect resource id: the server or meta-server
+// fronting the endpoint, else the directly addressed toolset.
 func (e *ResolvedMcpEndpoint) connectResourceID() uuid.UUID {
 	if e.McpServerID.Valid {
 		return e.McpServerID.UUID
+	}
+	if e.MetaMcpServerID.Valid {
+		return e.MetaMcpServerID.UUID
 	}
 	return e.ToolsetID.UUID
 }
@@ -462,6 +472,7 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
 		CustomDomainID:       mcpEndpoint.CustomDomainID,
 		IsPublic:             false,
+		idJAGConfigured:      false,
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:      uuid.NullUUID{UUID: metaServer.ID, Valid: true},
 		OrganizationID:       organizationID,
@@ -488,6 +499,7 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase
 		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
 		CustomDomainID:       toolset.CustomDomainID,
 		IsPublic:             toolset.McpIsPublic,
+		idJAGConfigured:      false,
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:       toolset.OrganizationID,

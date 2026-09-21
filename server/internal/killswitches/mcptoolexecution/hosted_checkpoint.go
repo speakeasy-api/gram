@@ -41,9 +41,9 @@ func NewHostedCheckpoint(db *pgxpool.Pool, meterProvider metric.MeterProvider, l
 	if !ok {
 		return nil, errors.New("hosted tools/call coverage contract is not registered")
 	}
-	principal, ok := registry.PrincipalAdapter(PrincipalKindUser)
-	if !ok {
-		return nil, errors.New("authenticated user principal adapter is not registered")
+	principal, err := registeredPrincipalAdapter(registry)
+	if err != nil {
+		return nil, err
 	}
 	resource, ok := registry.ResourceAdapter(ResourceKindMCPServer)
 	if !ok {
@@ -92,8 +92,8 @@ func (c *HostedCheckpoint) Evaluate(ctx context.Context, organizationID string, 
 		return c.infrastructureRejection(ctx, err)
 	}
 	if derivation.principalResult.Kind() == killswitches.PrincipalCandidateResultUnsupported {
-		if derivation.hasAgentPrincipal() {
-			return c.infrastructureRejection(ctx, errors.New("agent principals are not supported by the MCP tool-execution kill switch"))
+		if derivation.hasAgentBackedPrincipal() {
+			return c.infrastructureRejection(ctx, errors.New("agent or workload principal has no kill-switch principal candidate"))
 		}
 		return c.noMatch(killswitches.NoMatchReasonUnsupportedIdentity)
 	}

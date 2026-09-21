@@ -394,7 +394,7 @@ func seedMetaValidationFixture(t *testing.T, prefix string) (context.Context, va
 // seedStandaloneValidationFixture: a proxied endpoint whose own backend is the fake upstream, and a grant naming it.
 func seedStandaloneValidationFixture(t *testing.T, prefix string) (context.Context, validationFixture) {
 	t.Helper()
-	return seedStandaloneValidationFixtureWith(t, prefix, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationProbeTimeout})
+	return seedStandaloneValidationFixtureWith(t, prefix, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationProbeTimeout, AutoVerifyWait: 0, RecheckInterval: recheckTestInterval})
 }
 
 // seedStandaloneValidationFixtureWith is seedStandaloneValidationFixture under the given probe budgets.
@@ -1268,7 +1268,7 @@ func TestServeConsentAction_ValidateRejectedThenIntrospectedAsInactive(t *testin
 	require.Equal(t, remotesessions.IdentitySourceIntrospection, sess.IdentitySource.String)
 	page := renderConsent(t, fx)
 	require.Contains(t, page, `data-validation="rejected"`)
-	require.Contains(t, page, "Authenticated as grant")
+	require.Contains(t, page, `Authenticated as <span class="-mx-0.5 px-0.5 py-px box-decoration-clone" data-identity-text>grant`)
 
 	// The provider reports the token dead: inactive.
 	body.Store(conv.PtrEmpty(`{"active":false}`))

@@ -18,6 +18,17 @@ import (
 type Service interface {
 	// Get the usage for an organization for a given period
 	GetPeriodUsage(context.Context, *GetPeriodUsagePayload) (res *PeriodUsage, err error)
+	// Get incrementally aggregated ordinary meter usage by UTC day over a maximum
+	// of three calendar months. Duplicate deliveries count unless prevented by the
+	// producer.
+	GetMeterUsage(context.Context, *GetMeterUsagePayload) (res *MeterUsageResponse, err error)
+	// Report spend availability and estimate PAYG organizations' three metered
+	// products at current list prices over a maximum of three calendar months.
+	// Other plans return unsupported_plan, empty products, and a zero total
+	// without calculating estimates. This is not an actual bill: ordinary
+	// summaries count duplicate deliveries unless prevented by the producer and
+	// exclude adjustment readings.
+	GetSpendBreakdown(context.Context, *GetSpendBreakdownPayload) (res *SpendBreakdownResponse, err error)
 	// Get tokens under management for the active billing cycle alongside the
 	// contracted terms
 	GetTokensUnderManagement(context.Context, *GetTokensUnderManagementPayload) (res *TokensUnderManagement, err error)
@@ -79,7 +90,7 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "getStripeSubscription", "getPaygBillingSummary", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
+var MethodNames = [19]string{"getPeriodUsage", "getMeterUsage", "getSpendBreakdown", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "getStripeSubscription", "getPaygBillingSummary", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
 
 // BillingEmail is the result type of the usage service getBillingEmail method.
 type BillingEmail struct {
@@ -136,6 +147,21 @@ type GetInferenceSpendCapsPayload struct {
 	SessionToken *string
 }
 
+// GetMeterUsagePayload is the payload type of the usage service getMeterUsage
+// method.
+type GetMeterUsagePayload struct {
+	SessionToken *string
+	Family       string
+	// Inclusive UTC midnight reporting boundary. Must be paired with to.
+	From *string
+	// Exclusive UTC midnight reporting boundary. Must be paired with from and no
+	// later than three calendar months after from, clamped to the target month's
+	// last day.
+	To *string
+	// Family-compatible reporting facet
+	Breakdown *string
+}
+
 // GetPaygBillingSummaryPayload is the payload type of the usage service
 // getPaygBillingSummary method.
 type GetPaygBillingSummaryPayload struct {
@@ -146,6 +172,18 @@ type GetPaygBillingSummaryPayload struct {
 // getPeriodUsage method.
 type GetPeriodUsagePayload struct {
 	SessionToken *string
+}
+
+// GetSpendBreakdownPayload is the payload type of the usage service
+// getSpendBreakdown method.
+type GetSpendBreakdownPayload struct {
+	SessionToken *string
+	// Inclusive UTC midnight reporting boundary. Must be paired with to.
+	From *string
+	// Exclusive UTC midnight reporting boundary. Must be paired with from and no
+	// later than three calendar months after from, clamped to the target month's
+	// last day.
+	To *string
 }
 
 // GetStripeSubscriptionPayload is the payload type of the usage service
@@ -169,6 +207,61 @@ type InferenceSpendCap struct {
 	MonthlyCredits int
 	// Whether the platform-managed key is disabled
 	Disabled bool
+}
+
+type MeterUsageBreakdown struct {
+	// Selected family-compatible breakdown dimension
+	Dimension string
+	// At most six selected facet series plus a remainder
+	Series []*MeterUsageSeries
+}
+
+type MeterUsageBucket struct {
+	// Inclusive bucket boundary
+	From string
+	// Exclusive bucket boundary
+	To string
+	// Exact integer ordinary usage quantity as a decimal string
+	Total string
+}
+
+// MeterUsageResponse is the result type of the usage service getMeterUsage
+// method.
+type MeterUsageResponse struct {
+	Family string
+	Window *MeterUsageWindow
+	// Trailing twelve billing-cycle date windows
+	BillingCycles     []*MeterUsageWindow
+	Unit              string
+	MeasurementMethod string
+	// Exact integer ordinary usage period total as a decimal string
+	Total string
+	// Dense UTC daily ordinary usage buckets, including in-progress days
+	Buckets   []*MeterUsageBucket
+	Breakdown *MeterUsageBreakdown
+	// Retrieval timestamp, not an ingestion watermark
+	QueriedAt string
+}
+
+type MeterUsageSeries struct {
+	// Identity kind for this series
+	Kind string
+	// Canonical identity; present for value series and omitted for unset and
+	// remainder
+	Key *string
+	// Display label, never chart identity
+	Label string
+	// Exact integer ordinary usage series total as a decimal string
+	Total string
+	// Exact integer ordinary usage values aligned one-for-one with buckets
+	Values []string
+}
+
+type MeterUsageWindow struct {
+	// Inclusive UTC midnight window boundary
+	From string
+	// Exclusive UTC midnight window boundary
+	To string
 }
 
 // PaygBillingSummary is the result type of the usage service
@@ -254,12 +347,59 @@ type SetSpendCapPayload struct {
 	MonthlyCredits int
 }
 
+// SpendBreakdownResponse is the result type of the usage service
+// getSpendBreakdown method.
+type SpendBreakdownResponse struct {
+	// Whether spend estimates are available for the organization's plan
+	Availability string
+	Window       *MeterUsageWindow
+	// Trailing twelve billing-cycle date windows
+	BillingCycles []*MeterUsageWindow
+	Currency      string
+	PricingBasis  string
+	// Retrieval timestamp used to distinguish current and future buckets
+	QueriedAt string
+	// Exact estimated total at current PAYG list prices; zero when availability is
+	// unsupported_plan, meaning no estimate was calculated
+	TotalCostUsd string
+	// The three metered PAYG products in stable display order when available;
+	// empty when availability is unsupported_plan
+	Products []*SpendProduct
+}
+
+type SpendBucket struct {
+	// Inclusive bucket boundary
+	From string
+	// Exclusive bucket boundary
+	To string
+	// Exact integer ordinary usage quantity as a decimal string
+	Quantity string
+	// Exact estimated cost at current PAYG list prices
+	CostUsd string
+}
+
 // SpendCap is the result type of the usage service setSpendCap method.
 type SpendCap struct {
 	// The platform-managed inference key whose cap is reported
 	KeyType string
 	// The monthly inference spend cap in USD
 	MonthlyCredits int
+}
+
+type SpendProduct struct {
+	ID    string
+	Label string
+	Unit  string
+	// Exact integer ordinary usage quantity as a decimal string
+	Quantity string
+	// Exact integer quantity to which rate_usd applies
+	RateQuantity string
+	// Exact current PAYG USD list price
+	RateUsd string
+	// Exact estimated product cost at current PAYG list prices
+	CostUsd string
+	// Dense UTC daily product buckets, including in-progress and future days
+	Buckets []*SpendBucket
 }
 
 // StripeSubscription is the result type of the usage service
@@ -326,6 +466,10 @@ type TierLimits struct {
 	AddOnBullets []string
 	// Exact USD list price per million tokens under management (optional)
 	TumPricePerMillionUsd *string
+	// Exact USD list price per million tokens scanned for risk (optional)
+	RiskScanPricePerMillionUsd *string
+	// Exact USD list price per GiB of MCP gateway egress (optional)
+	McpEgressPricePerGibUsd *string
 }
 
 // TokensUnderManagement is the result type of the usage service

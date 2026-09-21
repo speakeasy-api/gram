@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/netip"
 	"net/url"
+	"sync"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -44,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -68,7 +71,12 @@ import (
 )
 
 type WorkerOptions struct {
-	GuardianPolicy      *guardian.Policy
+	GuardianPolicy *guardian.Policy
+
+	// TunnelHTTPClient carries back-channel OAuth calls for remote session
+	// clients bound to an MCP tunnel. Nil means tunnel-bound refreshes fail
+	// closed with a configuration error.
+	TunnelHTTPClient    *tunnelrouting.HTTPClient
 	DB                  *pgxpool.Pool
 	EncryptionClient    *encryption.Client
 	FeatureProvider     feature.Provider
@@ -86,40 +94,44 @@ type WorkerOptions struct {
 
 	// GitHubEvidenceToken authenticates the recheck sweep's repository
 	// lookups; empty falls back to GitHub's small unauthenticated budget.
-	GitHubEvidenceToken      string
-	SiteURL                  *url.URL
-	BillingTracker           billing.Tracker
-	BillingRepository        billing.Repository
-	StripeClient             stripeclient.Client
-	TUMMeterStreamingEnabled bool
-	RedisClient              *redis.Client
-	CacheAdapter             cache.Cache
-	EmailService             *email.Service
-	PosthogClient            *posthog.Posthog
-	FunctionsDeployer        functions.Deployer
-	FunctionsVersion         functions.RunnerVersion
-	RagService               *rag.ToolsetVectorStore
-	MCPRegistryClient        *externalmcp.RegistryClient
-	TelemetryLogger          *telemetry.Logger
-	ClickhouseConn           clickhouse.Conn
-	TelemetryRepo            *telemetryrepo.Queries
-	TriggersApp              *bgtriggers.App
-	AssistantsCore           *assistants.ServiceCore
-	TemporalEnv              *tenv.Environment
-	PIIScanner               risk_analysis.PIIScanner
-	PIScanner                *promptinjection.Scanner
-	CustomRuleScanner        *customruleanalyzer.Scanner
-	BuiltinPresets           *presetlib.Library
-	ShadowMCPClient          *shadowmcp.Client
-	AuditLogger              *audit.Logger
-	WorkOSClient             activities.WorkOSClient
-	ProductFeatures          *productfeatures.Client
-	PluginPublisher          *plugins.Service
-	Publishers               *Publishers
+	GitHubEvidenceToken string
+	SiteURL             *url.URL
+	BillingTracker      billing.Tracker
+	BillingRepository   billing.Repository
+	StripeClient        stripeclient.Client
+	RedisClient         *redis.Client
+	CacheAdapter        cache.Cache
+	EmailService        *email.Service
+	PosthogClient       *posthog.Posthog
+	FunctionsDeployer   functions.Deployer
+	FunctionsVersion    functions.RunnerVersion
+	RagService          *rag.ToolsetVectorStore
+	MCPRegistryClient   *externalmcp.RegistryClient
+	TelemetryLogger     *telemetry.Logger
+	ClickhouseConn      clickhouse.Conn
+	// MeterReadConn uses the least-privilege ClickHouse reader for billing summaries.
+	MeterReadConn     clickhouse.Conn
+	TelemetryRepo     *telemetryrepo.Queries
+	TriggersApp       *bgtriggers.App
+	AssistantsCore    *assistants.ServiceCore
+	TemporalEnv       *tenv.Environment
+	PIIScanner        risk_analysis.PIIScanner
+	PIScanner         *promptinjection.Scanner
+	CustomRuleScanner *customruleanalyzer.Scanner
+	BuiltinPresets    *presetlib.Library
+	ShadowMCPClient   *shadowmcp.Client
+	AuditLogger       *audit.Logger
+	WorkOSClient      activities.WorkOSClient
+	ProductFeatures   *productfeatures.Client
+	PluginPublisher   *plugins.Service
+	Publishers        *Publishers
 
 	// IssuerMetadataRefresher is optional. Share it with every in-process producer;
 	// the constructing caller owns it and must call Wait after those producers stop.
 	IssuerMetadataRefresher *remotesessions.IssuerMetadataRefresher
+	// RemoteSessionAssertionSigner enables scheduled refreshes for clients that
+	// authenticate with private_key_jwt.
+	RemoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner
 
 	// TrialEmailsService synchronizes trial lifecycle changes with Loops.
 	TrialEmailsService *trialemails.Service
@@ -134,6 +146,12 @@ type WorkerOptions struct {
 	// retroactive exclusion changes into ClickHouse: the reconcile activity
 	// gets no ClickHouse repo and degrades to its Postgres phases.
 	DisableRiskRetroReconcile bool
+
+	// LLMAnalyzerEnabled reports whether the streams process has a fine-tuned
+	// risk model configured (GRAM_RISK_LLM_URL). When false, batch scans for
+	// organizations on the LLM analyzer flag fall back to the legacy engines
+	// instead of publishing requests nobody evaluates.
+	LLMAnalyzerEnabled bool
 }
 
 // defaultFingerprinter merges WorkerOptions fingerprinters: the override wins
@@ -157,55 +175,58 @@ func ForDeploymentProcessing(
 	auditLogger *audit.Logger,
 ) *WorkerOptions {
 	return &WorkerOptions{
-		DB:                       db,
-		GuardianPolicy:           guardianPolicy,
-		EncryptionClient:         enc,
-		FeatureProvider:          f,
-		AssetStorage:             assetStorage,
-		FunctionsDeployer:        deployer,
-		FunctionsVersion:         "local", // Test deployers don't use baked versions
-		MCPRegistryClient:        mcpRegistryClient,
-		AuditLogger:              auditLogger,
-		SlackClient:              nil,
-		ChatMessageWriter:        nil,
-		ChatClient:               nil,
-		OpenRouter:               nil,
-		OpenRouterSpend:          nil,
-		K8sClient:                nil,
-		ExpectedTargetCNAME:      "",
-		ExpectedARecords:         nil,
-		GitHubEvidenceToken:      "",
-		SiteURL:                  nil,
-		BillingTracker:           nil,
-		BillingRepository:        nil,
-		StripeClient:             nil,
-		TUMMeterStreamingEnabled: false,
-		RagService:               nil,
-		RedisClient:              nil,
-		PosthogClient:            nil,
-		TelemetryLogger:          nil,
-		TelemetryRepo:            nil,
-		TriggersApp:              nil,
-		CacheAdapter:             nil,
-		IssuerMetadataRefresher:  nil,
-		EmailService:             nil,
-		AssistantsCore:           nil,
-		TemporalEnv:              nil,
-		PIIScanner:               nil,
-		PIScanner:                nil,
-		CustomRuleScanner:        nil,
-		BuiltinPresets:           nil,
-		ShadowMCPClient:          nil,
-		WorkOSClient:             workos.NewStubClient(),
-		ProductFeatures:          nil,
-		ClickhouseConn:           nil,
-		PluginPublisher:          nil,
+		DB:                           db,
+		GuardianPolicy:               guardianPolicy,
+		TunnelHTTPClient:             nil,
+		EncryptionClient:             enc,
+		FeatureProvider:              f,
+		AssetStorage:                 assetStorage,
+		FunctionsDeployer:            deployer,
+		FunctionsVersion:             "local", // Test deployers don't use baked versions
+		MCPRegistryClient:            mcpRegistryClient,
+		AuditLogger:                  auditLogger,
+		RemoteSessionAssertionSigner: nil,
+		SlackClient:                  nil,
+		ChatMessageWriter:            nil,
+		ChatClient:                   nil,
+		OpenRouter:                   nil,
+		OpenRouterSpend:              nil,
+		K8sClient:                    nil,
+		ExpectedTargetCNAME:          "",
+		ExpectedARecords:             nil,
+		GitHubEvidenceToken:          "",
+		SiteURL:                      nil,
+		BillingTracker:               nil,
+		BillingRepository:            nil,
+		StripeClient:                 nil,
+		RagService:                   nil,
+		RedisClient:                  nil,
+		PosthogClient:                nil,
+		TelemetryLogger:              nil,
+		MeterReadConn:                nil,
+		TelemetryRepo:                nil,
+		TriggersApp:                  nil,
+		CacheAdapter:                 nil,
+		IssuerMetadataRefresher:      nil,
+		EmailService:                 nil,
+		AssistantsCore:               nil,
+		TemporalEnv:                  nil,
+		PIIScanner:                   nil,
+		PIScanner:                    nil,
+		CustomRuleScanner:            nil,
+		BuiltinPresets:               nil,
+		ShadowMCPClient:              nil,
+		WorkOSClient:                 workos.NewStubClient(),
+		ProductFeatures:              nil,
+		ClickhouseConn:               nil,
+		PluginPublisher:              nil,
 		Publishers: &Publishers{
 			PresidioAnalysis:        gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
 			GitleaksAnalysis:        gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
 			PromptInjectionAnalysis: gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
 			PromptPolicyAnalysis:    gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
+			LLMAnalysis:             gcp.NewNoopPublisher[*riskv1.LLMAnalysis](),
 			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
 			MeterReadings:           gcp.NewNoopPublisher[*meteringv1.MeterReading](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
@@ -217,6 +238,7 @@ func ForDeploymentProcessing(
 		TrialEmailsService:        nil,
 		RiskFingerprinter:         risk.Fingerprinter{},
 		DisableRiskRetroReconcile: false,
+		LLMAnalyzerEnabled:        false,
 	}
 }
 
@@ -228,6 +250,15 @@ func newWorkerInterceptors() []interceptor.WorkerInterceptor {
 	}
 }
 
+// workerStopTimeout is how long a stopping worker lets in-flight activities
+// finish before cancelling them. A deploy stops every worker pod, and an
+// activity cancelled mid-flight is reported as a failed attempt that the
+// next pod repeats; letting short activities complete keeps a rollout from
+// looking like a failure burst. It must fit inside the pod's termination
+// drain window (60s after the preStop sleep) with room for the Temporal
+// client to respond.
+const workerStopTimeout = 45 * time.Second
+
 func NewTemporalWorker(
 	env *tenv.Environment,
 	logger *slog.Logger,
@@ -236,125 +267,135 @@ func NewTemporalWorker(
 	options ...*WorkerOptions,
 ) *Workers {
 	opts := &WorkerOptions{
-		GuardianPolicy:            nil,
-		DB:                        nil,
-		EncryptionClient:          nil,
-		FeatureProvider:           nil,
-		AssetStorage:              nil,
-		SlackClient:               nil,
-		ChatMessageWriter:         nil,
-		ChatClient:                nil,
-		OpenRouter:                nil,
-		OpenRouterSpend:           nil,
-		K8sClient:                 nil,
-		ExpectedTargetCNAME:       "",
-		ExpectedARecords:          nil,
-		GitHubEvidenceToken:       "",
-		SiteURL:                   nil,
-		BillingTracker:            nil,
-		BillingRepository:         nil,
-		StripeClient:              nil,
-		TUMMeterStreamingEnabled:  false,
-		RedisClient:               nil,
-		PosthogClient:             nil,
-		FunctionsDeployer:         nil,
-		FunctionsVersion:          "",
-		RagService:                nil,
-		MCPRegistryClient:         nil,
-		TelemetryLogger:           nil,
-		TelemetryRepo:             nil,
-		TriggersApp:               nil,
-		CacheAdapter:              nil,
-		IssuerMetadataRefresher:   nil,
-		EmailService:              nil,
-		AssistantsCore:            nil,
-		TemporalEnv:               env,
-		PIIScanner:                nil,
-		PIScanner:                 nil,
-		CustomRuleScanner:         nil,
-		BuiltinPresets:            nil,
-		ShadowMCPClient:           nil,
-		AuditLogger:               nil,
-		WorkOSClient:              workos.NewStubClient(),
-		ProductFeatures:           nil,
-		ClickhouseConn:            nil,
-		PluginPublisher:           nil,
-		Publishers:                nil,
-		TrialEmailsService:        nil,
-		RiskFingerprinter:         risk.Fingerprinter{},
-		DisableRiskRetroReconcile: false,
+		GuardianPolicy:               nil,
+		TunnelHTTPClient:             nil,
+		DB:                           nil,
+		EncryptionClient:             nil,
+		FeatureProvider:              nil,
+		AssetStorage:                 nil,
+		SlackClient:                  nil,
+		ChatMessageWriter:            nil,
+		ChatClient:                   nil,
+		OpenRouter:                   nil,
+		OpenRouterSpend:              nil,
+		K8sClient:                    nil,
+		ExpectedTargetCNAME:          "",
+		ExpectedARecords:             nil,
+		GitHubEvidenceToken:          "",
+		SiteURL:                      nil,
+		BillingTracker:               nil,
+		BillingRepository:            nil,
+		StripeClient:                 nil,
+		RedisClient:                  nil,
+		PosthogClient:                nil,
+		FunctionsDeployer:            nil,
+		FunctionsVersion:             "",
+		RagService:                   nil,
+		MCPRegistryClient:            nil,
+		TelemetryLogger:              nil,
+		MeterReadConn:                nil,
+		TelemetryRepo:                nil,
+		TriggersApp:                  nil,
+		CacheAdapter:                 nil,
+		IssuerMetadataRefresher:      nil,
+		RemoteSessionAssertionSigner: nil,
+		EmailService:                 nil,
+		AssistantsCore:               nil,
+		TemporalEnv:                  env,
+		PIIScanner:                   nil,
+		PIScanner:                    nil,
+		CustomRuleScanner:            nil,
+		BuiltinPresets:               nil,
+		ShadowMCPClient:              nil,
+		AuditLogger:                  nil,
+		WorkOSClient:                 workos.NewStubClient(),
+		ProductFeatures:              nil,
+		ClickhouseConn:               nil,
+		PluginPublisher:              nil,
+		Publishers:                   nil,
+		TrialEmailsService:           nil,
+		RiskFingerprinter:            risk.Fingerprinter{},
+		DisableRiskRetroReconcile:    false,
+		LLMAnalyzerEnabled:           false,
 	}
 
 	for _, o := range options {
 		opts = &WorkerOptions{
-			GuardianPolicy:            conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
-			DB:                        conv.Default(o.DB, opts.DB),
-			EncryptionClient:          conv.Default(o.EncryptionClient, opts.EncryptionClient),
-			FeatureProvider:           conv.Default(o.FeatureProvider, opts.FeatureProvider),
-			AssetStorage:              conv.Default(o.AssetStorage, opts.AssetStorage),
-			SlackClient:               conv.Default(o.SlackClient, opts.SlackClient),
-			ChatMessageWriter:         conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
-			OpenRouter:                conv.Default(o.OpenRouter, opts.OpenRouter),
-			OpenRouterSpend:           conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
-			ChatClient:                conv.Default(o.ChatClient, opts.ChatClient),
-			K8sClient:                 conv.Default(o.K8sClient, opts.K8sClient),
-			ExpectedTargetCNAME:       conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
-			ExpectedARecords:          conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
-			GitHubEvidenceToken:       conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
-			SiteURL:                   conv.Default(o.SiteURL, opts.SiteURL),
-			BillingTracker:            conv.Default(o.BillingTracker, opts.BillingTracker),
-			BillingRepository:         conv.Default(o.BillingRepository, opts.BillingRepository),
-			StripeClient:              conv.Default(o.StripeClient, opts.StripeClient),
-			TUMMeterStreamingEnabled:  conv.Default(o.TUMMeterStreamingEnabled, opts.TUMMeterStreamingEnabled),
-			RedisClient:               conv.Default(o.RedisClient, opts.RedisClient),
-			PosthogClient:             conv.Default(o.PosthogClient, opts.PosthogClient),
-			FunctionsDeployer:         conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
-			FunctionsVersion:          conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
-			RagService:                conv.Default(o.RagService, opts.RagService),
-			MCPRegistryClient:         conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
-			TelemetryLogger:           conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
-			TelemetryRepo:             conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
-			TriggersApp:               conv.Default(o.TriggersApp, opts.TriggersApp),
-			CacheAdapter:              conv.Default(o.CacheAdapter, opts.CacheAdapter),
-			IssuerMetadataRefresher:   conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
-			EmailService:              conv.Default(o.EmailService, opts.EmailService),
-			AssistantsCore:            conv.Default(o.AssistantsCore, opts.AssistantsCore),
-			TemporalEnv:               conv.Default(o.TemporalEnv, opts.TemporalEnv),
-			PIIScanner:                conv.Default(o.PIIScanner, opts.PIIScanner),
-			PIScanner:                 conv.Default(o.PIScanner, opts.PIScanner),
-			CustomRuleScanner:         conv.Default(o.CustomRuleScanner, opts.CustomRuleScanner),
-			BuiltinPresets:            conv.Default(o.BuiltinPresets, opts.BuiltinPresets),
-			ShadowMCPClient:           conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
-			AuditLogger:               conv.Default(o.AuditLogger, opts.AuditLogger),
-			WorkOSClient:              conv.Default(o.WorkOSClient, opts.WorkOSClient),
-			ProductFeatures:           conv.Default(o.ProductFeatures, opts.ProductFeatures),
-			ClickhouseConn:            conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
-			PluginPublisher:           conv.Default(o.PluginPublisher, opts.PluginPublisher),
-			Publishers:                conv.Default(o.Publishers, opts.Publishers),
-			TrialEmailsService:        conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
-			RiskFingerprinter:         defaultFingerprinter(o.RiskFingerprinter, opts.RiskFingerprinter),
-			DisableRiskRetroReconcile: conv.Default(o.DisableRiskRetroReconcile, opts.DisableRiskRetroReconcile),
+			GuardianPolicy:               conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
+			TunnelHTTPClient:             conv.Default(o.TunnelHTTPClient, opts.TunnelHTTPClient),
+			DB:                           conv.Default(o.DB, opts.DB),
+			EncryptionClient:             conv.Default(o.EncryptionClient, opts.EncryptionClient),
+			FeatureProvider:              conv.Default(o.FeatureProvider, opts.FeatureProvider),
+			AssetStorage:                 conv.Default(o.AssetStorage, opts.AssetStorage),
+			SlackClient:                  conv.Default(o.SlackClient, opts.SlackClient),
+			ChatMessageWriter:            conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
+			OpenRouter:                   conv.Default(o.OpenRouter, opts.OpenRouter),
+			OpenRouterSpend:              conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
+			ChatClient:                   conv.Default(o.ChatClient, opts.ChatClient),
+			K8sClient:                    conv.Default(o.K8sClient, opts.K8sClient),
+			ExpectedTargetCNAME:          conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
+			ExpectedARecords:             conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
+			GitHubEvidenceToken:          conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
+			SiteURL:                      conv.Default(o.SiteURL, opts.SiteURL),
+			BillingTracker:               conv.Default(o.BillingTracker, opts.BillingTracker),
+			BillingRepository:            conv.Default(o.BillingRepository, opts.BillingRepository),
+			StripeClient:                 conv.Default(o.StripeClient, opts.StripeClient),
+			RedisClient:                  conv.Default(o.RedisClient, opts.RedisClient),
+			PosthogClient:                conv.Default(o.PosthogClient, opts.PosthogClient),
+			FunctionsDeployer:            conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
+			FunctionsVersion:             conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
+			RagService:                   conv.Default(o.RagService, opts.RagService),
+			MCPRegistryClient:            conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
+			TelemetryLogger:              conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
+			MeterReadConn:                conv.Default(o.MeterReadConn, opts.MeterReadConn),
+			TelemetryRepo:                conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
+			TriggersApp:                  conv.Default(o.TriggersApp, opts.TriggersApp),
+			CacheAdapter:                 conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			IssuerMetadataRefresher:      conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
+			RemoteSessionAssertionSigner: conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
+			EmailService:                 conv.Default(o.EmailService, opts.EmailService),
+			AssistantsCore:               conv.Default(o.AssistantsCore, opts.AssistantsCore),
+			TemporalEnv:                  conv.Default(o.TemporalEnv, opts.TemporalEnv),
+			PIIScanner:                   conv.Default(o.PIIScanner, opts.PIIScanner),
+			PIScanner:                    conv.Default(o.PIScanner, opts.PIScanner),
+			CustomRuleScanner:            conv.Default(o.CustomRuleScanner, opts.CustomRuleScanner),
+			BuiltinPresets:               conv.Default(o.BuiltinPresets, opts.BuiltinPresets),
+			ShadowMCPClient:              conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
+			AuditLogger:                  conv.Default(o.AuditLogger, opts.AuditLogger),
+			WorkOSClient:                 conv.Default(o.WorkOSClient, opts.WorkOSClient),
+			ProductFeatures:              conv.Default(o.ProductFeatures, opts.ProductFeatures),
+			ClickhouseConn:               conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
+			PluginPublisher:              conv.Default(o.PluginPublisher, opts.PluginPublisher),
+			Publishers:                   conv.Default(o.Publishers, opts.Publishers),
+			TrialEmailsService:           conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
+			RiskFingerprinter:            defaultFingerprinter(o.RiskFingerprinter, opts.RiskFingerprinter),
+			DisableRiskRetroReconcile:    conv.Default(o.DisableRiskRetroReconcile, opts.DisableRiskRetroReconcile),
+			LLMAnalyzerEnabled:           conv.Default(o.LLMAnalyzerEnabled, opts.LLMAnalyzerEnabled),
 		}
 	}
 
 	workerInterceptors := newWorkerInterceptors()
 
 	temporalWorker := worker.New(env.Client(), string(env.Queue()), worker.Options{
-		Interceptors: workerInterceptors,
+		Interceptors:      workerInterceptors,
+		WorkerStopTimeout: workerStopTimeout,
 	})
 
 	riskWorker := worker.New(env.Client(), RiskAnalysisTaskQueue(env.Queue()), worker.Options{
 		Interceptors:                       workerInterceptors,
+		WorkerStopTimeout:                  workerStopTimeout,
 		MaxConcurrentActivityExecutionSize: perPodAnalyzeBatchConcurrency,
 	})
 
 	aiUsageWorker := worker.New(env.Client(), AIUsagePollerTaskQueue(env.Queue()), worker.Options{
 		Interceptors:                       workerInterceptors,
+		WorkerStopTimeout:                  workerStopTimeout,
 		MaxConcurrentActivityExecutionSize: perPodAIUsagePollerConcurrency,
 	})
 
 	skillEfficacyWorker := worker.New(env.Client(), SkillEfficacyTaskQueue(env.Queue()), worker.Options{
 		Interceptors:                       workerInterceptors,
+		WorkerStopTimeout:                  workerStopTimeout,
 		MaxConcurrentActivityExecutionSize: perPodSkillEfficacyPublishConcurrency,
 	})
 
@@ -371,11 +412,14 @@ func NewTemporalWorker(
 
 	// Identity capture is best effort: without a policy the sweep stores no identity.
 	idTokenVerifier := remotesessions.NoIDTokenVerifier()
+	var remoteSessionEnricher *remotesessions.SessionEnricher
 	if opts.GuardianPolicy != nil {
 		if idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, opts.GuardianPolicy, meterProvider, ratelimit.NewRedisStore(opts.RedisClient)); err != nil {
 			logger.ErrorContext(context.Background(), "build id token key resolver for the refresh sweep", attr.SlogError(err))
 		} else {
 			idTokenVerifier = remotesessions.NewIDTokenVerifier(idTokenKeys)
+			remoteSessionEnricher = remotesessions.NewSessionEnricher(logger, opts.EncryptionClient, opts.GuardianPolicy, idTokenKeys,
+				ratelimit.New(ratelimit.NewRedisStore(opts.RedisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), opts.TunnelHTTPClient, opts.IssuerMetadataRefresher)
 		}
 	}
 
@@ -384,6 +428,7 @@ func NewTemporalWorker(
 		tracerProvider,
 		meterProvider,
 		opts.GuardianPolicy,
+		opts.TunnelHTTPClient,
 		opts.DB,
 		opts.EncryptionClient,
 		opts.FeatureProvider,
@@ -407,6 +452,7 @@ func NewTemporalWorker(
 		opts.TemporalEnv,
 		opts.TelemetryLogger,
 		opts.ClickhouseConn,
+		opts.MeterReadConn,
 		opts.TelemetryRepo,
 		opts.TriggersApp,
 		opts.CacheAdapter,
@@ -429,9 +475,11 @@ func NewTemporalWorker(
 		opts.GitHubEvidenceToken,
 		opts.RiskFingerprinter,
 		opts.DisableRiskRetroReconcile,
-		opts.TUMMeterStreamingEnabled,
+		opts.LLMAnalyzerEnabled,
 		idTokenVerifier,
 		opts.IssuerMetadataRefresher,
+		remoteSessionEnricher,
+		opts.RemoteSessionAssertionSigner,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -466,13 +514,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
 	temporalWorker.RegisterActivity(activities.GetDeviceIntegrationSyncCandidates)
 	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
-	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
-	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
-	temporalWorker.RegisterActivity(activities.ReportTUMUsageToStripe)
+	temporalWorker.RegisterActivity(activities.GetOktaApplicationSyncCandidates)
+	temporalWorker.RegisterActivity(activities.RunOktaApplicationSync)
+	temporalWorker.RegisterActivity(activities.FinalizeOktaApplicationSync)
 	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
 	temporalWorker.RegisterActivity(activities.SendWeeklyUsageSummary)
-	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)
-	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 	temporalWorker.RegisterActivity(activities.ListProjectsForToolsetIndexing)
@@ -600,8 +646,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncWorkflow)
+	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
-	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetSweepWorkflow)
@@ -724,6 +771,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		}
 	}
 
+	if err := AddOktaApplicationSyncCoordinatorSchedule(ctx, env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(ctx, "failed to add okta application sync schedule", attr.SlogError(err))
+		}
+	}
+
 	if err := AddAIUsagePollerCoordinatorSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add ai integration usage polling schedule", attr.SlogError(err))
@@ -733,12 +786,6 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	if err := AddWeeklyUsageSummarySchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add weekly usage summary schedule", attr.SlogError(err))
-		}
-	}
-
-	if err := AddRefreshBillingUsageSchedule(ctx, env); err != nil {
-		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(ctx, "failed to add refresh billing usage schedule", attr.SlogError(err))
 		}
 	}
 
@@ -886,29 +933,16 @@ type Workers struct {
 	networkIngressQueue string
 }
 
-// Run registers the recurring schedules, starts the dedicated workers, then
-// blocks running the main worker until interruptCh receives.
+// Run registers the recurring schedules, starts every worker, then blocks
+// until interruptCh receives and the workers have stopped.
 func (w *Workers) Run(interruptCh <-chan any) error {
 	w.registerSchedules(context.Background())
 
-	if err := w.riskAnalysis.Start(); err != nil {
-		return fmt.Errorf("start risk analysis worker: %w", err)
+	if err := w.Start(); err != nil {
+		return err
 	}
-	defer w.riskAnalysis.Stop()
-
-	if err := w.aiUsage.Start(); err != nil {
-		return fmt.Errorf("start ai integration usage worker: %w", err)
-	}
-	defer w.aiUsage.Stop()
-
-	if err := w.skillEfficacy.Start(); err != nil {
-		return fmt.Errorf("start skill efficacy worker: %w", err)
-	}
-	defer w.skillEfficacy.Stop()
-
-	if err := w.main.Run(interruptCh); err != nil {
-		return fmt.Errorf("run main worker: %w", err)
-	}
+	<-interruptCh
+	w.Stop()
 	return nil
 }
 
@@ -941,9 +975,13 @@ func (w *Workers) Start() error {
 	return nil
 }
 
+// Stop stops every worker at once. Each stop waits up to workerStopTimeout
+// for its in-flight activities, so stopping them one after another would
+// multiply that wait past the pod's termination budget.
 func (w *Workers) Stop() {
-	w.skillEfficacy.Stop()
-	w.aiUsage.Stop()
-	w.riskAnalysis.Stop()
-	w.main.Stop()
+	var wg sync.WaitGroup
+	for _, stop := range []func(){w.skillEfficacy.Stop, w.aiUsage.Stop, w.riskAnalysis.Stop, w.main.Stop} {
+		wg.Go(stop)
+	}
+	wg.Wait()
 }

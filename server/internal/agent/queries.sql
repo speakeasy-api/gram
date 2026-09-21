@@ -312,21 +312,26 @@ ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS N
 -- overrides of the Speakeasy defaults compiled into the server. The served
 -- list is built in code by overlaying these rows on the defaults.
 
--- name: ListDeviceAgentAIScanTargets :many
+-- name: ListAIScanTargets :many
 SELECT *
-FROM device_agent_ai_scan_targets
+FROM ai_scan_targets
 WHERE organization_id = @organization_id
 ORDER BY id;
 
--- name: GetDeviceAgentAIScanTargetForUpdate :one
+-- name: GetAIScanTargetForUpdate :one
 SELECT *
-FROM device_agent_ai_scan_targets
+FROM ai_scan_targets
 WHERE organization_id = @organization_id
   AND id = @id
 FOR UPDATE;
 
--- name: UpsertDeviceAgentAIScanTarget :one
-INSERT INTO device_agent_ai_scan_targets (
+-- The definition and the organization's status are written by different
+-- endpoints, so neither upsert touches the other's columns: adding a target
+-- must not silently clear a standing block, and blocking one must not wipe
+-- the signatures agents scan for.
+
+-- name: UpsertAIScanTarget :one
+INSERT INTO ai_scan_targets (
   organization_id,
   id,
   display_name,
@@ -336,19 +341,23 @@ INSERT INTO device_agent_ai_scan_targets (
   config_dirs,
   process_names,
   version_plist_key,
-  enabled
+  cimd_vendor_keys,
+  oauth_client_ids,
+  client_info_names
 )
 VALUES (
   @organization_id,
   @id,
-  @display_name,
-  @category,
+  sqlc.narg('display_name'),
+  sqlc.narg('category'),
   @bundle_ids::text[],
   @binaries::text[],
   @config_dirs::text[],
   @process_names::text[],
   sqlc.narg('version_plist_key'),
-  @enabled
+  @cimd_vendor_keys::text[],
+  @oauth_client_ids::text[],
+  @client_info_names::text[]
 )
 ON CONFLICT (organization_id, id) DO UPDATE
 SET display_name = EXCLUDED.display_name
@@ -358,31 +367,60 @@ SET display_name = EXCLUDED.display_name
   , config_dirs = EXCLUDED.config_dirs
   , process_names = EXCLUDED.process_names
   , version_plist_key = EXCLUDED.version_plist_key
-  , enabled = EXCLUDED.enabled
+  , cimd_vendor_keys = EXCLUDED.cimd_vendor_keys
+  , oauth_client_ids = EXCLUDED.oauth_client_ids
+  , client_info_names = EXCLUDED.client_info_names
   , updated_at = clock_timestamp()
 RETURNING *;
 
--- name: DeleteDeviceAgentAIScanTarget :one
-DELETE FROM device_agent_ai_scan_targets
+-- name: SetAIScanTargetStatus :one
+INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
+VALUES (@organization_id, @id, @status, sqlc.narg('rationale'))
+ON CONFLICT (organization_id, id) DO UPDATE
+SET status = EXCLUDED.status
+  , rationale = EXCLUDED.rationale
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: DeleteAIScanTarget :one
+DELETE FROM ai_scan_targets
 WHERE organization_id = @organization_id
   AND id = @id
 RETURNING *;
 
--- Serializes an organization's scan target writes. Transaction-scoped.
+-- The gateway hot path asks only "does this organization block anything?".
+-- Nearly every organization answers with an empty set, and that answer costs
+-- one indexed lookup rather than loading the whole scan-target catalog.
+--
+-- Status is the only predicate, and that is the point. There is no second
+-- column for the gateway to disagree with mid-write: a target is in the
+-- organization's inventory or it is not, and its decision is this one value.
+--
+-- The matchers are deliberately not filtered here. A built-in stores its
+-- decision only: its definition columns, gateway matchers included, are empty
+-- by design because the matchers are compiled in. Requiring a non-empty
+-- matcher column would silently drop every blocked built-in, which is most of
+-- the catalog. No filter is needed for the other case either, but note that
+-- the guarantee is not this statement's: UpsertAIScanTarget never touches
+-- status. It is a transaction-level invariant kept by the upsert service,
+-- which follows the definition write with a status reset (SetAIScanTargetStatus)
+-- whenever the target it just wrote can no longer be recognized at the
+-- gateway, before committing. Callers of the repository queries directly do
+-- not get it for free. Held that way, a committed row with status = 'blocked'
+-- always names a target the gateway can still recognize.
 
--- name: AcquireDeviceAgentAIScanCatalogLock :exec
-SELECT pg_advisory_xact_lock(hashtextextended('device_agent_ai_scan_catalog:' || @organization_id::text, 0));
+-- name: ListBlockedAITargetIDs :many
+SELECT id
+FROM ai_scan_targets
+WHERE organization_id = @organization_id
+  AND status = 'blocked'
+ORDER BY id;
 
--- name: GetDeviceAgentAIScanCatalogVersion :one
-SELECT COALESCE(
-  (SELECT list_version FROM device_agent_ai_scan_catalogs WHERE organization_id = @organization_id),
-  0
-)::integer AS list_version;
+-- Serializes an organization's scan target writes, definition and status
+-- alike. Transaction-scoped, and taken before the reads that validate a write
+-- so a concurrent edit cannot invalidate them between check and commit.
+-- FOR UPDATE cannot stand in for it: a target with no row yet has nothing to
+-- lock, so two writers would both read absence and both act on it.
 
--- name: BumpDeviceAgentAIScanCatalogVersion :one
-INSERT INTO device_agent_ai_scan_catalogs (organization_id, list_version)
-VALUES (@organization_id, 1)
-ON CONFLICT (organization_id) DO UPDATE
-SET list_version = device_agent_ai_scan_catalogs.list_version + 1
-  , updated_at = clock_timestamp()
-RETURNING list_version;
+-- name: AcquireAIScanTargetsLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || @organization_id::text, 0));

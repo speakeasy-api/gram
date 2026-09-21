@@ -1428,6 +1428,35 @@ func BuildGetRiskSignalsPayload(riskGetRiskSignalsFrom string, riskGetRiskSignal
 	return v, nil
 }
 
+// BuildGetRiskAnalysisStatusPayload builds the payload for the risk
+// getRiskAnalysisStatus endpoint from CLI flags.
+func BuildGetRiskAnalysisStatusPayload(riskGetRiskAnalysisStatusApikeyToken string, riskGetRiskAnalysisStatusSessionToken string, riskGetRiskAnalysisStatusProjectSlugInput string) (*risk.GetRiskAnalysisStatusPayload, error) {
+	var apikeyToken *string
+	{
+		if riskGetRiskAnalysisStatusApikeyToken != "" {
+			apikeyToken = &riskGetRiskAnalysisStatusApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskAnalysisStatusSessionToken != "" {
+			sessionToken = &riskGetRiskAnalysisStatusSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskGetRiskAnalysisStatusProjectSlugInput != "" {
+			projectSlugInput = &riskGetRiskAnalysisStatusProjectSlugInput
+		}
+	}
+	v := &risk.GetRiskAnalysisStatusPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetRiskPolicyStatusPayload builds the payload for the risk
 // getRiskPolicyStatus endpoint from CLI flags.
 func BuildGetRiskPolicyStatusPayload(riskGetRiskPolicyStatusID string, riskGetRiskPolicyStatusApikeyToken string, riskGetRiskPolicyStatusSessionToken string, riskGetRiskPolicyStatusProjectSlugInput string) (*risk.GetRiskPolicyStatusPayload, error) {

@@ -58,6 +58,10 @@ type mockWorkOSFetcher struct {
 	usersByEmail        map[string]*workos.User
 	getUserByEmailErr   error
 	getUserByEmailCalls int
+
+	// Membership listing. Support logins must not touch this path.
+	listMembershipsErr   error
+	listMembershipsCalls int
 }
 
 type createdOrgRecord struct {
@@ -69,6 +73,10 @@ type createdMembershipRecord struct {
 }
 
 func (m *mockWorkOSFetcher) ListUserMemberships(_ context.Context, userID string) ([]workos.Member, error) {
+	m.listMembershipsCalls++
+	if m.listMembershipsErr != nil {
+		return nil, m.listMembershipsErr
+	}
 	return m.members[userID], nil
 }
 

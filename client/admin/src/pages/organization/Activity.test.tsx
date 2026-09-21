@@ -520,6 +520,12 @@ describe("Activity", () => {
           },
         }),
         anActivityLog({
+          id: "end-changed",
+          action: "organization:enterprise_trial_end_changed",
+          beforeSnapshot: { trial_ends_at: "2026-08-29T00:00:00Z" },
+          afterSnapshot: { trial_ends_at: "2026-08-10T00:00:00Z" },
+        }),
+        anActivityLog({
           id: "rearmed",
           action: "organization:enterprise_trial_rearmed",
         }),
@@ -576,6 +582,12 @@ describe("Activity", () => {
       screen.getByRole("region", { name: "Enterprise trial extended" })
         .textContent,
     ).toContain("Previous trial end");
+    const changed = screen.getByRole("region", {
+      name: "Enterprise trial end date changed",
+    });
+    expect(changed.textContent).toContain("Previous trial end");
+    expect(changed.textContent).toContain("August 29, 2026");
+    expect(changed.textContent).toContain("August 10, 2026");
     expect(
       screen.getByRole("region", { name: "Enterprise trial ended" })
         .textContent,

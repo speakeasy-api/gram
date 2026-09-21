@@ -21,6 +21,14 @@ type Client struct {
 	// getPeriodUsage endpoint.
 	GetPeriodUsageDoer goahttp.Doer
 
+	// GetMeterUsage Doer is the HTTP client used to make requests to the
+	// getMeterUsage endpoint.
+	GetMeterUsageDoer goahttp.Doer
+
+	// GetSpendBreakdown Doer is the HTTP client used to make requests to the
+	// getSpendBreakdown endpoint.
+	GetSpendBreakdownDoer goahttp.Doer
+
 	// GetTokensUnderManagement Doer is the HTTP client used to make requests to
 	// the getTokensUnderManagement endpoint.
 	GetTokensUnderManagementDoer goahttp.Doer
@@ -106,6 +114,8 @@ func NewClient(
 ) *Client {
 	return &Client{
 		GetPeriodUsageDoer:            doer,
+		GetMeterUsageDoer:             doer,
+		GetSpendBreakdownDoer:         doer,
 		GetTokensUnderManagementDoer:  doer,
 		SetBillingMetadataDoer:        doer,
 		GetBillingEmailDoer:           doer,
@@ -149,6 +159,54 @@ func (c *Client) GetPeriodUsage() goa.Endpoint {
 		resp, err := c.GetPeriodUsageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "getPeriodUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMeterUsage returns an endpoint that makes HTTP requests to the usage
+// service getMeterUsage server.
+func (c *Client) GetMeterUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMeterUsageRequest(c.encoder)
+		decodeResponse = DecodeGetMeterUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMeterUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMeterUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getMeterUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSpendBreakdown returns an endpoint that makes HTTP requests to the usage
+// service getSpendBreakdown server.
+func (c *Client) GetSpendBreakdown() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSpendBreakdownRequest(c.encoder)
+		decodeResponse = DecodeGetSpendBreakdownResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSpendBreakdownRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSpendBreakdownDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getSpendBreakdown", err)
 		}
 		return decodeResponse(resp)
 	}

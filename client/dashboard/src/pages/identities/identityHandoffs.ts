@@ -54,7 +54,7 @@ export function identityHandoffs(
   return {
     // Sessions filter on the subject URN the session store recorded, which
     // only exists for a subject with a directory row.
-    mcpSessions: query(orgRoutes.mcpSessions.href(), {
+    mcpSessions: query(routes.mcpSessions.href(), {
       subjectUrn: userId ? `user:${userId}` : undefined,
       status: "active",
     }),

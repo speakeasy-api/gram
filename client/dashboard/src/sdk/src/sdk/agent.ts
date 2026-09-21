@@ -27,9 +27,9 @@ import {
   CreateAgentSessionHandoffSecurity,
 } from "../models/operations/createagentsessionhandoff.js";
 import {
-  DeleteDeviceAgentAiScanTargetRequest,
-  DeleteDeviceAgentAiScanTargetSecurity,
-} from "../models/operations/deletedeviceagentaiscantarget.js";
+  DeleteAiScanTargetRequest,
+  DeleteAiScanTargetSecurity,
+} from "../models/operations/deleteaiscantarget.js";
 import {
   GetAgentPluginsRequest,
   GetAgentPluginsSecurity,
@@ -43,9 +43,9 @@ import {
   GetDeviceAgentConfigurationSecurity,
 } from "../models/operations/getdeviceagentconfiguration.js";
 import {
-  ListDeviceAgentAiScanTargetsRequest,
-  ListDeviceAgentAiScanTargetsSecurity,
-} from "../models/operations/listdeviceagentaiscantargets.js";
+  ListAiScanTargetsRequest,
+  ListAiScanTargetsSecurity,
+} from "../models/operations/listaiscantargets.js";
 import {
   ListSyncedAgentUsersRequest,
   ListSyncedAgentUsersSecurity,
@@ -63,9 +63,9 @@ import {
   UpdateDeviceAgentConfigurationSecurity,
 } from "../models/operations/updatedeviceagentconfiguration.js";
 import {
-  UpsertDeviceAgentAiScanTargetRequest,
-  UpsertDeviceAgentAiScanTargetSecurity,
-} from "../models/operations/upsertdeviceagentaiscantarget.js";
+  UpsertAiScanTargetRequest,
+  UpsertAiScanTargetSecurity,
+} from "../models/operations/upsertaiscantarget.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Agent extends ClientSDK {
@@ -92,11 +92,11 @@ export class Agent extends ClientSDK {
    * deleteAiScanTarget agent
    *
    * @remarks
-   * Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.
+   * Remove a target the organization added, or clear the row a built-in carries so it returns to having no recorded decision. A built-in itself cannot be removed here; it leaves the list only by leaving Speakeasy's catalog. Requires a session with the org:admin scope.
    */
   async deleteAiScanTarget(
-    request: DeleteDeviceAgentAiScanTargetRequest,
-    security?: DeleteDeviceAgentAiScanTargetSecurity | undefined,
+    request: DeleteAiScanTargetRequest,
+    security?: DeleteAiScanTargetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<DeleteAiScanTargetResult> {
     return unwrapAsync(agentDeleteAiScanTarget(
@@ -168,11 +168,11 @@ export class Agent extends ClientSDK {
    * listAiScanTargets agent
    *
    * @remarks
-   * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy defaults overlaid with the organization's own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.
+   * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins plus the organization's own additions, with the catalog version agents echo on scan receipts. Everything listed is probed for; a built-in leaves the list by leaving Speakeasy's catalog, an organization target by being deleted. Requires a session with the org:admin scope.
    */
   async listAiScanTargets(
-    request?: ListDeviceAgentAiScanTargetsRequest | undefined,
-    security?: ListDeviceAgentAiScanTargetsSecurity | undefined,
+    request?: ListAiScanTargetsRequest | undefined,
+    security?: ListAiScanTargetsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListAiScanTargetsResult> {
     return unwrapAsync(agentListAiScanTargets(
@@ -263,11 +263,11 @@ export class Agent extends ClientSDK {
    * upsertAiScanTarget agent
    *
    * @remarks
-   * Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
+   * Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged. Every field is a full replacement except gateway_client, which an existing target keeps when the field is omitted, so a write need not restate the target's matchers; sending gateway_client with empty lists still clears them. Clearing a target's last verifiable matcher also clears any access decision recorded about it, since nothing could enforce it any more; the organization decides again once the target can be recognized at the gateway. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
    */
   async upsertAiScanTarget(
-    request: UpsertDeviceAgentAiScanTargetRequest,
-    security?: UpsertDeviceAgentAiScanTargetSecurity | undefined,
+    request: UpsertAiScanTargetRequest,
+    security?: UpsertAiScanTargetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<AiScanTargetMutationResult> {
     return unwrapAsync(agentUpsertAiScanTarget(

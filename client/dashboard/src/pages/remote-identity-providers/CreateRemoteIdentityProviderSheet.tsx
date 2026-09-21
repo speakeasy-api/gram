@@ -17,13 +17,13 @@ import {
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { useCreateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/createOrganizationRemoteSessionIssuer.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Link } from "react-router";
+import { ExistingIssuerLink } from "./ExistingIssuerLink";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -61,7 +61,6 @@ export function CreateRemoteIdentityProviderSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
   const organization = useOrganization();
 
@@ -71,6 +70,9 @@ export function CreateRemoteIdentityProviderSheet({
   const projects = useMemo(() => projectsData?.projects ?? [], [projectsData]);
 
   const [projectId, setProjectId] = useState<string>(ORGANIZATIONAL);
+  const routes = useRoutes({
+    projectSlug: projects.find((project) => project.id === projectId)?.slug,
+  });
 
   // Display name + slug auto-derive from the Issuer URL hostname until the
   // operator edits them, after which the *Dirty flags lock in their value.
@@ -132,7 +134,7 @@ export function CreateRemoteIdentityProviderSheet({
       });
       toast.success("Remote identity provider created");
       onOpenChange(false);
-      orgRoutes.remoteIdentityProviders.issuerDetail.goTo(created.id);
+      routes.remoteIdentityProviders.issuerDetail.goTo(created.id);
     },
     onError: (error) => {
       // useMutation surfaces error.message via createMutation.error (shown in
@@ -246,16 +248,10 @@ export function CreateRemoteIdentityProviderSheet({
                   viewerScope="organization"
                   matches={duplicateMatches}
                   renderLink={(match) => (
-                    <Button asChild variant="secondary">
-                      <Link
-                        to={orgRoutes.remoteIdentityProviders.issuerDetail.href(
-                          match.id,
-                        )}
-                        onClick={() => onOpenChange(false)}
-                      >
-                        View existing provider
-                      </Link>
-                    </Button>
+                    <ExistingIssuerLink
+                      match={match}
+                      onClick={() => onOpenChange(false)}
+                    />
                   )}
                 />
               }

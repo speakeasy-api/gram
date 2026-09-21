@@ -144,6 +144,31 @@ func applyResponseHeaders(w http.ResponseWriter, remoteResp *http.Response, wwwA
 // are not meaningful upstream. When [Proxy.AuthorizationOverride] is
 // non-empty, the proxy emits its own "Authorization: Bearer <override>"
 // upstream; configured headers may further override that.
+// stripConfiguredCredentials removes every credential this proxy attaches on
+// a project's behalf, for use when a redirect leaves the origin the
+// credentials were configured for.
+//
+// net/http drops Authorization and Cookie itself, but only when the redirect
+// leaves the initial hostname: it keeps them across a subdomain, a port
+// change, and a downgrade to another scheme, and it knows nothing about
+// configured headers. Without this an upstream could redirect to a host it
+// controls and collect a project's API key.
+func (p *Proxy) stripConfiguredCredentials(header http.Header) {
+	header.Del("Authorization")
+	header.Del("Cookie")
+
+	for _, h := range p.Headers {
+		if h.Name != "" {
+			header.Del(h.Name)
+		}
+		// The inbound header a pass-through reads from is forwarded verbatim
+		// as well, so it has to go with the header it populates.
+		if h.ValueFromRequestHeader != "" {
+			header.Del(h.ValueFromRequestHeader)
+		}
+	}
+}
+
 func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
 	for name, values := range userReq.Header {
 		if isSkippedRequestHeader(name) {

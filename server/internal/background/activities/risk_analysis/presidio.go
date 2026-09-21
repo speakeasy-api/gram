@@ -470,7 +470,8 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 	// containing newlines before both token counting and the analyzer request.
 	text = reformatJSONAsYAML(text)
 
-	if originalSize := len(text); originalSize > presidioMaxMessageBytes {
+	truncated := len(text) > presidioMaxMessageBytes
+	if originalSize := len(text); truncated {
 		text = truncateAtRuneBoundary(text, presidioMaxMessageBytes)
 		p.logger.WarnContext(ctx, "presidio: truncating oversized message",
 			attr.SlogRiskScanTextSize(originalSize),
@@ -497,7 +498,7 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 
 		findings, err := p.analyzeOnce(ctx, text, entities, scoreThreshold, onProgress)
 		if err == nil {
-			return scanners.Result{Findings: findings, STokens: int64(stokenCount), Completed: countErr == nil}, false
+			return scanners.Result{Findings: findings, STokens: int64(stokenCount), Completed: countErr == nil && !truncated}, false
 		}
 
 		lastErr = err

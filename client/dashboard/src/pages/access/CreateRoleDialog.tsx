@@ -32,7 +32,14 @@ import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { useOrgRoutes } from "@/routes";
-import { ArrowLeft, Bot, Check, ChevronRight, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Bot,
+  Check,
+  ChevronRight,
+  Loader2,
+  Lock,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   getSelectableMembers,
@@ -125,7 +132,8 @@ interface CreateRoleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingRole?: Role | null;
-  onRoleCreated?: (roleName: string) => void;
+  onRoleCreated?: (role: Role) => void;
+  confirmAssignmentFor?: string;
   presentation?: RoleEditorPresentation;
 }
 
@@ -134,6 +142,7 @@ export function CreateRoleDialog({
   onOpenChange,
   editingRole,
   onRoleCreated,
+  confirmAssignmentFor,
   presentation = "sheet",
 }: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
@@ -154,6 +163,7 @@ export function CreateRoleDialog({
   const [initialDescription, setInitialDescription] = useState("");
   const [initialGrantKeys, setInitialGrantKeys] = useState("");
   const [showMembers, setShowMembers] = useState(false);
+  const [assignmentConfirmed, setAssignmentConfirmed] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   // ─── Rule editor state ────────────────────────────────────────
@@ -272,12 +282,12 @@ export function CreateRoleDialog({
 
   // ─── Mutations ────────────────────────────────────────────────
   const createRole = useCreateRoleMutation({
-    onSuccess: async () => {
+    onSuccess: async (role) => {
       await Promise.all([
         invalidateAllRoles(queryClient),
         invalidateAllMembers(queryClient),
       ]);
-      onRoleCreated?.(name);
+      onRoleCreated?.(role);
       handleClose();
     },
   });
@@ -296,6 +306,7 @@ export function CreateRoleDialog({
 
   const saveDisabled =
     !scopeDefinitions ||
+    (!!confirmAssignmentFor && !assignmentConfirmed) ||
     isSaveDisabled({
       isMutating,
       isEditing,
@@ -316,8 +327,15 @@ export function CreateRoleDialog({
 
   // ─── Scope / grant operations ─────────────────────────────────
 
+  const updateGrants = (
+    update: (previous: Record<string, RoleGrant>) => Record<string, RoleGrant>,
+  ) => {
+    setAssignmentConfirmed(false);
+    setGrants(update);
+  };
+
   const toggleScope = (scope: Scope) => {
-    setGrants((prev) => {
+    updateGrants((prev) => {
       const next = { ...prev };
       if (next[scope]) {
         delete next[scope];
@@ -377,7 +395,7 @@ export function CreateRoleDialog({
       const hasContent =
         draftRule.selectors === null || draftRule.selectors.length > 0;
       if (hasContent) {
-        setGrants((prev) => {
+        updateGrants((prev) => {
           const grant = prev[editingScopeSlug] ?? {
             scope: editingScopeSlug,
             rules: [],
@@ -426,7 +444,7 @@ export function CreateRoleDialog({
   // "All servers" is the unrestricted rule, which the model stores as null
   // selectors rather than as a list naming everything.
   const resetRuleToAll = (scopeSlug: string) => {
-    setGrants((prev) => {
+    updateGrants((prev) => {
       const grant = prev[scopeSlug];
       if (!grant) return prev;
       return {
@@ -442,7 +460,7 @@ export function CreateRoleDialog({
   };
 
   const removeRule = (scopeSlug: string, ruleIndex: number) => {
-    setGrants((prev) => {
+    updateGrants((prev) => {
       const grant = prev[scopeSlug];
       if (!grant) return prev;
       const result = applyRemoveRule(grant, ruleIndex);
@@ -565,6 +583,7 @@ export function CreateRoleDialog({
     setInitialDescription("");
     setInitialGrantKeys("");
     setShowMembers(false);
+    setAssignmentConfirmed(false);
     setInitialized(false);
     setDialogStep("form");
     setEditingScopeSlug(null);
@@ -781,74 +800,101 @@ export function CreateRoleDialog({
               }}
             />
 
-            {/* ─── Assign Members (hidden when directory sync manages assignment) ─── */}
-            {!organization.scimEnabled && (
-              <div className="border-border border-t pt-4 pb-4">
-                <button
-                  type="button"
-                  onClick={() => setShowMembers(!showMembers)}
-                  className="flex w-full items-center gap-1 text-left"
-                >
-                  <ChevronRight
-                    className={cn(
-                      "h-4 w-4 transition-transform",
-                      showMembers && "rotate-90",
-                    )}
-                  />
-                  <Text variant="body" className="font-medium">
-                    Assign Members
-                  </Text>
-                  <Text variant="body" className="text-muted-foreground ml-1">
-                    (optional, {selectedMembers.size} selected)
-                  </Text>
-                </button>
+            {/* ─── Assign Members (read-only when directory sync manages assignment) ─── */}
+            <div className="border-border border-t pt-4 pb-4">
+              <button
+                type="button"
+                onClick={() => setShowMembers(!showMembers)}
+                className="flex w-full items-center gap-1 text-left"
+              >
+                <ChevronRight
+                  className={cn(
+                    "h-4 w-4 transition-transform",
+                    showMembers && "rotate-90",
+                  )}
+                />
+                <Text variant="body" className="font-medium">
+                  Assign Members
+                </Text>
+                <Text variant="body" className="text-muted-foreground ml-1">
+                  {organization.scimEnabled
+                    ? `(${selectedMembers.size} assigned by directory sync)`
+                    : `(optional, ${selectedMembers.size} selected)`}
+                </Text>
+              </button>
 
-                {showMembers && (
-                  <div className="border-border divide-border mt-3 divide-y border">
+              {showMembers && (
+                <div className="relative mt-3">
+                  {/* The rows stay visible — who holds the role is still worth
+                        reading — but a directory owns the answer, so nothing here
+                        is clickable. */}
+                  {organization.scimEnabled && (
+                    <div className="bg-background/60 absolute inset-0 z-10 flex items-center justify-center">
+                      <div className="border-border bg-background flex items-center gap-2 border px-3 py-1.5 shadow-sm">
+                        <Lock className="text-muted-foreground h-3.5 w-3.5" />
+                        <Text variant="body" className="text-xs">
+                          Managed by directory sync
+                        </Text>
+                      </div>
+                    </div>
+                  )}
+                  <div
+                    className={cn(
+                      "border-border divide-border divide-y border",
+                      organization.scimEnabled &&
+                        "pointer-events-none opacity-50 select-none",
+                    )}
+                  >
                     {/* Select-all header */}
-                    {(() => {
-                      const selectableMembers = getSelectableMembers(
-                        members,
-                        isEditing,
-                        editingRole?.id,
-                      );
-                      const allSelected =
-                        selectableMembers.length > 0 &&
-                        selectableMembers.every((m) =>
-                          selectedMembers.has(m.id),
+                    {!organization.scimEnabled &&
+                      (() => {
+                        const selectableMembers = getSelectableMembers(
+                          members,
+                          isEditing,
+                          editingRole?.id,
                         );
-                      const someSelected =
-                        !allSelected &&
-                        selectableMembers.some((m) =>
-                          selectedMembers.has(m.id),
+                        const allSelected =
+                          selectableMembers.length > 0 &&
+                          selectableMembers.every((m) =>
+                            selectedMembers.has(m.id),
+                          );
+                        const someSelected =
+                          !allSelected &&
+                          selectableMembers.some((m) =>
+                            selectedMembers.has(m.id),
+                          );
+                        return (
+                          <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
+                            <Checkbox
+                              checked={
+                                allSelected
+                                  ? true
+                                  : someSelected
+                                    ? "indeterminate"
+                                    : false
+                              }
+                              onCheckedChange={() => toggleAllMembers()}
+                            />
+                            <Text
+                              variant="body"
+                              className="text-muted-foreground text-sm font-medium"
+                            >
+                              Select all
+                            </Text>
+                          </label>
                         );
-                      return (
-                        <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
-                          <Checkbox
-                            checked={
-                              allSelected
-                                ? true
-                                : someSelected
-                                  ? "indeterminate"
-                                  : false
-                            }
-                            onCheckedChange={() => toggleAllMembers()}
-                          />
-                          <Text
-                            variant="body"
-                            className="text-muted-foreground text-sm font-medium"
-                          >
-                            Select all
-                          </Text>
-                        </label>
-                      );
-                    })()}
+                      })()}
                     {members.map((member) => {
                       const alreadyHasRole = isMemberLockedToRole(
                         isEditing,
                         editingRole?.id,
                         member.roleIds,
                       );
+                      // Under directory sync the rows are read-only for
+                      // everyone, not only the mouse: a focusable checkbox
+                      // would let the keyboard edit an assignment the next
+                      // sync overwrites.
+                      const locked = organization.scimEnabled || alreadyHasRole;
                       return (
                         <label
                           key={member.id}
@@ -861,9 +907,9 @@ export function CreateRoleDialog({
                             checked={
                               alreadyHasRole || selectedMembers.has(member.id)
                             }
-                            disabled={alreadyHasRole}
+                            disabled={locked}
                             onCheckedChange={() => {
-                              void (!alreadyHasRole && toggleMember(member.id));
+                              void (!locked && toggleMember(member.id));
                             }}
                           />
                           <Avatar className="h-7 w-7">
@@ -900,9 +946,9 @@ export function CreateRoleDialog({
                       );
                     })}
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
 
             {/* ─── Assign Agents ─────────────────────────────────────
                 Not gated on SCIM: a directory syncs people, never agents,
@@ -1045,26 +1091,44 @@ export function CreateRoleDialog({
       )}
 
       {(dialogStep === "form" || isPage) && (
-        <Footer className="border-border flex-row justify-end border-t">
-          <Button variant="secondary" onClick={handleClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={saveDisabled}>
-            {isMutating && (
-              <Button.LeftIcon>
-                <Loader2 className="h-4 w-4 animate-spin" />
-              </Button.LeftIcon>
-            )}
-            <Button.Text>
-              {isMutating
-                ? isEditing
-                  ? "Saving\u2026"
-                  : "Creating\u2026"
-                : isEditing
-                  ? "Save Changes"
-                  : "Create Role"}
-            </Button.Text>
-          </Button>
+        <Footer className="border-border flex-col border-t">
+          {confirmAssignmentFor && !isEditing && (
+            <label className="flex cursor-pointer items-start gap-3 self-stretch text-left">
+              <Checkbox
+                checked={assignmentConfirmed}
+                onCheckedChange={(checked) =>
+                  setAssignmentConfirmed(checked === true)
+                }
+                aria-label="Confirm role assignment"
+                className="mt-0.5"
+              />
+              <Text variant="body" className="text-sm">
+                Assign <strong>{confirmAssignmentFor}</strong> to this role
+                after creation. I reviewed all permissions configured above.
+              </Text>
+            </label>
+          )}
+          <div className="flex justify-end gap-2 self-stretch">
+            <Button variant="secondary" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={saveDisabled}>
+              {isMutating && (
+                <Button.LeftIcon>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>
+                {isMutating
+                  ? isEditing
+                    ? "Saving\u2026"
+                    : "Creating\u2026"
+                  : isEditing
+                    ? "Save Changes"
+                    : "Create Role"}
+              </Button.Text>
+            </Button>
+          </div>
         </Footer>
       )}
     </Frame>

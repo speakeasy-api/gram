@@ -19,6 +19,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
@@ -45,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -82,6 +84,10 @@ type platformMCPConfig struct {
 	RiskPolicySignaler      policycore.PolicySignaler
 	RiskPolicyCache         policycore.PolicyCacheInvalidator
 	RiskExclusionReconciler risk.RiskExclusionReconciler
+	// RiskAnalysisDescriber reports the run state of a project's Watchdog
+	// analysis. Nil keeps get_risk_analysis_status visible as a stub rather
+	// than reporting a state nothing observed.
+	RiskAnalysisDescriber analysisstatus.Describer
 	// Telemetry is the Gram-owned ClickHouse read model the diagnostics tools
 	// answer from. Nil disables them rather than serving an empty answer, which
 	// a caller would read as "nothing is wrong".
@@ -151,7 +157,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	}
 
 	gate := platformmcp.NewOrganizationGate(config.ProductFeatures)
-	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz)
+	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz).WithDashboardURL(config.DashboardURL)
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
@@ -220,9 +226,13 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	budgets := platformmcp.OperationBudgets{
 		Catalog:      newBudget(platformmcp.CatalogConnectionLimitName, platformmcp.CatalogOrganizationLimitName),
 		Registration: newBudget(platformmcp.RegistrationConnectionLimitName, platformmcp.RegistrationOrganizationLimitName),
-		Handoff:      newBudget(platformmcp.HandoffConnectionLimitName, platformmcp.HandoffOrganizationLimitName),
-		SetupStart:   newBudget(platformmcp.SetupConnectionLimitName, platformmcp.SetupOrganizationLimitName),
-		Repair:       newBudget(platformmcp.RepairConnectionLimitName, platformmcp.RepairOrganizationLimitName),
+		ReviewRequests: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.ReviewRequestConnectionLimitName, ratelimit.PerMinute(platformmcp.ReviewRequestsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.ReviewRequestOrganizationLimitName, ratelimit.PerMinute(platformmcp.ReviewRequestsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+		Handoff:    newBudget(platformmcp.HandoffConnectionLimitName, platformmcp.HandoffOrganizationLimitName),
+		SetupStart: newBudget(platformmcp.SetupConnectionLimitName, platformmcp.SetupOrganizationLimitName),
+		Repair:     newBudget(platformmcp.RepairConnectionLimitName, platformmcp.RepairOrganizationLimitName),
 		// Documentation search is metered on its own allowances rather than the
 		// shared five-per-minute budget: retrieval is in-process and reading is
 		// what the corpus is for, so a caller researching a setup should not
@@ -331,6 +341,9 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
 	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, config.DistributionAdmission, organizationSlugs)
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
+		WithAuthorization(config.Authz).
+		WithRemoteSessions(config.RemoteChallengeManager).
+		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
 		WithDistributionAdmission(config.DistributionAdmission).
 		WithDistributionAdmissionReads(distributionAdmissionReads)
@@ -354,11 +367,15 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
+		WithAuthorization(config.Authz).
+		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
-		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
+		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
+		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB)))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
+	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
@@ -410,9 +427,16 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
 }
 
-// attachShadowInventory keeps the Shadow tools registered on both browser and
-// local-fixture surfaces. Missing dependencies degrade to stable unavailable
-// descriptors, but the capability loss is logged rather than silently hidden.
+// attachShadowInventory keeps the Shadow MCP tools registered on both browser
+// and local-fixture surfaces. Missing dependencies degrade to stable
+// unavailable descriptors, but the capability loss is logged rather than
+// silently hidden.
+//
+// It deliberately does NOT attach the Shadow AI reads. They are
+// organization-scoped and depend on the detection inventory and the scan
+// library, none of which this constructor supplies, so hanging them off its
+// success would report them unavailable whenever an unrelated Shadow MCP
+// dependency is missing. Callers attach the two independently.
 func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMCPConfig, budget platformmcp.OperationBudget) bool {
 	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
 	shadowInventory, err := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budget, config.JWTSigningKey)
@@ -423,6 +447,25 @@ func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMC
 	shadowInventory.WithDistributionAdmissionReads(platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, config.DistributionAdmission, organizationSlugs))
 	reader.WithShadowInventory(shadowInventory)
 	return true
+}
+
+// attachShadowAI registers the Shadow AI reads — what enrolled devices are
+// running, and what the agents probe for. Organization-scoped, so unlike the
+// MCP half it needs no project resolver or cursor key; it needs the live
+// org:admin authorizer, because the per-tool user and device counts are
+// attribution the dashboard withholds below that grant.
+func attachShadowAI(reader *platformmcp.PostgresReader, config platformMCPConfig, authorizer platformmcp.Authorizer, budget platformmcp.OperationBudget) {
+	service := platformmcp.NewShadowAIService(
+		config.ShadowInventory,
+		platformmcp.NewPostgresShadowAILibrary(agentrepo.New(config.DB)),
+		authorizer,
+		budget,
+	)
+	if service == nil {
+		config.Logger.WarnContext(context.Background(), "platform mcp shadow ai unavailable")
+		return
+	}
+	reader.WithShadowAI(service)
 }
 
 // platformMCPSetupResources builds the reviewed setup corpus this deployment
@@ -560,7 +603,7 @@ func loadBrowserPlatformMCPCatalogDescriptors(ctx context.Context, catalog *exte
 
 func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
 	gate := platformmcp.NewOrganizationGate(config.ProductFeatures)
-	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz)
+	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz).WithDashboardURL(config.DashboardURL)
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
@@ -608,9 +651,13 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	budgets := platformmcp.OperationBudgets{
 		Catalog:      newBudget(platformmcp.CatalogConnectionLimitName, platformmcp.CatalogOrganizationLimitName),
 		Registration: newBudget(platformmcp.RegistrationConnectionLimitName, platformmcp.RegistrationOrganizationLimitName),
-		Handoff:      newBudget(platformmcp.HandoffConnectionLimitName, platformmcp.HandoffOrganizationLimitName),
-		SetupStart:   newBudget(platformmcp.SetupConnectionLimitName, platformmcp.SetupOrganizationLimitName),
-		Repair:       newBudget(platformmcp.RepairConnectionLimitName, platformmcp.RepairOrganizationLimitName),
+		ReviewRequests: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.ReviewRequestConnectionLimitName, ratelimit.PerMinute(platformmcp.ReviewRequestsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.ReviewRequestOrganizationLimitName, ratelimit.PerMinute(platformmcp.ReviewRequestsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+		Handoff:    newBudget(platformmcp.HandoffConnectionLimitName, platformmcp.HandoffOrganizationLimitName),
+		SetupStart: newBudget(platformmcp.SetupConnectionLimitName, platformmcp.SetupOrganizationLimitName),
+		Repair:     newBudget(platformmcp.RepairConnectionLimitName, platformmcp.RepairOrganizationLimitName),
 		// Documentation search is metered on its own allowances rather than the
 		// shared five-per-minute budget: retrieval is in-process and reading is
 		// what the corpus is for, so a caller researching a setup should not
@@ -719,6 +766,9 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
 	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, config.DistributionAdmission, organizationSlugs)
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
+		WithAuthorization(config.Authz).
+		WithRemoteSessions(config.RemoteChallengeManager).
+		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
 		WithDistributionAdmission(config.DistributionAdmission).
 		WithDistributionAdmissionReads(distributionAdmissionReads)
@@ -731,10 +781,13 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDistributionAdmission(config.DistributionAdmission, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
+		WithAuthorization(config.Authz).
+		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
-		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
+		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
+		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB)))
 	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
 	if shadowErr != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))
@@ -747,6 +800,10 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		}
 		platformReader.WithShadowDecisions(platformmcp.NewShadowDecisionService(config.DB, shadowInventory, config.ShadowReview, pluginInventory, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), shadowDecisionBudget))
 	}
+	// Outside the branch on purpose: the Shadow AI reads answer an
+	// organization-scoped question and share none of the Shadow MCP
+	// inventory's dependencies, so a failure there must not take them down.
+	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))

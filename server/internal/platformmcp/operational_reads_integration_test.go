@@ -17,11 +17,14 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func mustParseURL(t *testing.T, raw string) *url.URL {
@@ -372,9 +375,14 @@ func TestListRecentToolCallsUsesBoundedSafeSummaryProjection(t *testing.T) {
 		BlockReason:       nil,
 		AccountType:       nil,
 	}}}
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithAuthorization(engine).
 		WithRecentToolCalls(telemetry, mustParseURL(t, "https://app.getgram.test"))
 	reader.recentToolCalls.now = func() time.Time { return fixedNow }
+	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
+	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.ID.String())})
 
 	output, err := reader.ListRecentToolCalls(ctx, principal, ListRecentToolCallsInput{ProjectSlug: project.Slug})
 	require.NoError(t, err)

@@ -404,7 +404,7 @@ func TestRemoteSessionRefreshActivity_SweepBackfillsNullResource(t *testing.T) {
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	refresher := remotesessions.NewRefreshService(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), policy, cache.NoopCache)
+	refresher := remotesessions.NewRefreshService(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), policy, nil, cache.NoopCache)
 	activity := activities.NewRemoteSessionRefresh(testenv.NewLogger(t), ti.conn, refresher)
 
 	res, err := activity.Do(ctx, activities.RefreshRemoteSessionInput{

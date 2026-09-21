@@ -7,12 +7,28 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
+ * Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
+ */
+export const CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat = {
+  Issuer: "issuer",
+  TokenEndpoint: "token_endpoint",
+} as const;
+/**
+ * Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
+ */
+export type CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat =
+  ClosedEnum<
+    typeof CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat
+  >;
+
+/**
  * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
  */
 export const CreateRemoteSessionClientFormTokenEndpointAuthMethod = {
   ClientSecretBasic: "client_secret_basic",
   ClientSecretPost: "client_secret_post",
   None: "none",
+  PrivateKeyJwt: "private_key_jwt",
 } as const;
 /**
  * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
@@ -34,9 +50,17 @@ export type CreateRemoteSessionClientForm = {
    */
   clientId: string;
   /**
+   * When the issuer reported issuing the client_id (RFC 7591 client_id_issued_at). Omit to record the time of this call.
+   */
+  clientIdIssuedAt?: Date | undefined;
+  /**
    * client_secret supplied by the caller. Gram encrypts before persisting.
    */
   clientSecret?: string | undefined;
+  /**
+   * When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
+   */
+  clientSecretExpiresAt?: Date | undefined;
   /**
    * The owning remote_session_issuer id.
    */
@@ -45,6 +69,12 @@ export type CreateRemoteSessionClientForm = {
    * Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
    */
   scope?: Array<string> | undefined;
+  /**
+   * Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
+   */
+  tokenEndpointAuthAudienceFormat?:
+    | CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat
+    | undefined;
   /**
    * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
    */
@@ -58,6 +88,12 @@ export type CreateRemoteSessionClientForm = {
 };
 
 /** @internal */
+export const CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat$outboundSchema:
+  z.ZodMiniEnum<
+    typeof CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat
+  > = z.enum(CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat);
+
+/** @internal */
 export const CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema:
   z.ZodMiniEnum<typeof CreateRemoteSessionClientFormTokenEndpointAuthMethod> = z
     .enum(CreateRemoteSessionClientFormTokenEndpointAuthMethod);
@@ -66,9 +102,12 @@ export const CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema
 export type CreateRemoteSessionClientForm$Outbound = {
   audience?: string | undefined;
   client_id: string;
+  client_id_issued_at?: string | undefined;
   client_secret?: string | undefined;
+  client_secret_expires_at?: string | undefined;
   remote_session_issuer_id: string;
   scope?: Array<string> | undefined;
+  token_endpoint_auth_audience_format?: string | undefined;
   token_endpoint_auth_method?: string | undefined;
   user_session_issuer_ids?: Array<string> | undefined;
 };
@@ -81,9 +120,18 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
   z.object({
     audience: z.optional(z.string()),
     clientId: z.string(),
+    clientIdIssuedAt: z.optional(
+      z.pipe(z.date(), z.transform(v => v.toISOString())),
+    ),
     clientSecret: z.optional(z.string()),
+    clientSecretExpiresAt: z.optional(
+      z.pipe(z.date(), z.transform(v => v.toISOString())),
+    ),
     remoteSessionIssuerId: z.string(),
     scope: z.optional(z.array(z.string())),
+    tokenEndpointAuthAudienceFormat: z.optional(
+      CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat$outboundSchema,
+    ),
     tokenEndpointAuthMethod: z.optional(
       CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
     ),
@@ -92,8 +140,11 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       clientId: "client_id",
+      clientIdIssuedAt: "client_id_issued_at",
       clientSecret: "client_secret",
+      clientSecretExpiresAt: "client_secret_expires_at",
       remoteSessionIssuerId: "remote_session_issuer_id",
+      tokenEndpointAuthAudienceFormat: "token_endpoint_auth_audience_format",
       tokenEndpointAuthMethod: "token_endpoint_auth_method",
       userSessionIssuerIds: "user_session_issuer_ids",
     });

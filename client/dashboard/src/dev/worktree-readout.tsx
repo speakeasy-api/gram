@@ -2,16 +2,14 @@ import { GitBranchIcon, FolderGit2Icon, type LucideIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 /**
- * The default development readout in the sidebar's brand row: which worktree
- * this dev server is serving and what it has checked out. Several worktrees run
- * their own stacks side by side, so a dashboard tab needs to say which one it
- * is.
+ * The default development readout in the sidebar footer, just above the user
+ * menu: which worktree this dev server is serving and what it has checked out.
+ * Several worktrees run their own stacks side by side, so a dashboard tab
+ * needs to say which one it is.
  *
- * The readout never contributes to layout — it is absolutely positioned inside
- * the brand row and clamped to that row's box, so no amount of content can
- * shift the page or spill over the nav beneath. Hovering lifts the clamp on
- * both axes and floats the whole thing over the page, which is how it copes
- * with worktree names, branch names and extra lines that don't fit.
+ * It sits at the bottom of the chrome, out of the brand's way and away from
+ * anything it could push around. Long worktree and branch names truncate;
+ * hovering floats the untruncated readout over the page.
  *
  * `branchPrefix` renders just before the branch, so a local dev slot
  * (src/dev/slot.local.tsx) can mark the branch up without rebuilding the frame.
@@ -24,8 +22,11 @@ export function DevWorktreeReadout({
   const branch = useGitBranch();
 
   return (
-    <div className="group/worktree relative flex h-full min-w-0 flex-1 items-center group-data-[collapsible=icon]:hidden">
-      <div className="group-hover/worktree:border-border group-hover/worktree:bg-card absolute top-1/2 left-1 z-20 flex max-h-[calc(var(--header-height)-0.5rem)] max-w-[calc(100%-0.25rem)] -translate-y-1/2 flex-col gap-0.5 overflow-hidden border border-transparent px-1.5 py-1 font-mono text-[10px] leading-none transition-[max-width,max-height] duration-150 group-hover/worktree:max-h-[32rem] group-hover/worktree:max-w-[32rem] group-hover/worktree:shadow-md">
+    <div className="group/worktree relative h-8 group-data-[collapsible=icon]:hidden">
+      {/* w-max, not inset-x-0: pinning both edges would hold the box at the
+          sidebar's width, so the hover max-width would have nothing to expand
+          into and a long branch name would stay truncated. */}
+      <div className="group-hover/worktree:border-border group-hover/worktree:bg-card absolute top-0 left-0 z-20 flex w-max max-w-full flex-col gap-0.5 overflow-hidden border border-transparent px-1.5 py-1 font-mono text-[10px] leading-none transition-[max-width] duration-150 group-hover/worktree:max-w-[32rem] group-hover/worktree:shadow-md">
         <ReadoutLine Icon={FolderGit2Icon} value={__GRAM_DEV_WORKTREE__} />
         <ReadoutLine
           Icon={GitBranchIcon}

@@ -197,7 +197,7 @@ function Unauthorized({
 }) {
   const [open, setOpen] = React.useState(false);
   const [requestState, setRequestState] = React.useState<
-    "idle" | "sending" | "sent" | "error"
+    "idle" | "sending" | "sent" | "no-admin" | "error"
   >("idle");
 
   const { hasScope } = useRBAC();
@@ -233,7 +233,12 @@ function Unauthorized({
     const notified = results.some(
       (r) => r.status === "fulfilled" && r.value.sentToCount > 0,
     );
-    setRequestState(notified ? "sent" : "error");
+    if (notified) {
+      setRequestState("sent");
+      return;
+    }
+    const reachedServer = results.some((r) => r.status === "fulfilled");
+    setRequestState(reachedServer ? "no-admin" : "error");
   };
 
   return (
@@ -271,6 +276,13 @@ function Unauthorized({
               Your organization admins have been notified.
             </p>
           </div>
+        )}
+
+        {requestState === "no-admin" && (
+          <p className="text-destructive text-sm">
+            No organization administrator could be notified. Contact an
+            administrator directly to request access.
+          </p>
         )}
 
         {requestState === "error" && (

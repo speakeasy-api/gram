@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
+import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import AgentsPage from "./Agents";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 function setup() {
@@ -8,7 +10,7 @@ function setup() {
     defaultOptions: { queries: { retry: false } },
   });
   client.setQueryData(
-    ["managed-agents", mocks.organizationId, "list"],
+    ["managed-agents", mocks.organizationId, "list", mocks.user.id],
     mocks.agents,
   );
   client.setQueryData(
@@ -31,12 +33,37 @@ function setup() {
       ),
   };
 }
-vi.mock("./AgentAPIKeys", () => ({ AgentAPIKeys: () => <div>API keys</div> }));
+vi.mock("./AgentAPIKeys", () => ({
+  AgentAPIKeys: ({
+    creation,
+    onCreate,
+    onDone,
+    onBusy,
+  }: {
+    creation?: boolean;
+    onCreate?: () => void;
+    onDone?: () => void;
+    onBusy?: (busy: boolean) => void;
+  }) =>
+    creation ? (
+      <>
+        <button onClick={onDone}>Wizard done</button>
+        <button onClick={() => onBusy?.(true)}>Start issuing</button>
+        <button onClick={() => onBusy?.(false)}>Finish issuing</button>
+      </>
+    ) : (
+      <div>
+        API keys<button onClick={onCreate}>Create API key</button>
+      </div>
+    ),
+}));
 vi.mock("./ManagedAgentSessions", () => ({
   ManagedAgentSessions: () => <div>Sessions</div>,
 }));
 
 const mocks = vi.hoisted(() => ({
+  managementFlag: "enabled" as FeatureFlagResult["status"],
+  sdkClient: vi.fn(),
   params: new URLSearchParams(),
   navigate: vi.fn(),
   list: vi.fn(),
@@ -88,8 +115,14 @@ vi.mock("@/components/dev-toolbar-utils", () => ({
 vi.mock("react-router", () => ({
   useSearchParams: () => [mocks.params, mocks.navigate],
 }));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: (flag: string) => ({
+    status:
+      flag === FEATURE_FLAGS.agentManagement ? mocks.managementFlag : "enabled",
+  }),
+}));
 vi.mock("@/contexts/Sdk", () => ({
-  useSdkClient: () => ({ agents: { list: mocks.list, get: mocks.detail } }),
+  useSdkClient: () => mocks.sdkClient(),
 }));
 vi.mock("@gram/client/react-query/createAgent.js", () => ({
   useCreateAgentMutation: () => ({ mutate: vi.fn() }),
@@ -165,6 +198,7 @@ vi.mock("@/components/page-templates", () => {
 
 afterEach(cleanup);
 beforeEach(() => {
+  mocks.managementFlag = "enabled";
   mocks.params = new URLSearchParams();
   mocks.unsupported = false;
   mocks.organizationId = "org_example";
@@ -173,11 +207,68 @@ beforeEach(() => {
   mocks.agents[0]!.ownerUserId = "user_owner";
   mocks.agents[0]!.ownerProfile = undefined;
   vi.clearAllMocks();
+  mocks.sdkClient.mockReturnValue({
+    agents: { list: mocks.list, get: mocks.detail },
+  });
   mocks.list.mockResolvedValue(mocks.agents);
   mocks.detail.mockResolvedValue(mocks.agents[0]);
 });
 
+describe("Agent management rollout gate", () => {
+  for (const status of ["loading", "disabled", "missing", "error"] as const) {
+    it.each(["", "create=true", "id=agent_example"])(
+      `blocks direct route %s while management is ${status}, even with credentials enabled`,
+      (query) => {
+        mocks.managementFlag = status;
+        mocks.params = new URLSearchParams(query);
+        setup();
+
+        expect(
+          screen.getByRole("heading", {
+            name:
+              status === "loading"
+                ? "Loading agent management"
+                : "Agent management unavailable",
+          }),
+        ).toBeTruthy();
+        expect(
+          screen.queryByRole("button", { name: "Create agent" }),
+        ).toBeNull();
+        expect(screen.queryByText("Example agent")).toBeNull();
+        expect(screen.queryByText("API keys")).toBeNull();
+        expect(screen.queryByText("Unable to load agents")).toBeNull();
+        // Cached inventory must not leak, and no SDK-backed child may mount
+        // (including creation's policy/server discovery).
+        expect(mocks.sdkClient).not.toHaveBeenCalled();
+        expect(mocks.list).not.toHaveBeenCalled();
+        expect(mocks.detail).not.toHaveBeenCalled();
+      },
+    );
+  }
+
+  it("unmounts cached agent content when the management flag turns off", () => {
+    const view = setup();
+    expect(screen.getByRole("button", { name: "Example agent" })).toBeTruthy();
+    mocks.managementFlag = "disabled";
+    view.rerenderPage();
+    expect(screen.queryByRole("button", { name: "Example agent" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Create agent" })).toBeNull();
+  });
+});
+
 describe("Agent owner access", () => {
+  it.each(["loading", "disabled", "missing", "error"] as const)(
+    "does not request agents while the rollout is %s",
+    (status) => {
+      mocks.managementFlag = status;
+      setup();
+      expect(mocks.list).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText("Unable to load agents. Try again."),
+      ).toBeNull();
+    },
+  );
+
   it("keeps search available after no results and restores agents when cleared", () => {
     setup();
     fireEvent.change(screen.getByPlaceholderText("Search agents"), {
@@ -237,9 +328,35 @@ describe("Agent owner access", () => {
     fireEvent.click(screen.getByRole("button", { name: "Example agent" }));
     expect(mocks.navigate).toHaveBeenCalledWith({ id: "agent_example" });
   });
+  it("provides an independent exit from a direct credential creation URL", () => {
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      credential: "new",
+    });
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Back to agent" }));
+    expect(mocks.navigate).toHaveBeenCalledWith({ id: "agent_example" });
+  });
+  it("disables the creation page header while the wizard reports busy", () => {
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      credential: "new",
+    });
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Start issuing" }));
+    expect(
+      screen.getByRole("button", { name: "Back to agent" }),
+    ).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByRole("button", { name: "Back to agent" }));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Finish issuing" }));
+    expect(
+      screen.getByRole("button", { name: "Back to agent" }),
+    ).toHaveProperty("disabled", false);
+  });
   it("keeps creation separate from the inventory", () => {
     setup();
-    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+    fireEvent.click(screen.getByRole("button", { name: "New agent identity" }));
     expect(mocks.navigate).toHaveBeenCalledWith({ create: "true" });
   });
   it("does not fetch agent data in an organization override session", () => {
@@ -277,5 +394,30 @@ describe("Agent owner access", () => {
     mocks.scopeOverride = "agent:read";
     setup();
     expect(mocks.list).not.toHaveBeenCalled();
+  });
+  it("routes key creation to a dedicated page and returns to the agent", async () => {
+    mocks.params = new URLSearchParams({ id: "agent_example" });
+    const view = setup();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create API key" }),
+    );
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      id: "agent_example",
+      credential: "new",
+    });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      credential: "new",
+    });
+    view.rerenderPage();
+    expect(
+      screen.getByRole("heading", { name: "Create API key" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Choose what Example agent can access."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Identity")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Wizard done" }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith({ id: "agent_example" });
   });
 });

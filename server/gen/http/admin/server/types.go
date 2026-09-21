@@ -191,6 +191,9 @@ type CreateGlobalIssuerRequestBody struct {
 	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
 	// pre-flight outbound CIMD. Default false.
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
+	// Route this issuer's OAuth endpoint calls through an MCP tunnel in the same
+	// project. Platform admins only.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// OpenID Connect userinfo endpoint. Discovered from the issuer metadata
 	// document; rejected unless an absolute https URL, or http on loopback.
 	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
@@ -276,6 +279,10 @@ type UpdateGlobalIssuerRequestBody struct {
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
+	// Set or clear this issuer's MCP tunnel binding. Omission keeps the binding;
+	// an empty string clears it; any other value must be a tunneled MCP server in
+	// the same project. Platform admins only.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// Set or clear the OpenID Connect userinfo endpoint. An empty string clears it
 	// to NULL; any other value must be an absolute https URL, or http on loopback.
 	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
@@ -332,6 +339,31 @@ type MigrateToGlobalIssuerRequestBody struct {
 	// The global remote_session_issuer to migrate onto; survives and adopts the
 	// source's clients.
 	TargetID *string `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
+}
+
+// StartTrialRequestBody is the type of the "admin" service "startTrial"
+// endpoint HTTP request body.
+type StartTrialRequestBody struct {
+	// Organization ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Number of days the trial runs for, counted from now.
+	Days *int `form:"days,omitempty" json:"days,omitempty" xml:"days,omitempty"`
+}
+
+// ChangeTrialEndDateRequestBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP request body.
+type ChangeTrialEndDateRequestBody struct {
+	// Organization ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// New trial end date in UTC.
+	EndsAt *string `form:"ends_at,omitempty" json:"ends_at,omitempty" xml:"ends_at,omitempty"`
+}
+
+// UpdateSupportMatrixRequestBody is the type of the "admin" service
+// "updateSupportMatrix" endpoint HTTP request body.
+type UpdateSupportMatrixRequestBody struct {
+	Revision *string                  `form:"revision,omitempty" json:"revision,omitempty" xml:"revision,omitempty"`
+	Draft    *SupportDraftRequestBody `form:"draft,omitempty" json:"draft,omitempty" xml:"draft,omitempty"`
 }
 
 // GetSessionResponseBody is the type of the "admin" service "getSession"
@@ -1050,6 +1082,9 @@ type CreateGlobalIssuerResponseBody struct {
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// When set, calls to this issuer's OAuth endpoints ride this MCP tunnel
+	// instead of dialing directly.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
 	// captured by discovery.
 	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
@@ -1182,6 +1217,9 @@ type UpdateGlobalIssuerResponseBody struct {
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// When set, calls to this issuer's OAuth endpoints ride this MCP tunnel
+	// instead of dialing directly.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
 	// captured by discovery.
 	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
@@ -1356,6 +1394,139 @@ type MigrateToGlobalIssuerResponseBody struct {
 type UploadPlatformImageResponseBody struct {
 	// The asset entry that was created in Gram
 	Asset *AssetResponseBody `form:"asset" json:"asset" xml:"asset"`
+}
+
+// StartTrialResponseBody is the type of the "admin" service "startTrial"
+// endpoint HTTP response body.
+type StartTrialResponseBody struct {
+	// The ID of the organization
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the organization
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the organization
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Gram account type (e.g. free, pro, payg, enterprise).
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// WorkOS organization ID, if linked.
+	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Whether the organization is whitelisted for full access.
+	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
+	// The time at which the organization was disabled, if any.
+	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Number of active members in the organization.
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// The creation date of the organization.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the organization.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ChangeTrialEndDateResponseBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP response body.
+type ChangeTrialEndDateResponseBody struct {
+	// The ID of the organization
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the organization
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the organization
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Gram account type (e.g. free, pro, payg, enterprise).
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// WorkOS organization ID, if linked.
+	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Whether the organization is whitelisted for full access.
+	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
+	// The time at which the organization was disabled, if any.
+	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Number of active members in the organization.
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// The creation date of the organization.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the organization.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// GetMeterUsageResponseBody is the type of the "admin" service "getMeterUsage"
+// endpoint HTTP response body.
+type GetMeterUsageResponseBody struct {
+	Family string                        `form:"family" json:"family" xml:"family"`
+	Window *MeterUsageWindowResponseBody `form:"window" json:"window" xml:"window"`
+	// Trailing twelve billing-cycle date windows
+	BillingCycles []*MeterUsageWindowResponseBody `form:"billing_cycles" json:"billing_cycles" xml:"billing_cycles"`
+	Unit          string                          `form:"unit" json:"unit" xml:"unit"`
+	// Exact integer ordinary usage period total as a decimal string
+	Total string `form:"total" json:"total" xml:"total"`
+	// Dense UTC daily ordinary usage buckets
+	Buckets []*AdminMeterUsageBucketResponseBody `form:"buckets" json:"buckets" xml:"buckets"`
+	// Retrieval timestamp, not an ingestion watermark
+	QueriedAt         string `form:"queried_at" json:"queried_at" xml:"queried_at"`
+	MeasurementMethod string `form:"measurement_method" json:"measurement_method" xml:"measurement_method"`
+}
+
+// GetSpendBreakdownResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body.
+type GetSpendBreakdownResponseBody struct {
+	Window *MeterUsageWindowResponseBody `form:"window" json:"window" xml:"window"`
+	// Trailing twelve billing-cycle date windows
+	BillingCycles []*MeterUsageWindowResponseBody `form:"billing_cycles" json:"billing_cycles" xml:"billing_cycles"`
+	Currency      string                          `form:"currency" json:"currency" xml:"currency"`
+	PricingBasis  string                          `form:"pricing_basis" json:"pricing_basis" xml:"pricing_basis"`
+	// Retrieval timestamp used to distinguish current and future buckets
+	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
+	// Exact estimated total at current PAYG list prices
+	TotalCostUsd string `form:"total_cost_usd" json:"total_cost_usd" xml:"total_cost_usd"`
+	// The three metered products in stable display order
+	Products []*SpendProductResponseBody `form:"products" json:"products" xml:"products"`
+}
+
+// GetSupportMatrixResponseBody is the type of the "admin" service
+// "getSupportMatrix" endpoint HTTP response body.
+type GetSupportMatrixResponseBody struct {
+	Methods      []*SupportMethodResponseBody     `json:"methods"`
+	Products     []*SupportPlatformResponseBody   `json:"products"`
+	Capabilities []*SupportCapabilityResponseBody `json:"capabilities"`
+	Draft        *SupportDraftResponseBody        `json:"draft"`
+	Revision     string                           `json:"revision"`
+}
+
+// UpdateSupportMatrixResponseBody is the type of the "admin" service
+// "updateSupportMatrix" endpoint HTTP response body.
+type UpdateSupportMatrixResponseBody struct {
+	Methods      []*SupportMethodResponseBody     `json:"methods"`
+	Products     []*SupportPlatformResponseBody   `json:"products"`
+	Capabilities []*SupportCapabilityResponseBody `json:"capabilities"`
+	Draft        *SupportDraftResponseBody        `json:"draft"`
+	Revision     string                           `json:"revision"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -10451,6 +10622,1138 @@ type ServeImageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// StartTrialUnauthorizedResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "unauthorized" error.
+type StartTrialUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartTrialForbiddenResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "forbidden" error.
+type StartTrialForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartTrialBadRequestResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "bad_request" error.
+type StartTrialBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartTrialNotFoundResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "not_found" error.
+type StartTrialNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartTrialConflictResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "conflict" error.
+type StartTrialConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartTrialUnsupportedMediaResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "unsupported_media" error.
+type StartTrialUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartTrialInvalidResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "invalid" error.
+type StartTrialInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartTrialInvariantViolationResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "invariant_violation" error.
+type StartTrialInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartTrialUnexpectedResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "unexpected" error.
+type StartTrialUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartTrialGatewayErrorResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "gateway_error" error.
+type StartTrialGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateUnauthorizedResponseBody is the type of the "admin"
+// service "changeTrialEndDate" endpoint HTTP response body for the
+// "unauthorized" error.
+type ChangeTrialEndDateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateForbiddenResponseBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP response body for the "forbidden" error.
+type ChangeTrialEndDateForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateBadRequestResponseBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP response body for the "bad_request" error.
+type ChangeTrialEndDateBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateNotFoundResponseBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP response body for the "not_found" error.
+type ChangeTrialEndDateNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateConflictResponseBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP response body for the "conflict" error.
+type ChangeTrialEndDateConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateUnsupportedMediaResponseBody is the type of the "admin"
+// service "changeTrialEndDate" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ChangeTrialEndDateUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateInvalidResponseBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP response body for the "invalid" error.
+type ChangeTrialEndDateInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateInvariantViolationResponseBody is the type of the "admin"
+// service "changeTrialEndDate" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ChangeTrialEndDateInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateUnexpectedResponseBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP response body for the "unexpected" error.
+type ChangeTrialEndDateUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateGatewayErrorResponseBody is the type of the "admin"
+// service "changeTrialEndDate" endpoint HTTP response body for the
+// "gateway_error" error.
+type ChangeTrialEndDateGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageUnavailableResponseBody is the type of the "admin" service
+// "getMeterUsage" endpoint HTTP response body for the "unavailable" error.
+type GetMeterUsageUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageUnauthorizedResponseBody is the type of the "admin" service
+// "getMeterUsage" endpoint HTTP response body for the "unauthorized" error.
+type GetMeterUsageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageForbiddenResponseBody is the type of the "admin" service
+// "getMeterUsage" endpoint HTTP response body for the "forbidden" error.
+type GetMeterUsageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageBadRequestResponseBody is the type of the "admin" service
+// "getMeterUsage" endpoint HTTP response body for the "bad_request" error.
+type GetMeterUsageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageNotFoundResponseBody is the type of the "admin" service
+// "getMeterUsage" endpoint HTTP response body for the "not_found" error.
+type GetMeterUsageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageConflictResponseBody is the type of the "admin" service
+// "getMeterUsage" endpoint HTTP response body for the "conflict" error.
+type GetMeterUsageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageUnsupportedMediaResponseBody is the type of the "admin" service
+// "getMeterUsage" endpoint HTTP response body for the "unsupported_media"
+// error.
+type GetMeterUsageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageInvalidResponseBody is the type of the "admin" service
+// "getMeterUsage" endpoint HTTP response body for the "invalid" error.
+type GetMeterUsageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageInvariantViolationResponseBody is the type of the "admin"
+// service "getMeterUsage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetMeterUsageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageUnexpectedResponseBody is the type of the "admin" service
+// "getMeterUsage" endpoint HTTP response body for the "unexpected" error.
+type GetMeterUsageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageGatewayErrorResponseBody is the type of the "admin" service
+// "getMeterUsage" endpoint HTTP response body for the "gateway_error" error.
+type GetMeterUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownUnavailableResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "unavailable" error.
+type GetSpendBreakdownUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownUnauthorizedResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "unauthorized" error.
+type GetSpendBreakdownUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownForbiddenResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "forbidden" error.
+type GetSpendBreakdownForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownBadRequestResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "bad_request" error.
+type GetSpendBreakdownBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownNotFoundResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "not_found" error.
+type GetSpendBreakdownNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownConflictResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "conflict" error.
+type GetSpendBreakdownConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownUnsupportedMediaResponseBody is the type of the "admin"
+// service "getSpendBreakdown" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetSpendBreakdownUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownInvalidResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "invalid" error.
+type GetSpendBreakdownInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownInvariantViolationResponseBody is the type of the "admin"
+// service "getSpendBreakdown" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetSpendBreakdownInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownUnexpectedResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "unexpected" error.
+type GetSpendBreakdownUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownGatewayErrorResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "gateway_error"
+// error.
+type GetSpendBreakdownGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportMatrixUnauthorizedResponseBody is the type of the "admin" service
+// "getSupportMatrix" endpoint HTTP response body for the "unauthorized" error.
+type GetSupportMatrixUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportMatrixForbiddenResponseBody is the type of the "admin" service
+// "getSupportMatrix" endpoint HTTP response body for the "forbidden" error.
+type GetSupportMatrixForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportMatrixBadRequestResponseBody is the type of the "admin" service
+// "getSupportMatrix" endpoint HTTP response body for the "bad_request" error.
+type GetSupportMatrixBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportMatrixNotFoundResponseBody is the type of the "admin" service
+// "getSupportMatrix" endpoint HTTP response body for the "not_found" error.
+type GetSupportMatrixNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportMatrixConflictResponseBody is the type of the "admin" service
+// "getSupportMatrix" endpoint HTTP response body for the "conflict" error.
+type GetSupportMatrixConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportMatrixUnsupportedMediaResponseBody is the type of the "admin"
+// service "getSupportMatrix" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetSupportMatrixUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportMatrixInvalidResponseBody is the type of the "admin" service
+// "getSupportMatrix" endpoint HTTP response body for the "invalid" error.
+type GetSupportMatrixInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportMatrixInvariantViolationResponseBody is the type of the "admin"
+// service "getSupportMatrix" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetSupportMatrixInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportMatrixUnexpectedResponseBody is the type of the "admin" service
+// "getSupportMatrix" endpoint HTTP response body for the "unexpected" error.
+type GetSupportMatrixUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportMatrixGatewayErrorResponseBody is the type of the "admin" service
+// "getSupportMatrix" endpoint HTTP response body for the "gateway_error" error.
+type GetSupportMatrixGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSupportMatrixUnauthorizedResponseBody is the type of the "admin"
+// service "updateSupportMatrix" endpoint HTTP response body for the
+// "unauthorized" error.
+type UpdateSupportMatrixUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSupportMatrixForbiddenResponseBody is the type of the "admin" service
+// "updateSupportMatrix" endpoint HTTP response body for the "forbidden" error.
+type UpdateSupportMatrixForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSupportMatrixBadRequestResponseBody is the type of the "admin" service
+// "updateSupportMatrix" endpoint HTTP response body for the "bad_request"
+// error.
+type UpdateSupportMatrixBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSupportMatrixNotFoundResponseBody is the type of the "admin" service
+// "updateSupportMatrix" endpoint HTTP response body for the "not_found" error.
+type UpdateSupportMatrixNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSupportMatrixConflictResponseBody is the type of the "admin" service
+// "updateSupportMatrix" endpoint HTTP response body for the "conflict" error.
+type UpdateSupportMatrixConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSupportMatrixUnsupportedMediaResponseBody is the type of the "admin"
+// service "updateSupportMatrix" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdateSupportMatrixUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSupportMatrixInvalidResponseBody is the type of the "admin" service
+// "updateSupportMatrix" endpoint HTTP response body for the "invalid" error.
+type UpdateSupportMatrixInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSupportMatrixInvariantViolationResponseBody is the type of the "admin"
+// service "updateSupportMatrix" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateSupportMatrixInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSupportMatrixUnexpectedResponseBody is the type of the "admin" service
+// "updateSupportMatrix" endpoint HTTP response body for the "unexpected" error.
+type UpdateSupportMatrixUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSupportMatrixGatewayErrorResponseBody is the type of the "admin"
+// service "updateSupportMatrix" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpdateSupportMatrixGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -10676,6 +11979,9 @@ type RemoteSessionIssuerResponseBody struct {
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// When set, calls to this issuer's OAuth endpoints ride this MCP tunnel
+	// instead of dialing directly.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
 	// captured by discovery.
 	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
@@ -10769,6 +12075,120 @@ type AssetResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the asset.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// MeterUsageWindowResponseBody is used to define fields on response body types.
+type MeterUsageWindowResponseBody struct {
+	// Inclusive UTC midnight window boundary
+	From string `form:"from" json:"from" xml:"from"`
+	// Exclusive UTC midnight window boundary
+	To string `form:"to" json:"to" xml:"to"`
+}
+
+// AdminMeterUsageBucketResponseBody is used to define fields on response body
+// types.
+type AdminMeterUsageBucketResponseBody struct {
+	// Inclusive UTC day boundary
+	From string `form:"from" json:"from" xml:"from"`
+	// Exclusive UTC day boundary
+	To string `form:"to" json:"to" xml:"to"`
+	// Exact integer ordinary usage quantity as a decimal string
+	Total string `form:"total" json:"total" xml:"total"`
+}
+
+// SpendProductResponseBody is used to define fields on response body types.
+type SpendProductResponseBody struct {
+	ID    string `form:"id" json:"id" xml:"id"`
+	Label string `form:"label" json:"label" xml:"label"`
+	Unit  string `form:"unit" json:"unit" xml:"unit"`
+	// Exact integer ordinary usage quantity as a decimal string
+	Quantity string `form:"quantity" json:"quantity" xml:"quantity"`
+	// Exact integer quantity to which rate_usd applies
+	RateQuantity string `form:"rate_quantity" json:"rate_quantity" xml:"rate_quantity"`
+	// Exact current PAYG USD list price
+	RateUsd string `form:"rate_usd" json:"rate_usd" xml:"rate_usd"`
+	// Exact estimated product cost at current PAYG list prices
+	CostUsd string `form:"cost_usd" json:"cost_usd" xml:"cost_usd"`
+	// Dense UTC daily product buckets, including in-progress and future days
+	Buckets []*SpendBucketResponseBody `form:"buckets" json:"buckets" xml:"buckets"`
+}
+
+// SpendBucketResponseBody is used to define fields on response body types.
+type SpendBucketResponseBody struct {
+	// Inclusive bucket boundary
+	From string `form:"from" json:"from" xml:"from"`
+	// Exclusive bucket boundary
+	To string `form:"to" json:"to" xml:"to"`
+	// Exact integer ordinary usage quantity as a decimal string
+	Quantity string `form:"quantity" json:"quantity" xml:"quantity"`
+	// Exact estimated cost at current PAYG list prices
+	CostUsd string `form:"cost_usd" json:"cost_usd" xml:"cost_usd"`
+}
+
+// SupportMethodResponseBody is used to define fields on response body types.
+type SupportMethodResponseBody struct {
+	ID     string                              `json:"id"`
+	Name   string                              `json:"name"`
+	Vendor string                              `json:"vendor"`
+	Plans  string                              `json:"plans"`
+	Facts  map[string]*SupportFactResponseBody `json:"facts"`
+}
+
+// SupportFactResponseBody is used to define fields on response body types.
+type SupportFactResponseBody struct {
+	Status string `json:"status"`
+	Note   string `json:"note"`
+	Verify bool   `json:"verify"`
+}
+
+// SupportPlatformResponseBody is used to define fields on response body types.
+type SupportPlatformResponseBody struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Vendor  string `json:"vendor"`
+	Family  string `json:"family"`
+	Surface string `json:"surface"`
+}
+
+// SupportCapabilityResponseBody is used to define fields on response body
+// types.
+type SupportCapabilityResponseBody struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Group string `json:"group"`
+}
+
+// SupportDraftResponseBody is used to define fields on response body types.
+type SupportDraftResponseBody struct {
+	Mappings   map[string]*SupportMappingResponseBody         `json:"mappings"`
+	References map[string]map[string]*SupportFactResponseBody `json:"references"`
+}
+
+// SupportMappingResponseBody is used to define fields on response body types.
+type SupportMappingResponseBody struct {
+	Applicability string                              `json:"applicability"`
+	Conditions    string                              `json:"conditions"`
+	Facts         map[string]*SupportFactResponseBody `json:"facts"`
+}
+
+// SupportDraftRequestBody is used to define fields on request body types.
+type SupportDraftRequestBody struct {
+	Mappings   map[string]*SupportMappingRequestBody         `json:"mappings"`
+	References map[string]map[string]*SupportFactRequestBody `json:"references"`
+}
+
+// SupportMappingRequestBody is used to define fields on request body types.
+type SupportMappingRequestBody struct {
+	Applicability *string                            `json:"applicability"`
+	Conditions    *string                            `json:"conditions"`
+	Facts         map[string]*SupportFactRequestBody `json:"facts"`
+}
+
+// SupportFactRequestBody is used to define fields on request body types.
+type SupportFactRequestBody struct {
+	Status *string `json:"status"`
+	Note   *string `json:"note"`
+	Verify *bool   `json:"verify"`
 }
 
 // NewGetSessionResponseBody builds the HTTP response body from the result of
@@ -11373,6 +12793,7 @@ func NewCreateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateGl
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               res.TunneledMcpServerID,
 		UserinfoEndpoint:                  res.UserinfoEndpoint,
 		IntrospectionEndpoint:             res.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
@@ -11518,6 +12939,7 @@ func NewUpdateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateGl
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               res.TunneledMcpServerID,
 		UserinfoEndpoint:                  res.UserinfoEndpoint,
 		IntrospectionEndpoint:             res.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
@@ -11784,6 +13206,231 @@ func NewUploadPlatformImageResponseBody(res *admin.UploadImageResult) *UploadPla
 	body := &UploadPlatformImageResponseBody{}
 	if res.Asset != nil {
 		body.Asset = marshalAdminAssetToAssetResponseBody(res.Asset)
+	}
+	return body
+}
+
+// NewStartTrialResponseBody builds the HTTP response body from the result of
+// the "startTrial" endpoint of the "admin" service.
+func NewStartTrialResponseBody(res *admin.AdminOrganization) *StartTrialResponseBody {
+	body := &StartTrialResponseBody{
+		ID:                   res.ID,
+		Name:                 res.Name,
+		Slug:                 res.Slug,
+		AccountType:          res.AccountType,
+		WorkosID:             res.WorkosID,
+		StripeCustomerID:     res.StripeCustomerID,
+		StripeSubscriptionID: res.StripeSubscriptionID,
+		Whitelisted:          res.Whitelisted,
+		DisabledAt:           res.DisabledAt,
+		TrialState:           res.TrialState,
+		TrialTier:            res.TrialTier,
+		TrialEndsAt:          res.TrialEndsAt,
+		TrialConvertedAt:     res.TrialConvertedAt,
+		TrialDemotedAt:       res.TrialDemotedAt,
+		MemberCount:          res.MemberCount,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateResponseBody builds the HTTP response body from the
+// result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateResponseBody(res *admin.AdminOrganization) *ChangeTrialEndDateResponseBody {
+	body := &ChangeTrialEndDateResponseBody{
+		ID:                   res.ID,
+		Name:                 res.Name,
+		Slug:                 res.Slug,
+		AccountType:          res.AccountType,
+		WorkosID:             res.WorkosID,
+		StripeCustomerID:     res.StripeCustomerID,
+		StripeSubscriptionID: res.StripeSubscriptionID,
+		Whitelisted:          res.Whitelisted,
+		DisabledAt:           res.DisabledAt,
+		TrialState:           res.TrialState,
+		TrialTier:            res.TrialTier,
+		TrialEndsAt:          res.TrialEndsAt,
+		TrialConvertedAt:     res.TrialConvertedAt,
+		TrialDemotedAt:       res.TrialDemotedAt,
+		MemberCount:          res.MemberCount,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
+	}
+	return body
+}
+
+// NewGetMeterUsageResponseBody builds the HTTP response body from the result
+// of the "getMeterUsage" endpoint of the "admin" service.
+func NewGetMeterUsageResponseBody(res *admin.AdminMeterUsageResponse) *GetMeterUsageResponseBody {
+	body := &GetMeterUsageResponseBody{
+		Family:            res.Family,
+		Unit:              res.Unit,
+		Total:             res.Total,
+		QueriedAt:         res.QueriedAt,
+		MeasurementMethod: res.MeasurementMethod,
+	}
+	if res.Window != nil {
+		body.Window = marshalAdminMeterUsageWindowToMeterUsageWindowResponseBody(res.Window)
+	}
+	if res.BillingCycles != nil {
+		body.BillingCycles = make([]*MeterUsageWindowResponseBody, len(res.BillingCycles))
+		for i, val := range res.BillingCycles {
+			if val == nil {
+				body.BillingCycles[i] = nil
+				continue
+			}
+			body.BillingCycles[i] = marshalAdminMeterUsageWindowToMeterUsageWindowResponseBody(val)
+		}
+	} else {
+		body.BillingCycles = []*MeterUsageWindowResponseBody{}
+	}
+	if res.Buckets != nil {
+		body.Buckets = make([]*AdminMeterUsageBucketResponseBody, len(res.Buckets))
+		for i, val := range res.Buckets {
+			if val == nil {
+				body.Buckets[i] = nil
+				continue
+			}
+			body.Buckets[i] = marshalAdminAdminMeterUsageBucketToAdminMeterUsageBucketResponseBody(val)
+		}
+	} else {
+		body.Buckets = []*AdminMeterUsageBucketResponseBody{}
+	}
+	return body
+}
+
+// NewGetSpendBreakdownResponseBody builds the HTTP response body from the
+// result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownResponseBody(res *admin.AdminSpendBreakdownResponse) *GetSpendBreakdownResponseBody {
+	body := &GetSpendBreakdownResponseBody{
+		Currency:     res.Currency,
+		PricingBasis: res.PricingBasis,
+		QueriedAt:    res.QueriedAt,
+		TotalCostUsd: res.TotalCostUsd,
+	}
+	if res.Window != nil {
+		body.Window = marshalAdminMeterUsageWindowToMeterUsageWindowResponseBody(res.Window)
+	}
+	if res.BillingCycles != nil {
+		body.BillingCycles = make([]*MeterUsageWindowResponseBody, len(res.BillingCycles))
+		for i, val := range res.BillingCycles {
+			if val == nil {
+				body.BillingCycles[i] = nil
+				continue
+			}
+			body.BillingCycles[i] = marshalAdminMeterUsageWindowToMeterUsageWindowResponseBody(val)
+		}
+	} else {
+		body.BillingCycles = []*MeterUsageWindowResponseBody{}
+	}
+	if res.Products != nil {
+		body.Products = make([]*SpendProductResponseBody, len(res.Products))
+		for i, val := range res.Products {
+			if val == nil {
+				body.Products[i] = nil
+				continue
+			}
+			body.Products[i] = marshalAdminSpendProductToSpendProductResponseBody(val)
+		}
+	} else {
+		body.Products = []*SpendProductResponseBody{}
+	}
+	return body
+}
+
+// NewGetSupportMatrixResponseBody builds the HTTP response body from the
+// result of the "getSupportMatrix" endpoint of the "admin" service.
+func NewGetSupportMatrixResponseBody(res *admin.SupportMatrix) *GetSupportMatrixResponseBody {
+	body := &GetSupportMatrixResponseBody{
+		Revision: res.Revision,
+	}
+	if res.Methods != nil {
+		body.Methods = make([]*SupportMethodResponseBody, len(res.Methods))
+		for i, val := range res.Methods {
+			if val == nil {
+				body.Methods[i] = nil
+				continue
+			}
+			body.Methods[i] = marshalAdminSupportMethodToSupportMethodResponseBody(val)
+		}
+	} else {
+		body.Methods = []*SupportMethodResponseBody{}
+	}
+	if res.Products != nil {
+		body.Products = make([]*SupportPlatformResponseBody, len(res.Products))
+		for i, val := range res.Products {
+			if val == nil {
+				body.Products[i] = nil
+				continue
+			}
+			body.Products[i] = marshalAdminSupportPlatformToSupportPlatformResponseBody(val)
+		}
+	} else {
+		body.Products = []*SupportPlatformResponseBody{}
+	}
+	if res.Capabilities != nil {
+		body.Capabilities = make([]*SupportCapabilityResponseBody, len(res.Capabilities))
+		for i, val := range res.Capabilities {
+			if val == nil {
+				body.Capabilities[i] = nil
+				continue
+			}
+			body.Capabilities[i] = marshalAdminSupportCapabilityToSupportCapabilityResponseBody(val)
+		}
+	} else {
+		body.Capabilities = []*SupportCapabilityResponseBody{}
+	}
+	if res.Draft != nil {
+		body.Draft = marshalAdminSupportDraftToSupportDraftResponseBody(res.Draft)
+	}
+	return body
+}
+
+// NewUpdateSupportMatrixResponseBody builds the HTTP response body from the
+// result of the "updateSupportMatrix" endpoint of the "admin" service.
+func NewUpdateSupportMatrixResponseBody(res *admin.SupportMatrix) *UpdateSupportMatrixResponseBody {
+	body := &UpdateSupportMatrixResponseBody{
+		Revision: res.Revision,
+	}
+	if res.Methods != nil {
+		body.Methods = make([]*SupportMethodResponseBody, len(res.Methods))
+		for i, val := range res.Methods {
+			if val == nil {
+				body.Methods[i] = nil
+				continue
+			}
+			body.Methods[i] = marshalAdminSupportMethodToSupportMethodResponseBody(val)
+		}
+	} else {
+		body.Methods = []*SupportMethodResponseBody{}
+	}
+	if res.Products != nil {
+		body.Products = make([]*SupportPlatformResponseBody, len(res.Products))
+		for i, val := range res.Products {
+			if val == nil {
+				body.Products[i] = nil
+				continue
+			}
+			body.Products[i] = marshalAdminSupportPlatformToSupportPlatformResponseBody(val)
+		}
+	} else {
+		body.Products = []*SupportPlatformResponseBody{}
+	}
+	if res.Capabilities != nil {
+		body.Capabilities = make([]*SupportCapabilityResponseBody, len(res.Capabilities))
+		for i, val := range res.Capabilities {
+			if val == nil {
+				body.Capabilities[i] = nil
+				continue
+			}
+			body.Capabilities[i] = marshalAdminSupportCapabilityToSupportCapabilityResponseBody(val)
+		}
+	} else {
+		body.Capabilities = []*SupportCapabilityResponseBody{}
+	}
+	if res.Draft != nil {
+		body.Draft = marshalAdminSupportDraftToSupportDraftResponseBody(res.Draft)
 	}
 	return body
 }
@@ -18912,6 +20559,882 @@ func NewServeImageGatewayErrorResponseBody(res *goa.ServiceError) *ServeImageGat
 	return body
 }
 
+// NewStartTrialUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "startTrial" endpoint of the "admin" service.
+func NewStartTrialUnauthorizedResponseBody(res *goa.ServiceError) *StartTrialUnauthorizedResponseBody {
+	body := &StartTrialUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartTrialForbiddenResponseBody builds the HTTP response body from the
+// result of the "startTrial" endpoint of the "admin" service.
+func NewStartTrialForbiddenResponseBody(res *goa.ServiceError) *StartTrialForbiddenResponseBody {
+	body := &StartTrialForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartTrialBadRequestResponseBody builds the HTTP response body from the
+// result of the "startTrial" endpoint of the "admin" service.
+func NewStartTrialBadRequestResponseBody(res *goa.ServiceError) *StartTrialBadRequestResponseBody {
+	body := &StartTrialBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartTrialNotFoundResponseBody builds the HTTP response body from the
+// result of the "startTrial" endpoint of the "admin" service.
+func NewStartTrialNotFoundResponseBody(res *goa.ServiceError) *StartTrialNotFoundResponseBody {
+	body := &StartTrialNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartTrialConflictResponseBody builds the HTTP response body from the
+// result of the "startTrial" endpoint of the "admin" service.
+func NewStartTrialConflictResponseBody(res *goa.ServiceError) *StartTrialConflictResponseBody {
+	body := &StartTrialConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartTrialUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "startTrial" endpoint of the "admin" service.
+func NewStartTrialUnsupportedMediaResponseBody(res *goa.ServiceError) *StartTrialUnsupportedMediaResponseBody {
+	body := &StartTrialUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartTrialInvalidResponseBody builds the HTTP response body from the
+// result of the "startTrial" endpoint of the "admin" service.
+func NewStartTrialInvalidResponseBody(res *goa.ServiceError) *StartTrialInvalidResponseBody {
+	body := &StartTrialInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartTrialInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "startTrial" endpoint of the "admin" service.
+func NewStartTrialInvariantViolationResponseBody(res *goa.ServiceError) *StartTrialInvariantViolationResponseBody {
+	body := &StartTrialInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartTrialUnexpectedResponseBody builds the HTTP response body from the
+// result of the "startTrial" endpoint of the "admin" service.
+func NewStartTrialUnexpectedResponseBody(res *goa.ServiceError) *StartTrialUnexpectedResponseBody {
+	body := &StartTrialUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartTrialGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "startTrial" endpoint of the "admin" service.
+func NewStartTrialGatewayErrorResponseBody(res *goa.ServiceError) *StartTrialGatewayErrorResponseBody {
+	body := &StartTrialGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateUnauthorizedResponseBody(res *goa.ServiceError) *ChangeTrialEndDateUnauthorizedResponseBody {
+	body := &ChangeTrialEndDateUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateForbiddenResponseBody builds the HTTP response body
+// from the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateForbiddenResponseBody(res *goa.ServiceError) *ChangeTrialEndDateForbiddenResponseBody {
+	body := &ChangeTrialEndDateForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateBadRequestResponseBody builds the HTTP response body
+// from the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateBadRequestResponseBody(res *goa.ServiceError) *ChangeTrialEndDateBadRequestResponseBody {
+	body := &ChangeTrialEndDateBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateNotFoundResponseBody builds the HTTP response body from
+// the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateNotFoundResponseBody(res *goa.ServiceError) *ChangeTrialEndDateNotFoundResponseBody {
+	body := &ChangeTrialEndDateNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateConflictResponseBody builds the HTTP response body from
+// the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateConflictResponseBody(res *goa.ServiceError) *ChangeTrialEndDateConflictResponseBody {
+	body := &ChangeTrialEndDateConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "changeTrialEndDate" endpoint of the "admin"
+// service.
+func NewChangeTrialEndDateUnsupportedMediaResponseBody(res *goa.ServiceError) *ChangeTrialEndDateUnsupportedMediaResponseBody {
+	body := &ChangeTrialEndDateUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateInvalidResponseBody builds the HTTP response body from
+// the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateInvalidResponseBody(res *goa.ServiceError) *ChangeTrialEndDateInvalidResponseBody {
+	body := &ChangeTrialEndDateInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "changeTrialEndDate" endpoint of the "admin"
+// service.
+func NewChangeTrialEndDateInvariantViolationResponseBody(res *goa.ServiceError) *ChangeTrialEndDateInvariantViolationResponseBody {
+	body := &ChangeTrialEndDateInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateUnexpectedResponseBody builds the HTTP response body
+// from the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateUnexpectedResponseBody(res *goa.ServiceError) *ChangeTrialEndDateUnexpectedResponseBody {
+	body := &ChangeTrialEndDateUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateGatewayErrorResponseBody(res *goa.ServiceError) *ChangeTrialEndDateGatewayErrorResponseBody {
+	body := &ChangeTrialEndDateGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageUnavailableResponseBody builds the HTTP response body from
+// the result of the "getMeterUsage" endpoint of the "admin" service.
+func NewGetMeterUsageUnavailableResponseBody(res *goa.ServiceError) *GetMeterUsageUnavailableResponseBody {
+	body := &GetMeterUsageUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getMeterUsage" endpoint of the "admin" service.
+func NewGetMeterUsageUnauthorizedResponseBody(res *goa.ServiceError) *GetMeterUsageUnauthorizedResponseBody {
+	body := &GetMeterUsageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageForbiddenResponseBody builds the HTTP response body from the
+// result of the "getMeterUsage" endpoint of the "admin" service.
+func NewGetMeterUsageForbiddenResponseBody(res *goa.ServiceError) *GetMeterUsageForbiddenResponseBody {
+	body := &GetMeterUsageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageBadRequestResponseBody builds the HTTP response body from
+// the result of the "getMeterUsage" endpoint of the "admin" service.
+func NewGetMeterUsageBadRequestResponseBody(res *goa.ServiceError) *GetMeterUsageBadRequestResponseBody {
+	body := &GetMeterUsageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageNotFoundResponseBody builds the HTTP response body from the
+// result of the "getMeterUsage" endpoint of the "admin" service.
+func NewGetMeterUsageNotFoundResponseBody(res *goa.ServiceError) *GetMeterUsageNotFoundResponseBody {
+	body := &GetMeterUsageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageConflictResponseBody builds the HTTP response body from the
+// result of the "getMeterUsage" endpoint of the "admin" service.
+func NewGetMeterUsageConflictResponseBody(res *goa.ServiceError) *GetMeterUsageConflictResponseBody {
+	body := &GetMeterUsageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getMeterUsage" endpoint of the "admin" service.
+func NewGetMeterUsageUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMeterUsageUnsupportedMediaResponseBody {
+	body := &GetMeterUsageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageInvalidResponseBody builds the HTTP response body from the
+// result of the "getMeterUsage" endpoint of the "admin" service.
+func NewGetMeterUsageInvalidResponseBody(res *goa.ServiceError) *GetMeterUsageInvalidResponseBody {
+	body := &GetMeterUsageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getMeterUsage" endpoint of the "admin" service.
+func NewGetMeterUsageInvariantViolationResponseBody(res *goa.ServiceError) *GetMeterUsageInvariantViolationResponseBody {
+	body := &GetMeterUsageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getMeterUsage" endpoint of the "admin" service.
+func NewGetMeterUsageUnexpectedResponseBody(res *goa.ServiceError) *GetMeterUsageUnexpectedResponseBody {
+	body := &GetMeterUsageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getMeterUsage" endpoint of the "admin" service.
+func NewGetMeterUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetMeterUsageGatewayErrorResponseBody {
+	body := &GetMeterUsageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownUnavailableResponseBody builds the HTTP response body
+// from the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownUnavailableResponseBody(res *goa.ServiceError) *GetSpendBreakdownUnavailableResponseBody {
+	body := &GetSpendBreakdownUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownUnauthorizedResponseBody(res *goa.ServiceError) *GetSpendBreakdownUnauthorizedResponseBody {
+	body := &GetSpendBreakdownUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownForbiddenResponseBody builds the HTTP response body from
+// the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownForbiddenResponseBody(res *goa.ServiceError) *GetSpendBreakdownForbiddenResponseBody {
+	body := &GetSpendBreakdownForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownBadRequestResponseBody builds the HTTP response body
+// from the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownBadRequestResponseBody(res *goa.ServiceError) *GetSpendBreakdownBadRequestResponseBody {
+	body := &GetSpendBreakdownBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownNotFoundResponseBody builds the HTTP response body from
+// the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownNotFoundResponseBody(res *goa.ServiceError) *GetSpendBreakdownNotFoundResponseBody {
+	body := &GetSpendBreakdownNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownConflictResponseBody builds the HTTP response body from
+// the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownConflictResponseBody(res *goa.ServiceError) *GetSpendBreakdownConflictResponseBody {
+	body := &GetSpendBreakdownConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getSpendBreakdown" endpoint of the "admin"
+// service.
+func NewGetSpendBreakdownUnsupportedMediaResponseBody(res *goa.ServiceError) *GetSpendBreakdownUnsupportedMediaResponseBody {
+	body := &GetSpendBreakdownUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownInvalidResponseBody builds the HTTP response body from
+// the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownInvalidResponseBody(res *goa.ServiceError) *GetSpendBreakdownInvalidResponseBody {
+	body := &GetSpendBreakdownInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getSpendBreakdown" endpoint of the "admin"
+// service.
+func NewGetSpendBreakdownInvariantViolationResponseBody(res *goa.ServiceError) *GetSpendBreakdownInvariantViolationResponseBody {
+	body := &GetSpendBreakdownInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownUnexpectedResponseBody(res *goa.ServiceError) *GetSpendBreakdownUnexpectedResponseBody {
+	body := &GetSpendBreakdownUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownGatewayErrorResponseBody(res *goa.ServiceError) *GetSpendBreakdownGatewayErrorResponseBody {
+	body := &GetSpendBreakdownGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportMatrixUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getSupportMatrix" endpoint of the "admin" service.
+func NewGetSupportMatrixUnauthorizedResponseBody(res *goa.ServiceError) *GetSupportMatrixUnauthorizedResponseBody {
+	body := &GetSupportMatrixUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportMatrixForbiddenResponseBody builds the HTTP response body from
+// the result of the "getSupportMatrix" endpoint of the "admin" service.
+func NewGetSupportMatrixForbiddenResponseBody(res *goa.ServiceError) *GetSupportMatrixForbiddenResponseBody {
+	body := &GetSupportMatrixForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportMatrixBadRequestResponseBody builds the HTTP response body from
+// the result of the "getSupportMatrix" endpoint of the "admin" service.
+func NewGetSupportMatrixBadRequestResponseBody(res *goa.ServiceError) *GetSupportMatrixBadRequestResponseBody {
+	body := &GetSupportMatrixBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportMatrixNotFoundResponseBody builds the HTTP response body from
+// the result of the "getSupportMatrix" endpoint of the "admin" service.
+func NewGetSupportMatrixNotFoundResponseBody(res *goa.ServiceError) *GetSupportMatrixNotFoundResponseBody {
+	body := &GetSupportMatrixNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportMatrixConflictResponseBody builds the HTTP response body from
+// the result of the "getSupportMatrix" endpoint of the "admin" service.
+func NewGetSupportMatrixConflictResponseBody(res *goa.ServiceError) *GetSupportMatrixConflictResponseBody {
+	body := &GetSupportMatrixConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportMatrixUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getSupportMatrix" endpoint of the "admin"
+// service.
+func NewGetSupportMatrixUnsupportedMediaResponseBody(res *goa.ServiceError) *GetSupportMatrixUnsupportedMediaResponseBody {
+	body := &GetSupportMatrixUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportMatrixInvalidResponseBody builds the HTTP response body from
+// the result of the "getSupportMatrix" endpoint of the "admin" service.
+func NewGetSupportMatrixInvalidResponseBody(res *goa.ServiceError) *GetSupportMatrixInvalidResponseBody {
+	body := &GetSupportMatrixInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportMatrixInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getSupportMatrix" endpoint of the "admin"
+// service.
+func NewGetSupportMatrixInvariantViolationResponseBody(res *goa.ServiceError) *GetSupportMatrixInvariantViolationResponseBody {
+	body := &GetSupportMatrixInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportMatrixUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getSupportMatrix" endpoint of the "admin" service.
+func NewGetSupportMatrixUnexpectedResponseBody(res *goa.ServiceError) *GetSupportMatrixUnexpectedResponseBody {
+	body := &GetSupportMatrixUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportMatrixGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getSupportMatrix" endpoint of the "admin" service.
+func NewGetSupportMatrixGatewayErrorResponseBody(res *goa.ServiceError) *GetSupportMatrixGatewayErrorResponseBody {
+	body := &GetSupportMatrixGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSupportMatrixUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "updateSupportMatrix" endpoint of the "admin" service.
+func NewUpdateSupportMatrixUnauthorizedResponseBody(res *goa.ServiceError) *UpdateSupportMatrixUnauthorizedResponseBody {
+	body := &UpdateSupportMatrixUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSupportMatrixForbiddenResponseBody builds the HTTP response body
+// from the result of the "updateSupportMatrix" endpoint of the "admin" service.
+func NewUpdateSupportMatrixForbiddenResponseBody(res *goa.ServiceError) *UpdateSupportMatrixForbiddenResponseBody {
+	body := &UpdateSupportMatrixForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSupportMatrixBadRequestResponseBody builds the HTTP response body
+// from the result of the "updateSupportMatrix" endpoint of the "admin" service.
+func NewUpdateSupportMatrixBadRequestResponseBody(res *goa.ServiceError) *UpdateSupportMatrixBadRequestResponseBody {
+	body := &UpdateSupportMatrixBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSupportMatrixNotFoundResponseBody builds the HTTP response body
+// from the result of the "updateSupportMatrix" endpoint of the "admin" service.
+func NewUpdateSupportMatrixNotFoundResponseBody(res *goa.ServiceError) *UpdateSupportMatrixNotFoundResponseBody {
+	body := &UpdateSupportMatrixNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSupportMatrixConflictResponseBody builds the HTTP response body
+// from the result of the "updateSupportMatrix" endpoint of the "admin" service.
+func NewUpdateSupportMatrixConflictResponseBody(res *goa.ServiceError) *UpdateSupportMatrixConflictResponseBody {
+	body := &UpdateSupportMatrixConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSupportMatrixUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "updateSupportMatrix" endpoint of the "admin"
+// service.
+func NewUpdateSupportMatrixUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateSupportMatrixUnsupportedMediaResponseBody {
+	body := &UpdateSupportMatrixUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSupportMatrixInvalidResponseBody builds the HTTP response body from
+// the result of the "updateSupportMatrix" endpoint of the "admin" service.
+func NewUpdateSupportMatrixInvalidResponseBody(res *goa.ServiceError) *UpdateSupportMatrixInvalidResponseBody {
+	body := &UpdateSupportMatrixInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSupportMatrixInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "updateSupportMatrix" endpoint of the
+// "admin" service.
+func NewUpdateSupportMatrixInvariantViolationResponseBody(res *goa.ServiceError) *UpdateSupportMatrixInvariantViolationResponseBody {
+	body := &UpdateSupportMatrixInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSupportMatrixUnexpectedResponseBody builds the HTTP response body
+// from the result of the "updateSupportMatrix" endpoint of the "admin" service.
+func NewUpdateSupportMatrixUnexpectedResponseBody(res *goa.ServiceError) *UpdateSupportMatrixUnexpectedResponseBody {
+	body := &UpdateSupportMatrixUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSupportMatrixGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "updateSupportMatrix" endpoint of the "admin" service.
+func NewUpdateSupportMatrixGatewayErrorResponseBody(res *goa.ServiceError) *UpdateSupportMatrixGatewayErrorResponseBody {
+	body := &UpdateSupportMatrixGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -19120,14 +21643,17 @@ func NewListOrganizationActivityPayload(organizationID string, cursor *string, a
 
 // NewListOrganizationsPayload builds a admin service listOrganizations
 // endpoint payload.
-func NewListOrganizationsPayload(q *string, accountType *string, accountTypes []string, trialStates []string, disabledStates []string, includeDisabled *bool, cursor *string, limit *int, sort *string, direction *string, page *int, adminSessionToken *string) *admin.ListOrganizationsPayload {
+func NewListOrganizationsPayload(q *string, accountType *string, accountTypes []string, trialStates []string, disabledStatus *string, minMembers *int64, maxMembers *int64, createdFrom *string, createdTo *string, cursor *string, limit *int, sort *string, direction *string, page *int, adminSessionToken *string) *admin.ListOrganizationsPayload {
 	v := &admin.ListOrganizationsPayload{}
 	v.Q = q
 	v.AccountType = accountType
 	v.AccountTypes = accountTypes
 	v.TrialStates = trialStates
-	v.DisabledStates = disabledStates
-	v.IncludeDisabled = includeDisabled
+	v.DisabledStatus = disabledStatus
+	v.MinMembers = minMembers
+	v.MaxMembers = maxMembers
+	v.CreatedFrom = createdFrom
+	v.CreatedTo = createdTo
 	v.Cursor = cursor
 	v.Limit = limit
 	v.Sort = sort
@@ -19309,6 +21835,7 @@ func NewCreateGlobalIssuerPayload(body *CreateGlobalIssuerRequestBody, adminSess
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               body.TunneledMcpServerID,
 		UserinfoEndpoint:                  body.UserinfoEndpoint,
 		IntrospectionEndpoint:             body.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
@@ -19426,6 +21953,7 @@ func NewUpdateGlobalIssuerPayload(body *UpdateGlobalIssuerRequestBody, adminSess
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               body.TunneledMcpServerID,
 		UserinfoEndpoint:                  body.UserinfoEndpoint,
 		IntrospectionEndpoint:             body.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
@@ -19572,6 +22100,75 @@ func NewUploadPlatformImagePayload(contentType string, adminSessionToken *string
 func NewServeImageForm(id string) *admin.ServeImageForm {
 	v := &admin.ServeImageForm{}
 	v.ID = id
+
+	return v
+}
+
+// NewStartTrialPayload builds a admin service startTrial endpoint payload.
+func NewStartTrialPayload(body *StartTrialRequestBody, adminSessionToken *string) *admin.StartTrialPayload {
+	v := &admin.StartTrialPayload{
+		ID:   *body.ID,
+		Days: *body.Days,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewChangeTrialEndDatePayload builds a admin service changeTrialEndDate
+// endpoint payload.
+func NewChangeTrialEndDatePayload(body *ChangeTrialEndDateRequestBody, adminSessionToken *string) *admin.ChangeTrialEndDatePayload {
+	v := &admin.ChangeTrialEndDatePayload{
+		ID:     *body.ID,
+		EndsAt: *body.EndsAt,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetMeterUsagePayload builds a admin service getMeterUsage endpoint
+// payload.
+func NewGetMeterUsagePayload(organizationID string, family string, from *string, to *string, adminSessionToken *string) *admin.GetMeterUsagePayload {
+	v := &admin.GetMeterUsagePayload{}
+	v.OrganizationID = organizationID
+	v.Family = family
+	v.From = from
+	v.To = to
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetSpendBreakdownPayload builds a admin service getSpendBreakdown
+// endpoint payload.
+func NewGetSpendBreakdownPayload(organizationID string, from *string, to *string, adminSessionToken *string) *admin.GetSpendBreakdownPayload {
+	v := &admin.GetSpendBreakdownPayload{}
+	v.OrganizationID = organizationID
+	v.From = from
+	v.To = to
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetSupportMatrixPayload builds a admin service getSupportMatrix endpoint
+// payload.
+func NewGetSupportMatrixPayload(adminSessionToken *string) *admin.GetSupportMatrixPayload {
+	v := &admin.GetSupportMatrixPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewUpdateSupportMatrixPayload builds a admin service updateSupportMatrix
+// endpoint payload.
+func NewUpdateSupportMatrixPayload(body *UpdateSupportMatrixRequestBody, adminSessionToken *string) *admin.UpdateSupportMatrixPayload {
+	v := &admin.UpdateSupportMatrixPayload{
+		Revision: *body.Revision,
+	}
+	v.Draft = unmarshalSupportDraftRequestBodyToAdminSupportDraft(body.Draft)
+	v.AdminSessionToken = adminSessionToken
 
 	return v
 }
@@ -19875,6 +22472,9 @@ func ValidateCreateGlobalIssuerRequestBody(body *CreateGlobalIssuerRequestBody) 
 	if body.LogoAssetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
 	}
+	if body.TunneledMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
+	}
 	return
 }
 
@@ -19925,6 +22525,165 @@ func ValidateMigrateToGlobalIssuerRequestBody(body *MigrateToGlobalIssuerRequest
 	}
 	if body.TargetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.target_id", *body.TargetID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateStartTrialRequestBody runs the validations defined on
+// StartTrialRequestBody
+func ValidateStartTrialRequestBody(body *StartTrialRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Days == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("days", "body"))
+	}
+	if body.ID != nil {
+		if utf8.RuneCountInString(*body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", *body.ID, utf8.RuneCountInString(*body.ID), 1, true))
+		}
+	}
+	if body.Days != nil {
+		if *body.Days < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.days", *body.Days, 1, true))
+		}
+	}
+	if body.Days != nil {
+		if *body.Days > 365 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.days", *body.Days, 365, false))
+		}
+	}
+	return
+}
+
+// ValidateChangeTrialEndDateRequestBody runs the validations defined on
+// ChangeTrialEndDateRequestBody
+func ValidateChangeTrialEndDateRequestBody(body *ChangeTrialEndDateRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.EndsAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ends_at", "body"))
+	}
+	if body.ID != nil {
+		if utf8.RuneCountInString(*body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", *body.ID, utf8.RuneCountInString(*body.ID), 1, true))
+		}
+	}
+	if body.EndsAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.ends_at", *body.EndsAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUpdateSupportMatrixRequestBody runs the validations defined on
+// UpdateSupportMatrixRequestBody
+func ValidateUpdateSupportMatrixRequestBody(body *UpdateSupportMatrixRequestBody) (err error) {
+	if body.Revision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revision", "body"))
+	}
+	if body.Draft == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("draft", "body"))
+	}
+	if body.Revision != nil {
+		if utf8.RuneCountInString(*body.Revision) < 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.revision", *body.Revision, utf8.RuneCountInString(*body.Revision), 64, true))
+		}
+	}
+	if body.Revision != nil {
+		if utf8.RuneCountInString(*body.Revision) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.revision", *body.Revision, utf8.RuneCountInString(*body.Revision), 64, false))
+		}
+	}
+	if body.Draft != nil {
+		if err2 := ValidateSupportDraftRequestBody(body.Draft); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateSupportDraftRequestBody runs the validations defined on
+// SupportDraftRequestBody
+func ValidateSupportDraftRequestBody(body *SupportDraftRequestBody) (err error) {
+	if body.Mappings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mappings", "body"))
+	}
+	if body.References == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("references", "body"))
+	}
+	for _, v := range body.Mappings {
+		if v != nil {
+			if err2 := ValidateSupportMappingRequestBody(v); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, v := range body.References {
+		for _, v := range v {
+			if v != nil {
+				if err2 := ValidateSupportFactRequestBody(v); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+	}
+	return
+}
+
+// ValidateSupportMappingRequestBody runs the validations defined on
+// SupportMappingRequestBody
+func ValidateSupportMappingRequestBody(body *SupportMappingRequestBody) (err error) {
+	if body.Applicability == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applicability", "body"))
+	}
+	if body.Conditions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("conditions", "body"))
+	}
+	if body.Facts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("facts", "body"))
+	}
+	if body.Applicability != nil {
+		if !(*body.Applicability == "unknown" || *body.Applicability == "applicable" || *body.Applicability == "na") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.applicability", *body.Applicability, []any{"unknown", "applicable", "na"}))
+		}
+	}
+	if body.Conditions != nil {
+		if utf8.RuneCountInString(*body.Conditions) > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.conditions", *body.Conditions, utf8.RuneCountInString(*body.Conditions), 10000, false))
+		}
+	}
+	for _, v := range body.Facts {
+		if v != nil {
+			if err2 := ValidateSupportFactRequestBody(v); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSupportFactRequestBody runs the validations defined on
+// SupportFactRequestBody
+func ValidateSupportFactRequestBody(body *SupportFactRequestBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Note == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("note", "body"))
+	}
+	if body.Verify == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("verify", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "supported" || *body.Status == "partial" || *body.Status == "unimplemented" || *body.Status == "impossible" || *body.Status == "na" || *body.Status == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"supported", "partial", "unimplemented", "impossible", "na", "unknown"}))
+		}
+	}
+	if body.Note != nil {
+		if utf8.RuneCountInString(*body.Note) > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", *body.Note, utf8.RuneCountInString(*body.Note), 10000, false))
+		}
 	}
 	return
 }

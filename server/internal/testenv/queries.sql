@@ -1024,6 +1024,17 @@ INSERT INTO mcp_servers (id, project_id, toolset_id, visibility)
 VALUES (@id, @project_id, @toolset_id, @visibility)
 RETURNING id;
 
+-- name: CreateMCPServerCatalogueFixtures :execrows
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id, visibility)
+SELECT
+    generate_uuidv7(),
+    @project_id,
+    @name_prefix::text || LPAD(series::text, 4, '0'),
+    @slug_prefix::text || LPAD(series::text, 4, '0'),
+    @toolset_id,
+    @visibility
+FROM generate_series(0, GREATEST(sqlc.arg(server_count)::integer - 1, -1)) AS series;
+
 -- name: CreateMCPGatewayFixture :one
 INSERT INTO meta_mcp_servers (id, organization_id, project_id, name)
 VALUES (@id, @organization_id, @project_id, @name)
@@ -1069,3 +1080,212 @@ WHERE organization_id = @organization_id AND principal_urn LIKE 'agent:%';
 
 -- name: CountDemoSeedAPIKeysFixture :one
 SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;
+
+-- name: CountAssistantAttachments :one
+-- Count stored attachments, including those whose targets are soft-deleted.
+SELECT
+  (SELECT count(*) FROM assistant_toolsets at
+   WHERE at.project_id = @project_id AND at.assistant_id = @assistant_id) AS toolsets,
+  (SELECT count(*) FROM assistant_mcp_servers ams
+   WHERE ams.project_id = @project_id AND ams.assistant_id = @assistant_id) AS mcp_servers;
+
+-- Shared attachment fixtures exercise authorization boundaries in remote-session,
+-- issuer-gate, and user-session projection tests.
+
+-- name: RevokeAttachmentByIDFixture :execrows
+UPDATE principal_remote_session_bindings SET revoked_at = clock_timestamp() WHERE id = $1;
+
+-- name: CountAttachmentAuditEventsFixture :one
+SELECT count(*) FROM audit_logs
+ WHERE project_id = @project_id AND organization_id = @organization_id AND subject_id = @subject_id
+ AND actor_id = @actor_id AND action IN ('remote-session:attach', 'remote-session:detach')
+ AND metadata->>'principal_id' = @principal_id::text AND metadata->>'binding_id' IN (@binding_id::text, @replacement_binding_id::text)
+ AND metadata ? 'grant_generation';
+
+-- name: SetAttachmentSourceSubjectFixture :execrows
+UPDATE remote_sessions SET subject_urn = $1 WHERE id = $2;
+
+-- name: EnableAttachmentSourceRefreshFixture :execrows
+UPDATE remote_sessions SET refresh_token_encrypted = 'refresh-ciphertext', auto_refresh = true, updated_at = $2 WHERE id = $1;
+
+-- name: CountAttachmentHumanSessionsFixture :one
+SELECT count(*) FROM user_sessions WHERE subject_urn = $1;
+
+-- name: ClearAttachmentRefreshClaimFixture :execrows
+UPDATE remote_sessions SET last_refresh_attempt_at = NULL WHERE id = $1;
+
+-- name: SuspendAttachmentAgentFixture :execrows
+UPDATE agents SET suspended_at = now() WHERE id = $1 AND organization_id = $2;
+
+-- name: RevokeAttachmentAgentFixture :execrows
+UPDATE agents SET revoked_at = now() WHERE id = $1 AND organization_id = $2;
+
+-- name: LatchAttachmentOwnerFixture :execrows
+UPDATE agents SET owner_reassignment_required_at = now(), owner_reassignment_reason = 'owner-loss' WHERE id = $1 AND organization_id = $2;
+
+-- name: SoftDeleteAttachmentMembershipFixture :execrows
+UPDATE organization_user_relationships SET deleted_at = now() WHERE user_id = $1 AND organization_id = $2;
+
+-- name: SoftDeleteAttachmentOwnerFixture :execrows
+UPDATE users SET deleted_at = now() WHERE id = $1;
+
+-- name: AddAttachmentReplacementOwnerMembershipFixture :execrows
+INSERT INTO organization_user_relationships (organization_id, user_id) VALUES ($1, 'replacement-owner');
+
+-- name: UnlinkAttachmentClientFixture :execrows
+DELETE FROM remote_session_client_user_session_issuers WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2;
+
+-- name: SoftDeleteAttachmentConfigFixture :execrows
+UPDATE user_session_issuers SET deleted_at = now() WHERE id = $1 AND project_id = $2;
+
+-- name: SoftDeleteAttachmentClientFixture :execrows
+UPDATE remote_session_clients SET deleted_at = now() WHERE id = $1 AND project_id = $2;
+
+-- name: SoftDeleteAttachmentIssuerFixture :execrows
+UPDATE remote_session_issuers SET deleted_at = now() WHERE id = $1 AND project_id = $2;
+
+-- name: SoftDeleteAttachmentProjectFixture :execrows
+UPDATE projects SET deleted_at = now() WHERE id = $1;
+
+-- name: DisableAttachmentSourceRefreshFixture :execrows
+UPDATE remote_sessions SET auto_refresh = false WHERE id = $1;
+
+-- name: DisableAttachmentRefreshFeatureFixture :execrows
+UPDATE organization_features SET deleted_at = now() WHERE organization_id = $1 AND feature_name = 'remote_session_auto_refresh';
+
+-- name: SetAttachmentSourceIdentityFixture :execrows
+UPDATE remote_sessions SET upstream_email = $2, upstream_display_name = $3, identity_source = $4
+ WHERE id = $1 AND user_session_issuer_id = $5;
+
+-- name: RestoreAttachmentConfigFixture :execrows
+UPDATE user_session_issuers SET deleted_at = NULL WHERE id = $1 AND project_id = $2;
+
+-- name: CreateAttachmentMembershipFixture :execrows
+INSERT INTO organization_user_relationships (organization_id, user_id) VALUES ($1, $2);
+
+-- name: SetAttachmentAgentOwnerFixture :execrows
+UPDATE agents SET owner_user_id = $1 WHERE id = $2 AND organization_id = $3;
+
+-- name: MakeAttachmentClientGlobalFixture :execrows
+UPDATE remote_session_clients SET project_id = NULL, organization_id = NULL WHERE id = $1;
+
+-- name: MakeAttachmentIssuerGlobalFixture :execrows
+UPDATE remote_session_issuers SET project_id = NULL, organization_id = NULL WHERE id = $1;
+
+-- name: SoftDeleteAttachmentSourceFixture :execrows
+UPDATE remote_sessions SET deleted_at = clock_timestamp() WHERE id = $1;
+
+-- name: CreateAttachmentAgentFixture :execrows
+INSERT INTO agents (id, organization_id, owner_user_id, name) VALUES ($1, $2, $3, $4);
+
+-- name: InsertAttachmentFixture :execrows
+INSERT INTO principal_remote_session_bindings
+ (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, attached_by_subject_id, grant_generation)
+ VALUES ($1,$2,$3,$4,$5,$6,$7,$8);
+
+-- name: TransferAttachmentToReplacementOwnerFixture :execrows
+UPDATE agents SET owner_user_id = 'replacement-owner' WHERE id = $1 AND organization_id = $2;
+
+-- name: AttachmentSourceWasUsedFixture :one
+SELECT (last_used_at IS NOT NULL)::boolean AS used FROM remote_sessions WHERE id = $1;
+
+-- name: RevokeAgentAttachmentsFixture :execrows
+UPDATE principal_remote_session_bindings SET revoked_at = clock_timestamp() WHERE project_id = $1 AND principal_id = $2;
+
+-- name: RestoreAgentAttachmentsFixture :execrows
+UPDATE principal_remote_session_bindings SET revoked_at = NULL WHERE project_id = $1 AND principal_id = $2;
+
+-- name: CreateAttachmentUpstreamAgentFixture :execrows
+INSERT INTO agents (id, organization_id, owner_user_id, name) VALUES ($1, $2, $3, 'upstream-agent');
+
+-- name: GetAttachmentSourceIDFixture :one
+SELECT id FROM remote_sessions WHERE remote_session_client_id = $1 AND subject_urn = $2;
+
+-- name: CreateAttachmentForeignProjectFixture :execrows
+INSERT INTO projects (id, organization_id, name, slug) VALUES ($1, $2, 'Other attachment project', 'other-attachment');
+
+-- name: CreateAttachmentForeignOrganizationFixture :execrows
+INSERT INTO organization_metadata (id, name, slug) VALUES ('org_attachment_other', 'Other attachment organization', 'other-attachment');
+
+-- name: InsertAttachmentFromSourceFixture :execrows
+INSERT INTO principal_remote_session_bindings
+    (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
+    SELECT @project, @organization, @agent, @requesting, @client, s.id, s.grant_generation, s.subject_urn FROM remote_sessions AS s WHERE s.id = @source;
+
+-- name: MutateAttachmentExpiredAccessRemainsRefreshableFixture :execrows
+UPDATE remote_sessions SET access_expires_at = clock_timestamp() - interval '1 hour', refresh_expires_at = clock_timestamp() + interval '1 day' WHERE id = @source;
+
+-- name: MutateAttachmentDetachedBindingFixture :execrows
+DELETE FROM principal_remote_session_bindings WHERE project_id = @project AND principal_id = @agent;
+
+-- name: MutateAttachmentRevokedBindingFixture :execrows
+UPDATE principal_remote_session_bindings SET revoked_at = clock_timestamp() WHERE project_id = @project AND principal_id = @agent;
+
+-- name: MutateAttachmentSupersededGrantGenerationFixture :execrows
+UPDATE remote_sessions SET grant_generation = grant_generation + 1 WHERE id = @source;
+
+-- name: MutateAttachmentDeletedSourceFixture :execrows
+UPDATE remote_sessions SET deleted_at = clock_timestamp() WHERE id = @source;
+
+-- name: MutateAttachmentSuspendedAgentFixture :execrows
+UPDATE agents SET suspended_at = clock_timestamp() WHERE id = @agent AND organization_id = @organization;
+
+-- name: MutateAttachmentRevokedAgentFixture :execrows
+UPDATE agents SET revoked_at = clock_timestamp() WHERE id = @agent AND organization_id = @organization;
+
+-- name: MutateAttachmentDeletedAgentFixture :execrows
+UPDATE agents SET deleted_at = clock_timestamp() WHERE id = @agent AND organization_id = @organization;
+
+-- name: MutateAttachmentOwnerReassignmentRequiredFixture :execrows
+UPDATE agents SET owner_reassignment_required_at = clock_timestamp(), owner_reassignment_reason = 'membership_removed' WHERE id = @agent AND organization_id = @organization;
+
+-- name: MutateAttachmentDeletedOwnerFixture :execrows
+UPDATE users SET deleted_at = clock_timestamp() WHERE id = @owner;
+
+-- name: MutateAttachmentInactiveOwnerMembershipFixture :execrows
+UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE user_id = @owner AND organization_id = @organization;
+
+-- name: MutateAttachmentClientDetachedFromRequestingIssuerFixture :execrows
+DELETE FROM remote_session_client_user_session_issuers WHERE remote_session_client_id = @client AND user_session_issuer_id = @requesting;
+
+-- name: MutateAttachmentDeletedClientFixture :execrows
+UPDATE remote_session_clients SET deleted_at = clock_timestamp() WHERE id = @client AND project_id = @project;
+
+-- name: MutateAttachmentDeletedRemoteIssuerFixture :execrows
+UPDATE remote_session_issuers SET deleted_at = clock_timestamp() WHERE id = (SELECT c.remote_session_issuer_id FROM remote_session_clients AS c WHERE c.id = @client) AND remote_session_issuers.project_id = @project;
+
+-- name: MutateAttachmentDeletedProvenanceIssuerFixture :execrows
+UPDATE user_session_issuers SET deleted_at = clock_timestamp() WHERE id = @provenance AND project_id = @project;
+
+-- name: MutateAttachmentForeignProjectBindingFixture :execrows
+UPDATE principal_remote_session_bindings SET project_id = @foreign_project WHERE project_id = @project AND principal_id = @agent;
+
+-- name: MutateAttachmentForeignProjectClientFixture :execrows
+UPDATE remote_session_clients SET project_id = @foreign_project WHERE id = @client AND project_id = @project;
+
+-- name: MutateAttachmentForeignProjectRemoteIssuerFixture :execrows
+UPDATE remote_session_issuers SET project_id = @foreign_project WHERE id = (SELECT c.remote_session_issuer_id FROM remote_session_clients AS c WHERE c.id = @client) AND remote_session_issuers.project_id = @project;
+
+-- name: MutateAttachmentForeignProjectProvenanceFixture :execrows
+UPDATE user_session_issuers SET project_id = @foreign_project WHERE id = @provenance AND project_id = @project;
+
+-- name: MutateAttachmentForeignOrganizationClientFixture :execrows
+UPDATE remote_session_clients SET project_id = NULL, organization_id = 'org_attachment_other' WHERE id = @client AND project_id = @project;
+
+-- name: MutateAttachmentForeignOrganizationProvenanceFixture :execrows
+UPDATE user_session_issuers SET project_id = NULL, organization_id = 'org_attachment_other' WHERE id = @provenance AND project_id = @project;
+
+-- name: MutateAttachmentDifferentSourceSubjectFixture :execrows
+UPDATE remote_sessions SET subject_urn = 'user:another-owner' WHERE id = @source;
+
+-- name: MutateAttachmentDirectAgentSourceDoesNotBypassAttachmentFixture :execrows
+UPDATE remote_sessions SET subject_urn = @agent_subject WHERE id = @source;
+
+-- name: MutateAttachmentDifferentAttachingSubjectFixture :execrows
+UPDATE principal_remote_session_bindings SET attached_by_subject_id = 'user:another-owner' WHERE project_id = @project AND principal_id = @agent;
+
+-- name: MutateAttachmentDifferentSourceClientFixture :execrows
+UPDATE principal_remote_session_bindings SET remote_session_client_id = @other_client WHERE project_id = @project AND principal_id = @agent;
+
+-- name: MutateAttachmentDifferentRequestingIssuerFixture :execrows
+UPDATE principal_remote_session_bindings SET user_session_issuer_id = @provenance WHERE project_id = @project AND principal_id = @agent;

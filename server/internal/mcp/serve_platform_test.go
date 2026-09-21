@@ -21,6 +21,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -28,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -414,11 +416,11 @@ func TestServePlatformToolset_PlatformMCPReadNonManagedAssistantRejected(t *test
 }
 
 // tools/call must round-trip through the re-served reader against the seeded
-// org: list_projects returns the project the auth context lives in.
+// org: list_projects returns only projects the caller has permission to read.
 func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -453,7 +455,33 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, body, token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "list_projects call must succeed: %s", w.Body.String())
-	require.Contains(t, w.Body.String(), authCtx.ProjectID.String(), "the caller's project must appear in the listing")
+	require.NotContains(t, w.Body.String(), `"error"`)
+	require.Contains(t, w.Body.String(), `"projects":[]`)
+	require.NotContains(t, w.Body.String(), authCtx.ProjectID.String(), "org:admin alone does not grant project:read")
+
+	require.NoError(t, authz.PatchPrincipalGrants(
+		t.Context(), ti.conn, authCtx.ActiveOrganizationID,
+		urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		[]*authz.RoleGrant{{Scope: string(authz.ScopeProjectRead), Selectors: []authz.Selector{authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String())}}},
+		nil,
+	))
+	w, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, body, token)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "list_projects call must succeed: %s", w.Body.String())
+	require.NotContains(t, w.Body.String(), `"error"`)
+	require.Contains(t, w.Body.String(), authCtx.ProjectID.String(), "the caller's readable project must appear in the listing")
+
+	events := scanAttributes(recorder, mcpriskscan.SurfacePlatformMCP)
+	require.Len(t, events, 2)
+	for _, event := range events {
+		require.Equal(t, authCtx.ActiveOrganizationID, event[attr.OrganizationIDKey])
+		require.Equal(t, authCtx.ProjectID.String(), event[attr.ProjectIDKey])
+		require.Equal(t, "list_projects", event[attr.ToolNameKey])
+		require.Empty(t, event[attr.McpServerIDKey])
+		require.Empty(t, event[attr.ToolsetIDKey])
+		require.Equal(t, mcpriskscan.MethodToolsCall, event["gram.mcp.risk.scan.method"])
+		require.Equal(t, mcpriskscan.PhaseBeforeExecution, event["gram.mcp.risk.scan.phase"])
+	}
 }
 
 // grantLiveOrgAdmin persists an org:admin grant for the auth context's user.

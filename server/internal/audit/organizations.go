@@ -31,10 +31,12 @@ const (
 
 	ActionOrganizationEnterpriseTrialArmed Action = "organization:enterprise_trial_armed"
 
-	ActionOrganizationEnterpriseTrialDemoted   Action = "organization:enterprise_trial_demoted"
-	ActionOrganizationEnterpriseTrialRearmed   Action = "organization:enterprise_trial_rearmed"
-	ActionOrganizationEnterpriseTrialExtended  Action = "organization:enterprise_trial_extended"
-	ActionOrganizationEnterpriseTrialConverted Action = "organization:enterprise_trial_converted"
+	ActionOrganizationEnterpriseTrialDemoted    Action = "organization:enterprise_trial_demoted"
+	ActionOrganizationEnterpriseTrialRearmed    Action = "organization:enterprise_trial_rearmed"
+	ActionOrganizationEnterpriseTrialExtended   Action = "organization:enterprise_trial_extended"
+	ActionOrganizationEnterpriseTrialConverted  Action = "organization:enterprise_trial_converted"
+	ActionOrganizationEnterpriseTrialStarted    Action = "organization:enterprise_trial_started"
+	ActionOrganizationEnterpriseTrialEndChanged Action = "organization:enterprise_trial_end_changed"
 
 	ActionOrganizationPaygActivated   Action = "organization:payg_activated"
 	ActionOrganizationPaygDeactivated Action = "organization:payg_deactivated"
@@ -597,6 +599,58 @@ func (l *Logger) LogOrganizationEnterpriseTrialRearmed(ctx context.Context, dbtx
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
 }
 
+// LogOrganizationEnterpriseTrialStartedEvent records an operator granting a
+// new enterprise trial, either to an organization that never trialled or to
+// one whose previous trial expired without converting or being demoted.
+type LogOrganizationEnterpriseTrialStartedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	AccountType string
+	TrialEndsAt time.Time
+}
+
+func (l *Logger) LogOrganizationEnterpriseTrialStarted(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialStartedEvent) error {
+	action := ActionOrganizationEnterpriseTrialStarted
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"account_type":  event.AccountType,
+		"trial_ends_at": event.TrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       metadata,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
+}
+
 // LogOrganizationEnterpriseTrialExtendedEvent records an operator moving a
 // running trial's end date forward. Both dates are carried so the entry never
 // depends on inverting the calendar-day arithmetic, which is exact only while
@@ -621,6 +675,68 @@ func (l *Logger) LogOrganizationEnterpriseTrialExtended(ctx context.Context, dbt
 
 	metadata, err := marshalAuditPayload(map[string]any{
 		"extended_by_days":       event.ExtendedByDays,
+		"previous_trial_ends_at": event.PreviousTrialEndsAt,
+		"trial_ends_at":          event.TrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+	beforeSnapshot, err := marshalAuditPayload(map[string]any{
+		"trial_ends_at": event.PreviousTrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(map[string]any{
+		"trial_ends_at": event.TrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       metadata,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
+}
+
+// LogOrganizationEnterpriseTrialEndChangedEvent records the previous and new end dates.
+type LogOrganizationEnterpriseTrialEndChangedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	PreviousTrialEndsAt time.Time
+	TrialEndsAt         time.Time
+}
+
+func (l *Logger) LogOrganizationEnterpriseTrialEndChanged(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialEndChangedEvent) error {
+	action := ActionOrganizationEnterpriseTrialEndChanged
+
+	metadata, err := marshalAuditPayload(map[string]any{
 		"previous_trial_ends_at": event.PreviousTrialEndsAt,
 		"trial_ends_at":          event.TrialEndsAt,
 	})

@@ -55,5 +55,5 @@ func applyPrincipalCredentialAdmission(ctx context.Context, admission PrincipalC
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, admission.OwnerUserID)
-	return principalCredentialPoliciesToContext(ctx, admission.Credential, admission.Agent, admission.Owner), nil
+	return admittedPoliciesToContext(ctx, admission.Credential, admission.Agent, admission.Owner), nil
 }

@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -12,7 +13,9 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestPluginPublishWorkflowID(t *testing.T) {
@@ -227,4 +230,49 @@ func TestPluginPublishWorkflowDebounced_StarterForceSignalAppliesToFirstRun(t *t
 	captured := recorder.captured()
 	require.Len(t, captured, 1)
 	require.False(t, captured[0].SkipIfUnchanged)
+}
+
+// rejectingPublishClient stands in for the plugins service and refuses every
+// publish the way an organization with no member to attribute keys to does.
+type rejectingPublishClient struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (c *rejectingPublishClient) PublishProject(context.Context, plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	return nil, fmt.Errorf("%w: organization %q", plugins.ErrPluginAPIKeyCreatorNotMember, "org_none")
+}
+
+func TestPluginPublishWorkflow_NoActorIsRejectedOnce(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	// Run the registered activity shim, not a stand-in: the shim is the last
+	// hop before the Temporal SDK decides retryability from the error's
+	// concrete type, so a wrapper there silently turns the permanent
+	// rejection into three attempts and a failed workflow.
+	client := &rejectingPublishClient{mu: sync.Mutex{}, calls: 0}
+	var a Activities
+	a.pluginPublisher = activities.NewPluginPublisher(testenv.NewLogger(t), nil, client)
+	env.RegisterActivity(a.PublishPluginProject)
+
+	env.ExecuteWorkflow(PluginPublishWorkflow, PluginPublishParams{
+		ProjectID:       uuid.New(),
+		CreatedByUserID: "user_01HZ",
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var result plugins.PublishProjectResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.True(t, result.Skipped)
+	require.Equal(t, 1, client.calls, "a permanent rejection must not be retried")
 }

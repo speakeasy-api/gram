@@ -19,6 +19,8 @@ describe("proxyRegisterUpstreamClient", () => {
         client_id: "abc",
         client_secret: "shh",
         token_endpoint_auth_method: "client_secret_basic",
+        client_id_issued_at: "2026-06-10T22:27:12Z",
+        client_secret_expires_at: "2026-09-08T22:27:12Z",
       }),
     );
 
@@ -30,6 +32,54 @@ describe("proxyRegisterUpstreamClient", () => {
       clientId: "abc",
       clientSecret: "shh",
       tokenEndpointAuthMethod: "client_secret_basic",
+      clientIdIssuedAt: "2026-06-10T22:27:12Z",
+      clientSecretExpiresAt: "2026-09-08T22:27:12Z",
+    });
+  });
+
+  it("reports no stamps when the issuer reports none", async () => {
+    const authedFetch: AuthedFetch = vi.fn(async () =>
+      jsonResponse({
+        client_id: "abc",
+        token_endpoint_auth_method: "none",
+      }),
+    );
+
+    const result = await proxyRegisterUpstreamClient(authedFetch, {
+      registrationEndpoint: "https://idp.example/register",
+    });
+
+    expect(result).toEqual({
+      clientId: "abc",
+      clientSecret: "",
+      tokenEndpointAuthMethod: "none",
+      clientIdIssuedAt: null,
+      clientSecretExpiresAt: null,
+    });
+  });
+
+  it("forwards the issuer tunnel binding for registration", async () => {
+    const authedFetch: AuthedFetch = vi.fn(async () =>
+      jsonResponse({ client_id: "abc" }),
+    );
+
+    await proxyRegisterUpstreamClient(authedFetch, {
+      registrationEndpoint: "https://idp.example/register",
+      tunneledMcpServerId: "019c001e-b43d-7000-8000-000000000001",
+      projectSlug: "private-network",
+    });
+
+    const call = vi.mocked(authedFetch).mock.calls[0];
+    expect(call).toBeDefined();
+    const [, init] = call!;
+    if (typeof init.body !== "string") {
+      throw new Error("expected a JSON request body");
+    }
+    expect(JSON.parse(init.body)).toMatchObject({
+      tunneled_mcp_server_id: "019c001e-b43d-7000-8000-000000000001",
+    });
+    expect(init.headers).toMatchObject({
+      "gram-project": "private-network",
     });
   });
 

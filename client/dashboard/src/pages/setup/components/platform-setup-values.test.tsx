@@ -1,8 +1,9 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlatformSetupStep } from "../types";
 
 const mocks = vi.hoisted(() => ({
+  mutate: vi.fn(),
   publishStatus: undefined as undefined | Record<string, string>,
   marketplaceName: "acme-speakeasy",
 }));
@@ -16,7 +17,7 @@ vi.mock("@gram/client/react-query/marketplaceSettings", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/createAPIKey", () => ({
-  useCreateAPIKeyMutation: () => ({ mutate: vi.fn() }),
+  useCreateAPIKeyMutation: () => ({ mutate: mocks.mutate }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "default",
@@ -25,13 +26,18 @@ vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ deviceAgent: { href: () => "/acme/device-agent" } }),
 }));
 
-import { usePlatformPlaceholders } from "./platform-setup-values";
+import { AGENT_PLATFORMS } from "../setup-data";
+import {
+  usePlatformApiKeys,
+  usePlatformPlaceholders,
+} from "./platform-setup-values";
 
 function step(code: string): PlatformSetupStep {
   return { title: "step", code, language: "text" };
 }
 
 beforeEach(() => {
+  mocks.mutate.mockReset();
   mocks.publishStatus = {
     repoOwner: "acme",
     repoName: "acme-plugins",
@@ -130,5 +136,129 @@ describe("usePlatformPlaceholders", () => {
     expect(result.current.snippetFor(keyed, "gram_live_x")).toBe(
       "Gram-Key=gram_live_x",
     );
+  });
+});
+
+const platform = (id: string) => AGENT_PLATFORMS.find((p) => p.id === id)!;
+const callbacks = (index = 0) =>
+  mocks.mutate.mock.calls[index]![1] as {
+    onSuccess: (data: { key?: string }) => void;
+    onError: (error: Error) => void;
+  };
+
+describe("usePlatformApiKeys", () => {
+  it("mints once for concurrent Anthropic ensures and exposes the same key", () => {
+    const { result } = renderHook(() =>
+      usePlatformApiKeys({ shareAnthropicKey: true }),
+    );
+    const ensure = result.current.ensure;
+    act(() => {
+      ensure(platform("claude-cowork"));
+      ensure(platform("claude"));
+    });
+    expect(mocks.mutate).toHaveBeenCalledOnce();
+    expect(mocks.mutate.mock.calls[0]![0].request.createKeyForm).toMatchObject({
+      name: expect.stringContaining("Claude Code and Cowork hooks"),
+      scopes: ["hooks"],
+    });
+    expect(result.current.pending).toEqual({
+      claude: true,
+      "claude-cowork": true,
+    });
+    act(() => {
+      callbacks().onSuccess({ key: "EXAMPLE_SHARED_KEY" });
+      ensure(platform("claude"));
+    });
+    expect(result.current.keys).toEqual({
+      claude: "EXAMPLE_SHARED_KEY",
+      "claude-cowork": "EXAMPLE_SHARED_KEY",
+    });
+    expect(result.current.pending).toEqual({
+      claude: false,
+      "claude-cowork": false,
+    });
+    expect(mocks.mutate).toHaveBeenCalledOnce();
+  });
+
+  it.each(["error", "missing token"])(
+    "shares %s and allows one explicit retry",
+    (failure) => {
+      const { result } = renderHook(() =>
+        usePlatformApiKeys({ shareAnthropicKey: true }),
+      );
+      act(() => result.current.ensure(platform("claude")));
+      act(() => {
+        if (failure === "error") callbacks().onError(new Error("Mint failed"));
+        else callbacks().onSuccess({});
+      });
+      expect(result.current.errors.claude).toBe(
+        failure === "error"
+          ? "Mint failed"
+          : "API key token missing from response.",
+      );
+      expect(result.current.errors["claude-cowork"]).toBe(
+        result.current.errors.claude,
+      );
+      expect(result.current.pending).toEqual({
+        claude: false,
+        "claude-cowork": false,
+      });
+      expect(result.current.keys).toEqual({});
+      expect(mocks.mutate).toHaveBeenCalledOnce();
+      act(() => {
+        result.current.ensure(platform("claude-cowork"));
+        result.current.ensure(platform("claude"));
+      });
+      expect(mocks.mutate).toHaveBeenCalledTimes(2);
+      expect(result.current.errors).toEqual({});
+      act(() => callbacks(1).onSuccess({ key: "EXAMPLE_RETRY_KEY" }));
+      expect(result.current.keys.claude).toBe("EXAMPLE_RETRY_KEY");
+      expect(result.current.keys["claude-cowork"]).toBe("EXAMPLE_RETRY_KEY");
+    },
+  );
+
+  it("keeps other platforms and hook instances isolated", () => {
+    const { result } = renderHook(() => ({
+      shared: usePlatformApiKeys({ shareAnthropicKey: true }),
+      standalone: usePlatformApiKeys(),
+    }));
+    act(() => {
+      result.current.shared.ensure(platform("claude"));
+      result.current.shared.ensure({
+        ...platform("cursor"),
+        setupSteps: [{ title: "Key", requiresApiKey: true }],
+      });
+      result.current.standalone.ensure(platform("claude"));
+      result.current.standalone.ensure(platform("claude-cowork"));
+    });
+    expect(mocks.mutate).toHaveBeenCalledTimes(4);
+    act(() => {
+      callbacks(0).onSuccess({ key: "EXAMPLE_SHARED_KEY" });
+      callbacks(1).onSuccess({ key: "EXAMPLE_CURSOR_KEY" });
+      callbacks(2).onSuccess({ key: "EXAMPLE_STANDALONE_KEY" });
+      callbacks(3).onSuccess({ key: "EXAMPLE_STANDALONE_COWORK_KEY" });
+    });
+    expect(result.current.shared.keys.cursor).toBe("EXAMPLE_CURSOR_KEY");
+    expect(result.current.shared.keys.claude).toBe("EXAMPLE_SHARED_KEY");
+    expect(result.current.shared.keys["claude-cowork"]).toBe(
+      "EXAMPLE_SHARED_KEY",
+    );
+    expect(result.current.standalone.keys.claude).toBe(
+      "EXAMPLE_STANDALONE_KEY",
+    );
+    expect(result.current.standalone.keys["claude-cowork"]).toBe(
+      "EXAMPLE_STANDALONE_COWORK_KEY",
+    );
+  });
+
+  it("does not mint for steps without an API key", () => {
+    const { result } = renderHook(() => usePlatformApiKeys());
+    act(() =>
+      result.current.ensure({
+        ...platform("claude"),
+        setupSteps: [{ title: "No key needed" }],
+      }),
+    );
+    expect(mocks.mutate).not.toHaveBeenCalled();
   });
 });

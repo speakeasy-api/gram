@@ -76,6 +76,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	}
 	subject := *challengeState.Subject
 
+	switch r.PostForm.Get("action") {
+	case "agent_connections", "agent_attach", "agent_detach":
+		return s.serveConsentAgentConnections(w, r, endpoint, challengeState)
+	}
+
 	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)

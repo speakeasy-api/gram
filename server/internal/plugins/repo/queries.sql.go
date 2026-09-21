@@ -1009,46 +1009,50 @@ func (q *Queries) ListPluginEnvironmentConfigsForProject(ctx context.Context, ar
 }
 
 const listPluginPublishCandidates = `-- name: ListPluginPublishCandidates :many
-SELECT
-  cp.project_id,
+WITH candidate_projects AS MATERIALIZED (
+  SELECT cp.project_id, p.organization_id
+  FROM (
+    SELECT c.project_id FROM plugin_github_connections c WHERE c.project_id > $1
+    UNION
+    SELECT dp.project_id FROM plugins dp WHERE dp.is_default IS TRUE AND dp.deleted IS FALSE AND dp.project_id > $1
+  ) cp
+  JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
+  ORDER BY cp.project_id ASC
+  LIMIT $2
+)
+SELECT cp.project_id, cp.organization_id,
   COALESCE(
-    k.created_by_user_id,
-    (
-      SELECT our.user_id
-      FROM organization_user_relationships our
-      JOIN users u ON u.id = our.user_id
-      WHERE our.organization_id = p.organization_id
-        AND our.deleted IS FALSE
-        AND our.user_id IS NOT NULL
-        AND u.deleted_at IS NULL
-      ORDER BY our.created_at ASC, our.user_id ASC
-      LIMIT 1
-    ),
-    ''
-  ) AS created_by_user_id
-FROM (
-  SELECT c.project_id FROM plugin_github_connections c WHERE c.project_id > $1
-  UNION
-  SELECT dp.project_id FROM plugins dp WHERE dp.is_default IS TRUE AND dp.deleted IS FALSE AND dp.project_id > $1
-) cp
-JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
-LEFT JOIN LATERAL (
-  SELECT ak.created_by_user_id
-  FROM api_keys ak
-  JOIN users u ON u.id = ak.created_by_user_id
-  JOIN organization_user_relationships our
-    ON our.user_id = ak.created_by_user_id
-   AND our.organization_id = p.organization_id
-   AND our.deleted IS FALSE
-  WHERE ak.project_id = cp.project_id
-    AND ak.deleted IS FALSE
-    AND ak.name LIKE 'plugins-mcp-%'
-    AND u.deleted_at IS NULL
-  ORDER BY ak.created_at DESC
-  LIMIT 1
-) k ON TRUE
+  (
+    SELECT ak.created_by_user_id
+    FROM api_keys ak
+    JOIN users u ON u.id = ak.created_by_user_id
+    JOIN organization_user_relationships our
+      ON our.user_id = ak.created_by_user_id
+     AND our.organization_id = cp.organization_id
+     AND our.deleted IS FALSE
+    WHERE ak.organization_id = cp.organization_id
+      AND ak.project_id = cp.project_id
+      AND ak.deleted IS FALSE
+      AND ak.name LIKE 'plugins-mcp-%'
+      AND u.deleted_at IS NULL
+    ORDER BY ak.created_at DESC
+    LIMIT 1
+  ),
+  (
+    SELECT our.user_id
+    FROM organization_user_relationships our
+    JOIN users u ON u.id = our.user_id
+    WHERE our.organization_id = cp.organization_id
+      AND our.deleted IS FALSE
+      AND our.user_id IS NOT NULL
+      AND u.deleted_at IS NULL
+    ORDER BY our.created_at ASC, our.user_id ASC
+    LIMIT 1
+  ),
+  ''
+)::text AS created_by_user_id
+FROM candidate_projects cp
 ORDER BY cp.project_id ASC
-LIMIT $2
 `
 
 type ListPluginPublishCandidatesParams struct {
@@ -1058,6 +1062,7 @@ type ListPluginPublishCandidatesParams struct {
 
 type ListPluginPublishCandidatesRow struct {
 	ProjectID       uuid.UUID
+	OrganizationID  string
 	CreatedByUserID string
 }
 
@@ -1073,20 +1078,12 @@ type ListPluginPublishCandidatesRow struct {
 // crash between commit and enqueue), this sweep picks it up within one tick
 // instead of leaving it stuck until a human notices. Republishing an
 // unchanged project is cheap -- SkipIfUnchanged short-circuits on the
-// fingerprint check before any GitHub/key work. Each row carries a real
-// users.id as the publish actor: the creator of the project's newest
-// plugins-mcp API key when that id is a current connected member of the
-// project's organization (users row plus a non-deleted
-// organization_user_relationships row), otherwise the organization's
-// oldest connected member. A former member still in users is skipped so
-// PublishProject's membership check does not reject the publish and skip
-// the fallback. A project with no such actor still appears so pagination
-// can advance; the actor id is empty and PublishProject refuses to mint.
+// fingerprint check before any GitHub/key work. The publish actor for each
+// row is resolved in this query, using the same fallback order as
+// ResolvePluginPublishActor. Page before resolving actors; key lookups use
+// the existing (organization_id, project_id, id) index prefix.
 // This is a deliberate cross-project sweep, so unlike the tenant-scoped
-// queries it is not constrained to a single project_id. The after_project_id filter is applied inside each
-// UNION branch rather than the outer query -- sqlc's analyzer can't resolve
-// an outer WHERE referencing the derived table's alias once a LATERAL join
-// follows it ("table alias does not exist").
+// queries it is not constrained to a single project_id.
 func (q *Queries) ListPluginPublishCandidates(ctx context.Context, arg ListPluginPublishCandidatesParams) ([]ListPluginPublishCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listPluginPublishCandidates, arg.AfterProjectID, arg.ResultLimit)
 	if err != nil {
@@ -1096,7 +1093,7 @@ func (q *Queries) ListPluginPublishCandidates(ctx context.Context, arg ListPlugi
 	var items []ListPluginPublishCandidatesRow
 	for rows.Next() {
 		var i ListPluginPublishCandidatesRow
-		if err := rows.Scan(&i.ProjectID, &i.CreatedByUserID); err != nil {
+		if err := rows.Scan(&i.ProjectID, &i.OrganizationID, &i.CreatedByUserID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1728,6 +1725,72 @@ func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServer
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const resolvePluginPublishActor = `-- name: ResolvePluginPublishActor :one
+SELECT COALESCE(
+  (
+    SELECT our.user_id
+    FROM organization_user_relationships our
+    JOIN users u ON u.id = our.user_id
+    WHERE our.organization_id = $1
+      AND our.user_id = $2::text
+      AND our.deleted IS FALSE
+      AND u.deleted_at IS NULL
+    LIMIT 1
+  ),
+  (
+    SELECT ak.created_by_user_id
+    FROM api_keys ak
+    JOIN users u ON u.id = ak.created_by_user_id
+    JOIN organization_user_relationships our
+      ON our.user_id = ak.created_by_user_id
+     AND our.organization_id = $1
+     AND our.deleted IS FALSE
+    WHERE ak.organization_id = $1
+      AND ak.project_id = $3::uuid
+      AND ak.deleted IS FALSE
+      AND ak.name LIKE 'plugins-mcp-%'
+      AND u.deleted_at IS NULL
+    ORDER BY ak.created_at DESC
+    LIMIT 1
+  ),
+  (
+    SELECT our.user_id
+    FROM organization_user_relationships our
+    JOIN users u ON u.id = our.user_id
+    WHERE our.organization_id = $1
+      AND our.deleted IS FALSE
+      AND our.user_id IS NOT NULL
+      AND u.deleted_at IS NULL
+    ORDER BY our.created_at ASC, our.user_id ASC
+    LIMIT 1
+  ),
+  ''
+)::text AS user_id
+`
+
+type ResolvePluginPublishActorParams struct {
+	OrganizationID  string
+	PreferredUserID string
+	ProjectID       uuid.UUID
+}
+
+// Picks the users.id that the plugin API keys minted by a publish are
+// attributed to. GetAPIKeyByKeyHash JOINs users on created_by_user_id, so the
+// id must belong to a current connected member of the organization (a
+// non-deleted users row plus a non-deleted organization_user_relationships
+// row) or the minted keys never authenticate. In order of preference: the
+// preferred actor (the user who made the change) when they are such a member;
+// the creator of the project's newest plugins-mcp API key when they still
+// are, so successive publishes keep one attribution; otherwise the
+// organization's oldest connected member. Returns ” when the organization has
+// no member at all.
+func (q *Queries) ResolvePluginPublishActor(ctx context.Context, arg ResolvePluginPublishActorParams) (string, error) {
+	row := q.db.QueryRow(ctx, resolvePluginPublishActor, arg.OrganizationID, arg.PreferredUserID, arg.ProjectID)
+	var user_id string
+	err := row.Scan(&user_id)
+	return user_id, err
 }
 
 const revokeSkillDistributionsByPlugin = `-- name: RevokeSkillDistributionsByPlugin :many

@@ -108,7 +108,11 @@ SELECT id, slug
 FROM toolsets
 WHERE project_id = @project_id
   AND slug = ANY(@slugs::TEXT[])
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+-- Serialize MCP-enable writes and deletion without blocking FK KEY SHARE
+-- locks when an MCP server concurrently switches to this toolset backend.
+ORDER BY id
+FOR NO KEY UPDATE;
 
 -- name: ResolveEnvironmentsForWrite :many
 SELECT id, slug
@@ -128,7 +132,7 @@ SELECT
   at.environment_id,
   e.slug AS environment_slug
 FROM assistant_toolsets at
-JOIN toolsets t ON t.id = at.toolset_id
+JOIN toolsets t ON t.id = at.toolset_id AND t.deleted IS FALSE
 LEFT JOIN environments e ON e.id = at.environment_id
 WHERE at.assistant_id = ANY(@assistant_ids::UUID[])
   AND at.project_id = @project_id
@@ -383,7 +387,9 @@ SELECT
 FROM mcp_servers ms
 WHERE ms.project_id = @project_id
   AND ms.slug = ANY(@slugs::TEXT[])
-  AND ms.deleted IS FALSE;
+  AND ms.deleted IS FALSE
+ORDER BY ms.id
+FOR NO KEY UPDATE OF ms;
 
 -- name: ClearAssistantMcpServers :exec
 DELETE FROM assistant_mcp_servers
@@ -1383,12 +1389,21 @@ LIMIT 1;
 SELECT
   client_id,
   client_secret_encrypted,
+  client_id_metadata_uri,
   (
     client_id IS NOT NULL
-    AND client_secret_encrypted IS NOT NULL
     AND redirect_uri = @redirect_uri
     AND (client_secret_expires_at IS NULL OR client_secret_expires_at > @usable_after)
+    AND (
+      client_secret_encrypted IS NOT NULL
+      OR client_id_metadata_uri IS NOT NULL
+    )
   ) AS usable,
+  (
+    client_id IS NOT NULL
+    AND client_secret_expires_at IS NOT NULL
+    AND client_secret_expires_at <= @usable_after
+  ) AS invalidated,
   (
     (
       client_id IS NULL
@@ -1440,6 +1455,7 @@ DO UPDATE SET
   client_id = NULL,
   client_secret_encrypted = NULL,
   client_secret_expires_at = NULL,
+  client_id_metadata_uri = NULL,
   redirect_uri = EXCLUDED.redirect_uri,
   registration_owner = EXCLUDED.registration_owner,
   registration_started_at = EXCLUDED.registration_started_at,
@@ -1466,6 +1482,7 @@ SET
   client_id = @client_id,
   client_secret_encrypted = @client_secret_encrypted,
   client_secret_expires_at = @client_secret_expires_at,
+  client_id_metadata_uri = NULL,
   registration_owner = NULL,
   registration_started_at = NULL,
   updated_at = clock_timestamp()
@@ -1506,6 +1523,76 @@ WHERE project_id = @project_id
   AND client_id = @client_id
   AND client_id IS NOT NULL
   AND deleted IS FALSE;
+
+-- name: UpsertAssistantMCPOAuthClientCIMD :one
+-- Records a public CIMD client whose client_id is the document URL. Does not
+-- replace a live confidential DCR registration or an in-progress claim: that
+-- reuse path stays on the secret-bearing row until it expires, is
+-- invalidated, or was registered for another redirect. Intentionally
+-- project-scoped.
+INSERT INTO assistant_mcp_oauth_clients AS clients (
+  project_id,
+  assistant_id,
+  oauth_server_issuer,
+  redirect_uri,
+  client_id,
+  client_id_metadata_uri
+) SELECT
+  @project_id,
+  @assistant_id,
+  @oauth_server_issuer,
+  @redirect_uri,
+  @client_id,
+  @client_id_metadata_uri
+FROM assistants owner
+WHERE owner.id = @assistant_id
+  AND owner.project_id = @project_id
+  AND owner.deleted IS FALSE
+ON CONFLICT (project_id, assistant_id, oauth_server_issuer) WHERE deleted IS FALSE
+DO UPDATE SET
+  redirect_uri = EXCLUDED.redirect_uri,
+  client_id = EXCLUDED.client_id,
+  client_id_metadata_uri = EXCLUDED.client_id_metadata_uri,
+  client_secret_encrypted = NULL,
+  client_secret_expires_at = NULL,
+  registration_owner = NULL,
+  registration_started_at = NULL,
+  updated_at = clock_timestamp()
+WHERE
+  clients.client_id_metadata_uri IS NOT NULL
+  OR (
+    clients.client_id IS NULL
+    AND clients.registration_started_at < clock_timestamp() - @claim_lease::interval
+  )
+  OR (
+    clients.client_id IS NOT NULL
+    AND clients.client_secret_expires_at IS NOT NULL
+    AND clients.client_secret_expires_at <= @usable_after
+  )
+  OR (
+    clients.client_id IS NOT NULL
+    AND clients.redirect_uri <> EXCLUDED.redirect_uri
+  )
+RETURNING client_id, client_secret_encrypted, client_id_metadata_uri;
+
+-- name: GetAssistantForClientMetadataDocument :one
+-- Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the
+-- endpoint is unauthenticated and addresses assistants by their globally
+-- unique primary key. The served document exposes the assistant's display
+-- name, dashboard URI, and redirect_uri — the same identity sent upstream as
+-- client_id. A deleted assistant or missing org/project yields no row, so
+-- the handler 404s.
+SELECT
+  a.id,
+  a.project_id,
+  a.name,
+  p.slug AS project_slug,
+  om.slug AS organization_slug
+FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.deleted IS FALSE
+JOIN organization_metadata om ON om.id = a.organization_id
+WHERE a.id = @assistant_id
+  AND a.deleted IS FALSE;
 
 -- name: GetAssistantMCPOAuthClientDeleted :one
 -- Test-only helper for verifying credential retirement on assistant deletion.

@@ -34,6 +34,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
 	keys_gen "github.com/speakeasy-api/gram/server/gen/keys"
@@ -71,10 +73,7 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
-var (
-	infra *testenv.Environment
-	funcs functions.ToolCaller
-)
+var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true, Temporal: true})
@@ -84,6 +83,7 @@ func TestMain(m *testing.M) {
 	}
 
 	infra = res
+	mcp.TestInfra = res
 
 	code := m.Run()
 
@@ -143,6 +143,8 @@ func newTestMCPServiceWithoutTemporal(t *testing.T) (context.Context, *testInsta
 		nil,
 		false,
 		mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0, AutoVerifyWait: 0},
+		testenv.NewTracerProvider(t),
+		nil,
 	)
 }
 
@@ -300,7 +302,7 @@ func newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(
 // newTestMCPServiceWithValidationTimeout shortens the probe deadline so a hanging upstream fails fast.
 func newTestMCPServiceWithValidationTimeout(t *testing.T, meterProvider metric.MeterProvider, validationTimeout time.Duration) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithMetaRuntime(t, meterProvider, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationTimeout, AutoVerifyWait: 0})
+	return newTestMCPServiceWithMetaRuntime(t, meterProvider, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationTimeout, AutoVerifyWait: 0, RecheckInterval: recheckTestInterval})
 }
 
 func newTestMCPServiceWithMetaRuntime(t *testing.T, meterProvider metric.MeterProvider, metaRuntime mcp.MetaRuntimeConfig) (context.Context, *testInstance) {
@@ -326,7 +328,7 @@ func newTestMCPServiceWithPoolConfig(
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, metaRuntime, guardianOpts...)
+	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, metaRuntime, testenv.NewTracerProvider(t), nil, guardianOpts...)
 }
 
 func newTestMCPServiceWithPoolConfigAndTemporal(
@@ -339,13 +341,14 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	configurePool func(*pgxpool.Config),
 	withTemporal bool,
 	metaRuntime mcp.MetaRuntimeConfig,
+	tracerProvider trace.TracerProvider,
+	funcs functions.ToolCaller,
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
 
-	tracerProvider := testenv.NewTracerProvider(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardianOpts...)
 	require.NoError(t, err)
 
@@ -404,7 +407,12 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX})
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{
+		AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
+		AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
+		AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
+		DevMode:                          false,
+	})
 
 	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	telemService := telemetry.NewService(
@@ -433,7 +441,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
-	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, cacheAdapter, serverURL)
+	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, nil, cacheAdapter, serverURL)
 	mcpToolExecutionCheckpoint, err := mcptoolexecution.NewCheckpoint(conn, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger)
 	require.NoError(t, err)
 	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint)
@@ -457,7 +465,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		PlatformMCPReadTools: assistant_platform_mcp_adapter.ExternalTools(
 			platformmcp.NewRuntimeWithLifecycle(
 				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "",
-				platformmcp.NewPostgresReader(logger, conn), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
 			).AssistantTools(),
 			platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine),
@@ -488,6 +496,29 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		features:            features,
 		efficacySignaler:    efficacySignaler,
 	}
+}
+
+func newTestMCPServiceWithScanSpans(t *testing.T, callers ...functions.ToolCaller) (context.Context, *testInstance, *tracetest.SpanRecorder) {
+	t.Helper()
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	var caller functions.ToolCaller
+	if len(callers) > 0 {
+		caller = callers[0]
+	}
+	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t,
+		testenv.NewLogger(t), testenv.NewMeterProvider(t),
+		&mockIdentityResolver{hasAccessOK: true},
+		mcp.TunnelPublicConfig{
+			SessionTTL: 0, LiveSessionCap: 0,
+			InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+			RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+			MaxRequestLifetime: 0,
+		}, nil, nil, false, mcp.MetaRuntimeConfig{
+			MemberCallTimeout: 0, ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: 0,
+		}, provider, caller)
+	return ctx, ti, recorder
 }
 
 // createTestAPIKey creates an API key for the test context project

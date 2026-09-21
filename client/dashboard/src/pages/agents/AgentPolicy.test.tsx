@@ -1,3 +1,6 @@
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: "enabled" }),
+}));
 import {
   cleanup,
   fireEvent,

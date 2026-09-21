@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	templatesRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
@@ -26,7 +27,7 @@ type promptGetResult struct {
 	Messages    []promptMessage `json:"messages"`
 }
 
-func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
+func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, scan mcpriskscan.Evaluator) (json.RawMessage, error) {
 	var params prompGetParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse get prompt request").LogError(ctx, logger)
@@ -44,6 +45,25 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "prompt not found").LogError(ctx, logger)
 	}
+
+	serverID := ""
+	if payload.mcpServerID != nil {
+		serverID = payload.mcpServerID.String()
+	}
+	// Prompt arguments are decoded, not retained as standalone bytes. Leave the
+	// scan payload absent rather than encoding them solely for no-op observation.
+	scan.Scan(ctx, nil, mcpriskscan.Event{
+		Surface:        mcpriskscan.SurfaceHostedMCP,
+		Method:         mcpriskscan.MethodPromptsGet,
+		OrganizationID: payload.organizationID,
+		ProjectID:      payload.projectID.String(),
+		ServerID:       serverID,
+		ToolsetID:      "",
+		ToolName:       "",
+		ResourceURI:    "",
+		PromptName:     params.Name,
+		Phase:          mcpriskscan.PhaseBeforeRender,
+	})
 
 	promptData, err := templates.RenderTemplate(ctx, logger, prompt.Prompt, prompt.Kind.String, prompt.Engine.String, params.Arguments)
 	if err != nil {

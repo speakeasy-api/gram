@@ -18,9 +18,11 @@ import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Pencil } from "lucide-react";
+import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { gatewayTabHref } from "./GatewayDetailsRouting";
+import { GATEWAY_INSTRUCTIONS_SECTION_ID } from "./GatewaySettingsTab";
 import { useGatewayMemberRows } from "./useGatewayMemberRows";
 import {
   useGatewayDescribeServer,
@@ -143,6 +145,8 @@ function InspectBody({
   onRetry: () => void;
   settingsHref: string;
 }): JSX.Element {
+  const navigate = useNavigate();
+
   if (!hasUrl && !isLoading) {
     return (
       <Text muted small>
@@ -224,18 +228,30 @@ function InspectBody({
 
       {/* Right column: what the agent is told, and the state it can see. */}
       <div className="flex flex-col gap-6">
-        <InspectCard title="server instructions" meta="sent on connect">
-          {data.instructions ? (
-            // Prose, not code: a plain pre keeps the paragraph breaks that a
-            // syntax highlighter collapses.
-            <pre className="font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
-              {data.instructions}
-            </pre>
-          ) : (
-            <Text muted small>
-              This gateway sends no instructions.
-            </Text>
-          )}
+        <InspectCard
+          title="server instructions"
+          action={
+            <Button
+              variant="secondary"
+              size="xs"
+              onClick={() => {
+                void navigate(
+                  `${settingsHref}#${GATEWAY_INSTRUCTIONS_SECTION_ID}`,
+                );
+              }}
+            >
+              <Button.LeftIcon>
+                <Pencil />
+              </Button.LeftIcon>
+              <Button.Text>Edit</Button.Text>
+            </Button>
+          }
+        >
+          {/* Prose, not code: a plain pre keeps the paragraph breaks that a
+              syntax highlighter collapses. */}
+          <pre className="font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
+            {data.instructions}
+          </pre>
         </InspectCard>
 
         <InspectCard title="list_servers" meta="bundle state">

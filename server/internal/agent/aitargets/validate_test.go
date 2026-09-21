@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
 
 func validTarget() aitargets.Target {
@@ -21,7 +22,6 @@ func validTarget() aitargets.Target {
 			ProcessNames: []string{},
 		},
 		VersionHint: nil,
-		Enabled:     true,
 	}
 }
 
@@ -65,7 +65,7 @@ func TestValidateTargetRejectsEachRule(t *testing.T) {
 		"empty display name":         func(x *aitargets.Target) { x.DisplayName = "" },
 		"padded display name":        func(x *aitargets.Target) { x.DisplayName = " ChatGPT " },
 		"display name too long":      func(x *aitargets.Target) { x.DisplayName = strings.Repeat("a", 129) },
-		"unknown category":           func(x *aitargets.Target) { x.Category = "assistant" },
+		"unknown category":           func(x *aitargets.Target) { x.Category = "future_category" },
 		"too many bundle ids":        func(x *aitargets.Target) { x.Signatures.BundleIDs = repeat("com.example.app", 17) },
 		"bundle id with slash":       func(x *aitargets.Target) { x.Signatures.BundleIDs = []string{"com/openai/chat"} },
 		"empty bundle id":            func(x *aitargets.Target) { x.Signatures.BundleIDs = []string{""} },
@@ -130,4 +130,63 @@ func repeat(value string, n int) []string {
 		out[i] = value
 	}
 	return out
+}
+
+// TestValidateTargetRejectsMatchersTheGatewayCannotResolve pins parity with
+// cimd.ValidateClientIDURL, the authorization-time gate.
+//
+// A matcher this accepts and that gate rejects is the worst shape on offer:
+// the target is reported enforceable, an administrator stores a block, and no
+// client id matching it can ever reach the gateway. The block reads as active
+// and silently never fires. The cross-check below fails if the two validators
+// ever drift apart on one of these.
+func TestValidateTargetRejectsMatchersTheGatewayCannotResolve(t *testing.T) {
+	t.Parallel()
+
+	for _, clientID := range []string{
+		"https://client.example/%gh",      // malformed percent-escape
+		"https://client.example/%zz/x",    // malformed percent-escape mid-path
+		"https://client.example/%2e%2e/x", // dot segment hidden behind escapes
+		"https://client.example/../x",     // literal dot segment
+		"https://client.example",          // bare origin, no path
+		"https://user@client.example/x",   // userinfo component
+		"https://client.example/x#frag",   // fragment
+		"http://client.example/x",         // not https
+	} {
+		t.Run(clientID, func(t *testing.T) {
+			t.Parallel()
+
+			target := validTarget()
+			target.GatewayClient = aitargets.GatewayClient{
+				CIMDVendorKeys:  nil,
+				OAuthClientIDs:  []string{clientID},
+				ClientInfoNames: nil,
+			}
+			require.ErrorIsf(t, aitargets.ValidateTarget(target), aitargets.ErrInvalidTarget,
+				"%q must not be storable as a gateway matcher", clientID)
+
+			_, err := cimd.ValidateClientIDURL(clientID)
+			require.Errorf(t, err,
+				"%q is rejected here but accepted at authorization; the two validators have drifted", clientID)
+		})
+	}
+}
+
+// TestValidateTargetAcceptsALegallyEscapedMatcher is the other half: the parse
+// added above must reject malformed escapes without rejecting valid ones.
+func TestValidateTargetAcceptsALegallyEscapedMatcher(t *testing.T) {
+	t.Parallel()
+
+	const clientID = "https://client.example/a%20b/client.json"
+
+	target := validTarget()
+	target.GatewayClient = aitargets.GatewayClient{
+		CIMDVendorKeys:  nil,
+		OAuthClientIDs:  []string{clientID},
+		ClientInfoNames: nil,
+	}
+	require.NoError(t, aitargets.ValidateTarget(target))
+
+	_, err := cimd.ValidateClientIDURL(clientID)
+	require.NoError(t, err, "the authorization-time gate must accept it too")
 }

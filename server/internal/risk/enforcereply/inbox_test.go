@@ -16,6 +16,7 @@ import (
 var (
 	gitleaksLane = Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""}
 	presidioLane = Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO, PolicyID: ""}
+	llmLane      = Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER, PolicyID: ""}
 )
 
 type awaitResult struct {

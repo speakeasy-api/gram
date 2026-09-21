@@ -1,5 +1,52 @@
 # admin
 
+## 0.5.0
+
+### Minor Changes
+
+- 52ebc1b: Add an admin spend breakdown API and organization billing visualization for every account type, including organizations without a Stripe subscription. Reuse exact server-calculated storage, per-scanner risk, and MCP egress estimates at current PAYG list prices, with product selection, billing-cycle and custom date ranges, daily/weekly/monthly grouping, and cumulative views. These usage comparisons are not invoices or contracted charges.
+  
+  Display USD amounts rounded to two decimals while retaining exact arithmetic. Use consistent, theme-aware product colors across spend and usage graphs: blue for storage, purple for risk scanning, and amber for MCP.
+  
+  Preserve the last successful estimate while changing date ranges and if a new range fails to load. Distinguish nonzero amounts that round to zero with a sub-cent marker rather than displaying them as zero.
+  
+  Keep the customer spend endpoint restricted to PAYG organizations. Admin requests require the existing admin authentication and resolve the requested organization by ID or slug.
+- 8fa1872: Add a shared admin support matrix with CSV import, editable coverage, and integration recommendations that include remaining coverage gaps.
+
+### Patch Changes
+
+- 9059ae1: Allow staff to enable Tailscale private access for an organization from the admin feature controls without requiring a separate PostHog rollout flag.
+
+## 0.4.3
+
+### Patch Changes
+
+- 6f6ab02: Replace the admin trial extension action with Change end date. Operators can shorten or extend a running trial to any future UTC calendar date, with an audit record of the previous and new end dates. New and restarted trials still default to fourteen days.
+
+## Unreleased
+
+### Minor Changes
+
+- Add totals-only organization meter usage charts for storage, MCP bandwidth,
+  and risk scans, with daily, weekly, monthly, and cumulative views, billing
+  cycles, shareable date filters, and an authenticated admin usage endpoint.
+  Admin startup now requires primary and read-replica ClickHouse connections;
+  meter usage reads from the replica without a telemetry enablement flag.
+  Filter changes retain the previous report with an updating indicator and
+  matching labels; chart axes use integer ticks for small usage quantities.
+
+## 0.4.2
+
+### Patch Changes
+
+- f5fb216: Operators can start or restart an enterprise trial from the admin organization overview trial panel, including orgs that never trialled and expired trials that have not converted or been demoted.
+
+## 0.4.1
+
+### Patch Changes
+
+- fc61b11: Group standalone admin navigation into Account Management and Platform Management sections.
+
 ## 0.4.0
 
 ### Minor Changes

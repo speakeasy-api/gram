@@ -524,6 +524,7 @@ export const oauthWizardMachine = setup({
                   tokenAuthMethod:
                     event.output.tokenAuthMethod ??
                     context.proxy.tokenAuthMethod,
+                  registration: event.output.registration,
                 }),
                 error: () => null,
               }),
@@ -585,6 +586,7 @@ export const oauthWizardMachine = setup({
               clientId: context.proxy.clientId,
               clientSecret: context.proxy.clientSecret,
               audience: context.proxy.audience,
+              registration: context.proxy.registration,
             }),
             onDone: {
               target: "#oauthWizard.result.success",

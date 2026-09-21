@@ -1,0 +1,24 @@
+edition = "2024";
+
+package gram.otel.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1";
+
+// AgentEventSpanCHWriter is the subscription that projects normalized span records into
+// the agent_events ClickHouse table. It mirrors the event feed tee on the same
+// topic and is a separate consumer so the two write paths fail independently.
+message AgentEventSpanCHWriter {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.otel.v1.Span"
+    ack_deadline: {seconds: 60}
+    retention: {seconds: 604800} /* 7 days */
+    retain_acked_messages: true
+    retry_policy: {
+      minimum_backoff: {seconds: 10}
+      maximum_backoff: {seconds: 60}
+    }
+    dead_letter: {max_delivery_attempts: 10}
+  };
+}

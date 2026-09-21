@@ -50,6 +50,7 @@ import {
   type SignalGroupMode,
   type SignalSeverity,
 } from "./signals-helpers";
+import { AnalysisStatusBadge } from "./AnalysisStatusBadge";
 import { collectFindingsForRules } from "./collect-findings";
 import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
 import { SuppressMenu } from "./SuppressMenu";
@@ -310,7 +311,12 @@ function WatchdogContent(): JSX.Element {
   if (isLoggingDisabled) {
     return (
       <Page.Section>
-        <Page.Section.Title>Watchdog</Page.Section.Title>
+        <Page.Section.Title>
+          <span className="inline-flex items-center gap-3">
+            Watchdog
+            <AnalysisStatusBadge />
+          </span>
+        </Page.Section.Title>
         <Page.Section.Description>
           Your riskiest AI usage, clustered and ranked across {rangeLabel}.
         </Page.Section.Description>
@@ -333,7 +339,12 @@ function WatchdogContent(): JSX.Element {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Watchdog</Page.Section.Title>
+      <Page.Section.Title>
+        <span className="inline-flex items-center gap-3">
+          Watchdog
+          <AnalysisStatusBadge />
+        </span>
+      </Page.Section.Title>
       <Page.Section.Description>
         Your riskiest AI usage, clustered and ranked
         {subtitleSummary ? ` — ${subtitleSummary}` : ""} across {rangeLabel}.

@@ -43,17 +43,27 @@ type Service interface {
 	// and credential keys are rejected.
 	UpdateConfiguration(context.Context, *UpdateConfigurationPayload) (res *DeviceAgentConfiguration, err error)
 	// List the Shadow AI scan targets this organization's device agents probe for:
-	// the Speakeasy defaults overlaid with the organization's own additions and
-	// customizations, with the list version agents echo on scan receipts. Requires
-	// a session with the org:admin scope.
+	// the Speakeasy built-ins plus the organization's own additions, with the
+	// catalog version agents echo on scan receipts. Everything listed is probed
+	// for; a built-in leaves the list by leaving Speakeasy's catalog, an
+	// organization target by being deleted. Requires a session with the org:admin
+	// scope.
 	ListAiScanTargets(context.Context, *ListAiScanTargetsPayload) (res *ListAiScanTargetsResult, err error)
-	// Add a scan target for this organization, replace one it added earlier, or
-	// customize a Speakeasy default under the same id, which is how a default is
-	// disabled for the organization. Agents pick the change up on their next
-	// policy poll. Requires a session with the org:admin scope.
+	// Add a scan target for this organization or replace one it added earlier.
+	// Built-in targets are system-supplied and read-only: a write under a
+	// built-in's id is accepted only when it carries that built-in's definition
+	// unchanged. Every field is a full replacement except gateway_client, which an
+	// existing target keeps when the field is omitted, so a write need not restate
+	// the target's matchers; sending gateway_client with empty lists still clears
+	// them. Clearing a target's last verifiable matcher also clears any access
+	// decision recorded about it, since nothing could enforce it any more; the
+	// organization decides again once the target can be recognized at the gateway.
+	// Agents pick the change up on their next policy poll. Requires a session with
+	// the org:admin scope.
 	UpsertAiScanTarget(context.Context, *UpsertAiScanTargetPayload) (res *AiScanTargetMutationResult, err error)
-	// Remove a target the organization added, or drop the organization's
-	// customization of a Speakeasy default so the default is served again.
+	// Remove a target the organization added, or clear the row a built-in carries
+	// so it returns to having no recorded decision. A built-in itself cannot be
+	// removed here; it leaves the list only by leaving Speakeasy's catalog.
 	// Requires a session with the org:admin scope.
 	DeleteAiScanTarget(context.Context, *DeleteAiScanTargetPayload) (res *DeleteAiScanTargetResult, err error)
 	// Resolve display metadata (Gram chat id, generated title, last activity) for
@@ -121,9 +131,9 @@ type AIScanMatch struct {
 	// claude-code, ollama). Stored as reported: an agent binary can ship a newer
 	// target list than the server catalog knows.
 	TargetID string
-	// Target category the agent scanned under: harness or local_model. The server
-	// catalog's category wins for targets it knows; this is what gets stored for
-	// the rest.
+	// Target category the agent scanned under: harness, assistant, or local_model.
+	// The server catalog's category wins for targets it knows; this is what gets
+	// stored for the rest.
 	Category string
 	// What the scan observed: installed or running.
 	Signal string
@@ -172,32 +182,54 @@ type AgentSessionMeta struct {
 	UpdatedAt string
 }
 
-// One Shadow AI scan target in an organization's list: a Speakeasy default, or
-// a target the organization added or customized.
+// One Shadow AI scan target in an organization's list: a Speakeasy built-in,
+// or a target the organization added.
 type AiScanTarget struct {
 	// Stable id agents report and detections key on.
 	ID string
 	// Name shown in the dashboard.
 	DisplayName string
-	// Target category: harness (an AI coding tool) or local_model (a local model
-	// runtime).
+	// Target category: harness (an AI coding tool), assistant (a general-purpose
+	// AI assistant or agent), or local_model (an open model run locally).
 	Category   string
 	Signatures *AiScanTargetSignatures
 	// Info.plist key the installed version is read from on a bundle match;
 	// defaults to CFBundleShortVersionString when omitted.
 	VersionPlistKey *string
-	// Whether the organization's agents probe for this target.
-	Enabled bool
-	// Where the target comes from: default (compiled into Gram) or organization
-	// (added by the organization).
+	GatewayClient   *AiScanTargetGatewayClient
+	// Where the target comes from: default (a Speakeasy built-in, whose definition
+	// is read-only) or organization (added by the organization, fully editable).
+	// Every target listed here is probed for; a built-in leaves the list by being
+	// removed from Speakeasy's catalog, an organization target by being deleted.
 	Origin string
-	// For a default, whether the organization has replaced it with its own row,
-	// for example to disable it. Always false for organization targets.
+	// For a built-in, whether the organization has recorded an access decision
+	// about it. Always false for organization targets.
 	Customized bool
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string
 	// When the organization's row last changed; absent for an untouched default.
 	UpdatedAt *string
+}
+
+// How a target detected on a device is recognized again when the same tool
+// calls Gram's MCP gateway. A device signature and a registered OAuth client
+// share no natural join key, so the link is declared here. The three lists are
+// not interchangeable: the first two name credentials Gram verified and can be
+// enforced on, the third names what a client said about itself and is used
+// only to attribute traffic.
+type AiScanTargetGatewayClient struct {
+	// Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two targets
+	// may claim the same key, or a block on either would silently cover the other.
+	CimdVendorKeys []string
+	// Client ids matched literally against the caller's verified client_id, or
+	// CIMD catalog URLs — including the wildcard patterns — matched against the
+	// catalog entry that admitted it. Naming the catalog URL is how a vendor that
+	// mints one document per MCP server is still named exactly. No two targets may
+	// claim the same entry.
+	OauthClientIds []string
+	// Names an MCP client reports at initialize. Detection only, never
+	// authorization: the value is self-reported and any client can claim any name.
+	ClientInfoNames []string
 }
 
 // AiScanTargetMutationResult is the result type of the agent service
@@ -216,7 +248,9 @@ type AiScanTargetSignatures struct {
 	// Bare command names resolved on the device PATH; never a path.
 	Binaries []string
 	// Directories whose existence marks the tool as installed, taken as
-	// home-relative unless they start with /.
+	// home-relative unless they start with /. A `*` is a wildcard matching any run
+	// of characters within ONE path segment, never crossing a `/`, for tools
+	// installed under a version-stamped directory name such as an editor extension.
 	ConfigDirs []string
 	// Exact process names checked for the running signal.
 	ProcessNames []string
@@ -371,12 +405,13 @@ type ListAiScanTargetsPayload struct {
 // ListAiScanTargetsResult is the result type of the agent service
 // listAiScanTargets method.
 type ListAiScanTargetsResult struct {
-	// Version of the served list; the value agents echo as target_list_version
+	// Version of the served catalog; the value agents echo as target_list_version
 	// once they receive it.
 	ListVersion int
-	// Fingerprint of the served list; changes whenever the enabled set changes.
+	// Fingerprint of the served list; changes whenever the targets or their
+	// definitions change.
 	Etag string
-	// Every target in the organization's list, enabled or not, ordered by id.
+	// Every target in the organization's list, ordered by id.
 	Targets []*AiScanTarget
 }
 
@@ -481,15 +516,14 @@ type UpsertAiScanTargetPayload struct {
 	ID string
 	// Name shown in the dashboard.
 	DisplayName string
-	// Target category: harness (an AI coding tool) or local_model (a local model
-	// runtime).
-	Category   string
-	Signatures *AiScanTargetSignatures
+	// Target category: harness (an AI coding tool), assistant (a general-purpose
+	// AI assistant or agent), or local_model (an open model run locally).
+	Category      string
+	Signatures    *AiScanTargetSignatures
+	GatewayClient *AiScanTargetGatewayClient
 	// Info.plist key to read the installed version from on a bundle match;
 	// defaults to CFBundleShortVersionString when omitted.
 	VersionPlistKey *string
-	// Whether the organization's agents probe for the target. Defaults to true.
-	Enabled bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

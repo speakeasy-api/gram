@@ -37,7 +37,7 @@ func ExecuteIndexToolset(
 	params IndexToolsetParams,
 ) (client.WorkflowRun, error) {
 	if env == nil {
-		return nil, ErrTemporalUnavailable
+		return nil, tenv.ErrNotConfigured
 	}
 
 	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
@@ -89,6 +89,9 @@ func IndexToolsetWorkflow(
 		var applicationErr *temporal.ApplicationError
 		if errors.As(err, &applicationErr) && applicationErr.Type() == activities.GenerateToolsetEmbeddingsSupersededErrorType {
 			return nil
+		}
+		if errors.As(err, &applicationErr) && applicationErr.Type() == activities.GenerateToolsetEmbeddingsKeyDisabledErrorType {
+			return err
 		}
 		if !errors.As(err, &applicationErr) || applicationErr.Type() != activities.GenerateToolsetEmbeddingsPermanentErrorType {
 			return err

@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
@@ -31,7 +33,7 @@ func TestListPluginsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 			IsDefault:   false,
 			ServerCount: 3,
 			SkillCount:  1,
-			Assignments: PluginAssignmentSummary{AllMembers: false, Roles: 2, Users: 4},
+			Assignments: &PluginAssignmentSummary{AllMembers: false, Roles: 2, Users: 4},
 			Publication: PluginPublicationPublished,
 		}},
 		NextCursor: "opaque",
@@ -45,6 +47,52 @@ func TestListPluginsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"publication",
 		"next_cursor",
 	}, decodeKeys(t, output))
+}
+
+func TestPluginInventoryAdminDetectionRequiresLoadedGrants(t *testing.T) {
+	t.Parallel()
+
+	service := &PluginsService{}
+	principal := Principal{OrganizationID: "org-1"}
+
+	_, err := service.IsOrganizationAdmin(context.Background(), principal)
+	require.ErrorIs(t, err, ErrUnavailable)
+
+	admin, err := service.IsOrganizationAdmin(authz.GrantsToContext(context.Background(), nil), principal)
+	require.NoError(t, err)
+	require.False(t, admin)
+
+	admin, err = service.IsOrganizationAdmin(authz.GrantsToContext(context.Background(), []authz.Grant{{
+		PrincipalUrn: "role:admin", Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, principal.OrganizationID),
+	}}), principal)
+	require.NoError(t, err)
+	require.True(t, admin)
+}
+
+func TestMemberPluginOutputOmitsAdministrativeFields(t *testing.T) {
+	t.Parallel()
+
+	output := GetPluginOutput{
+		ProjectID: "00000000-0000-0000-0000-000000000001",
+		Plugin: assignedPlugin(
+			uuid.MustParse("00000000-0000-0000-0000-0000000000a1"),
+			"Marketing",
+			"marketing",
+			"Tools the marketing team installs",
+			false,
+			2,
+			1,
+		),
+		Servers: []PluginServer{},
+		Skills:  []PluginSkill{},
+	}
+
+	encoded, err := json.Marshal(output)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), `"assignments"`)
+	require.NotContains(t, string(encoded), "assignment_version")
+	require.NotContains(t, string(encoded), "references_expire_at")
+	require.NotContains(t, string(encoded), "distribution_admission")
 }
 
 func TestListPluginAssignmentsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
@@ -73,6 +121,8 @@ func TestListPluginAssignmentsOutput_ProjectsOnlyAllowlistedFields(t *testing.T)
 func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	t.Parallel()
 
+	detailsComplete := true
+	assignmentsTruncated := false
 	output := GetPluginOutput{
 		ProjectID: "00000000-0000-0000-0000-000000000001",
 		Plugin: Plugin{
@@ -82,7 +132,7 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 			IsDefault:             true,
 			ServerCount:           1,
 			SkillCount:            1,
-			Assignments:           PluginAssignmentSummary{AllMembers: true},
+			Assignments:           &PluginAssignmentSummary{AllMembers: true},
 			Publication:           PluginPublicationUnpublished,
 			DistributionAdmission: &DistributionAdmission{State: DistributionAdmissionCovered, Mode: string(admission.ModeEnforce), MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-04T12:00:00Z", Complete: true},
 		},
@@ -103,8 +153,8 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 			DisplayName: "Everyone",
 			Reference:   "opaque-reference",
 		}},
-		AssignmentDetailsComplete: true,
-		AssignmentsTruncated:      false,
+		AssignmentDetailsComplete: &detailsComplete,
+		AssignmentsTruncated:      &assignmentsTruncated,
 		ReferencesExpireAt:        "2026-09-04T12:10:00Z",
 		Truncated:                 false,
 	}

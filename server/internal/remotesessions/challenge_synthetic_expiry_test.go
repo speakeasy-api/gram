@@ -15,7 +15,6 @@ package remotesessions_test
 
 import (
 	"context"
-	"crypto/x509"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -29,11 +28,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -177,6 +179,9 @@ type syntheticExpiryEnv struct {
 	// authURL is the upstream authorize redirect BuildAuthorizationUrl minted
 	// for the login, so a test can assert on its query parameters.
 	authURL string
+	// issuerMetadata and issuerMetadataReader are set by withIssuerMetadataRefresh.
+	issuerMetadata       *remotesessions.IssuerMetadataRefresher
+	issuerMetadataReader *sdkmetric.ManualReader
 }
 
 // callback drives HandleRemoteLoginCallback with the given query string, as
@@ -222,13 +227,30 @@ type syntheticLoginOptions struct {
 	onAuthorizationURL func(*url.URL)
 	// enrichment, when set, advertises its userinfo and introspection endpoints on the issuer and trusts its TLS cert.
 	enrichment *enrichmentAS
-	// metadataRefresh, when set, receives the issuer id an enrichment 404 asks to refresh.
-	metadataRefresh func(context.Context, uuid.UUID)
 	// enrichmentRate, when set, paces the enricher through a Redis-backed limiter.
 	enrichmentRate *ratelimit.Rate
+	// issuerMetadataRefresh wires an IssuerMetadataRefresher into the manager and the refresher.
+	issuerMetadataRefresh bool
+	// issuerMetadataFetchedAt stamps the issuer row as fetched then, so the on-use cadence stays silent.
+	issuerMetadataFetchedAt time.Time
+	// tunnels, when set, is the back-channel transport every component this
+	// fixture builds carries — the manager, both refreshers, the enricher, and
+	// the metadata refresher — so a tunnel-bound issuer cannot be reported
+	// working by a component that quietly stayed on direct egress.
+	tunnels *tunnelrouting.HTTPClient
+	// maxDBConns constrains the fixture pool for connection-ownership tests.
+	maxDBConns int32
 }
 
 type syntheticLoginOption func(*syntheticLoginOptions)
+
+func withTunnels(tunnels *tunnelrouting.HTTPClient) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.tunnels = tunnels }
+}
+
+func withMaxDBConns(maxConns int32) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.maxDBConns = maxConns }
+}
 
 func withIssuerScopes(scopes ...string) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.issuerScopes = scopes }
@@ -298,12 +320,16 @@ func withEnrichmentAS(as *enrichmentAS) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.enrichment = as }
 }
 
-func withIssuerMetadataRefreshSeam(fn func(context.Context, uuid.UUID)) syntheticLoginOption {
-	return func(o *syntheticLoginOptions) { o.metadataRefresh = fn }
-}
-
 func withEnrichmentRate(rate ratelimit.Rate) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.enrichmentRate = &rate }
+}
+
+func withIssuerMetadataRefresh() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issuerMetadataRefresh = true }
+}
+
+func withIssuerMetadataFetchedAt(at time.Time) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.issuerMetadataFetchedAt = at }
 }
 
 // newSyntheticExpiryEnv wires a ChallengeManager to a mock upstream token
@@ -340,7 +366,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		opt(&options)
 	}
 
-	ctx, ti := newTestService(t)
+	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{maxDBConns: options.maxDBConns})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -351,21 +377,19 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	enc := testenv.NewEncryptionClient(t)
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	var policyOptions []func(*guardian.Policy)
 	issuerURL, jwksURI := "https://idp.example.com", ""
-	trusted := x509.NewCertPool()
+	// Every httptest TLS server presents the package's test certificate, so the issuer discovery server is trusted too.
+	trusted := testIssuerTLSRootCAs.Clone()
 	if options.idTokenIssuer != nil {
 		trusted.AddCert(options.idTokenIssuer.cert)
-		policyOptions = append(policyOptions, guardian.WithTLSRootCAs(trusted))
 		issuerURL, jwksURI = options.idTokenIssuer.issuerURL, options.idTokenIssuer.jwksURI
 	}
 	userinfoEndpoint, introspectionEndpoint := "", ""
 	if options.enrichment != nil {
 		trusted.AddCert(options.enrichment.cert)
-		policyOptions = append(policyOptions, guardian.WithTLSRootCAs(trusted))
 		userinfoEndpoint, introspectionEndpoint = options.enrichment.userinfoURL, options.enrichment.introspectionURL
 	}
-	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, policyOptions...)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardian.WithTLSRootCAs(trusted))
 	require.NoError(t, err)
 
 	// A real Redis-backed cache is required: BuildAuthorizationUrl writes the
@@ -376,6 +400,15 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 
 	var managerOptions []remotesessions.ChallengeManagerOption
 	var refreshOptions []remotesessions.RefreshOption
+	var issuerMetadata *remotesessions.IssuerMetadataRefresher
+	var issuerMetadataReader *sdkmetric.ManualReader
+	if options.issuerMetadataRefresh {
+		issuerMetadataReader = sdkmetric.NewManualReader()
+		issuerMetadata = remotesessions.NewIssuerMetadataRefresher(logger, sdkmetric.NewMeterProvider(sdkmetric.WithReader(issuerMetadataReader)), ti.conn, policy, options.tunnels, audit.NewLogger())
+		t.Cleanup(issuerMetadata.Shutdown)
+		managerOptions = append(managerOptions, remotesessions.WithIssuerMetadataRefresher(issuerMetadata))
+		refreshOptions = append(refreshOptions, remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadata))
+	}
 	if options.idTokenIssuer != nil {
 		store := ratelimit.NewRedisStore(redisClient)
 		keys, err := remotesessions.NewIDTokenKeyResolver(logger, policy, testenv.NewMeterProvider(t), store)
@@ -395,11 +428,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		if options.enrichmentRate != nil {
 			enrichmentLimiter = ratelimit.New(store, "test_enrichment_"+slugSuffix, *options.enrichmentRate)
 		}
-		enricher := remotesessions.NewSessionEnricher(logger, enc, policy, keys, enrichmentLimiter)
-		if options.metadataRefresh != nil {
-			enricher.SetIssuerMetadataRefreshSeam(options.metadataRefresh)
-		}
+		enricher := remotesessions.NewSessionEnricher(logger, enc, policy, keys, enrichmentLimiter, options.tunnels, issuerMetadata)
 		managerOptions = append(managerOptions, remotesessions.WithSessionEnricher(enricher))
+		refreshOptions = append(refreshOptions, remotesessions.WithRefreshSessionEnricher(enricher))
 	}
 	mgr := remotesessions.NewChallengeManager(
 		logger,
@@ -408,11 +439,12 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		ti.conn,
 		enc,
 		policy,
+		options.tunnels,
 		cache.NewRedisCacheAdapter(redisClient),
 		mustURL(t, "http://localhost"),
 		managerOptions...,
 	)
-	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, cache.NewRedisCacheAdapter(redisClient), refreshOptions...)
+	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, options.tunnels, cache.NewRedisCacheAdapter(redisClient), refreshOptions...)
 	// Detached restatements finish before the pool closes.
 	t.Cleanup(mgr.WaitIdentityRestatements)
 	t.Cleanup(refresher.WaitIdentityRestatements)
@@ -450,6 +482,18 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		Metadata:                   options.issuerMetadata,
 	})
 	require.NoError(t, err)
+	if !options.issuerMetadataFetchedAt.IsZero() {
+		require.NoError(t, q.SetRemoteSessionIssuerMetadataTracking(ctx, repo.SetRemoteSessionIssuerMetadataTrackingParams{
+			Metadata:             string(options.issuerMetadata),
+			MetadataFetchedAt:    conv.ToPGTimestamptz(options.issuerMetadataFetchedAt),
+			MetadataLastError:    "",
+			MetadataLastErrorAt:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+			MetadataLastErrorUrl: "",
+			ID:                   issuer.ID,
+			ProjectID:            issuer.ProjectID,
+			OrganizationID:       issuer.OrganizationID,
+		}))
+	}
 
 	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-synthetic-"+slugSuffix)
 
@@ -512,7 +556,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		mgr:       mgr,
 		refresher: refresher,
 		newRefresher: func(meterProvider metric.MeterProvider, locks cache.Cache) *remotesessions.RefreshService {
-			r := remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, locks, refreshOptions...)
+			r := remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, options.tunnels, locks, refreshOptions...)
 			t.Cleanup(r.WaitIdentityRestatements)
 			return r
 		},
@@ -525,6 +569,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		subject:        subject,
 		session:        repo.RemoteSession{},
 		authURL:        authURL,
+
+		issuerMetadata:       issuerMetadata,
+		issuerMetadataReader: issuerMetadataReader,
 	}
 	cbW, callbackErr := env.callback(t, cbQuery.Encode())
 

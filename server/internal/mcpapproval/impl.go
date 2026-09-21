@@ -634,7 +634,29 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 		return nil, err
 	}
 
-	raw := strings.TrimSpace(payload.Target)
+	return s.createRequest(ctx, projectID, authCtx.ActiveOrganizationID, authCtx.UserID, authCtx.Email, payload.TargetKind, payload.Target, payload.Note)
+}
+
+// CreatePlatformRequest admits a request from a trusted Platform MCP runtime.
+// The runtime resolves the exact project under the authenticated organization;
+// this method preserves the approval rollout gate, validation, redaction,
+// requester attribution, evidence gathering, audit, and transactional write used
+// by the HTTP API without pretending Platform MCP has a selected-project session.
+func (s *Service) CreatePlatformRequest(ctx context.Context, organizationID string, projectID uuid.UUID, userID, targetKind, target, note string) (*gen.ApprovalRequestSummary, error) {
+	if s == nil || s.db == nil {
+		return nil, oops.E(oops.CodeUnavailable, nil, "MCP review requests are temporarily unavailable")
+	}
+	if strings.TrimSpace(organizationID) == "" || projectID == uuid.Nil || strings.TrimSpace(userID) == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.requireFeature(ctx, organizationID); err != nil {
+		return nil, err
+	}
+	return s.createRequest(ctx, projectID, organizationID, userID, nil, targetKind, target, note)
+}
+
+func (s *Service) createRequest(ctx context.Context, projectID uuid.UUID, organizationID, userID string, userEmail *string, targetKind, target, requestNote string) (*gen.ApprovalRequestSummary, error) {
+	raw := strings.TrimSpace(target)
 	if raw == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "a server reference is required")
 	}
@@ -643,9 +665,9 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 	}
 
 	var key string
-	switch payload.TargetKind {
+	switch targetKind {
 	case targetKindServerURL:
-		canonicalKey, display, err := admittableServerURL(raw)
+		canonicalKey, display, err := admittableSecureServerURL(raw)
 		if err != nil {
 			return nil, err
 		}
@@ -656,6 +678,9 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 		// the server anyway.
 		raw = display
 	case targetKindStdioCommand:
+		if identity.ContainsPlaintextHTTPURL(raw) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "stdio command server URLs must use https")
+		}
 		// The stored reference is the redacted form for the same reason: a
 		// launch command routinely embeds credentials (`--header
 		// "Authorization: Bearer …"`, `--api-key=…`, `TOKEN=… npx …`), and
@@ -671,7 +696,7 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 
 	// The justification is the one input no automated evidence supplies, so
 	// a proactive ask cannot omit it.
-	trimmedNote := strings.TrimSpace(payload.Note)
+	trimmedNote := strings.TrimSpace(requestNote)
 	if trimmedNote == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "a justification is required")
 	}
@@ -680,17 +705,17 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 	}
 	note := &trimmedNote
 
-	return s.admit(ctx, projectID, authCtx.ActiveOrganizationID, admission{
-		targetKind:      payload.TargetKind,
+	return s.admit(ctx, projectID, organizationID, admission{
+		targetKind:      targetKind,
 		targetRaw:       raw,
 		targetKey:       key,
 		status:          statusRequested,
 		bypassRequestID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		requesterID:     authCtx.UserID,
-		requesterEmail:  authCtx.Email,
+		requesterID:     userID,
+		requesterEmail:  userEmail,
 		note:            note,
-		actor:           authCtx.UserID,
-		actorEmail:      authCtx.Email,
+		actor:           userID,
+		actorEmail:      userEmail,
 	})
 }
 
@@ -752,6 +777,18 @@ func (s *Service) Promote(ctx context.Context, payload *gen.PromotePayload) (*ge
 		actor:           authCtx.UserID,
 		actorEmail:      authCtx.Email,
 	})
+}
+
+func admittableSecureServerURL(raw string) (key string, display string, err error) {
+	key, display, err = admittableServerURL(raw)
+	if err != nil {
+		return "", "", err
+	}
+	parsed, parseErr := url.Parse(display)
+	if parseErr != nil || !strings.EqualFold(parsed.Scheme, "https") {
+		return "", "", oops.E(oops.CodeBadRequest, parseErr, "target must be an https URL")
+	}
+	return key, display, nil
 }
 
 // admittableServerURL validates a server URL reference for intake and returns

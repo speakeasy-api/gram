@@ -28,6 +28,7 @@ import SkillUsage from "./pages/skills/SkillUsage";
 import SkillVersionHistory from "./pages/skills/SkillVersionHistory";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
+import ProjectIdentityRedirect from "./pages/org/ProjectIdentityRedirect";
 import UserSessions from "./pages/org/UserSessions";
 import EventFeed from "./pages/data/EventFeed";
 import DataExports from "./pages/data-exports/DataExports";
@@ -57,6 +58,7 @@ import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
+import Explore from "./pages/explore/Explore";
 import IdentitiesIndex, {
   IdentityDetailIndexRedirect,
   IdentitiesRoot,
@@ -126,6 +128,15 @@ import SecurityOverview, {
 } from "./pages/security/SecurityOverview";
 import Watchdog from "./pages/security/watchdog/Watchdog";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
+import {
+  ShadowAIIndexRedirect,
+  ShadowAIRoot,
+  ShadowMCPLegacyRedirect,
+  ShadowMCPServerLegacyRedirect,
+} from "./pages/shadow-ai/ShadowAI";
+import ShadowAIHarnesses from "./pages/shadow-ai/ShadowAIHarnesses";
+import ShadowAIAssistants from "./pages/shadow-ai/ShadowAIAssistants";
+import ShadowAIModels from "./pages/shadow-ai/ShadowAIModels";
 import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
@@ -416,12 +427,12 @@ const ROUTE_STRUCTURE = {
       // the backend that stores it, and OpenAPI and functions sit under
       // "advanced" on the same page instead of in the navigation.
       //
-      // `add` and `sources` are static segments under `mcp`, so they rank above
-      // the `details` `:toolsetSlug` route and are not swallowed by it. The
-      // cost is that a toolset slugged "add" or "sources" becomes unreachable
-      // in the dashboard. Nothing reserves those slugs server-side, so this is
-      // the same latent collision the sibling `x` and `gateway`
-      // segments already carry.
+      // `add`, `catalog` and `sources` are static segments under `mcp`, so they
+      // rank above the `details` `:toolsetSlug` route and are not swallowed by
+      // it. The cost is that a toolset slugged "add", "catalog" or "sources"
+      // becomes unreachable in the dashboard. Nothing reserves those slugs
+      // server-side, so this is the same latent collision the sibling `x` and
+      // `gateway` segments already carry.
       add: {
         title: "Add MCP Server",
         url: "add",
@@ -438,22 +449,6 @@ const ROUTE_STRUCTURE = {
             url: "tunneled",
             component: CreateTunneledMcp,
           },
-          // The single catalog entry point. It previously rendered from both
-          // `/catalog` and `/sources/add-from-catalog`; both now redirect here.
-          catalog: {
-            title: "Catalog",
-            url: "catalog",
-            component: CatalogRoot,
-            indexComponent: Catalog,
-            subPages: {
-              detail: {
-                title: "Server Details",
-                url: ":serverSpecifier",
-                component: CatalogDetailRoot,
-                indexComponent: CatalogDetail,
-              },
-            },
-          },
           fromSource: {
             title: "From Existing Source",
             url: "from-existing-source",
@@ -468,6 +463,24 @@ const ROUTE_STRUCTURE = {
             title: "Add Function",
             url: "function",
             component: FunctionsOnboarding,
+          },
+        },
+      },
+      // The single catalog entry point, and a tab of the MCP index rather than
+      // a step inside the add flow: it is the one surface people go looking for
+      // by name. `/catalog`, `/sources/add-from-catalog` and the earlier
+      // `/mcp/add/catalog` all redirect here.
+      catalog: {
+        title: "Catalog",
+        url: "catalog",
+        component: CatalogRoot,
+        indexComponent: Catalog,
+        subPages: {
+          detail: {
+            title: "Server Details",
+            url: ":serverSpecifier",
+            component: CatalogDetailRoot,
+            indexComponent: CatalogDetail,
           },
         },
       },
@@ -644,6 +657,50 @@ const ROUTE_STRUCTURE = {
     component: InsightsRoot,
     indexComponent: InsightsHooksPage,
   },
+  mcpSessions: {
+    title: "MCP Sessions",
+    url: "mcp-sessions",
+    icon: "users",
+    component: UserSessions,
+  },
+
+  remoteIdentityProviders: {
+    title: "Remote Identity Providers",
+    url: "remote-identity-providers",
+    icon: "key-round",
+    component: RemoteIdentityProvidersRoot,
+    indexComponent: RemoteIdentityProvidersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Remote Identity Provider",
+        url: ":issuerId",
+        component: RemoteIdentityProviderDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          clients: { title: "Clients", url: "clients" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+      clientDetail: {
+        title: "Remote Session Client",
+        url: ":issuerId/clients/:clientId",
+        component: RemoteSessionClientDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          mcpServers: { title: "MCP Servers", url: "mcp-servers" },
+          sessions: { title: "Sessions", url: "sessions" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
+  },
+
+  agents: {
+    title: "Agent Identity",
+    url: "agent-management",
+    icon: "bot",
+    component: AgentsPage,
+  },
   // One page per person, reached from every surface that renders a human. The
   // URL segment is an identity URN (`user:...`, `email:...`, `external:...`),
   // url-encoded; the resolver folds every identifier for a subject onto the
@@ -726,6 +783,13 @@ const ROUTE_STRUCTURE = {
         component: Costs,
       },
     },
+  },
+  explore: {
+    title: "Explore",
+    url: "explore",
+    icon: "telescope",
+    component: Explore,
+    stage: "preview",
   },
   logs: {
     title: "Tool Logs",
@@ -821,17 +885,67 @@ const ROUTE_STRUCTURE = {
     icon: "flag",
     component: RiskEventsPage,
   },
+  // Shadow MCP is a subset of Shadow AI, not a sibling: a shadow MCP server
+  // is reached by some AI tool, and one admin answers "what are people
+  // running?" and "what is it talking to?" in the same sitting. The two tabs
+  // are routed rather than toggled so either half survives being linked.
+  //
+  // Project-level placement with organization-scoped reads behind it, the
+  // same shape as identities above and for the same reason.
+  shadowAI: {
+    // "Shadow AI" in the nav, matching the URL segment, which is also what
+    // the redirects below and the links already in tickets point at.
+    title: "Shadow AI",
+    url: "shadow-ai",
+    icon: "shield",
+    component: ShadowAIRoot,
+    indexComponent: ShadowAIIndexRedirect,
+    subPages: {
+      harnesses: {
+        title: "Harnesses",
+        url: "harnesses",
+        component: ShadowAIHarnesses,
+      },
+      assistants: {
+        title: "Assistants",
+        url: "assistants",
+        component: ShadowAIAssistants,
+      },
+      models: {
+        title: "Models",
+        url: "models",
+        component: ShadowAIModels,
+      },
+      mcps: {
+        title: "MCPs",
+        url: "mcps",
+        component: ShadowMCPRoot,
+        indexComponent: ShadowMCP,
+        subPages: {
+          detail: {
+            title: "Shadow MCP Server",
+            url: ":serverSlug",
+            component: ShadowMCPServerDetail,
+          },
+        },
+      },
+    },
+  },
+  // The Shadow MCP paths predate the section and are sitting in bookmarks and
+  // tickets, so they redirect permanently rather than 404. The end-user
+  // request URLs (/shadow-mcp/request, /risk-policy-bypass/request) are
+  // top-level routes in App.tsx, are quoted verbatim in block messages
+  // already in people's terminals, and are deliberately left alone.
   shadowMCP: {
     title: "Shadow MCP",
     url: "shadow-mcp",
-    icon: "shield",
-    component: ShadowMCPRoot,
-    indexComponent: ShadowMCP,
+    component: ShadowAIRoot,
+    indexComponent: ShadowMCPLegacyRedirect,
     subPages: {
       detail: {
         title: "Shadow MCP Server",
         url: ":serverSlug",
-        component: ShadowMCPServerDetail,
+        component: ShadowMCPServerLegacyRedirect,
       },
     },
   },
@@ -1297,47 +1411,29 @@ const ORG_ROUTE_STRUCTURE = {
       },
     },
   },
-  mcpSessions: {
+  legacyAgents: {
+    title: "Agent Identity",
+    url: "agent-management",
+    legacyRedirect: true,
+    component: ProjectIdentityRedirect,
+  },
+  legacyMcpSessions: {
     title: "MCP Sessions",
     url: "mcp-sessions",
-    icon: "users",
-    component: UserSessions,
+    legacyRedirect: true,
+    component: ProjectIdentityRedirect,
+  },
+  legacyRemoteIdentityProviders: {
+    title: "Remote Identity Providers",
+    url: "remote-identity-providers/*",
+    legacyRedirect: true,
+    component: ProjectIdentityRedirect,
   },
   identity: {
     title: "IDP and SSO",
     url: "identity",
     icon: "fingerprint",
     component: OrgIdentity,
-  },
-  remoteIdentityProviders: {
-    title: "Remote Identity Providers",
-    url: "remote-identity-providers",
-    icon: "key-round",
-    component: RemoteIdentityProvidersRoot,
-    indexComponent: RemoteIdentityProvidersPage,
-    subPages: {
-      issuerDetail: {
-        title: "Remote Identity Provider",
-        url: ":issuerId",
-        component: RemoteIdentityProviderDetail,
-        subPages: {
-          overview: { title: "Overview", url: "overview" },
-          clients: { title: "Clients", url: "clients" },
-          settings: { title: "Settings", url: "settings" },
-        },
-      },
-      clientDetail: {
-        title: "Remote Session Client",
-        url: ":issuerId/clients/:clientId",
-        component: RemoteSessionClientDetail,
-        subPages: {
-          overview: { title: "Overview", url: "overview" },
-          mcpServers: { title: "MCP Servers", url: "mcp-servers" },
-          sessions: { title: "Sessions", url: "sessions" },
-          settings: { title: "Settings", url: "settings" },
-        },
-      },
-    },
   },
   // Platform Admin pages — the former floating Developer Toolkit, one page per
   // old tab. Speakeasy staff only (plus local dev); see PlatformAdminGate.
@@ -1377,6 +1473,11 @@ const ORG_ROUTE_STRUCTURE = {
         url: "configuration",
         component: DeviceAgent,
       },
+      scanTargets: {
+        title: "Scan Targets",
+        url: "scan-targets",
+        component: DeviceAgent,
+      },
       mdmIntegrations: {
         title: "MDM Integrations",
         url: "mdm-integrations",
@@ -1388,12 +1489,6 @@ const ORG_ROUTE_STRUCTURE = {
         component: MdmIntegrationDetail,
       },
     },
-  },
-  agents: {
-    title: "Agents",
-    url: "agent-management",
-    icon: "bot",
-    component: AgentsPage,
   },
   access: {
     title: "Roles & Permissions",

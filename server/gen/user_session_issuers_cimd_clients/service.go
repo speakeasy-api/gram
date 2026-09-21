@@ -20,9 +20,10 @@ import (
 // per-issuer custom document URLs.
 type Service interface {
 	// List Gram's curated CIMD preset catalog. Issuers whose admission mode is
-	// 'presets' — the default — admit every enabled entry here automatically, with
-	// no per-issuer configuration. The catalog is global and contains no tenant
-	// data.
+	// 'presets' admit every enabled entry here automatically, with no per-issuer
+	// configuration. Presets mode is opt-in; an issuer without an explicit mode
+	// uses 'open' and evaluates this catalog only for its shadow measurement. The
+	// catalog is global and contains no tenant data.
 	ListPresets(context.Context, *ListPresetsPayload) (res *ListCimdClientPresetsResult, err error)
 	// Allow an additional CIMD document URL on a user_session_issuer, beyond the
 	// preset catalog. The URL is validated for
@@ -174,6 +175,10 @@ type VerifyCimdURLResult struct {
 	// The document's client_name, set only when verified. Lets an operator confirm
 	// the URL names the client they intended.
 	ClientName *string
+	// The validated document rendered as JSON, set only when verified. Re-encoded
+	// from what Gram parsed rather than echoed from the wire, so it shows what the
+	// authorization server will act on.
+	Document *string
 }
 
 // VerifyURLPayload is the payload type of the userSessionIssuersCimdClients

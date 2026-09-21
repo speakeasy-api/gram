@@ -41,7 +41,7 @@ func newIssuerMetadataRefresher(t *testing.T, ti *testInstance) (*remotesessions
 	require.NoError(t, err)
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	return remotesessions.NewIssuerMetadataRefresher(testenv.NewLogger(t), provider, ti.conn, policy, audit.NewLogger()), reader
+	return remotesessions.NewIssuerMetadataRefresher(testenv.NewLogger(t), provider, ti.conn, policy, nil, audit.NewLogger()), reader
 }
 
 // metadataTracking is the tracking state a test stamps on an issuer row; a nil errorAt with an error means now.
@@ -604,6 +604,65 @@ func TestIssuerMetadataRefresh_Refresh_DefinitiveFailureWaitsForTheDailyCutoff(t
 	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure])
 }
 
+func TestIssuerMetadataRefresh_RefreshIncompatibleWithTrustedClientBacksOff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	refresher, reader := newIssuerMetadataRefresher(t, ti)
+	upstream := fakeIssuerServer(t, func(doc map[string]any) {
+		doc["scopes_supported"] = []string{"openid"}
+	})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	now := time.Now()
+	past := now.Add(-25 * time.Hour).Truncate(time.Microsecond)
+
+	issuer, err := repo.New(ti.conn).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{},
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "refresh-trusted-incompatible",
+		Issuer:                            upstream.URL,
+		AuthorizationEndpoint:             conv.ToPGText(upstream.URL + "/authorize"),
+		TokenEndpoint:                     conv.ToPGText(upstream.URL + "/token"),
+		ScopesSupported:                   []string{"openid", "email", "offline_access"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+	})
+	require.NoError(t, err)
+	client, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:                       uuid.NullUUID{},
+		OrganizationID:                  conv.ToPGText(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID:           issuer.ID,
+		ClientID:                        "refresh-trusted-incompatible-client",
+		ClientSecretEncrypted:           conv.ToPGText("encrypted-test-secret"),
+		ClientIDIssuedAt:                conv.ToPGTimestamptz(now),
+		ClientSecretExpiresAt:           pgtype.Timestamptz{},
+		TokenEndpointAuthMethod:         conv.ToPGText("client_secret_basic"),
+		TokenEndpointAuthAudienceFormat: pgtype.Text{},
+		Scope:                           []string{"openid", "email", "offline_access"},
+		Audience:                        pgtype.Text{},
+		LegacyCallbackUrl:               false,
+	})
+	require.NoError(t, err)
+	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "refresh-trusted-incompatible-usi", issuer.ID, client.ID)
+	setIssuerMetadataTracking(t, ctx, ti, issuer.ID, metadataTracking{document: "", fetchedAt: &past, lastError: "", errorAt: nil, errorURL: ""})
+
+	outcome, err := refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, issuer.ID))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure, outcome)
+
+	after := loadIssuerByID(t, ctx, ti, issuer.ID)
+	require.Equal(t, past, after.MetadataFetchedAt.Time, "the incompatible capability write must roll back")
+	require.Contains(t, after.ScopesSupported, "email")
+	require.Equal(t, "issuer metadata is incompatible with a trusted identity-provider client", after.MetadataLastError.String)
+	require.True(t, after.MetadataLastErrorAt.Valid)
+	require.False(t, after.MetadataLastErrorUrl.Valid)
+	require.False(t, fetchDue(t, ctx, ti, issuer.ID, now.Add(23*time.Hour)))
+	require.True(t, fetchDue(t, ctx, ti, issuer.ID, now.Add(25*time.Hour)))
+	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure])
+}
+
 func TestIssuerMetadataRefresh_Refresh_DefinitiveFailureOnNeverFetchedRowWaitsForTheDailyCutoff(t *testing.T) {
 	t.Parallel()
 
@@ -961,6 +1020,7 @@ func TestIssuerMetadataRefresh_NoteUse_ListClientsRefreshesTheIssuerItRenders(t 
 		ti.conn,
 		testenv.NewEncryptionClient(t),
 		policy,
+		nil,
 		ti.redisCache,
 		mustURL(t, "http://localhost"),
 		remotesessions.WithIssuerMetadataRefresher(refresher),

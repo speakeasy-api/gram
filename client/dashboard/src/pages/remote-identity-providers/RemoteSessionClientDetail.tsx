@@ -9,7 +9,7 @@ import {
   PageTabsList,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { useOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { Link, Navigate, useLocation, useParams } from "react-router";
@@ -40,7 +40,7 @@ export default function RemoteSessionClientDetail(): JSX.Element {
     issuerId: string;
     clientId: string;
   }>();
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const location = useLocation();
   const {
     data: client,
@@ -53,9 +53,10 @@ export default function RemoteSessionClientDetail(): JSX.Element {
 
   const activeTab = activeDetailTab(location.pathname, CLIENT_TABS);
   const tabHref = (tab: ClientTab) =>
-    orgRoutes.remoteIdentityProviders.clientDetail[
-      CLIENT_TAB_ROUTE_KEY[tab]
-    ].href(issuerId, clientId);
+    routes.remoteIdentityProviders.clientDetail[CLIENT_TAB_ROUTE_KEY[tab]].href(
+      issuerId,
+      clientId,
+    );
 
   const label = client
     ? remoteSessionClientDisplayName(client)
@@ -69,9 +70,7 @@ export default function RemoteSessionClientDetail(): JSX.Element {
   if (isClientError || (!isClientLoading && !client)) {
     return (
       <Navigate
-        to={orgRoutes.remoteIdentityProviders.issuerDetail.clients.href(
-          issuerId,
-        )}
+        to={routes.remoteIdentityProviders.issuerDetail.clients.href(issuerId)}
         replace
       />
     );

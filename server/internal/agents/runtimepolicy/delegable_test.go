@@ -1,6 +1,7 @@
 package runtimepolicy
 
 import (
+	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -93,4 +94,73 @@ func TestDelegableWildcardCandidates(t *testing.T) {
 			require.Empty(t, grants)
 		})
 	}
+}
+
+func TestDelegableGrantsConcreteResource(t *testing.T) {
+	t.Parallel()
+	constraint := authz.NewSelector(authz.ScopeMCPConnect, "selected-server")
+	constraint[authz.SelectorKeyProjectID] = "selected-project"
+	broad := authz.NewGrant(authz.ScopeMCPWrite, "*")
+	for _, excludedBy := range []int{0, 1, 2} {
+		for _, dimension := range []string{authz.SelectorKeyResourceID, authz.SelectorKeyProjectID, authz.SelectorKeyTool, authz.SelectorKeyDisposition} {
+			t.Run(fmt.Sprintf("parent-%d/%s", excludedBy, dimension), func(t *testing.T) {
+				t.Parallel()
+				exclusion := authz.NewGrant(authz.ScopeMCPBlockedConnect, "*")
+				exclusion.Selector[dimension] = "other"
+				if dimension == authz.SelectorKeyDisposition {
+					exclusion.Selector[dimension] = authz.DispositionDestructive
+				}
+				policies := [][]authz.Grant{{broad}, {broad}, {broad}}
+				policies[excludedBy] = append(policies[excludedBy], exclusion)
+				unscoped, err := DelegableGrants(policies[0], policies[1], policies[2])
+				require.NoError(t, err)
+				require.Empty(t, unscoped)
+				grants, err := DelegableGrants(policies[0], policies[1], policies[2], constraint)
+				require.NoError(t, err)
+				if dimension == authz.SelectorKeyTool || dimension == authz.SelectorKeyDisposition {
+					require.Empty(t, grants, "overlapping tool/disposition exclusions still fail closed")
+					return
+				}
+				require.Len(t, grants, 3, "write, read, and connect implications remain delegable")
+				for _, grant := range grants {
+					require.Equal(t, constraint, grant.Selector)
+					policy, err := NewDelegatedPolicyV1([]authz.Grant{grant})
+					require.NoError(t, err)
+					safe, err := DelegationContained(policy, policies...)
+					require.NoError(t, err)
+					require.True(t, safe)
+				}
+				exclusion.Selector[dimension] = constraint[dimension]
+				grants, err = DelegableGrants(policies[0], policies[1], policies[2], constraint)
+				require.NoError(t, err)
+				require.Empty(t, grants, "selected resource exclusions also block implied scopes")
+			})
+		}
+	}
+}
+
+func TestDelegableGrantsConcreteResourcePreservesPinnedDimensions(t *testing.T) {
+	t.Parallel()
+	constraint := authz.NewSelector(authz.ScopeMCPConnect, "selected-server")
+	constraint[authz.SelectorKeyProjectID] = "selected-project"
+	broad := authz.NewGrant(authz.ScopeMCPWrite, "*")
+	pinned := authz.NewGrant(authz.ScopeMCPConnect, "*")
+	pinned.Selector[authz.SelectorKeyTool] = "safe-tool"
+	pinned.Selector[authz.SelectorKeyDisposition] = authz.DispositionReadOnly
+	grants, err := DelegableGrants([]authz.Grant{broad}, []authz.Grant{broad}, []authz.Grant{pinned}, constraint)
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.Equal(t, authz.ScopeMCPConnect, grants[0].Scope)
+	require.Equal(t, "safe-tool", grants[0].Selector[authz.SelectorKeyTool])
+	require.Equal(t, authz.DispositionReadOnly, grants[0].Selector[authz.SelectorKeyDisposition])
+	for _, dimension := range []string{authz.SelectorKeyResourceID, authz.SelectorKeyProjectID} {
+		incompatible := authz.NewGrant(authz.ScopeMCPConnect, "*")
+		incompatible.Selector[dimension] = "other"
+		grants, err := DelegableGrants([]authz.Grant{broad}, []authz.Grant{broad}, []authz.Grant{incompatible}, constraint)
+		require.NoError(t, err)
+		require.Empty(t, grants)
+	}
+	grants, err = DelegableGrants([]authz.Grant{authz.NewGrant(authz.ScopeSkillRead, "*")}, []authz.Grant{broad}, []authz.Grant{broad}, constraint)
+	require.NoError(t, err)
+	require.Empty(t, grants, "scoped discovery excludes unrelated resource kinds")
 }

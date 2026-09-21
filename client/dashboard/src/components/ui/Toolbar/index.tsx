@@ -69,7 +69,7 @@ import {
  */
 
 // Shared height for every control in the toolbar (40px).
-const CONTROL_HEIGHT = "h-10";
+export const CONTROL_HEIGHT = "h-10";
 
 // The toolbar's shell (the grey bar) — one definition whether the bar
 // lays out a single row or composes Toolbar.Row children.
@@ -100,7 +100,7 @@ function ToolbarClusters({ children }: { children: ReactNode }): JSX.Element {
   return (
     <>
       {hasLeft && (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
           {search}
           {search != null && filters != null && (
             <div className="bg-border h-6 w-px shrink-0" />

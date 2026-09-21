@@ -290,7 +290,7 @@ var _ = Service("adminRemoteSessions", func() {
 		Description("Rotate the client_secret or change non-issuer settings on a global remote_session_client. Requires platform admin.")
 
 		Payload(func() {
-			Extend(rsclients.UpdateRemoteSessionClientForm)
+			Extend(UpdateGlobalRemoteSessionClientForm)
 			security.SessionPayload()
 		})
 
@@ -536,4 +536,24 @@ var CreateGlobalRemoteSessionClientForm = Type("CreateGlobalRemoteSessionClientF
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", rsclients.AudienceAttribute)
 
 	Required("remote_session_issuer_id", "client_id")
+})
+
+// Global clients have no organization-owned signing key and cannot use
+// private_key_jwt or its assertion-audience setting.
+var UpdateGlobalRemoteSessionClientForm = Type("UpdateGlobalRemoteSessionClientForm", func() {
+	Description("Form for updating a global remote_session_client without organization-owned signing keys.")
+
+	Attribute("id", String, "The remote_session_client id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("client_secret", String, "Rotate the client secret. Gram re-encrypts before persisting.")
+	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", func() {
+		Enum("client_secret_basic", "client_secret_post", "none")
+	})
+	Attribute("scope", ArrayOf(String), func() {
+		rsclients.ScopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
+	})
+	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.", rsclients.AudienceAttribute)
+
+	Required("id")
 })

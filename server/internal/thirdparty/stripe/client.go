@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"strconv"
 	"time"
 
 	stripesdk "github.com/stripe/stripe-go/v85"
@@ -31,8 +30,6 @@ const (
 	organizationNameMetadataKey = "organization_name"
 	speakeasyProductMetadataKey = "speakeasy_product"
 	accountTypeMetadataKey      = "aicp_account_type"
-	meterCustomerPayloadKey     = "stripe_customer_id"
-	meterValuePayloadKey        = "value"
 	allocationMetadataKey       = "gram_billing_allocation"
 
 	// speakeasyProductAICP identifies objects billed by the AI Control Plane (this service).
@@ -53,8 +50,6 @@ var errMissingIdempotencyKey = errors.New("idempotency key is required")
 
 var errMissingCustomerID = errors.New("customer id is required")
 
-var errMissingMeterEventName = errors.New("meter event name is required")
-
 var errMissingBillingCycleAnchor = errors.New("billing cycle anchor is required")
 
 var errMissingCheckoutExpiration = errors.New("checkout expiration is required")
@@ -64,11 +59,11 @@ type Catalog struct {
 	// PriceIDTUM identifies the Stripe price included in PAYG subscriptions.
 	PriceIDTUM string
 
-	// MeterIDTUM identifies the Stripe meter queried during reconciliation.
-	MeterIDTUM string
+	// PriceIDMCPEgress identifies the metered MCP egress price in PAYG subscriptions.
+	PriceIDMCPEgress string
 
-	// MeterEventName identifies the event stream used when reporting TUM deltas.
-	MeterEventName string
+	// PriceIDRiskScans identifies the metered risk scans price in PAYG subscriptions.
+	PriceIDRiskScans string
 
 	// PortalConfigurationID identifies the controlled Stripe customer portal configuration.
 	PortalConfigurationID string
@@ -79,11 +74,11 @@ func (c Catalog) Validate() error {
 	if !IsConfigured(c.PriceIDTUM) {
 		return errors.New("missing TUM price id in catalog")
 	}
-	if !IsConfigured(c.MeterIDTUM) {
-		return errors.New("missing TUM meter id in catalog")
+	if !IsConfigured(c.PriceIDMCPEgress) {
+		return errors.New("missing MCP egress price id in catalog")
 	}
-	if !IsConfigured(c.MeterEventName) {
-		return errors.New("missing meter event name in catalog")
+	if !IsConfigured(c.PriceIDRiskScans) {
+		return errors.New("missing risk scans price id in catalog")
 	}
 	if !IsConfigured(c.PortalConfigurationID) {
 		return errors.New("missing portal configuration id in catalog")
@@ -106,8 +101,6 @@ type Client interface {
 	GetSubscription(context.Context, string) (*SubscriptionState, error)
 	SetSubscriptionCancelAtPeriodEnd(context.Context, SetSubscriptionCancelAtPeriodEndInput) (*SubscriptionState, error)
 	CreatePortalSession(context.Context, CreatePortalSessionInput) (*PortalSession, error)
-	CreateMeterEvent(context.Context, CreateMeterEventInput) error
-	GetMeterEventSummary(context.Context, GetMeterEventSummaryInput) (float64, error)
 	GetInvoice(context.Context, string) (*InvoiceState, error)
 	CreateInvoiceItem(context.Context, CreateInvoiceItemInput) (*InvoiceItem, error)
 	CreateCreditNote(context.Context, CreateCreditNoteInput) (*CreditNote, error)
@@ -330,36 +323,6 @@ type PortalSession struct {
 	URL string
 }
 
-// CreateMeterEventInput reports a TUM delta for one Stripe customer.
-type CreateMeterEventInput struct {
-	// CustomerID identifies the Stripe customer receiving the usage.
-	CustomerID string
-
-	// EventName is the immutable event stream captured with the delivery intent.
-	EventName string
-
-	// Value is the signed TUM delta.
-	Value int64
-
-	// Timestamp places the event inside its billing cycle.
-	Timestamp time.Time
-
-	// IdempotencyKey is also used as Stripe's meter-event identifier.
-	IdempotencyKey string
-}
-
-// GetMeterEventSummaryInput identifies a customer's half-open metering interval.
-type GetMeterEventSummaryInput struct {
-	// CustomerID identifies the Stripe customer whose meter is queried.
-	CustomerID string
-
-	// Start is the inclusive, minute-aligned interval boundary.
-	Start time.Time
-
-	// End is the exclusive, minute-aligned interval boundary.
-	End time.Time
-}
-
 // InvoiceState is the current Stripe invoice state required by pass-through
 // billing. Amounts are Stripe minor units.
 type InvoiceState struct {
@@ -453,8 +416,6 @@ type stripeAPI interface {
 	retrieveSubscription(context.Context, string, *stripesdk.SubscriptionRetrieveParams) (*stripesdk.Subscription, error)
 	updateSubscription(context.Context, string, *stripesdk.SubscriptionUpdateParams) (*stripesdk.Subscription, error)
 	createPortalSession(context.Context, *stripesdk.BillingPortalSessionCreateParams) (*stripesdk.BillingPortalSession, error)
-	createMeterEvent(context.Context, *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error)
-	listMeterEventSummaries(context.Context, *stripesdk.BillingMeterEventSummaryListParams) stripesdk.Seq2[*stripesdk.BillingMeterEventSummary, error]
 	retrieveInvoice(context.Context, string, *stripesdk.InvoiceRetrieveParams) (*stripesdk.Invoice, error)
 	createInvoiceItem(context.Context, *stripesdk.InvoiceItemCreateParams) (*stripesdk.InvoiceItem, error)
 	listInvoiceItems(context.Context, *stripesdk.InvoiceItemListParams) stripesdk.Seq2[*stripesdk.InvoiceItem, error]
@@ -536,18 +497,6 @@ func (s *sdkAPI) createPortalSession(ctx context.Context, params *stripesdk.Bill
 		return nil, fmt.Errorf("stripe SDK create billing portal session: %w", err)
 	}
 	return session, nil
-}
-
-func (s *sdkAPI) createMeterEvent(ctx context.Context, params *stripesdk.BillingMeterEventCreateParams) (*stripesdk.BillingMeterEvent, error) {
-	event, err := s.client.V1BillingMeterEvents.Create(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("stripe SDK create meter event: %w", err)
-	}
-	return event, nil
-}
-
-func (s *sdkAPI) listMeterEventSummaries(ctx context.Context, params *stripesdk.BillingMeterEventSummaryListParams) stripesdk.Seq2[*stripesdk.BillingMeterEventSummary, error] {
-	return s.client.V1BillingMeterEventSummaries.List(ctx, params).All(ctx)
 }
 
 func (s *sdkAPI) retrieveInvoice(ctx context.Context, id string, params *stripesdk.InvoiceRetrieveParams) (*stripesdk.Invoice, error) {
@@ -706,6 +655,14 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	params.LineItems = []*stripesdk.CheckoutSessionCreateLineItemParams{
 		{
 			Price:    stripesdk.String(c.catalog.PriceIDTUM),
+			Quantity: nil,
+		},
+		{
+			Price:    stripesdk.String(c.catalog.PriceIDMCPEgress),
+			Quantity: nil,
+		},
+		{
+			Price:    stripesdk.String(c.catalog.PriceIDRiskScans),
 			Quantity: nil,
 		},
 	}
@@ -895,59 +852,6 @@ func unixTime(seconds int64) time.Time {
 		return time.Time{}
 	}
 	return time.Unix(seconds, 0).UTC()
-}
-
-func (c *client) CreateMeterEvent(ctx context.Context, input CreateMeterEventInput) error {
-	if input.IdempotencyKey == "" {
-		return errMissingIdempotencyKey
-	}
-	if !IsConfigured(input.EventName) {
-		return errMissingMeterEventName
-	}
-
-	params := new(stripesdk.BillingMeterEventCreateParams)
-	params.EventName = stripesdk.String(input.EventName)
-	params.Identifier = stripesdk.String(input.IdempotencyKey)
-	params.Payload = map[string]string{
-		meterCustomerPayloadKey: input.CustomerID,
-		meterValuePayloadKey:    strconv.FormatInt(input.Value, 10),
-	}
-	if !input.Timestamp.IsZero() {
-		params.Timestamp = new(input.Timestamp.Unix())
-	}
-	params.SetIdempotencyKey(input.IdempotencyKey)
-
-	if _, err := c.api.createMeterEvent(ctx, params); err != nil {
-		return fmt.Errorf("create Stripe meter event: %w", err)
-	}
-	return nil
-}
-
-// GetMeterEventSummary returns Stripe's eventually consistent observed total.
-// Callers decide whether the value is sufficiently settled for reconciliation.
-func (c *client) GetMeterEventSummary(ctx context.Context, input GetMeterEventSummaryInput) (float64, error) {
-	if !input.Start.Equal(input.Start.Truncate(time.Minute)) || !input.End.Equal(input.End.Truncate(time.Minute)) {
-		return 0, errors.New("meter event summary bounds must be minute-aligned")
-	}
-	if !input.End.After(input.Start) {
-		return 0, errors.New("meter event summary end must be after start")
-	}
-
-	params := new(stripesdk.BillingMeterEventSummaryListParams)
-	params.ID = stripesdk.String(c.catalog.MeterIDTUM)
-	params.Customer = stripesdk.String(input.CustomerID)
-	params.StartTime = new(input.Start.Unix())
-	params.EndTime = new(input.End.Unix())
-	params.Limit = stripesdk.Int64(100)
-
-	var total float64
-	for summary, err := range c.api.listMeterEventSummaries(ctx, params) {
-		if err != nil {
-			return 0, fmt.Errorf("list Stripe meter event summaries: %w", err)
-		}
-		total += summary.AggregatedValue
-	}
-	return total, nil
 }
 
 func (c *client) GetInvoice(ctx context.Context, id string) (*InvoiceState, error) {
@@ -1236,16 +1140,6 @@ func (s *stubClient) CreatePortalSession(context.Context, CreatePortalSessionInp
 	return nil, errors.New("create Stripe billing portal session is unavailable locally")
 }
 
-func (s *stubClient) CreateMeterEvent(ctx context.Context, _ CreateMeterEventInput) error {
-	s.logger.DebugContext(ctx, "stub Stripe meter event skipped")
-	return nil
-}
-
-func (s *stubClient) GetMeterEventSummary(ctx context.Context, _ GetMeterEventSummaryInput) (float64, error) {
-	s.logger.DebugContext(ctx, "stub Stripe meter event summary skipped")
-	return 0, nil
-}
-
 func (s *stubClient) GetInvoice(context.Context, string) (*InvoiceState, error) {
 	return nil, errors.New("retrieve Stripe invoice is unavailable locally")
 }
@@ -1285,8 +1179,8 @@ func (s *stubClient) VerifyWebhook(_ []byte, _ string) (*WebhookEvent, error) {
 func (s *stubClient) Catalog() Catalog {
 	return Catalog{
 		PriceIDTUM:            "",
-		MeterIDTUM:            "",
-		MeterEventName:        "",
+		PriceIDMCPEgress:      "",
+		PriceIDRiskScans:      "",
 		PortalConfigurationID: "",
 	}
 }
