@@ -42,6 +42,33 @@ describe("AGENT_PLATFORMS", () => {
     });
   });
 
+  it("includes restricted egress allowlisting before Cowork telemetry export", () => {
+    const steps = AGENT_PLATFORMS.find(
+      ({ id }) => id === "claude-cowork",
+    )!.setupSteps;
+    const index = steps.findIndex(
+      ({ title }) => title === "Allow Cowork to send events to Speakeasy",
+    );
+    expect(index).toBeGreaterThanOrEqual(0);
+    expect(index).toBeLessThan(
+      steps.findIndex(({ title }) => title === "Enable OTEL export"),
+    );
+    const step = steps[index]!;
+    expect(step.description).toContain(
+      "Admin settings → Capabilities → Domain allowlist",
+    );
+    expect(step.description).toContain("Package managers only");
+    expect(step.description).toContain("All domains");
+    expect(step.fields).toEqual([
+      { label: "Additional allowed domains", value: "app.getgram.ai" },
+    ]);
+    expect(step.afterFields).toContain("no events reach Speakeasy");
+    expect(step.afterFields).toContain(
+      "A working MCP connector does not confirm hook connectivity",
+    );
+    expect(step.afterFields).toContain("start a Cowork session");
+  });
+
   it("ends Cowork setup with authenticated OTEL export instructions", () => {
     const cowork = AGENT_PLATFORMS.find(({ id }) => id === "claude-cowork");
     const step = cowork?.setupSteps.at(-1);
