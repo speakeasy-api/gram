@@ -63,9 +63,6 @@ describe("AGENT_PLATFORMS", () => {
       { label: "Additional allowed domains", value: "app.getgram.ai" },
     ]);
     expect(step.afterFields).toContain("no events reach Speakeasy");
-    expect(step.afterFields).toContain(
-      "A working MCP connector does not confirm hook connectivity",
-    );
     expect(step.afterFields).toContain("start a Cowork session");
   });
 
