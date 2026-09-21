@@ -1253,6 +1253,12 @@ func newStartCommand() *cli.Command {
 						w.WriteHeader(http.StatusOK)
 						return
 					}
+					// The marketplace and hooks proxies stay on the platform
+					// host; the authentication host serves OAuth routes alone.
+					if mcpAuthenticationHost.Matches(r) {
+						h.ServeHTTP(w, r)
+						return
+					}
 					if localMarketplaceServer != nil && isLocalPlatformMCPMarketplaceRoute(r) {
 						localMarketplaceRoutes.ServeHTTP(w, r)
 						return
@@ -1309,10 +1315,12 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("configure mcp security middleware: %w", err)
 			}
-			mux.Use(mcpSecurity)
-			// Must stay above customdomains.Middleware, which refuses hosts it
-			// does not know and would otherwise reject the authentication host.
+			// Below CORS, which browser OAuth clients need on the authentication
+			// host too. Above MCPSecurity, so MCP endpoint paths answer 404 there like
+			// every route the host does not serve, and above customdomains.Middleware,
+			// which refuses hosts it does not know.
 			mux.Use(mcpAuthenticationHost.Middleware)
+			mux.Use(mcpSecurity)
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 			// Ordering invariant: recovery and context-enrichment middleware stay
 			// outside bandwidth metering so panics and pre-handler rejections are

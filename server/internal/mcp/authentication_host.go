@@ -23,12 +23,13 @@ import (
 // AuthenticationHost routes requests addressed to a dedicated authentication
 // host to the per-server OAuth authorization server endpoints.
 //
-// The host is an alias: every route it serves also serves on the MCP host,
-// and the same handlers run with the resource still derived from the MCP
-// host. Which host an endpoint announces as its issuer is a per-issuer
-// setting (user_session_issuers.use_authentication_host), never the host a
-// request happened to arrive on, so the issuer a client recorded stays the
-// issuer it sees.
+// The host is an alias for issuers that opt in with
+// user_session_issuers.use_authentication_host: every route it serves also
+// serves on the MCP host, and the same handlers run with the resource still
+// derived from the MCP host. Such an issuer announces the authentication host
+// as its issuer whichever host a request arrives on, so the issuer a client
+// recorded stays the issuer it sees. For any other issuer the host serves
+// nothing.
 //
 // MCP traffic and protected-resource metadata are not served, so the host
 // can never become an API host by accident; every such path answers 404.
@@ -102,8 +103,7 @@ func (h *AuthenticationHost) Middleware(next http.Handler) http.Handler {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host, err := requestorigin.CanonicalHost(r.Host)
-		if err != nil || host != h.host {
+		if !h.Matches(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -118,6 +118,15 @@ func (h *AuthenticationHost) Middleware(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, authenticationHostContextKey{}, h.baseURL)
 		h.router.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// Matches reports whether r is addressed to the authentication host.
+func (h *AuthenticationHost) Matches(r *http.Request) bool {
+	if h.host == "" {
+		return false
+	}
+	host, err := requestorigin.CanonicalHost(r.Host)
+	return err == nil && host == h.host
 }
 
 // Handle mounts a route on the authentication host. It is a no-op when the

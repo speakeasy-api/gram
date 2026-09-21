@@ -429,10 +429,12 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	if err != nil {
 		return nil, fmt.Errorf("configure mcp security middleware: %w", err)
 	}
-	mux.Use(mcpSecurity)
-	// Must stay above customdomains.Middleware, which refuses hosts it does not
-	// know and would otherwise reject the authentication host.
+	// Below CORS, which browser OAuth clients need on the authentication
+	// host too. Above MCPSecurity, so MCP endpoint paths answer 404 there like
+	// every route the host does not serve, and above customdomains.Middleware,
+	// which refuses hosts it does not know.
 	mux.Use(authenticationHost.Middleware)
+	mux.Use(mcpSecurity)
 	mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 	mux.Use(metering.NewMCPBandwidthMiddleware(logger, publishers.MeterReadings))
 	mux.Use(middleware.SessionMiddleware)
