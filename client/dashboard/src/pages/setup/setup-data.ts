@@ -170,7 +170,7 @@ const SETUP_AGENT_PLATFORMS: Array<{
           { label: "Additional allowed domains", value: "app.getgram.ai" },
         ],
         afterFields:
-          "Without this exception, Cowork hooks cannot leave the sandbox and no events reach Speakeasy. After completing Cowork setup, including OTEL export, start a Cowork session and confirm its events arrive in the traffic section below.",
+          "Without this exception, Cowork hooks cannot leave the sandbox and no events reach Speakeasy. After completing Cowork setup, including OTEL export, start a Cowork session and confirm its events arrive in Speakeasy.",
       },
     ],
   },
