@@ -55,7 +55,7 @@ type handler struct {
 // ErrIntegrationUnavailable identifies a missing or explicitly disabled binding.
 var ErrIntegrationUnavailable = errors.New("inference integration unavailable")
 
-const fallbackVerdictJSON = `{"action":"deny","deny_reason":"Speakeasy could not evaluate this request. Please try again."}`
+const fallbackVerdictJSON = `{"action":"deny","deny_reason":"` + unavailableDenyReason + `"}`
 
 // verdictTimeoutWriter translates TimeoutHandler's fallback into the protocol's
 // HTTP-200 denial. TimeoutHandler buffers writes and cancels work safely, even

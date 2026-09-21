@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,9 +61,9 @@ func TestDeniedToolRetryDoesNotBecomeAccepted(t *testing.T) {
 		{Role: "user", Content: json.RawMessage(`[{"type":"tool_result","tool_use_id":"call-example","content":"benign result"}]`)},
 	}
 	store := &memoryStore{}
-	calls := 0
-	service := &Service{store: store, scanner: scannerFunc(func(_ context.Context, r risk.RealtimeScanRequest) (*risk.ScanResult, error) {
-		calls++
+	var calls atomic.Int32
+	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scannerFunc(func(_ context.Context, r risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+		calls.Add(1)
 		if r.ToolName == "blocked_tool" {
 			return &risk.ScanResult{Action: "block"}, nil
 		}
@@ -80,7 +82,7 @@ func TestDeniedToolRetryDoesNotBecomeAccepted(t *testing.T) {
 		require.Equal(t, "deny", verdict.Action)
 		require.Equal(t, markerA, store.accepted)
 	}
-	require.Equal(t, 3, calls)
+	require.LessOrEqual(t, int(calls.Load()), 1+2*scanConcurrency)
 	require.Len(t, store.saved, 3)
 	// An edited retry recovers: denial is not sticky session state.
 	frame.Messages[1] = textMessage("assistant", "safe reply")
@@ -101,10 +103,9 @@ func TestPartialEvaluationDoesNotAdvanceCheckpoint(t *testing.T) {
 			store := &memoryStore{accepted: before}
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			calls := 0
-			service := &Service{store: store, scanner: scannerFunc(func(ctx context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
-				calls++
-				if calls == 2 {
+			var calls atomic.Int32
+			service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scannerFunc(func(ctx context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+				if calls.Add(1) == 2 {
 					switch mode {
 					case "error":
 						return nil, errors.New("scanner unavailable")
@@ -138,11 +139,11 @@ func TestArchivedHistoryWithoutCheckpointIsRescanned(t *testing.T) {
 	frame.Messages = []Message{textMessage("user", "prompt"), textMessage("assistant", "reply"), textMessage("user", "result")}
 	store := &deltaStore{newStart: len(frame.Messages)}
 	scanned := &recordingScanner{}
-	service := &Service{store: store, scanner: scanned}
+	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanned}
 	_, err := service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
 	require.Len(t, scanned.inputs, 3)
-	scanned.inputs = nil
+	scanned.reset()
 	_, err = service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
 	require.Len(t, scanned.inputs, 1)
@@ -155,7 +156,7 @@ func TestIncompleteAllowRetainsLastKnownGoodCheckpoint(t *testing.T) {
 			t.Parallel()
 			store := &memoryStore{}
 			scanned := &recordingScanner{}
-			service := &Service{store: store, scanner: scanned}
+			service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanned}
 			frame := exampleFrame()
 			verdict, err := service.Process(t.Context(), Config{}, frame)
 			require.NoError(t, err)
@@ -178,7 +179,8 @@ func TestIncompleteAllowRetainsLastKnownGoodCheckpoint(t *testing.T) {
 			}
 			require.Equal(t, markerA, store.accepted)
 			require.Len(t, store.saved, 2)
-			scanned.incomplete, scanned.result, scanned.inputs = false, nil, nil
+			scanned.incomplete, scanned.result = false, nil
+			scanned.reset()
 			verdict, err = service.Process(t.Context(), Config{}, frame)
 			require.NoError(t, err)
 			require.Equal(t, "allow", verdict.Action)
@@ -232,7 +234,7 @@ func TestCheckpointConflictDoesNotHideAcceptanceErrors(t *testing.T) {
 				}
 				return tc.acceptErr
 			}}
-			service := &Service{store: store, scanner: &recordingScanner{}}
+			service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &recordingScanner{}}
 			verdict, err := service.Process(ctx, Config{}, exampleFrame())
 			if tc.wantErr != nil {
 				require.ErrorIs(t, err, tc.wantErr)

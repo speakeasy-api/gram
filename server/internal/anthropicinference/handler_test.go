@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -226,10 +227,10 @@ func TestAttachDeadlineIncludesUnresponsiveResolver(t *testing.T) {
 	})
 }
 
-type slowScanner struct{ calls int }
+type slowScanner struct{ calls atomic.Int32 }
 
 func (s *slowScanner) ScanForInferenceEnforcement(ctx context.Context, _ risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error) {
-	s.calls++
+	s.calls.Add(1)
 	select {
 	case <-ctx.Done():
 		return nil, fmt.Errorf("scan deadline: %w", ctx.Err())
@@ -247,8 +248,8 @@ func TestAttachBoundsLongTranscriptScanning(t *testing.T) {
 		}
 		body, err := json.Marshal(frame)
 		require.NoError(t, err)
-		scanner := &slowScanner{calls: 0}
-		service := &Service{store: &memoryStore{saved: nil, userID: "", err: nil}, scanner: scanner}
+		scanner := &slowScanner{}
+		service := &Service{logger: testenv.NewLogger(t), store: &memoryStore{saved: nil, userID: "", err: nil}, scanner: scanner}
 		key := []byte("EXAMPLE-signing-secret")
 		var config Config
 		config.SigningSecrets = []string{"whsec_" + base64.StdEncoding.EncodeToString(key)}
@@ -260,11 +261,11 @@ func TestAttachBoundsLongTranscriptScanning(t *testing.T) {
 		start := time.Now()
 		mux.ServeHTTP(response, request)
 		synctest.Wait()
-		require.Equal(t, 9*time.Second, time.Since(start))
+		require.Equal(t, verdictBudget, time.Since(start))
 		require.Equal(t, http.StatusOK, response.Code)
 		require.JSONEq(t, fallbackVerdictJSON, response.Body.String())
-		// A scan may start at the deadline before timer cancellation is scheduled;
-		// it must immediately stop once the shared context is canceled.
-		require.LessOrEqual(t, scanner.calls, 10)
+		// Scans may start at the budget deadline before timer cancellation is
+		// scheduled; they must immediately stop once the shared context is canceled.
+		require.LessOrEqual(t, int(scanner.calls.Load()), 5*scanConcurrency)
 	})
 }
