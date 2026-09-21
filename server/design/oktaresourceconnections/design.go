@@ -168,43 +168,4 @@ var _ = Service("oktaResourceConnections", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "reset")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResetOktaResourceConnection"}`)
 	})
-
-	Method("exportChecklist", func() {
-		Description("Download the checklist of pending servers as CSV or Markdown, with the values to enter for each. Requires org:admin.")
-
-		Security(security.Session)
-
-		Payload(func() {
-			security.SessionPayload()
-			Attribute("format", String, func() {
-				Enum("csv", "markdown")
-				Default("csv")
-			})
-			Attribute("include_all", Boolean, "Include connected and not-applicable servers.", func() {
-				Default(false)
-			})
-		})
-
-		Result(func() {
-			Attribute("content_type", String, "text/csv or text/markdown, with charset.")
-			Attribute("content_disposition", String)
-			Required("content_type", "content_disposition")
-		})
-
-		HTTP(func() {
-			GET("/rpc/oktaResourceConnections.exportChecklist")
-			security.SessionHeader()
-			Param("format")
-			Param("include_all")
-			Response(StatusOK, func() {
-				ContentType("text/*")
-				Header("content_type:Content-Type")
-				Header("content_disposition:Content-Disposition")
-			})
-			SkipResponseBodyEncodeDecode()
-		})
-
-		Meta("openapi:operationId", "exportOktaResourceConnectionsChecklist")
-		Meta("openapi:extension:x-speakeasy-name-override", "exportChecklist")
-	})
 })

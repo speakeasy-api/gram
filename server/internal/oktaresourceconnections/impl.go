@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/url"
 	"regexp"
@@ -697,54 +696,6 @@ func (s *Service) Reset(ctx context.Context, payload *srv.ResetPayload) (*srv.Ok
 		return nil, oops.E(oops.CodeUnexpected, err, "commit reset").LogError(ctx, logger)
 	}
 	return buildRow(snap, r), nil
-}
-
-func (s *Service) ExportChecklist(ctx context.Context, payload *srv.ExportChecklistPayload) (*srv.ExportChecklistResult, io.ReadCloser, error) {
-	authCtx, logger, err := s.authorize(ctx, false)
-	if err != nil {
-		return nil, nil, err
-	}
-	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, nil, err
-	}
-	rows := make([]exportRow, 0, len(snap.rows))
-	for _, r := range orderRows(snap.rows) {
-		if !payload.IncludeAll && !r.state.Pending() {
-			continue
-		}
-		audience := ""
-		if r.connection != nil {
-			audience = r.connection.Audience
-		}
-		rows = append(rows, exportRow{
-			Server:            r.server.Name.String,
-			Project:           r.server.ProjectSlug,
-			State:             string(r.state),
-			ResourceIndicator: r.resource,
-			Audience:          audience,
-			ClientID:          r.clientID,
-			Scopes:            strings.Join(r.scopes, " "),
-			DeepLink:          snap.deepLink,
-		})
-	}
-	stamp := s.now().UTC().Format("2006-01-02")
-	var body []byte
-	var contentType, filename string
-	switch payload.Format {
-	case FormatMarkdown:
-		body = renderMarkdown(rows)
-		contentType = "text/markdown; charset=utf-8"
-		filename = "xaa-checklist-" + stamp + ".md"
-	default:
-		body = renderCSV(rows)
-		contentType = "text/csv; charset=utf-8"
-		filename = "xaa-checklist-" + stamp + ".csv"
-	}
-	return &srv.ExportChecklistResult{
-		ContentType:        contentType,
-		ContentDisposition: fmt.Sprintf("attachment; filename=%q", filename),
-	}, io.NopCloser(bytes.NewReader(body)), nil
 }
 
 // orderRows puts pending servers first, then by name.

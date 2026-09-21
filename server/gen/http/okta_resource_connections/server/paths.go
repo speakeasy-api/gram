@@ -21,8 +21,3 @@ func ConfirmOktaResourceConnectionsPath() string {
 func ResetOktaResourceConnectionsPath() string {
 	return "/rpc/oktaResourceConnections.reset"
 }
-
-// ExportChecklistOktaResourceConnectionsPath returns the URL path to the oktaResourceConnections service exportChecklist HTTP endpoint.
-func ExportChecklistOktaResourceConnectionsPath() string {
-	return "/rpc/oktaResourceConnections.exportChecklist"
-}

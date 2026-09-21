@@ -3,7 +3,6 @@
  */
 
 import { oktaResourceConnectionsConfirm } from "../funcs/oktaResourceConnectionsConfirm.js";
-import { oktaResourceConnectionsExportChecklist } from "../funcs/oktaResourceConnectionsExportChecklist.js";
 import { oktaResourceConnectionsList } from "../funcs/oktaResourceConnectionsList.js";
 import { oktaResourceConnectionsReset } from "../funcs/oktaResourceConnectionsReset.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -14,11 +13,6 @@ import {
   ConfirmOktaResourceConnectionsRequest,
   ConfirmOktaResourceConnectionsSecurity,
 } from "../models/operations/confirmoktaresourceconnections.js";
-import {
-  ExportOktaResourceConnectionsChecklistRequest,
-  ExportOktaResourceConnectionsChecklistResponse,
-  ExportOktaResourceConnectionsChecklistSecurity,
-} from "../models/operations/exportoktaresourceconnectionschecklist.js";
 import {
   ListOktaResourceConnectionsRequest,
   ListOktaResourceConnectionsSecurity,
@@ -42,25 +36,6 @@ export class OktaResourceConnections extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ConfirmOktaResourceConnectionsResult> {
     return unwrapAsync(oktaResourceConnectionsConfirm(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * exportChecklist oktaResourceConnections
-   *
-   * @remarks
-   * Download the checklist of pending servers as CSV or Markdown, with the values to enter for each. Requires org:admin.
-   */
-  async exportChecklist(
-    request?: ExportOktaResourceConnectionsChecklistRequest | undefined,
-    security?: ExportOktaResourceConnectionsChecklistSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<ExportOktaResourceConnectionsChecklistResponse> {
-    return unwrapAsync(oktaResourceConnectionsExportChecklist(
       this,
       request,
       security,
