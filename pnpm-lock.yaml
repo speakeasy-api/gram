@@ -310,7 +310,7 @@ importers:
         version: 3.14.11(react@19.2.8)(react-dom@19.2.8(react@19.2.8))
       '@xstate/react':
         specifier: ^6.1.0
-        version: 6.1.0(react@19.2.8)(xstate@5.32.4)
+        version: 6.1.0(react@19.2.8)(xstate@5.32.6)
       '@xyflow/react':
         specifier: ^12.11.1
         version: 12.11.1(@types/react@19.2.18)(@types/react-dom@19.2.7(@types/react@19.2.18))(react@19.2.8)(react-dom@19.2.8(react@19.2.8))
@@ -429,8 +429,8 @@ importers:
         specifier: ^2.3.1
         version: 2.3.1
       xstate:
-        specifier: ^5.32.4
-        version: 5.32.4
+        specifier: ^5.32.6
+        version: 5.32.6
       zod:
         specifier: ^4
         version: 4.4.3
@@ -7642,8 +7642,8 @@ packages:
     resolution: {integrity: sha512-bx8Q1STctnNaaDymWnkfQLKofs0mGNN7rLLapJlGuV3VlvegD7Ls4ggMjE3aUSWItCCzU0PEv45lI87iSigiCA==}
     engines: {node: '>=20.0'}
 
-  xstate@5.32.4:
-    resolution: {integrity: sha512-E5WtDB8DBs2ZWliz2Ry9XfbSZTbBRcK/cwefBot04qQ/L5SLP16xpnTDU4/ZFXuXFhNxi7JP2RhuoGwBnM+S4A==}
+  xstate@5.32.6:
+    resolution: {integrity: sha512-WfA8WNrh6r9osuGwVm+aIPM4jmMW2LKHV1Yv9thYpOtL4HVF/kobh95K/O8v2jDCpDmP2EoY+6uvuqHXCZ6ZLw==}
 
   y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
@@ -11246,13 +11246,13 @@ snapshots:
 
   '@workflow/serde@4.1.0': {}
 
-  '@xstate/react@6.1.0(react@19.2.8)(xstate@5.32.4)':
+  '@xstate/react@6.1.0(react@19.2.8)(xstate@5.32.6)':
     dependencies:
       react: 19.2.8
       use-isomorphic-layout-effect: 1.2.1(@types/react@19.2.18)(react@19.2.8)
       use-sync-external-store: 1.6.0(react@19.2.8)
     optionalDependencies:
-      xstate: 5.32.4
+      xstate: 5.32.6
 
   '@xyflow/react@12.11.1(@types/react@19.2.18)(@types/react-dom@19.2.7(@types/react@19.2.18))(react@19.2.8)(react-dom@19.2.8(react@19.2.8))':
     dependencies:
@@ -15026,7 +15026,7 @@ snapshots:
       '@oozcitak/util': 10.0.0
       js-yaml: 4.3.1
 
-  xstate@5.32.4: {}
+  xstate@5.32.6: {}
 
   y18n@5.0.8: {}
 
