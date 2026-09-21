@@ -491,6 +491,9 @@ type hostedToolEventParams struct {
 	statusCode    int
 	clientName    string
 	clientVersion string
+	// toolError models an upstream that answered successfully but flagged
+	// isError, which Gram records alongside an unchanged 2xx status code.
+	toolError bool
 }
 
 func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, p hostedToolEventParams) {
@@ -515,6 +518,9 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 	}
 	if p.clientVersion != "" {
 		attrs["gram.mcp.client.version"] = p.clientVersion
+	}
+	if p.toolError {
+		attrs["gram.tool_call.error"] = "upstream_result_error"
 	}
 	attrsJSON, err := json.Marshal(attrs)
 	require.NoError(t, err)

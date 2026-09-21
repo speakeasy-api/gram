@@ -155,6 +155,10 @@ export type ToolUsageTraceSummary = {
    */
   targetType: ToolUsageTraceSummaryTargetType;
   /**
+   * Whether the tool ran and reported failure in its own result, which an upstream MCP server does by answering isError. The status code stays 2xx in that case, so this is the only signal separating it from a success.
+   */
+  toolError?: boolean | undefined;
+  /**
    * Tool name shown in the row
    */
   toolName: string;
@@ -228,6 +232,7 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
     target_kind: ToolUsageTraceSummaryTargetKind$inboundSchema,
     target_label: z.string(),
     target_type: ToolUsageTraceSummaryTargetType$inboundSchema,
+    tool_error: z.optional(z.boolean()),
     tool_name: z.string(),
     trace_id: z.optional(z.string()),
     user_key: z.string(),
@@ -255,6 +260,7 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
       "target_kind": "targetKind",
       "target_label": "targetLabel",
       "target_type": "targetType",
+      "tool_error": "toolError",
       "tool_name": "toolName",
       "trace_id": "traceId",
       "user_key": "userKey",

@@ -8806,6 +8806,10 @@ type ToolUsageTraceSummaryResponseBody struct {
 	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
 	// Hook execution status when the row came from hook telemetry
 	HookStatus *string `form:"hook_status,omitempty" json:"hook_status,omitempty" xml:"hook_status,omitempty"`
+	// Whether the tool ran and reported failure in its own result, which an
+	// upstream MCP server does by answering isError. The status code stays 2xx in
+	// that case, so this is the only signal separating it from a success.
+	ToolError *bool `form:"tool_error,omitempty" json:"tool_error,omitempty" xml:"tool_error,omitempty"`
 	// Hook block reason when hook_status is blocked
 	BlockReason *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
 	// AI account classification ('team' or 'personal'); empty/absent when

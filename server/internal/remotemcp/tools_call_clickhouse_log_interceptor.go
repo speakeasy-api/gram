@@ -159,6 +159,12 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	}
 	logAttrs.RecordDuration(durationSec)
 	logAttrs.RecordStatusCode(statusCode)
+	// An upstream that answers successfully but flags isError keeps its 2xx
+	// status, so the failure has to be carried separately or the row reads as
+	// a success.
+	if call.Result != nil && call.Result.IsError {
+		logAttrs.RecordToolCallError(tm.ToolCallErrorUpstreamResult)
+	}
 	logAttrs.RecordRequestBody(requestBytes)
 	logAttrs.RecordResponseBody(outputBytes)
 	logAttrs.RecordRequestBodyContent(call.Request.Params.Arguments)
