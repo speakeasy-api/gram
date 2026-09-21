@@ -81,6 +81,10 @@ type ResetResponseBody struct {
 	NotApplicableReason *string `form:"not_applicable_reason,omitempty" json:"not_applicable_reason,omitempty" xml:"not_applicable_reason,omitempty"`
 	// Whether the administrator still has a step to do for this server.
 	Pending bool `form:"pending" json:"pending" xml:"pending"`
+	// The upstream authorization server ID. Together with the resource indicator,
+	// identifies the shared readiness confirmation; independent of the confirmed
+	// identity assertion audience.
+	IssuerID *string `form:"issuer_id,omitempty" json:"issuer_id,omitempty" xml:"issuer_id,omitempty"`
 	// The resource indicator to enter on the connection: the server's RFC 9728
 	// resource identifier when known, otherwise its URL.
 	ResourceIndicator string `form:"resource_indicator" json:"resource_indicator" xml:"resource_indicator"`
@@ -789,6 +793,10 @@ type OktaResourceConnectionServerResponseBody struct {
 	NotApplicableReason *string `form:"not_applicable_reason,omitempty" json:"not_applicable_reason,omitempty" xml:"not_applicable_reason,omitempty"`
 	// Whether the administrator still has a step to do for this server.
 	Pending bool `form:"pending" json:"pending" xml:"pending"`
+	// The upstream authorization server ID. Together with the resource indicator,
+	// identifies the shared readiness confirmation; independent of the confirmed
+	// identity assertion audience.
+	IssuerID *string `form:"issuer_id,omitempty" json:"issuer_id,omitempty" xml:"issuer_id,omitempty"`
 	// The resource indicator to enter on the connection: the server's RFC 9728
 	// resource identifier when known, otherwise its URL.
 	ResourceIndicator string `form:"resource_indicator" json:"resource_indicator" xml:"resource_indicator"`
@@ -888,6 +896,7 @@ func NewResetResponseBody(res *oktaresourceconnections.OktaResourceConnectionSer
 		State:                res.State,
 		NotApplicableReason:  res.NotApplicableReason,
 		Pending:              res.Pending,
+		IssuerID:             res.IssuerID,
 		ResourceIndicator:    res.ResourceIndicator,
 		ClientID:             res.ClientID,
 		ClientBinding:        res.ClientBinding,

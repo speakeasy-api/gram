@@ -11,6 +11,7 @@ import { invalidateAllRiskRuleBreakdown } from "@gram/client/react-query/riskRul
 import { invalidateAllRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { invalidateAllRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
 import { showUndoToast } from "@/lib/toast-undo";
+import { chunk } from "@/lib/utils";
 import {
   expireRestoredAfter,
   getRestoredFindings,
@@ -30,14 +31,6 @@ const MAX_BATCH = 500;
 // restore triggers. The window only has to outlast that lag; it expires on its
 // own so an id can never be hidden indefinitely.
 export const RESTORE_HIDE_MS = 60_000;
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    chunks.push(items.slice(i, i + size));
-  }
-  return chunks;
-}
 
 /** Runs `mutateAsync` once per MAX_BATCH-sized chunk of `ids`, one batch at a
  * time (not concurrently — a selection of several thousand ids should not

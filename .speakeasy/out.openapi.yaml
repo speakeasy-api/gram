@@ -80060,20 +80060,49 @@ components:
     IdentityProviderConnectionChecklistItem:
       type: object
       properties:
+        completed:
+          type: boolean
+          description: Whether the last verification observed this step done. Omitted for steps the server cannot observe; the administrator tracks those.
         description:
           type: string
           description: What to do in the console, including any value copied from this connection.
+        details:
+          type: array
+          items:
+            type: string
+          description: Sub-steps, in order. Empty when the description says it all.
+        group:
+          type: string
+          description: 'Which phase the step belongs to: connect (the service app the connection authenticates with) or cross_app_access (the AI agent).'
+          enum:
+            - connect
+            - cross_app_access
         key:
           type: string
           description: Stable step identifier.
+          enum:
+            - add_oin_app
+            - create_api_services_app
+            - public_key_auth
+            - dpop
+            - grant_scopes
+            - assign_admin_roles
+            - submit_client_id
+            - register_ai_agent
+            - link_agent_app
+            - activate_agent_app
+            - record_ai_agent
+            - first_resource_connection
         title:
           type: string
           description: Short step title.
       description: One step the organization administrator completes in the identity provider's console. Ordered; keys are stable across responses.
       required:
         - key
+        - group
         - title
         - description
+        - details
     IdentityProviderConnectionReconcileRun:
       type: object
       properties:
@@ -84830,6 +84859,10 @@ components:
         deep_link:
           type: string
           description: Link to the add-resource-connection form of the AI agent in the identity provider console. Omitted until an agent is recorded or when the org uses a custom domain.
+        issuer_id:
+          type: string
+          description: The upstream authorization server ID. Together with the resource indicator, identifies the shared readiness confirmation; independent of the confirmed identity assertion audience.
+          format: uuid
         mcp_server_id:
           type: string
           description: MCP server ID.

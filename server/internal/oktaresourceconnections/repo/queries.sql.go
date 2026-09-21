@@ -490,6 +490,27 @@ func (q *Queries) GetResourceConnectionForUpdate(ctx context.Context, arg GetRes
 	return i, err
 }
 
+const hasResourceConnections = `-- name: HasResourceConnections :one
+SELECT EXISTS (
+  SELECT 1
+  FROM okta_resource_connections
+  WHERE organization_id = $1
+    AND identity_provider_connection_id = $2
+)
+`
+
+type HasResourceConnectionsParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) HasResourceConnections(ctx context.Context, arg HasResourceConnectionsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasResourceConnections, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listEMABindings = `-- name: ListEMABindings :many
 SELECT
     b.project_id

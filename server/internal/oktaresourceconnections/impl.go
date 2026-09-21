@@ -118,6 +118,16 @@ func DeleteForConnection(ctx context.Context, dbtx repo.DBTX, organizationID str
 	return nil
 }
 
+// ExistForConnection reports whether any resource connection is recorded
+// for an identity provider connection.
+func ExistForConnection(ctx context.Context, dbtx repo.DBTX, organizationID string, connectionID uuid.UUID) (bool, error) {
+	has, err := repo.New(dbtx).HasResourceConnections(ctx, repo.HasResourceConnectionsParams{OrganizationID: organizationID, IdentityProviderConnectionID: connectionID})
+	if err != nil {
+		return false, fmt.Errorf("read resource connections: %w", err)
+	}
+	return has, nil
+}
+
 // authorize runs RBAC; a mutation additionally refuses support sessions and non-principal API keys.
 func (s *Service) authorize(ctx context.Context, mutation bool) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -797,6 +807,7 @@ func buildRow(snap *snapshot, r row) *srv.OktaResourceConnectionServer {
 		NotApplicableReason:  conv.PtrEmpty(r.reason),
 		Pending:              r.state.Pending(),
 		ResourceIndicator:    r.resource,
+		IssuerID:             new(r.server.IssuerID.String()),
 		ClientID:             conv.PtrEmpty(r.clientID),
 		ClientBinding:        r.binding,
 		Scopes:               scopesOr(nil, r.scopes),
