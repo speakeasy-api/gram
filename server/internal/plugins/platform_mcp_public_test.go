@@ -22,7 +22,11 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 		"speakeasy/.mcp.json",
 		"speakeasy/.claude-plugin/plugin.json",
 		"speakeasy/skills/manage-mcp-access/SKILL.md",
+		"speakeasy/skills/add-existing-mcp-servers/SKILL.md",
+		"agent-plugins/speakeasy/skills/add-existing-mcp-servers/SKILL.md",
 		"agent-plugins/speakeasy/skills/manage-mcp-access/SKILL.md",
+		"speakeasy/skills/migrate-mcp-between-projects/SKILL.md",
+		"agent-plugins/speakeasy/skills/migrate-mcp-between-projects/SKILL.md",
 		"cursor-plugins/speakeasy-cursor/.cursor-plugin/plugin.json",
 		"speakeasy-codex/.codex-plugin/plugin.json",
 	} {

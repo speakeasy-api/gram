@@ -43,6 +43,7 @@ type Service struct {
 	logPublisher    gcp.Publisher[*otelv1.InboundLogRecord]
 	metricPublisher gcp.Publisher[*otelv1.InboundMetric]
 	spanPublisher   gcp.Publisher[*otelv1.InboundSpan]
+	hooksSink       HooksSink
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -70,6 +71,7 @@ func NewService(
 		logPublisher:    logPublisher,
 		metricPublisher: metricPublisher,
 		spanPublisher:   spanPublisher,
+		hooksSink:       nil,
 	}
 }
 

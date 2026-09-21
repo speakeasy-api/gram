@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
@@ -49,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
@@ -70,6 +72,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 func workerRuntimeFlags() []cli.Flag {
@@ -193,6 +196,17 @@ func newWorkerCommand() *cli.Command {
 			Usage:    "List of CIDR blocks to block for SSRF protection",
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "tunnel-forward-token",
+			Usage:    "Shared secret presented to the tunnel gateway forward listener to authenticate gram-worker",
+			Required: true,
+			EnvVars:  []string{"GRAM_TUNNEL_FORWARD_TOKEN"},
+		},
+		&cli.StringSliceFlag{
+			Name:    "tunnel-gateway-cidr-blocks",
+			Usage:   "CIDR blocks the tunnel gateway advertise addresses live in (cluster pod range). Allowlisted past the guardian egress policy for tunnel forwards only; unset means tunnels to private addresses fail closed",
+			EnvVars: []string{"GRAM_TUNNEL_GATEWAY_CIDR_BLOCKS"},
 		},
 		&cli.StringFlag{
 			Name:     "polar-api-key",
@@ -329,6 +343,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskReconcileFlags()...)
+	flags = append(flags, riskLLMFlags()...)
 	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
@@ -578,6 +593,7 @@ func newWorkerCommand() *cli.Command {
 				authz.EngineOpts{
 					AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 					AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
+					AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 					DevMode:                          c.String("environment") == "local",
 				})
 
@@ -602,7 +618,7 @@ func newWorkerCommand() *cli.Command {
 
 			riskSignaler := background.NewThrottledSignaler(
 				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
-				30*time.Second,
+				analysisstatus.SignalCooldown,
 				logger,
 			)
 			// riskSignaler.Shutdown is flushed synchronously after temporalWorker.Run
@@ -712,6 +728,27 @@ func newWorkerCommand() *cli.Command {
 
 			chatClient := chat.NewAgenticChatClient(completionsClient)
 
+			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a
+			// typo here would strand tunnels fail-closed with no signal. Reject
+			// misconfiguration at startup instead.
+			tunnelGatewayCIDRs := c.StringSlice("tunnel-gateway-cidr-blocks")
+			for _, cidr := range tunnelGatewayCIDRs {
+				if _, _, err := net.ParseCIDR(cidr); err != nil {
+					return fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
+				}
+			}
+
+			// Back-channel OAuth calls (token refresh, revocation) for
+			// tunnel-bound remote session clients ride this transport instead
+			// of dialing from cloud egress. The refresh sweep runs here, so
+			// the worker needs the same tunnel reach as the HTTP server.
+			tunnelHTTPClient := tunnelrouting.NewHTTPClient(
+				route.NewRedis(redisClient),
+				c.String("tunnel-forward-token"),
+				guardianPolicy,
+				tunnelGatewayCIDRs,
+			)
+
 			assistantRuntime, err := newAssistantRuntime(ctx, logger, tracerProvider, c, guardianPolicy, db, serverURL)
 			if err != nil {
 				return err
@@ -761,7 +798,7 @@ func newWorkerCommand() *cli.Command {
 			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
-			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, auditLogger)
+			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnelHTTPClient, auditLogger)
 			gcpIdentity := newGCPIdentity(ctx, logger, c)
 			kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
 			if err != nil {
@@ -771,6 +808,7 @@ func newWorkerCommand() *cli.Command {
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:               guardianPolicy,
+				TunnelHTTPClient:             tunnelHTTPClient,
 				DB:                           db,
 				EncryptionClient:             encryptionClient,
 				FeatureProvider:              featureFlags,
@@ -788,7 +826,6 @@ func newWorkerCommand() *cli.Command {
 				BillingTracker:               billingTracker,
 				BillingRepository:            billingRepo,
 				StripeClient:                 stripeClient,
-				TUMMeterStreamingEnabled:     c.Bool(stripeTUMMeterStreamingFlagName),
 				RedisClient:                  redisClient,
 				PosthogClient:                posthogClient,
 				EmailService:                 emailService,
@@ -818,6 +855,7 @@ func newWorkerCommand() *cli.Command {
 				TrialEmailsService:           trialEmailsService,
 				RiskFingerprinter:            riskFingerprinter,
 				DisableRiskRetroReconcile:    c.Bool("disable-clickhouse-risk-retro-reconcile"),
+				LLMAnalyzerEnabled:           llmAnalyzerConfigFromCLI(c).Enabled(),
 			})
 
 			// Flush the throttle's queued trailing risk signals before this Action

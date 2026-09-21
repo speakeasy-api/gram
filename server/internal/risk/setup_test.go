@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
@@ -81,6 +82,7 @@ func realtimeScanRequest(organizationID string, projectID uuid.UUID, userID, tex
 		},
 		Text:        text,
 		MessageType: messageType,
+		ToolCallID:  "",
 		ToolName:    toolName,
 	}
 }
@@ -122,8 +124,10 @@ func TestMain(m *testing.M) {
 }
 
 type signalerStub struct {
-	mu    sync.Mutex
-	calls []uuid.UUID
+	mu             sync.Mutex
+	calls          []uuid.UUID
+	describeStatus analysisstatus.Status
+	describeErr    error
 }
 
 type countingCache struct {
@@ -159,6 +163,20 @@ func (s *signalerStub) Signal(_ context.Context, projectID uuid.UUID) error {
 	defer s.mu.Unlock()
 	s.calls = append(s.calls, projectID)
 	return nil
+}
+
+// Describe answers a fixed status so service tests can exercise the status
+// endpoint without a Temporal server. Tests may set describeStatus on the stub.
+func (s *signalerStub) Describe(_ context.Context, _ uuid.UUID) (analysisstatus.Status, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.describeErr != nil {
+		return analysisstatus.Status{}, s.describeErr
+	}
+	if s.describeStatus.State == "" {
+		return analysisstatus.Status{State: analysisstatus.StateNever, RunningSince: nil, LastRunStartedAt: nil, LastRunAt: nil, LastRunOutcome: ""}, nil
+	}
+	return s.describeStatus, nil
 }
 
 func (s *signalerStub) Calls() []uuid.UUID {

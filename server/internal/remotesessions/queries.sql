@@ -47,7 +47,8 @@ INSERT INTO remote_session_issuers (
     metadata_last_error_at,
     metadata_last_error_url,
     oidc,
-    passthrough
+    passthrough,
+    tunneled_mcp_server_id
 )
 VALUES (
     @project_id,
@@ -93,7 +94,8 @@ VALUES (
     CASE WHEN @metadata_last_error::text = '' THEN NULL ELSE clock_timestamp() END,
     NULLIF(@metadata_last_error_url::text, ''),
     @oidc,
-    @passthrough
+    @passthrough,
+    @tunneled_mcp_server_id
 )
 RETURNING *;
 
@@ -350,13 +352,14 @@ SET
         WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
     END,
-    -- A manually changed key URL invalidates every value derived from the old
-    -- source. Omitting the field or explicitly restating the same URL keeps the
-    -- cache; clearing or replacing it clears the cache atomically.
-    jwks = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
-    jwks_fetched_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
-    jwks_cache_expires_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
-    jwks_etag = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
+    -- Changing the issuer identity or key URL invalidates every value derived
+    -- from the old source. Restating either value keeps the cache.
+    jwks = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_fetched_at ELSE NULL END,
+    jwks_last_error = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error ELSE NULL END,
+    jwks_last_error_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
@@ -401,6 +404,11 @@ SET
     resource_indicator_supported = COALESCE(sqlc.narg('resource_indicator_supported'), resource_indicator_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
+    tunneled_mcp_server_id = CASE
+        WHEN sqlc.narg('tunneled_mcp_server_id')::text = '' THEN NULL
+        WHEN sqlc.narg('tunneled_mcp_server_id')::text IS NULL THEN tunneled_mcp_server_id
+        ELSE (sqlc.narg('tunneled_mcp_server_id')::text)::uuid
+    END,
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
@@ -467,6 +475,8 @@ SET
     jwks_uri = CASE WHEN @jwks_uri::text = '' THEN NULL ELSE @jwks_uri::text END,
     jwks = NULLIF(@jwks::text, '')::jsonb,
     jwks_fetched_at = sqlc.narg('jwks_fetched_at')::timestamptz,
+    jwks_last_error = NULL,
+    jwks_last_error_at = NULL,
     jwks_cache_expires_at = sqlc.narg('jwks_cache_expires_at')::timestamptz,
     jwks_etag = NULLIF(@jwks_etag::text, ''),
     service_documentation = CASE WHEN @service_documentation::text = '' THEN NULL ELSE @service_documentation::text END,
@@ -507,6 +517,33 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: ManagedRemoteSessionClientExistsForIssuer :one
+-- Whether any live managed client sits on the issuer; the issuer mutation guards refuse if so.
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_clients
+  WHERE remote_session_issuer_id = @remote_session_issuer_id
+    AND organization_id = @organization_id
+    AND identity_provider_connection_id IS NOT NULL
+    AND deleted IS FALSE
+);
+
+-- name: OktaIdentityProviderConnectionReferencesIssuer :one
+-- Whether a live Okta connection in the organization pins the issuer; the
+-- issuer mutation guards refuse if so, and the pin lifts when the connection
+-- is tombstoned.
+SELECT EXISTS (
+  SELECT 1
+  FROM okta_identity_provider_connections AS o
+  JOIN identity_provider_connections AS c
+    ON c.id = o.identity_provider_connection_id
+   AND c.organization_id = o.organization_id
+   AND c.deleted IS FALSE
+  WHERE o.remote_session_issuer_id = @remote_session_issuer_id
+    AND o.organization_id = @organization_id
+    AND o.deleted IS FALSE
+);
+
 -- name: CountRemoteSessionClientsByIssuerID :one
 -- Every non-deleted client on an issuer, across every tenancy tier. Delete
 -- guards use this as the fail-safe: a count that ignored rows the caller cannot
@@ -531,6 +568,26 @@ WHERE trusted_remote_session_issuer_id = @remote_session_issuer_id::uuid
 SELECT id, slug
 FROM user_session_issuers
 WHERE trusted_remote_session_issuer_id = @remote_session_issuer_id::uuid
+  AND project_id IS NULL
+  AND organization_id = @organization_id::text
+  AND deleted IS FALSE
+ORDER BY id;
+
+-- name: CountTrustedUserSessionIssuersByRemoteSessionClientID :one
+-- Every active user-session issuer that uses this client for identity-provider
+-- login. Delete enforcement is intentionally unscoped so corrupt legacy data
+-- cannot be stranded by deleting a client through a tenant-scoped surface.
+SELECT COUNT(*)
+FROM user_session_issuers
+WHERE trusted_remote_session_client_id = @remote_session_client_id::uuid
+  AND deleted IS FALSE;
+
+-- name: ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientID :many
+-- Tenant-scoped details for the client delete preflight. Mutation enforcement
+-- uses the unscoped count above.
+SELECT id, slug
+FROM user_session_issuers
+WHERE trusted_remote_session_client_id = @remote_session_client_id::uuid
   AND project_id IS NULL
   AND organization_id = @organization_id::text
   AND deleted IS FALSE
@@ -567,7 +624,9 @@ INSERT INTO remote_session_clients (
     token_endpoint_auth_audience_format,
     scope,
     audience,
-    legacy_callback_url
+    legacy_callback_url,
+    json_web_key_set_id,
+    identity_provider_connection_id
 )
 VALUES (
     @project_id,
@@ -581,7 +640,9 @@ VALUES (
     @token_endpoint_auth_audience_format,
     sqlc.narg('scope')::text[],
     @audience,
-    @legacy_callback_url
+    @legacy_callback_url,
+    sqlc.narg('json_web_key_set_id'),
+    sqlc.narg('identity_provider_connection_id')
 )
 RETURNING *;
 
@@ -620,15 +681,17 @@ WHERE id = @id
 -- name: GetRemoteSessionClientForRotation :one
 -- The client row plus the issuer endpoints a re-registration needs: the token
 -- endpoint to probe and the registration endpoint to re-register at, both as
--- discovery last refreshed them on the issuer. Not locked: the rotation talks
--- to the issuer between this read and its write, and the write compares the
--- client_id it read here so a concurrent rotation is detected rather than
--- blocked.
+-- discovery last refreshed them on the issuer, and the issuer's transport
+-- binding, since both of those endpoints are only reachable over the tunnel
+-- when one is set. Not locked: the rotation talks to the issuer between this
+-- read and its write, and the write compares the client_id it read here so a
+-- concurrent rotation is detected rather than blocked.
 SELECT
     sqlc.embed(c),
-    i.issuer                 AS issuer_url,
-    i.token_endpoint         AS issuer_token_endpoint,
-    i.registration_endpoint  AS issuer_registration_endpoint
+    i.issuer                   AS issuer_url,
+    i.token_endpoint           AS issuer_token_endpoint,
+    i.registration_endpoint    AS issuer_registration_endpoint,
+    i.tunneled_mcp_server_id   AS issuer_tunneled_mcp_server_id
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
@@ -664,9 +727,11 @@ ORDER BY link.user_session_issuer_id;
 -- rejection marker is cleared because the replacement is known to the issuer.
 -- Compare-and-swap on the client_id and updated_at the caller read: a row
 -- another rotation or an administrator's edit already moved is left alone and
--- reported as no rows. CIMD-mode rows are
+-- reported as no rows. The expected issuer also proves the advisory lock the
+-- caller holds still covers this client. CIMD-mode rows are
 -- excluded: their client_id is the metadata document URL and is never
--- registered upstream.
+-- registered upstream. Managed rows are excluded: their registration belongs
+-- to the identity provider connection.
 UPDATE remote_session_clients
 SET client_id = @client_id,
     client_secret_encrypted = @client_secret_encrypted,
@@ -679,8 +744,10 @@ SET client_id = @client_id,
 WHERE id = @id
   AND client_id = @expected_client_id
   AND updated_at = @expected_updated_at
+  AND remote_session_issuer_id = @expected_issuer_id
   AND deleted IS FALSE
   AND client_id_metadata_uri IS NULL
+  AND identity_provider_connection_id IS NULL
 RETURNING *;
 
 -- name: AttachRemoteSessionClientToUserSessionIssuer :exec
@@ -872,13 +939,15 @@ WHERE c.id = @id
 -- visible for assertions minted before rotation. Revoked keys are always
 -- soft-deleted and therefore excluded. Ordering by immutable key id keeps the
 -- serialized document and its HTTP ETag stable between lifecycle changes.
+-- managed selects the shorter freshness window.
 SELECT jsonb_build_object(
     'keys',
     COALESCE(
         jsonb_agg(k.public_jwk ORDER BY k.id) FILTER (WHERE k.id IS NOT NULL),
         '[]'::jsonb
     )
-) AS document
+) AS document,
+(c.identity_provider_connection_id IS NOT NULL)::boolean AS managed
 FROM remote_session_clients AS c
 JOIN json_web_key_sets AS s
   ON s.organization_id = c.organization_id
@@ -891,7 +960,7 @@ LEFT JOIN json_web_keys AS k
  AND k.deleted IS FALSE
 WHERE c.id = @id
   AND c.deleted IS FALSE
-GROUP BY c.id;
+GROUP BY c.id, c.identity_provider_connection_id;
 
 -- name: GetLocalFixtureOrganizationRemoteSessionClient :one
 -- The local Platform MCP fixture owns at most one organization-scoped public
@@ -906,6 +975,7 @@ WHERE organization_id = @organization_id
 -- name: GetRemoteSessionClientByID :one
 SELECT
     sqlc.embed(c),
+    i.tunneled_mcp_server_id,
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
@@ -914,6 +984,7 @@ SELECT
           AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND c.deleted IS FALSE;
@@ -996,6 +1067,18 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: GetTunneledMcpServerBinding :one
+-- Validates an issuer tunnel binding at create/update time: the tunnel must
+-- exist, be active, and live in the same project and organization as the issuer.
+SELECT t.id, t.project_id, t.name
+FROM tunneled_mcp_servers AS t
+JOIN projects AS p ON p.id = t.project_id
+WHERE t.id = @id
+  AND t.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND t.status <> 'revoked'
+  AND t.deleted IS FALSE
+  AND p.deleted IS FALSE;
 -- Serializes the two halves of the private_key_jwt coupling, which live in
 -- different handlers and each read a column the other writes. Under READ
 -- COMMITTED both can pass against the same starting row and commit, landing
@@ -1043,7 +1126,7 @@ FOR UPDATE OF c;
 -- project_id IS NULL matches LockJsonWebKeySetForKeyWrite: sets are
 -- organization-tier only.
 -- name: LockJsonWebKeySetForClientAttach :one
-SELECT id
+SELECT id, identity_provider_connection_id
 FROM json_web_key_sets
 WHERE id = @id
   AND organization_id = @organization_id
@@ -1557,6 +1640,7 @@ SELECT
     c.resource_tos_uri                     AS resource_tos_uri,
     c.upstream_rejected_at                 AS upstream_rejected_at,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
     i.metadata                             AS issuer_metadata,
@@ -1632,6 +1716,7 @@ SELECT
     c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
     c.json_web_key_set_id                  AS json_web_key_set_id,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
     i.metadata                             AS issuer_metadata,
@@ -1664,6 +1749,7 @@ SELECT
     c.client_secret_expires_at             AS client_secret_expires_at,
     c.upstream_rejected_at                 AS upstream_rejected_at,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
     i.name                                 AS issuer_name,
     i.registration_endpoint                AS issuer_registration_endpoint,
@@ -2270,6 +2356,32 @@ WHERE (
     OR (@include_global::boolean AND i.project_id IS NULL AND i.organization_id IS NULL)
   )
   AND i.deleted IS FALSE
+  -- An issuer whose only live clients were left behind by tombstoned identity
+  -- provider connections is hidden until those clients are deleted; it then
+  -- lists again with no clients so the organization can delete it too.
+  AND (
+    NOT EXISTS (
+      SELECT 1
+      FROM remote_session_clients AS rc
+      JOIN identity_provider_connections AS ipc
+        ON ipc.id = rc.identity_provider_connection_id
+       AND ipc.organization_id = rc.organization_id
+      WHERE rc.remote_session_issuer_id = i.id
+        AND rc.deleted IS FALSE
+        AND ipc.deleted IS TRUE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM remote_session_clients AS rc
+      LEFT JOIN identity_provider_connections AS ipc
+        ON ipc.id = rc.identity_provider_connection_id
+       AND ipc.organization_id = rc.organization_id
+      WHERE rc.remote_session_issuer_id = i.id
+        AND (i.organization_id = @organization_id OR rc.organization_id = @organization_id)
+        AND rc.deleted IS FALSE
+        AND ipc.deleted IS NOT TRUE
+    )
+  )
   AND (sqlc.narg('cursor')::uuid IS NULL OR i.id < sqlc.narg('cursor')::uuid)
 ORDER BY i.id DESC
 LIMIT sqlc.arg('limit_value');
@@ -2452,10 +2564,12 @@ SET
     -- A manually changed key URL invalidates every value derived from the old
     -- source. Omitting the field or explicitly restating the same URL keeps the
     -- cache; clearing or replacing it clears the cache atomically.
-    jwks = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
-    jwks_fetched_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
-    jwks_cache_expires_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
-    jwks_etag = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
+    jwks = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_fetched_at ELSE NULL END,
+    jwks_last_error = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error ELSE NULL END,
+    jwks_last_error_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
@@ -2500,6 +2614,11 @@ SET
     resource_indicator_supported = COALESCE(sqlc.narg('resource_indicator_supported'), resource_indicator_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
+    tunneled_mcp_server_id = CASE
+        WHEN sqlc.narg('tunneled_mcp_server_id')::text = '' THEN NULL
+        WHEN sqlc.narg('tunneled_mcp_server_id')::text IS NULL THEN tunneled_mcp_server_id
+        ELSE (sqlc.narg('tunneled_mcp_server_id')::text)::uuid
+    END,
     updated_at = clock_timestamp()
 WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE
 RETURNING *;
@@ -2587,6 +2706,15 @@ WHERE c.remote_session_issuer_id = @remote_session_issuer_id
   AND (i.organization_id = @organization_id OR c.organization_id = @organization_id)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
+  -- Clients left behind by a tombstoned identity provider connection are
+  -- hidden; they stay reachable by id so the organization can delete them.
+  AND NOT EXISTS (
+    SELECT 1
+    FROM identity_provider_connections AS ipc
+    WHERE ipc.id = c.identity_provider_connection_id
+      AND ipc.organization_id = c.organization_id
+      AND ipc.deleted IS TRUE
+  )
   AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
 ORDER BY c.id DESC
 LIMIT sqlc.arg('limit_value');
@@ -2669,6 +2797,12 @@ WHERE c.id = @id
   AND (i.organization_id = @organization_id OR c.organization_id = @organization_id)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS usi
+    WHERE usi.trusted_remote_session_client_id = c.id
+      AND usi.deleted IS FALSE
+  )
 RETURNING c.*;
 
 -- name: ListOrganizationMcpServersForClient :many
@@ -2745,6 +2879,17 @@ WHERE m.deleted IS FALSE
 -- migrations cannot deadlock.
 SELECT pg_advisory_xact_lock(hashtextextended((@remote_session_issuer_id::uuid)::text, 0));
 
+-- name: LockRemoteSessionIssuerForClientBindingSession :exec
+-- Session-scoped counterpart used by registration rotation. Rotation must keep
+-- the issuer's endpoint and tunnel snapshot stable across upstream HTTP calls,
+-- but must not hold a database transaction open while making those calls. The
+-- caller owns one dedicated pooled connection until it invokes the matching
+-- unlock query.
+SELECT pg_advisory_lock(hashtextextended((@remote_session_issuer_id::uuid)::text, 0));
+
+-- name: UnlockRemoteSessionIssuerForClientBindingSession :one
+SELECT pg_advisory_unlock(hashtextextended((@remote_session_issuer_id::uuid)::text, 0));
+
 -- name: GetTrustedRemoteSessionIssuerForOrganization :one
 -- A trusted issuer must be either global or organization-owned by the caller.
 -- Project-specific issuers are deliberately excluded, including projects in
@@ -2755,6 +2900,140 @@ WHERE id = @id
   AND project_id IS NULL
   AND (organization_id = @organization_id::text OR organization_id IS NULL)
   AND deleted IS FALSE;
+
+-- name: LockTrustedRemoteSessionIssuerForOrganization :one
+-- Repeats the issuer-only eligibility predicate after the caller has taken the
+-- issuer advisory lock. The row lock prevents a capability or lifecycle write
+-- from invalidating the reference before its transaction commits.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND project_id IS NULL
+  AND (organization_id = @organization_id::text OR organization_id IS NULL)
+  AND deleted IS FALSE
+FOR SHARE;
+
+-- name: GetTrustedRemoteSessionClientForOrganization :one
+-- The exact live issuer/client pair eligible for organization identity-provider
+-- login. Clients must be organization-owned by the caller; project and global
+-- clients are deliberately excluded. The issuer may be organization-owned or
+-- global, but the client must belong to that exact issuer.
+SELECT sqlc.embed(c), sqlc.embed(i)
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = @client_id::uuid
+  AND c.remote_session_issuer_id = @issuer_id::uuid
+  AND c.project_id IS NULL
+  AND c.organization_id = @organization_id::text
+  AND c.deleted IS FALSE
+  AND i.id = @issuer_id::uuid
+  AND i.project_id IS NULL
+  AND (i.organization_id = @organization_id::text OR i.organization_id IS NULL)
+  AND i.deleted IS FALSE;
+
+-- name: LockTrustedRemoteSessionClientForOrganization :one
+-- Callers first run the unlocked query above, then take the issuer advisory
+-- lock, then run this query. Repeating the exact eligibility predicate closes
+-- delete and re-scope races without allowing cross-tenant row locks.
+SELECT sqlc.embed(c), sqlc.embed(i)
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = @client_id::uuid
+  AND c.remote_session_issuer_id = @issuer_id::uuid
+  AND c.project_id IS NULL
+  AND c.organization_id = @organization_id::text
+  AND c.deleted IS FALSE
+  AND i.id = @issuer_id::uuid
+  AND i.project_id IS NULL
+  AND (i.organization_id = @organization_id::text OR i.organization_id IS NULL)
+  AND i.deleted IS FALSE
+FOR SHARE OF c, i;
+
+-- name: ListTrustedRemoteSessionClientsByIssuerID :many
+-- Every live client actively used with this issuer for identity-provider login.
+-- Issuer capability writers validate these rows before committing so an
+-- existing trusted-login pair cannot be invalidated after it was linked.
+-- Deliberately not tenant-scoped: issuer ids are globally unique, and changing
+-- a global issuer must validate trusted clients in every organization.
+SELECT c.*
+FROM remote_session_clients AS c
+WHERE c.remote_session_issuer_id = @remote_session_issuer_id
+  AND c.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS usi
+    WHERE usi.trusted_remote_session_issuer_id = @remote_session_issuer_id
+      AND usi.trusted_remote_session_client_id = c.id
+      AND usi.deleted IS FALSE
+  )
+ORDER BY c.id;
+
+-- name: CreateTestTrustedIssuerJWKSCache :one
+-- Test fixture for conditional issuer-key cache writes.
+INSERT INTO remote_session_issuers (organization_id, slug, issuer, jwks_uri)
+VALUES (sqlc.narg('organization_id')::text, @slug, @issuer, @jwks_uri)
+RETURNING id;
+
+-- name: CreateTestTrustedIssuerOrganization :exec
+INSERT INTO organization_metadata (id, name, slug)
+VALUES (@id, @name, @slug);
+
+-- name: UpdateTestTrustedIssuerConfiguration :exec
+UPDATE remote_session_issuers
+SET issuer = @issuer, jwks_uri = @jwks_uri, updated_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: GetTrustedIssuerJWKSCache :one
+-- Only administrator-configurable organization and global issuers can back
+-- ID-JAG verification. The row id is selected through a trusted link first.
+SELECT jwks, jwks_uri, jwks_fetched_at, jwks_cache_expires_at, jwks_etag,
+       jwks_last_error, jwks_last_error_at, xmin::text AS revision
+FROM remote_session_issuers
+WHERE id = @id
+  AND (organization_id = @organization_id::text OR organization_id IS NULL)
+  AND project_id IS NULL
+  AND issuer = @issuer::text
+  AND jwks_uri = @jwks_uri::text
+  AND deleted IS FALSE;
+
+-- name: UpdateTrustedIssuerJWKSCache :execrows
+-- A rotated URI or changed cache state must not be overwritten by the
+-- result of an older fetch. project_id IS NULL keeps this write on the
+-- organization/global trusted-issuer tiers.
+UPDATE remote_session_issuers
+SET jwks = @jwks::jsonb,
+    jwks_fetched_at = @fetched_at::timestamptz,
+    jwks_cache_expires_at = @cache_expires_at::timestamptz,
+    jwks_etag = NULLIF(@etag::text, ''),
+    jwks_last_error = NULLIF(@last_error::text, ''),
+    jwks_last_error_at = @last_error_at::timestamptz,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND (organization_id = @organization_id::text OR organization_id IS NULL)
+  AND project_id IS NULL
+  AND issuer = @issuer::text
+  AND jwks_uri = @jwks_uri
+  AND deleted IS FALSE
+  AND xmin::text = @prior_revision::text
+  AND jwks IS NOT DISTINCT FROM @prior_jwks::jsonb
+  AND jwks_fetched_at IS NOT DISTINCT FROM @prior_fetched_at::timestamptz
+  AND jwks_cache_expires_at IS NOT DISTINCT FROM @prior_cache_expires_at::timestamptz;
+
+-- name: MarkTrustedIssuerJWKSConsultFailure :execrows
+UPDATE remote_session_issuers
+SET jwks_last_error = @reason::text,
+    jwks_last_error_at = @consulted_at::timestamptz,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND (organization_id = @organization_id::text OR organization_id IS NULL)
+  AND project_id IS NULL
+  AND issuer = @issuer::text
+  AND jwks_uri = @jwks_uri
+  AND deleted IS FALSE
+  AND xmin::text = @prior_revision::text
+  AND jwks IS NOT DISTINCT FROM @prior_jwks::jsonb
+  AND jwks_fetched_at IS NOT DISTINCT FROM @prior_fetched_at::timestamptz
+  AND jwks_cache_expires_at IS NOT DISTINCT FROM @prior_cache_expires_at::timestamptz;
 
 -- name: ListConflictingClientBindingsForIssuerMigration :many
 -- The user_session_issuers that already have an active remote_session_client on
@@ -3035,10 +3314,12 @@ SET
     -- A manually changed key URL invalidates every value derived from the old
     -- source. Omitting the field or explicitly restating the same URL keeps the
     -- cache; clearing or replacing it clears the cache atomically.
-    jwks = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
-    jwks_fetched_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
-    jwks_cache_expires_at = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
-    jwks_etag = CASE WHEN sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
+    jwks = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_fetched_at ELSE NULL END,
+    jwks_last_error = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error ELSE NULL END,
+    jwks_last_error_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
@@ -3422,3 +3703,19 @@ SET registration_endpoint = sqlc.narg('registration_endpoint'),
 FROM remote_session_clients AS c
 WHERE c.id = @client_id
   AND i.id = c.remote_session_issuer_id;
+
+-- name: SoftDeleteRemoteSessionClientFixture :execrows
+-- Test fixture: plants a tombstoned client for management-link rejection tests
+-- without coupling those tests to a second service's authorization path.
+UPDATE remote_session_clients
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE;
+
+-- name: SoftDeleteRemoteSessionIssuerFixture :execrows
+-- Test fixture: plants a tombstoned issuer for management-link rejection tests
+-- without coupling those tests to a second service's authorization path.
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE;

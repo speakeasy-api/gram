@@ -18,6 +18,8 @@ export type TimeSeriesStack = {
   key?: string;
   label: string;
   series: number[];
+  /** Stable index into the shared chart palette, independent of filtering. */
+  paletteIndex?: number;
   /**
    * Exact decimal integers aligned to series. Meter callers use these for
    * rollups, cumulative values, and tooltips; Number values remain chart
@@ -25,4 +27,11 @@ export type TimeSeriesStack = {
    */
   exactSeries?: string[];
   rollup?: boolean;
+  /**
+   * The "unset"/unattributed group. It draws hollow — a box outlined in the
+   * neutral rather than filled — everywhere the series appears (bar segment,
+   * legend swatch, table swatch), because it is the absence of a category
+   * rather than one more category competing for a color.
+   */
+  unset?: boolean;
 };

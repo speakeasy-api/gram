@@ -268,6 +268,21 @@ func (q *Queries) CreateToolsetVersion(ctx context.Context, arg CreateToolsetVer
 	return i, err
 }
 
+const deleteAssistantToolsetsByToolset = `-- name: DeleteAssistantToolsetsByToolset :exec
+DELETE FROM assistant_toolsets
+WHERE toolset_id = $1 AND project_id = $2
+`
+
+type DeleteAssistantToolsetsByToolsetParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) DeleteAssistantToolsetsByToolset(ctx context.Context, arg DeleteAssistantToolsetsByToolsetParams) error {
+	_, err := q.db.Exec(ctx, deleteAssistantToolsetsByToolset, arg.ToolsetID, arg.ProjectID)
+	return err
+}
+
 const deleteToolset = `-- name: DeleteToolset :one
 UPDATE toolsets
 SET deleted_at = clock_timestamp()

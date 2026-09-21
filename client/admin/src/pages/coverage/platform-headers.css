@@ -1,0 +1,56 @@
+/* Platform identity is consistent whether platforms appear as rows or columns. */
+.support-platform-header {
+  --platform-hue: 210;
+  --platform-saturation: 30%;
+  --platform-lightness: 88%;
+  background: hsl(
+    var(--platform-hue) var(--platform-saturation) var(--platform-lightness)
+  );
+  color: hsl(var(--platform-hue) var(--platform-saturation) 16%);
+}
+.support-platform-header[data-vendor="Anthropic"] {
+  --platform-hue: 25;
+  --platform-saturation: 85%;
+}
+.support-platform-header[data-family="Claude Code"] {
+  --platform-lightness: 78%;
+}
+.support-platform-header[data-family="Claude Chat"] {
+  --platform-lightness: 86%;
+}
+.support-platform-header[data-family="Cowork"] {
+  --platform-hue: 34;
+  --platform-lightness: 82%;
+}
+.support-platform-header[data-family="Other Claudes"] {
+  --platform-lightness: 92%;
+}
+.support-platform-header[data-vendor="OpenAI"] {
+  --platform-saturation: 0%;
+}
+.support-platform-header[data-family="Codex"] {
+  --platform-lightness: 74%;
+}
+.support-platform-header[data-family="ChatGPT"] {
+  --platform-lightness: 87%;
+}
+.support-platform-header[data-vendor="Cursor"] {
+  --platform-hue: 210;
+  --platform-saturation: 60%;
+  --platform-lightness: 84%;
+}
+.support-platform-header[data-vendor="Others"] {
+  --platform-hue: 145;
+  --platform-saturation: 25%;
+  --platform-lightness: 87%;
+}
+
+@media (prefers-color-scheme: dark) {
+  .support-platform-header {
+    background: hsl(
+      var(--platform-hue) var(--platform-saturation)
+        calc(100% - var(--platform-lightness))
+    );
+    color: hsl(var(--platform-hue) var(--platform-saturation) 92%);
+  }
+}

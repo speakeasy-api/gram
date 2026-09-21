@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,6 +26,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/BurntSushi/toml"
+	"github.com/speakeasy-api/gram/hooks/relay"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/stretchr/testify/require"
@@ -1751,10 +1753,90 @@ func TestCarryHooksSubtreeTreatsLaterPlatformsAsOptional(t *testing.T) {
 
 	// Once published, the platform's subtree is carried verbatim.
 	published[optional[0]+"index.js"] = []byte("v15 openclaw")
+	published[optional[1]+relay.PiExtensionFile] = []byte("v15 pi")
 	dst = map[string][]byte{}
 	_, carried = carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Acme")
 	require.True(t, carried)
 	require.Equal(t, []byte("v15 openclaw"), dst[optional[0]+"index.js"])
+	require.Equal(t, []byte("v15 pi"), dst[optional[1]+relay.PiExtensionFile])
+}
+
+// Pi has no hook configuration at all — the extension module under
+// extensions/ is the whole registration — so a regression there is silent.
+// Pin that the package ships the extension wired to the relay's serve mode,
+// the deployment identity it reads, and both bootstrappers, since the
+// extension picks the Windows one itself.
+func TestGeneratePiObservabilityPluginPackage(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "pi")
+	require.NoError(t, err)
+
+	extension, ok := files[relay.PiExtensionFile]
+	require.True(t, ok, "pi package must ship "+relay.PiExtensionFile)
+	for _, want := range []string{
+		// the relay subcommand that speaks the extension's frame protocol
+		`"pi","serve"`,
+		"speakeasy.json",
+		"bootstrap.sh",
+		"bootstrap.ps1",
+		// every Pi lifecycle event the capture path depends on
+		`pi.on("session_start"`,
+		`pi.on("input"`,
+		`pi.on("tool_call"`,
+		`pi.on("tool_result"`,
+		`pi.on("message_end"`,
+		`pi.on("session_shutdown"`,
+	} {
+		require.Contains(t, string(extension), want)
+	}
+
+	_, ok = files["speakeasy.json"]
+	require.True(t, ok, "pi package must ship speakeasy.json alongside the extension")
+	_, ok = files["hooks/bootstrap.sh"]
+	require.True(t, ok, "pi package must ship the hooks bootstrapper the extension spawns")
+	_, ok = files["hooks/bootstrap.ps1"]
+	require.True(t, ok, "pi package must ship the Windows bootstrapper the extension spawns")
+}
+
+// The dogfood trees are what `hooks:test` renders for local development, so a
+// platform missing here cannot be exercised against a dev server at all.
+func TestDogfoodPluginFilesIncludesPi(t *testing.T) {
+	t.Parallel()
+	files, err := DogfoodPluginFiles()
+	require.NoError(t, err)
+
+	extension, ok := files["plugin-pi/"+relay.PiExtensionFile]
+	require.True(t, ok, "dogfood tree must ship the pi extension")
+	require.Contains(t, string(extension), `"pi","serve"`)
+	require.NotEmpty(t, files["plugin-pi/speakeasy.json"])
+	require.NotEmpty(t, files["plugin-pi/hooks/bootstrap.sh"])
+}
+
+// The published hooks subtree carries one directory per platform and the
+// rollout carries it forward by prefix, so a platform missing from either the
+// generator or the prefix lists silently stops publishing.
+func TestGenerateHooksFilesCoversEveryPlatformSubtree(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := generateHooksFiles(cfg)
+	require.NoError(t, err)
+
+	names := slices.Collect(maps.Keys(files))
+	for _, prefix := range slices.Concat(hooksSubtreePrefixes(cfg.OrgName), hooksOptionalSubtreePrefixes(cfg.OrgName)) {
+		require.True(t, slices.ContainsFunc(names, func(name string) bool {
+			return strings.HasPrefix(name, prefix)
+		}), "hooks subtree prefix %q has no generated files", prefix)
+	}
+	require.Contains(t, files, PiObservabilitySlug(cfg)+"/"+relay.PiExtensionFile)
 }
 
 func TestHooksBootstrapConcurrentColdInvocationsDownloadOnce(t *testing.T) {
@@ -2656,6 +2738,21 @@ func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
 	require.Contains(t, readme, "codex plugin marketplace add")
 }
 
+func TestGenerateReadmeDescribesAdminAccessAndCursorServing(t *testing.T) {
+	t.Parallel()
+	files, err := GeneratePluginPackages(nil, GenerateConfig{
+		OrgName:   "Acme",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	readme := string(files["README.md"])
+	require.Contains(t, readme, "**Admin access.**")
+	require.Contains(t, readme, "Serve Marketplace From Cursor")
+	require.Contains(t, readme, "keep their original permission until they are re-added")
+	require.NotContains(t, readme, "Collaborators are granted pull permission")
+}
+
 func TestGenerateReadmeIncludesOpenClawInstallation(t *testing.T) {
 	t.Parallel()
 	files, err := GeneratePluginPackages(nil, GenerateConfig{
@@ -2924,6 +3021,142 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 	require.Equal(t, base["plugin-b"], changedFP["plugin-b"], "untouched plugin's fingerprint must be stable")
 }
 
+func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const path = "skills/add-existing-mcp-servers/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	for _, required := range []string{
+		"name: add-existing-mcp-servers", "claude mcp list",
+		"OWN Speakeasy connection", "Before any local discovery",
+		"health-checks", "launch stdio processes", "BEFORE filtering",
+		"explicit informed consent", "user-sanitized manual inventory",
+		"process side effects",
+		"If discovery succeeds but returns no entries", "normal catalogue path",
+		"Do not claim import completion for an empty inventory",
+		"`registration.status: registered`", "`registration.components_complete: true`",
+		"`model: dashboard_managed`", "Do not require or invent a registration record",
+		"pending or incomplete registration", "must not be reported as already present or complete",
+		"Skip provider attachment for anonymous servers",
+		"inspection reports an authentication requirement and advertises a supported identity provider",
+		"`authentication: authentication_required`", "`oauth_discovery: available_dcr`",
+		"`available` alone or `incomplete` does not establish support",
+		"list_projects", "find_mcp", "get_mcp", "inspect_mcp_candidate",
+		"register_remote_mcp", "Never copy local credentials",
+		"Every selected supported server", "localhost", "stdio",
+		"obtain explicit permission", "current CLI user, working directory",
+		"Do not inspect credential files", "forward raw output",
+		"Never manufacture a safe URL", "not hostname or display name",
+		"connected Speakeasy management endpoint", "not display name alone",
+		"Confirm candidate selection and destination", "`truncated: true`",
+		"Follow every `next_cursor`", "Never combine `query` and `cursor`",
+		"explicit confirmation of the exact inspected batch and project",
+		"Catalogue substitutions require separate confirmation",
+		"Preserve all logical-operation inputs and the same idempotency key on retries",
+		"Continue independent items after failure", "Server validation remains authoritative",
+		"including already-present entries and uncertain write outcomes",
+		"Do not use cached preflight results as final evidence", "Zero selections is not success",
+		"Report registration and authentication/readiness separately",
+		"exact server-returned Speakeasy setup/authorization links",
+		"separate explicit consent for provider attachment", "Leave local config unchanged",
+	} {
+		require.Contains(t, workflow, required)
+	}
+	require.NotContains(t, workflow, "speakeasy-skill-feedback")
+	require.NotContains(t, workflow, "claude mcp add")
+	require.NotContains(t, workflow, "claude mcp remove")
+}
+
+// These are packaged-instruction regressions, not simulated agent/tool executions.
+func TestGeneratePlatformMCPExistingServersCatalogPreference(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	path := "skills/add-existing-mcp-servers/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	for _, scenario := range []struct {
+		name         string
+		instructions []string
+	}{
+		{"different endpoint found by synthetic service alias", []string{
+			"Search exact endpoint identity FIRST", "search local non-secret alias/provider/name SECONDARY",
+			"only inputs are optional `query`, `provider_key` and `cursor`",
+			"Follow `next_cursor` with the same `query` and `provider_key`",
+			"A URL search miss does not rule out a reviewed alternative",
+			"an absent `canonical_url` is unknown, not a match",
+			"region, product and tools differences", "explicitly mark unknown differences",
+		}},
+		{"ambiguous or declined synthetic alternatives", []string{
+			"never silently substitute based on a name", "ask for one exact candidate",
+			"Catalogue substitutions require separate confirmation",
+			"If the user declines, no suitable match exists", "offer the original safe direct remote path",
+			"Unresolved ambiguity must not trigger a catalogue write",
+		}},
+		{"accepted alternative uses reviewed registration", []string{
+			"call `register_catalog_mcp`", "only declared `non_secret_config`",
+			"Never create a custom direct-remote entry for a confirmed catalogue replacement",
+			"import does not require readiness or plugin distribution",
+		}},
+		{"two configurations of one catalogue reference require persisted evidence", []string{
+			"Two configurations of one catalogue reference are not the same target",
+			"source/reference alone cannot prove configuration equivalence",
+			"match fresh inventory `registration.id` to the receipt's returned `registration_id`",
+			"Receipt-ID correlation alone is not persisted configuration proof",
+			"do not invent fields or claim current configuration was read back",
+			"configuration equivalence remains unverified and requires manual resolution, not automatic reuse",
+			"do not claim already present or create a duplicate",
+		}},
+		{"reused wrong configuration returns matching registration ID", []string{
+			"reuse an existing registration for the same source/reference with different configuration unchanged",
+			"Neither a new receipt nor `replayed: false` proves that the submitted configuration took effect",
+			"Require server-backed evidence of the registration's exact effective confirmed configuration",
+			"even when the returned ID matches the receipt and live status is registered with complete components",
+		}},
+		{"race or unknown existing registration cannot prove creation", []string{
+			"A concurrent registration after preflight, an unknown existing registration or an uncertain write outcome",
+			"must not be treated as newly created or correctly configured from the receipt",
+			"keep it unverified, do not create a duplicate, and offer manual dashboard resolution",
+		}},
+		{"empty request and configless candidate are not persisted proof", []string{
+			"Distinguish a configless candidate from an empty submitted `non_secret_config`",
+			"omitted values can use declared defaults",
+			"absent/empty `configuration` only describes the current candidate",
+			"inventory does not bind persisted configuration to that inspected candidate version",
+			"even an apparently configless candidate remains unverified/manual resolution",
+		}},
+		{"declined catalogue needs separate inspected direct batch consent", []string{
+			"call `inspect_mcp_candidate` with the original `remote_url`",
+			"After declining a catalogue candidate, require explicit confirmation of the inspected direct target, destination project and exact direct batch before `register_remote_mcp`",
+			"declining the candidate is not consent to the fallback",
+		}},
+		{"confirmed catalogue target already present", []string{
+			"Recheck existing registrations after substitution",
+			"Deduplicate confirmed catalogue targets across aliases too",
+			"do not register again", "pending/incomplete or uncertain identity blocks duplicate creation",
+			"do not verify against the original URL when the confirmed replacement differs",
+			"Every selected supported server must be confirmed present",
+		}},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			for _, instruction := range scenario.instructions {
+				require.Contains(t, workflow, instruction)
+			}
+		})
+	}
+	require.Less(t, strings.Index(workflow, "Search exact endpoint identity FIRST"), strings.Index(workflow, "search local non-secret alias/provider/name SECONDARY"))
+	require.NotContains(t, workflow, "`lookup_url`")
+	require.NotContains(t, workflow, "This proves which request produced that registration")
+	require.NotContains(t, workflow, "Without correlated operation evidence for an existing registration")
+}
+
 func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {
 	t.Parallel()
 
@@ -2990,6 +3223,96 @@ func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {
 		"get_shadow_mcp_audience",
 		"inspect_mcp_candidate",
 		"register_remote_mcp",
+	} {
+		require.NotContains(t, workflow, forbidden)
+	}
+}
+
+func TestGeneratePlatformMCPPackageEmitsMigrateWorkflow(t *testing.T) {
+	t.Parallel()
+
+	files, err := PublicPlatformMCPFiles("https://app.getgram.ai", "17")
+	require.NoError(t, err)
+
+	const skillPath = "skills/migrate-mcp-between-projects/SKILL.md"
+	claudeSkill := files["speakeasy/"+skillPath]
+	require.NotEmpty(t, claudeSkill)
+	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/"+skillPath])
+
+	workflow := string(claudeSkill)
+	cursor := 0
+	for _, tool := range []string{
+		"list_projects",
+		"find_mcp",
+		"get_mcp",
+		"get_mcp_access",
+		"get_mcp_client_admission",
+		"list_plugins",
+		"get_plugin",
+		"inspect_mcp_candidate",
+		"inspect_mcp_candidate",
+		"register_catalog_mcp",
+		"register_remote_mcp",
+		"find_mcp",
+		"get_mcp",
+		"update_mcp_metadata",
+		"get_mcp_readiness",
+		"get_mcp_readiness",
+		"attach_platform_mcp_identity_provider",
+		"attach_platform_mcp_identity_provider",
+		"get_setup_handoff",
+		"get_mcp_readiness",
+		"get_mcp_client_admission",
+		"set_mcp_client_admission",
+		"list_plugins",
+		"get_plugin",
+		"list_plugin_assignments",
+		"set_plugin_assignments",
+		"get_mcp_readiness",
+		"distribute_mcp_to_plugin",
+		"get_plugin",
+		"get_mcp",
+		"get_mcp",
+		"disable_mcp",
+		"get_mcp",
+		"get_mcp",
+		"enable_mcp",
+		"remove_mcp_from_plugin",
+	} {
+		token := "`" + tool + "`"
+		index := strings.Index(workflow[cursor:], token)
+		require.NotEqual(t, -1, index, "%s must appear in the required workflow order", tool)
+		cursor += index + len(token)
+	}
+	for _, guardrail := range []string{
+		"report that project discovery is incomplete and hand off to the AICP dashboard",
+		"Secrets never enter chat.",
+		"never let the source and target be the same project",
+		"Nothing is dropped silently.",
+		"a fresh idempotency key",
+		"`confirmed: true`",
+		"`force: true`",
+		"immediately preceding `expected_version`",
+		"Registration is private and does not distribute the MCP.",
+		"Do not choose for them and do not assume the default plugin.",
+		"never disable the source to make the target succeed",
+		"Do not claim that users have the MCP unless the returned live state supports that conclusion.",
+		"Never delete anything.",
+		"It is not available to managed project assistants",
+		"never disable the source until the target's live state has been verified and the user confirms retirement",
+		"Never retry a mutation automatically",
+		"Use `send_platform_mcp_feedback` only after asking for consent",
+	} {
+		require.Contains(t, workflow, guardrail)
+	}
+	for _, forbidden := range []string{
+		"Gram",
+		"api key",
+		"client_secret",
+		"Authorization:",
+		"hooks",
+		"speakeasy-skill-feedback",
+		"app.getgram.ai",
 	} {
 		require.NotContains(t, workflow, forbidden)
 	}

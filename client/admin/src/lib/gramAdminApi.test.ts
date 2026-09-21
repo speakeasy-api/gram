@@ -1,4 +1,17 @@
+import {
+  invalidateAdminListOrganizations,
+  invalidateAllAdminListOrganizations,
+} from "@gram/admin-client/react-query/adminListOrganizations";
+import { QueryClient } from "@tanstack/react-query";
+import {
+  queryKeyAdminListOrganizations,
+  queryKeyAdminListOrganizationsInfinite,
+} from "@gram/admin-client/react-query/adminListOrganizations.core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { GramCore } from "@gram/admin-client/core";
+import { HTTPClient } from "@gram/admin-client/lib/http";
+import { adminListOrganizations } from "@gram/admin-client/funcs/adminListOrganizations";
+
 import {
   GramAdminError,
   bulkUpdateAccountType,
@@ -25,6 +38,7 @@ import {
   setInferenceKeyMonthlyLimit,
   setStripeCustomer,
   toSearchParams,
+  omitUnset,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
 
@@ -47,7 +61,7 @@ describe("toSearchParams", () => {
       q: undefined,
       cursor: "",
       type: [],
-      include_disabled: false,
+      flag: false,
     });
     expect(qs.toString()).toBe("");
   });
@@ -62,9 +76,140 @@ describe("toSearchParams", () => {
 // has to arrive as one key per value. A comma-joined `account_types=free,pro`
 // parses on the server as a single account type named "free,pro", which matches
 // no organization: the browser would show an empty list and no error.
+describe("generated organization filter serialization", () => {
+  it("sends native bigint bounds without precision loss alongside status", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response('{"organizations":[]}', {
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const client = new GramCore({
+      serverURL: "https://admin.example.test",
+      httpClient: new HTTPClient({ fetcher }),
+    });
+    await adminListOrganizations(client, {
+      minMembers: 9007199254740993n,
+      maxMembers: 9223372036854775807n,
+      disabledStatus: "all",
+      createdFrom: "2024-02-29",
+      createdTo: "2024-03-01",
+    });
+    const request = fetcher.mock.calls[0]?.[0] as Request;
+    const url = new URL(request.url);
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      min_members: "9007199254740993",
+      max_members: "9223372036854775807",
+      disabled_status: "all",
+      created_from: "2024-02-29",
+      created_to: "2024-03-01",
+    });
+  });
+});
+
 describe("listOrganizations", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("preserves explicit all in both request parameters and cache keys", () => {
+    expect(omitUnset({ disabled_status: "all" })).toEqual({
+      disabled_status: "all",
+    });
+    expect(toSearchParams({ disabled_status: "all" }).toString()).toBe(
+      "disabled_status=all",
+    );
+    expect(toSearchParams({ disabled_status: undefined }).toString()).toBe("");
+  });
+
+  it.each(["all", "active", "disabled"] as const)(
+    "sends disabled_status=%s",
+    async (disabled_status) => {
+      const fetch = vi
+        .fn()
+        .mockResolvedValue(new Response('{"organizations":[]}'));
+      vi.stubGlobal("fetch", fetch);
+      await listOrganizations({
+        disabled_status,
+      });
+      expect(fetch.mock.calls[0]?.[0]).toBe(
+        `/admin/organizations.list?disabled_status=${disabled_status}`,
+      );
+    },
+  );
+
+  it.each([
+    0,
+    Number.MAX_SAFE_INTEGER,
+    "9007199254740992",
+    "9223372036854775807",
+  ])("sends member bound %s without loss of precision", async (value) => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response('{"organizations":[]}'));
+    vi.stubGlobal("fetch", fetch);
+    await listOrganizations({ min_members: value, max_members: value });
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      `/admin/organizations.list?min_members=${value}&max_members=${value}`,
+    );
+  });
+
+  it.each([
+    -1,
+    1.5,
+    NaN,
+    Infinity,
+    Number.MAX_SAFE_INTEGER + 1,
+    "-1",
+    "1.5",
+    "1e3",
+    "",
+    " 1",
+    "9223372036854775808",
+  ])(
+    "rejects invalid or imprecise member bound %s before fetching",
+    (value) => {
+      const fetch = vi.fn();
+      vi.stubGlobal("fetch", fetch);
+      for (const key of ["min_members", "max_members"] as const) {
+        expect(() => listOrganizations({ [key]: value })).toThrow(RangeError);
+      }
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["2024-02-29", "0000-01-01", "9999-12-31"])(
+    "sends inclusive UTC date %s unchanged",
+    async (value) => {
+      const fetch = vi
+        .fn()
+        .mockResolvedValue(new Response('{"organizations":[]}'));
+      vi.stubGlobal("fetch", fetch);
+      await listOrganizations({ created_from: value, created_to: value });
+      expect(fetch.mock.calls[0]?.[0]).toBe(
+        `/admin/organizations.list?created_from=${value}&created_to=${value}`,
+      );
+    },
+  );
+
+  it.each([
+    "",
+    "2023-02-29",
+    "2024-02-30",
+    "2024-04-31",
+    "2024-13-01",
+    "2024-00-01",
+    "2024-01-00",
+    "2024-1-01",
+    "2024-01-1",
+    "2024-01-01T00:00:00Z",
+    " 2024-01-01",
+  ])("rejects non-calendar date %s before fetching", (value) => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    for (const key of ["created_from", "created_to"] as const) {
+      expect(() => listOrganizations({ [key]: value })).toThrow(RangeError);
+    }
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("repeats a key per value of each filter", async () => {
@@ -80,14 +225,14 @@ describe("listOrganizations", () => {
       q: "acme",
       account_types: ["free", "pro"],
       trial_states: ["running", "ending_soon"],
-      disabled_states: ["active", "disabled"],
+      disabled_status: "all",
     });
 
     expect(fetch.mock.calls.at(-1)?.[0]).toBe(
       "/admin/organizations.list?q=acme" +
         "&account_types=free&account_types=pro" +
         "&trial_states=running&trial_states=ending_soon" +
-        "&disabled_states=active&disabled_states=disabled",
+        "&disabled_status=all",
     );
   });
 
@@ -554,4 +699,109 @@ describe("logout", () => {
 
     expect(window.location.href).toBe(before);
   });
+});
+
+describe("generated organization list query keys", () => {
+  it.each([
+    ["normal", queryKeyAdminListOrganizations],
+    ["infinite", queryKeyAdminListOrganizationsInfinite],
+  ] as const)(
+    "%s keys hash, retrieve and invalidate losslessly",
+    async (_, factory) => {
+      const client = new QueryClient();
+      const bounds = [0n, 9007199254740993n, 9223372036854775807n];
+      try {
+        const keys = bounds.map((bound) =>
+          factory({ minMembers: bound, maxMembers: bound }),
+        );
+        keys.forEach((key, i) => {
+          client.setQueryData(key, { value: i });
+        });
+        expect(client.getQueryCache().getAll()).toHaveLength(bounds.length);
+        for (const [i, bound] of bounds.entries()) {
+          const key = factory({ minMembers: bound, maxMembers: bound });
+          expect(client.getQueryData(key)).toEqual({ value: i });
+          expect(key.at(-1)).toEqual({
+            minMembers: bound.toString(),
+            maxMembers: bound.toString(),
+          });
+          expect(JSON.stringify(key)).toContain(`"${bound}"`);
+          await client.invalidateQueries({ queryKey: key, exact: true });
+          expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+        }
+        const normal = queryKeyAdminListOrganizations({ minMembers: 0n });
+        const infinite = queryKeyAdminListOrganizationsInfinite({
+          minMembers: 0n,
+        });
+        expect(JSON.stringify(normal)).not.toBe(JSON.stringify(infinite));
+      } finally {
+        client.clear();
+      }
+    },
+  );
+});
+
+describe("generated organization invalidation helpers", () => {
+  it.each([0n, 9223372036854775807n])(
+    "invalidates matching normal and infinite bounds %s",
+    async (bound) => {
+      const client = new QueryClient();
+      try {
+        const factories = [
+          queryKeyAdminListOrganizations,
+          queryKeyAdminListOrganizationsInfinite,
+        ];
+        const matching = factories.map((factory) =>
+          factory({
+            minMembers: bound,
+            maxMembers: bound,
+            q: "match",
+            page: 2,
+          }),
+        );
+        const otherBound = bound === 0n ? 9223372036854775807n : 0n;
+        const unrelated = factories.flatMap((factory) => [
+          factory({ minMembers: bound, maxMembers: bound, q: "other" }),
+          factory({
+            minMembers: otherBound,
+            maxMembers: otherBound,
+            q: "match",
+          }),
+        ]);
+        for (const key of [...matching, ...unrelated])
+          client.setQueryData(key, {});
+        // Query filters must still be honored: these caches have no observers.
+        await invalidateAdminListOrganizations(
+          client,
+          [{ minMembers: bound, maxMembers: bound, q: "match" }],
+          { type: "active", refetchType: "none" },
+        );
+        for (const key of matching)
+          expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+        await invalidateAdminListOrganizations(
+          client,
+          [{ minMembers: bound, maxMembers: bound, q: "match" }],
+          { refetchType: "none" },
+        );
+        for (const key of matching)
+          expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+        for (const key of unrelated)
+          expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+        await invalidateAdminListOrganizations(client, [{}], {
+          refetchType: "none",
+        });
+        for (const key of unrelated)
+          expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+        for (const key of [...matching, ...unrelated])
+          client.setQueryData(key, {});
+        await invalidateAllAdminListOrganizations(client, {
+          refetchType: "none",
+        });
+        for (const key of [...matching, ...unrelated])
+          expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+      } finally {
+        client.clear();
+      }
+    },
+  );
 });

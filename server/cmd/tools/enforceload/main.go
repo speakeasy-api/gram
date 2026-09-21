@@ -615,7 +615,7 @@ func runFullPoint(
 		_ = inbox.Close()
 		_ = redisClient.Del(context.WithoutCancel(ctx), enforcereply.InboxKey(inbox.ReplicaID())).Err()
 	}()
-	dispatcher, err := enforcereply.NewDispatcher(pointCtx, logger, otel.GetMeterProvider(), loop.broker, inbox, enforcereply.DispatcherConfig{WaitTimeout: cfg.timeout})
+	dispatcher, err := enforcereply.NewDispatcher(pointCtx, logger, otel.GetMeterProvider(), loop.broker, inbox, enforcereply.DispatcherConfig{WaitTimeout: cfg.timeout, LaneWaitTimeout: nil})
 	if err != nil {
 		return sweepResult{}, fmt.Errorf("create dispatcher: %w", err)
 	}
@@ -642,8 +642,13 @@ func runFullPoint(
 			started := time.Now()
 			outcome, dispatchErr := dispatcher.Dispatch(pointCtx, enforcereply.DispatchRequest{
 				OrganizationID:         "load-org",
+				OrganizationSlug:       "",
 				ProjectID:              loadProjectID.String(),
 				Content:                content,
+				Body:                   "",
+				ToolName:               "",
+				MessageType:            "",
+				ToolCalls:              nil,
 				PresidioEntities:       nil,
 				PresidioScoreThreshold: nil,
 				Lanes:                  []enforcereply.Lane{lane},

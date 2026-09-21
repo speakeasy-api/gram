@@ -1,0 +1,984 @@
+{
+  "methods": [
+    {
+      "id": "device",
+      "name": "Device Agent",
+      "vendor": "Cross-platform",
+      "plans": "Team and personal accounts",
+      "facts": {
+        "org": {
+          "status": "supported",
+          "note": "via plugins",
+          "verify": false
+        },
+        "role": {
+          "status": "supported",
+          "note": "via plugins",
+          "verify": false
+        },
+        "session": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "session-cost": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "cost": {
+          "status": "supported",
+          "note": "via OTEL",
+          "verify": false
+        },
+        "tokens": {
+          "status": "supported",
+          "note": "via OTEL",
+          "verify": false
+        },
+        "blocking": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "mcp-redaction": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "prompt-redaction": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "shadow-ai": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        }
+      }
+    },
+    {
+      "id": "hooks",
+      "name": "Anthropic Hooks",
+      "vendor": "Anthropic",
+      "plans": "Plan eligibility not applicable in source",
+      "facts": {
+        "org": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "session": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "session-cost": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "cost": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "tokens": {
+          "status": "unimplemented",
+          "note": "cursor",
+          "verify": false
+        },
+        "blocking": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "mcp-redaction": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "prompt-redaction": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        }
+      }
+    },
+    {
+      "id": "settings",
+      "name": "Managed settings file",
+      "vendor": "Anthropic",
+      "plans": "Team plans; personal accounts not possible",
+      "facts": {
+        "org": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "session": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "session-cost": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "cost": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "tokens": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "blocking": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "mcp-redaction": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "prompt-redaction": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        }
+      }
+    },
+    {
+      "id": "plugins",
+      "name": "Anthropic Admin Plugin Dist",
+      "vendor": "Anthropic",
+      "plans": "Team plans; personal accounts not possible",
+      "facts": {
+        "org": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "session": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "session-cost": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "cost": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "tokens": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "blocking": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "mcp-redaction": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "prompt-redaction": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        }
+      }
+    },
+    {
+      "id": "anthropic-api",
+      "name": "Anthropic Compliance API",
+      "vendor": "Anthropic",
+      "plans": "Team plans; personal accounts not possible",
+      "facts": {
+        "org": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "session": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "session-cost": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "cost": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "tokens": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "blocking": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "mcp-redaction": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "prompt-redaction": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        }
+      }
+    },
+    {
+      "id": "inference",
+      "name": "Inference hooks",
+      "vendor": "Anthropic",
+      "plans": "Team plans; personal accounts not possible",
+      "facts": {
+        "org": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "session": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "session-cost": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "cost": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "tokens": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "blocking": {
+          "status": "supported",
+          "note": "prompt & tool_call",
+          "verify": false
+        },
+        "mcp-redaction": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "prompt-redaction": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        }
+      }
+    },
+    {
+      "id": "otel",
+      "name": "OTEL export",
+      "vendor": "Anthropic",
+      "plans": "Team plans; personal accounts not possible",
+      "facts": {
+        "org": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "session": {
+          "status": "supported",
+          "note": "claude",
+          "verify": true
+        },
+        "session-cost": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "cost": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "tokens": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "blocking": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "mcp-redaction": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "prompt-redaction": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        }
+      }
+    },
+    {
+      "id": "litellm",
+      "name": "LiteLLM",
+      "vendor": "Others",
+      "plans": "Source lists MDM under team plans; eligibility needs clarification",
+      "facts": {
+        "org": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "session": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "session-cost": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "cost": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "tokens": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "blocking": {
+          "status": "supported",
+          "note": "not for tool calls",
+          "verify": false
+        },
+        "mcp-redaction": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "prompt-redaction": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        }
+      }
+    },
+    {
+      "id": "cursor-api",
+      "name": "Cursor API",
+      "vendor": "Cursor",
+      "plans": "Team plans; personal accounts not possible",
+      "facts": {
+        "org": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "session": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "session-cost": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "cost": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "tokens": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "blocking": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "mcp-redaction": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "prompt-redaction": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        }
+      }
+    },
+    {
+      "id": "openai-api",
+      "name": "OpenAI Compliance API",
+      "vendor": "OpenAI",
+      "plans": "Enterprise only; personal accounts not possible",
+      "facts": {
+        "org": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "session": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "session-cost": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "cost": {
+          "status": "supported",
+          "note": "",
+          "verify": true
+        },
+        "tokens": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "blocking": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "mcp-redaction": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "prompt-redaction": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        }
+      }
+    },
+    {
+      "id": "conversations",
+      "name": "ChatGPT Conversations",
+      "vendor": "OpenAI",
+      "plans": "Enterprise only; personal accounts not possible",
+      "facts": {
+        "org": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "session": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "session-cost": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "cost": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "tokens": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "blocking": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "mcp-redaction": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "prompt-redaction": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        }
+      }
+    }
+  ],
+  "products": [
+    {
+      "id": "claude-code-cli",
+      "vendor": "Anthropic",
+      "family": "Claude Code",
+      "surface": "CLI",
+      "name": "Claude Code · CLI"
+    },
+    {
+      "id": "claude-code-web",
+      "vendor": "Anthropic",
+      "family": "Claude Code",
+      "surface": "Web",
+      "name": "Claude Code · Web"
+    },
+    {
+      "id": "claude-code-desktop",
+      "vendor": "Anthropic",
+      "family": "Claude Code",
+      "surface": "Desktop",
+      "name": "Claude Code · Desktop"
+    },
+    {
+      "id": "claude-code-vscode",
+      "name": "Claude Code · VSCode",
+      "vendor": "Anthropic",
+      "family": "Claude Code",
+      "surface": "VSCode"
+    },
+    {
+      "id": "claude-code-cloud",
+      "vendor": "Anthropic",
+      "family": "Claude Code",
+      "surface": "Cloud",
+      "name": "Claude Code · Cloud"
+    },
+    {
+      "id": "claude-chat-web",
+      "vendor": "Anthropic",
+      "family": "Claude Chat",
+      "surface": "Web",
+      "name": "Claude Chat · Web"
+    },
+    {
+      "id": "claude-chat-desktop",
+      "vendor": "Anthropic",
+      "family": "Claude Chat",
+      "surface": "Desktop",
+      "name": "Claude Chat · Desktop"
+    },
+    {
+      "id": "cowork-desktop",
+      "vendor": "Anthropic",
+      "family": "Cowork",
+      "surface": "Desktop",
+      "name": "Cowork · Desktop"
+    },
+    {
+      "id": "cowork-cloud",
+      "vendor": "Anthropic",
+      "family": "Cowork",
+      "surface": "Cloud",
+      "name": "Cowork · Cloud"
+    },
+    {
+      "id": "cowork-web",
+      "vendor": "Anthropic",
+      "family": "Cowork",
+      "surface": "Web",
+      "name": "Cowork · Web"
+    },
+    {
+      "id": "other-claudes-claude-tag",
+      "vendor": "Anthropic",
+      "family": "Other Claudes",
+      "surface": "Claude Tag",
+      "name": "Other Claudes · Claude Tag"
+    },
+    {
+      "id": "other-claudes-claude-mobile",
+      "vendor": "Anthropic",
+      "family": "Other Claudes",
+      "surface": "Claude Mobile",
+      "name": "Other Claudes · Claude Mobile"
+    },
+    {
+      "id": "codex-cli",
+      "vendor": "OpenAI",
+      "family": "Codex",
+      "surface": "CLI",
+      "name": "Codex · CLI"
+    },
+    {
+      "id": "codex-desktop",
+      "vendor": "OpenAI",
+      "family": "Codex",
+      "surface": "Desktop",
+      "name": "Codex · Desktop"
+    },
+    {
+      "id": "codex-cloud-web",
+      "vendor": "OpenAI",
+      "family": "Codex",
+      "surface": "Cloud/web",
+      "name": "Codex · Cloud/web"
+    },
+    {
+      "id": "chatgpt-desktop",
+      "vendor": "OpenAI",
+      "family": "ChatGPT",
+      "surface": "Desktop",
+      "name": "ChatGPT · Desktop"
+    },
+    {
+      "id": "chatgpt-web",
+      "vendor": "OpenAI",
+      "family": "ChatGPT",
+      "surface": "Web",
+      "name": "ChatGPT · Web"
+    },
+    {
+      "id": "cursor-ide",
+      "vendor": "Cursor",
+      "family": "Cursor",
+      "surface": "IDE",
+      "name": "Cursor · IDE"
+    },
+    {
+      "id": "cursor-cli",
+      "vendor": "Cursor",
+      "family": "Cursor",
+      "surface": "CLI",
+      "name": "Cursor · CLI"
+    },
+    {
+      "id": "cursor-cloud",
+      "vendor": "Cursor",
+      "family": "Cursor",
+      "surface": "Cloud",
+      "name": "Cursor · Cloud"
+    },
+    {
+      "id": "opencode-app",
+      "vendor": "Others",
+      "family": "OpenCode",
+      "surface": "App",
+      "name": "OpenCode"
+    },
+    {
+      "id": "gemini-cli-cli",
+      "vendor": "Others",
+      "family": "Gemini CLI",
+      "surface": "CLI",
+      "name": "Gemini CLI · CLI"
+    },
+    {
+      "id": "openclaw-app",
+      "vendor": "Others",
+      "family": "OpenClaw",
+      "surface": "App",
+      "name": "OpenClaw"
+    },
+    {
+      "id": "github-copilot-app",
+      "vendor": "Others",
+      "family": "GitHub Copilot",
+      "surface": "App",
+      "name": "GitHub Copilot"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "org",
+      "name": "Org-wide",
+      "group": "MCP Distribution"
+    },
+    {
+      "id": "role",
+      "name": "Role-based",
+      "group": "MCP Distribution"
+    },
+    {
+      "id": "session",
+      "name": "Session tracking",
+      "group": "Observability"
+    },
+    {
+      "id": "session-cost",
+      "name": "Session cost",
+      "group": "Observability"
+    },
+    {
+      "id": "session-tokens",
+      "name": "Session tokens",
+      "group": "Observability"
+    },
+    {
+      "id": "cost",
+      "name": "Cost tracking",
+      "group": "Observability"
+    },
+    {
+      "id": "tokens",
+      "name": "Token tracking",
+      "group": "Observability"
+    },
+    {
+      "id": "blocking",
+      "name": "Blocking",
+      "group": "Security"
+    },
+    {
+      "id": "mcp-redaction",
+      "name": "MCP redaction",
+      "group": "Security"
+    },
+    {
+      "id": "prompt-redaction",
+      "name": "Prompt redaction",
+      "group": "Security"
+    },
+    {
+      "id": "shadow-mcp",
+      "name": "Shadow MCP",
+      "group": "Shadow AI"
+    },
+    {
+      "id": "shadow-ai",
+      "name": "Shadow AI",
+      "group": "Shadow AI"
+    }
+  ]
+}

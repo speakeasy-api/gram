@@ -4,6 +4,7 @@ export type AgentProviderIconKind =
   | "codex"
   | "opencode"
   | "openclaw"
+  | "pi"
   | "litellm"
   | "cline"
   | "warp"
@@ -21,6 +22,15 @@ export type AgentProviderIconKind =
   | "bedrock"
   | "catchall"
   | "unknown";
+
+/**
+ * Whether a source resolves to a real provider mark rather than the generic
+ * fallback. Callers that would rather show nothing than a globe use this.
+ */
+export function hasAgentProviderIcon(source?: string): boolean {
+  const kind = agentProviderIconKind(source);
+  return kind !== "unknown" && kind !== "catchall";
+}
 
 export function agentProviderIconKind(source?: string): AgentProviderIconKind {
   const normalizedSource = source
@@ -45,6 +55,9 @@ export function agentProviderIconKind(source?: string): AgentProviderIconKind {
   }
   if (normalizedSource?.includes("opencode")) return "opencode";
   if (normalizedSource?.includes("openclaw")) return "openclaw";
+  // Matched exactly, not by substring: "pi" is a substring of other agent
+  // names ("copilot"), and Pi's hook source is always the bare slug.
+  if (normalizedSource === "pi") return "pi";
   if (normalizedSource?.includes("litellm")) return "litellm";
   if (normalizedSource?.includes("cline")) return "cline";
   if (normalizedSource?.includes("warp")) return "warp";

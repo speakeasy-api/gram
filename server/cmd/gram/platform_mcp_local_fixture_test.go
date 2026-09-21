@@ -58,6 +58,18 @@ func (allowingPlatformMCPBudget) AllowN(context.Context, string, int) (ratelimit
 // the package, which is what this stub stands in for.
 type stubLiveOrgAdminAuthorizer struct{}
 
+func (stubLiveOrgAdminAuthorizer) PrepareExternalContext(ctx context.Context, principal platformmcp.Principal) (context.Context, error) {
+	return platformmcp.ContextWithPrincipal(ctx, principal), nil
+}
+
+func (stubLiveOrgAdminAuthorizer) AuthorizeExternalCall(context.Context, platformmcp.Principal, platformmcp.ExternalAuthorization) error {
+	return nil
+}
+
+func (stubLiveOrgAdminAuthorizer) RequireLiveMembership(context.Context, platformmcp.Principal) error {
+	return nil
+}
+
 func (stubLiveOrgAdminAuthorizer) RequireLiveOrgAdmin(context.Context, platformmcp.Principal) error {
 	return nil
 }

@@ -257,23 +257,36 @@ export default function PluginDetail(): JSX.Element | null {
     await invalidateAllPublishStatus(queryClient);
   };
 
+  // Ref, not state: onSuccess/onError read the mode from a detached mutation
+  // callback, where a state capture would be stale; it also avoids re-rendering
+  // the memoized dialogs on mode switch.
+  const publishModeRef = useRef<"publish" | "manage">("publish");
+
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
+      const managing = publishModeRef.current === "manage";
       setIsPublishDialogOpen(false);
       setIsManageCollaboratorsOpen(false);
       void invalidateAllPublishStatus(queryClient);
-      toast.success("Plugins published to GitHub", {
-        description: data.repoUrl,
-        action: {
-          label: "Open",
-          onClick: () => {
-            openSafeExternalUrl(data.repoUrl);
+      toast.success(
+        managing ? "Collaborators added" : "Plugins published to GitHub",
+        {
+          description: data.repoUrl,
+          action: {
+            label: "Open",
+            onClick: () => {
+              openSafeExternalUrl(data.repoUrl);
+            },
           },
         },
-      });
+      );
     },
     onError: () => {
-      toast.error("Failed to publish plugins to GitHub");
+      toast.error(
+        publishModeRef.current === "manage"
+          ? "Failed to add collaborators"
+          : "Failed to publish plugins to GitHub",
+      );
     },
   });
 
@@ -290,6 +303,18 @@ export default function PluginDetail(): JSX.Element | null {
   const handlePublish = useCallback(
     (githubUsernames: string[]) => {
       if (isPublishingRef.current) return;
+      publishModeRef.current = "publish";
+      publishMutate({
+        security: { sessionHeaderGramSession: "" },
+        request: { publishPluginsRequestBody: { githubUsernames } },
+      });
+    },
+    [publishMutate],
+  );
+  const handleAddCollaborators = useCallback(
+    (githubUsernames: string[]) => {
+      if (isPublishingRef.current) return;
+      publishModeRef.current = "manage";
       publishMutate({
         security: { sessionHeaderGramSession: "" },
         request: { publishPluginsRequestBody: { githubUsernames } },
@@ -1006,7 +1031,7 @@ export default function PluginDetail(): JSX.Element | null {
           mode="manage"
           open={isManageCollaboratorsOpen}
           onOpenChange={setIsManageCollaboratorsOpen}
-          onPublish={handlePublish}
+          onPublish={handleAddCollaborators}
           isPending={publishMutation.isPending}
         />
         <PluginAssignmentsSheet

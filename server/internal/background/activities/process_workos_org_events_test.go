@@ -2148,9 +2148,12 @@ func TestProcessWorkOSOrganizationEvents_MembershipInactiveStatusDeprovisions(t 
 	require.Len(t, assignments, 1)
 	require.True(t, assignments[0].DeletedAt.Valid)
 
+	// One invalidation per membership change: the add and the deactivation.
 	deletedKeys := capturingCache.Deleted()
-	require.Len(t, deletedKeys, 1)
-	require.Contains(t, deletedKeys[0], sessions.UserInfoCacheKey(userID))
+	require.Len(t, deletedKeys, 2)
+	for _, key := range deletedKeys {
+		require.Contains(t, key, sessions.UserInfoCacheKey(userID))
+	}
 }
 
 func TestProcessWorkOSOrganizationEvents_MembershipReactivationRestoresAccess(t *testing.T) {

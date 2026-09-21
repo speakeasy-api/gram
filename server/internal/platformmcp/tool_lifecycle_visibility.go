@@ -47,7 +47,7 @@ func registerLifecycleVisibilityTools(reg *Registrar, registrations *Registratio
 			call:        registrations.EnableMCP,
 		},
 	} {
-		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpdateMCPVisibilityToolInput) (*mcp.CallToolResult, UpdateMCPVisibilityToolOutput, error) {
+		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpdateMCPVisibilityToolInput) (*mcp.CallToolResult, UpdateMCPVisibilityToolOutput, error) {
 			principal, err := principalFromToolContext(ctx)
 			if err != nil {
 				return nil, UpdateMCPVisibilityToolOutput{}, err
@@ -73,6 +73,6 @@ func registerUnavailableLifecycleVisibilityTools(reg *Registrar) {
 		{"disable_mcp", "Turn Off an MCP Server", "Turn off one MCP server. This is not switched on for your organization yet."},
 		{"enable_mcp", "Turn On an MCP Server", "Turn one MCP server back on. This is not switched on for your organization yet."},
 	} {
-		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_visibility"))
+		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_visibility"))
 	}
 }

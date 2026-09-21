@@ -75,6 +75,12 @@ export const AUDIT_ACTIONS = [
   "gcp_kms_key:create",
   "gcp_kms_key:delete",
   "gcp_kms_key:update",
+  "identity-provider-connection:create",
+  "identity-provider-connection:record-agent",
+  "identity-provider-connection:revoke",
+  "identity-provider-connection:submit-client-id",
+  "identity-provider-connection:sync-applications",
+  "identity-provider-connection:verify",
   "json_web_key:activate",
   "json_web_key:delete",
   "json_web_key:publish",
@@ -124,6 +130,7 @@ export const AUDIT_ACTIONS = [
   "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
   "organization:enterprise_trial_extended",
+  "organization:enterprise_trial_end_changed",
   "organization:enterprise_trial_rearmed",
   "organization:enterprise_trial_started",
   "organization:hooks_fail_open_disabled",
@@ -158,6 +165,9 @@ export const AUDIT_ACTIONS = [
   "project:create",
   "project:delete",
   "project:update",
+  "query:create",
+  "query:delete",
+  "query:update",
   "remote-mcp-server-header:create",
   "remote-mcp-server-header:delete",
   "remote-mcp-server-header:update",
@@ -354,6 +364,18 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated GCP KMS key";
     case "gcp_kms_key:delete":
       return "removed GCP KMS key";
+    case "identity-provider-connection:create":
+      return "connected identity provider";
+    case "identity-provider-connection:submit-client-id":
+      return "submitted client ID for identity provider";
+    case "identity-provider-connection:verify":
+      return "verified identity provider connection to";
+    case "identity-provider-connection:record-agent":
+      return "recorded agent for identity provider";
+    case "identity-provider-connection:revoke":
+      return "revoked identity provider connection to";
+    case "identity-provider-connection:sync-applications":
+      return "requested an applications sync for identity provider";
     case "json_web_key_set:create":
       return "created JSON Web Key Set";
     case "json_web_key_set:update":
@@ -531,6 +553,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":
       return "ended enterprise trial";
+    case "organization:enterprise_trial_end_changed":
+      return "changed enterprise trial end date";
     case "organization:enterprise_trial_extended":
       return "extended enterprise trial";
     case "organization:enterprise_trial_rearmed":
@@ -601,6 +625,13 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated project";
     case "project:delete":
       return "deleted project";
+
+    case "query:create":
+      return "created saved query";
+    case "query:update":
+      return "updated saved query";
+    case "query:delete":
+      return "deleted saved query";
 
     case "remote-mcp:create":
       return "added remote MCP server";

@@ -42,7 +42,11 @@ import { Result } from "../types/fp.js";
  * verifyURL remoteMcp
  *
  * @remarks
- * Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.
+ * Probe a candidate remote MCP server URL and return the legacy boolean verification result.
+ *
+ * Deprecated: use probeURL instead.
+ *
+ * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
  */
 export function remoteMcpVerifyURL(
   client: GramCore,

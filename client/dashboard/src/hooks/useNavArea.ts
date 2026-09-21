@@ -2,6 +2,7 @@ import { useLocation } from "react-router";
 
 export type NavArea =
   | "Observability"
+  | "Identity"
   | "MCP Gateway"
   | "Security and Policy"
   | "Organization";
@@ -13,11 +14,16 @@ export type NavArea =
 const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   // Observability
   costs: "Observability",
+  explore: "Observability",
   insights: "Observability",
   "agent-sessions": "Observability",
   "org-memory": "Observability",
   logs: "Observability",
-  identities: "Observability",
+  // Identity
+  identities: "Identity",
+  "agent-management": "Identity",
+  "mcp-sessions": "Identity",
+  "remote-identity-providers": "Identity",
   // Security and Policy
   watchdog: "Security and Policy",
   "risk-overview": "Security and Policy",

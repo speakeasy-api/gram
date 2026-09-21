@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -20,12 +21,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 	}
@@ -79,6 +81,16 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 	svc.verifier = NewVerifier(logger, sessions, svc.oidc, adminCache)
 
 	return ctx, svc, conn
+}
+
+func newTestAdminMeterService(t *testing.T) (context.Context, *Service, *pgxpool.Pool, clickhouse.Conn) {
+	t.Helper()
+
+	ctx, svc, db := newTestAdminService(t)
+	meterConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	svc.billing = usage.NewBillingOperations(svc.logger, db, nil, nil, svc.audit, meterConn)
+	return ctx, svc, db, meterConn
 }
 
 // newTestAdminServiceWithWorkOS is newTestAdminService with an identity provider

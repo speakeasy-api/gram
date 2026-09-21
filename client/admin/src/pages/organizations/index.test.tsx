@@ -64,8 +64,8 @@ const mocks = vi.hoisted(() => ({
     vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
   enableOrganization:
     vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
-  extendTrial:
-    vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
+  changeTrialEndDate:
+    vi.fn<(body: { id: string; endsAt: Date }) => Promise<AdminOrganization>>(),
   rearmTrial:
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
   startTrial:
@@ -105,7 +105,7 @@ vi.mock("@/lib/gramAdminClient", async (importOriginal) => {
     ...actual,
     disableOrganization: mocks.disableOrganization,
     enableOrganization: mocks.enableOrganization,
-    extendTrial: mocks.extendTrial,
+    changeTrialEndDate: mocks.changeTrialEndDate,
     rearmTrial: mocks.rearmTrial,
     startTrial: mocks.startTrial,
   };
@@ -140,7 +140,7 @@ const ORGS: AdminOrganization[] = [
     created_at: "2026-06-08T00:00:00Z",
     updated_at: "2026-06-09T00:00:00Z",
   },
-  // Live, and mid-trial. Extend trial is offered on this row and on no other:
+  // Live, and mid-trial. Change end date is offered on this row and on no other:
   // the first row's trial is running too, but the organization is disabled and
   // a disabled organization is not offered more of a trial nobody can use.
   {
@@ -257,10 +257,9 @@ function currentSearch(router: AnyRouter): string {
   return decodeURIComponent(router.state.location.searchStr);
 }
 
-// The three triggers above the table. Found by the state a screen reader is
-// told, because the visible label is the group's name and a bare count.
-function filterTrigger(group: string): HTMLElement {
-  return screen.getByRole("button", { name: new RegExp(`^${group} filter:`) });
+// The single Filters trigger above the table opens every filter group.
+function filterTrigger(_group?: string): HTMLElement {
+  return screen.getByRole("button", { name: "Filters" });
 }
 
 // Focused before the click, because a click does not focus a button in every
@@ -283,6 +282,11 @@ function picker(group: string): HTMLElement {
 // choice does not close it, because the group takes more than one, so a second
 // call must not toggle the open list shut.
 async function chooseFilter(group: string, option: string): Promise<void> {
+  if (group === "Organization Status") {
+    openOn(picker(group));
+    fireEvent.click(await screen.findByRole("option", { name: option }));
+    return;
+  }
   const trigger = picker(group);
   if (trigger.getAttribute("aria-expanded") !== "true") {
     fireEvent.click(trigger);
@@ -377,16 +381,23 @@ function tabStopBefore(target: HTMLElement): HTMLElement | null {
 }
 
 function urlFor(search: Record<string, unknown>): string {
-  // The router JSON-encodes a non-string value, so a bookmarked URL is built
-  // the same way here rather than hand-written.
+  // Match router encoding, including numeric strings: unquoted member bounds
+  // would be JSON-parsed into numbers and could lose integer precision.
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(search)) {
-    qs.set(key, typeof value === "string" ? value : JSON.stringify(value));
+    qs.set(
+      key,
+      typeof value === "string" && !/^\d+$/.test(value)
+        ? value
+        : JSON.stringify(value),
+    );
   }
   return `/organizations?${qs.toString()}`;
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-05-01T12:00:00Z"));
   mocks.listOrganizations.mockReset();
   mocks.listOrganizations.mockResolvedValue({
     total: ORGS.length,
@@ -416,8 +427,8 @@ beforeEach(() => {
   mocks.enableOrganization.mockImplementation(({ id }) =>
     Promise.resolve({ ...orgByID(id), disabled_at: undefined }),
   );
-  mocks.extendTrial.mockReset();
-  mocks.extendTrial.mockImplementation(({ id }) =>
+  mocks.changeTrialEndDate.mockReset();
+  mocks.changeTrialEndDate.mockImplementation(({ id }) =>
     Promise.resolve({ ...orgByID(id), trial_ends_at: EXTENDED_TRIAL_END }),
   );
   // No default answer: the one describe that re-arms owns a record none of the
@@ -448,6 +459,90 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("organizations list", () => {
+  it("shows only Filters when idle and focuses the first field", async () => {
+    await renderRouteTree(routeTree);
+    const trigger = filterTrigger();
+    expect(trigger.textContent).toBe("Filters");
+    expect(trigger.parentElement?.textContent).toBe(
+      "FiltersCreate organization",
+    );
+    for (const name of [
+      "Type",
+      "Trial",
+      "Organization Status",
+      "Members",
+      "Created date",
+    ]) {
+      expect(
+        screen.queryByRole("button", { name: new RegExp(`^${name} filter:`) }),
+      ).toBeNull();
+    }
+    expect(
+      screen.queryByRole("button", {
+        name: /^Clear (Type|Trial|Organization Status|created|minimum|maximum)/,
+      }),
+    ).toBeNull();
+    await openFilters("Type");
+    await waitFor(() => expect(document.activeElement).toBe(picker("Type")));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    for (const action of ["Apply", "Clear all"]) {
+      await openFilters("Type");
+      fireEvent.click(screen.getByRole("button", { name: action }));
+      await waitFor(() => expect(document.activeElement).toBe(trigger));
+    }
+  });
+
+  it.each([
+    ["Clear Type pro", "type", ["enterprise"]],
+    [`Clear Trial ${TRIAL_LABELS.running}`, "trial", ["expired"]],
+    ["Clear Organization Status Disabled", "disabledStatus", undefined],
+    ["Clear minimum members", "minMembers", undefined],
+    ["Clear maximum members", "maxMembers", undefined],
+    ["Clear created from", "createdFrom", undefined],
+    ["Clear created to", "createdTo", undefined],
+  ])(
+    "removes only %s using its distinct X target",
+    async (name, key, value) => {
+      const selected = {
+        type: ["pro", "enterprise"],
+        trial: ["running", "expired"],
+        disabledStatus: "disabled",
+        minMembers: "0",
+        maxMembers: "9223372036854775807",
+        createdFrom: "2024-02-01",
+        createdTo: "2024-02-29",
+        q: "needle",
+        sort: "name",
+        dir: "asc",
+      };
+      mocks.listOrganizations.mockResolvedValue({
+        organizations: ORGS,
+        total: 101,
+      });
+      const { router } = await renderRouteTree(routeTree, {
+        initialPath: urlFor(selected),
+      });
+      await waitFor(() => expect(lastListParams().page).toBe(1));
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => expect(lastListParams().page).toBe(2));
+      const clear = screen.getByRole("button", { name: name as string });
+      const label = clear.parentElement!.querySelector("span")!;
+      const before = currentSearch(router);
+      fireEvent.click(label);
+      expect(currentSearch(router)).toBe(before);
+      fireEvent.click(clear);
+      await waitFor(() =>
+        expect(organizationsSearchSchema(router.state.location.search)).toEqual(
+          organizationsSearchSchema({ ...selected, [key as string]: value }),
+        ),
+      );
+      await waitFor(() => expect(lastListParams().page).toBe(1));
+      expect(document.activeElement).toBe(filterTrigger());
+      expect(screen.queryByRole("button", { name: name as string })).toBeNull();
+    },
+  );
+
   it("sorts only Created, resets paging, and restores direction on reload", async () => {
     mocks.listOrganizations.mockResolvedValue({
       organizations: ORGS,
@@ -655,12 +750,14 @@ describe("organizations list", () => {
       }),
     });
 
-    // The one chosen value is named; more than one is counted, because the
-    // trigger has a row of controls to share.
-    expect(filterTrigger("Type").getAttribute("aria-label")).toContain("pro");
-    expect(filterTrigger("Trial").getAttribute("aria-label")).toContain(
-      "2 selected",
-    );
+    expect(screen.getByRole("button", { name: "Clear Type pro" })).toBeTruthy();
+    for (const state of ["running", "expired"] as const) {
+      expect(
+        screen.getByRole("button", {
+          name: `Clear Trial ${TRIAL_LABELS[state]}`,
+        }),
+      ).toBeTruthy();
+    }
 
     await waitFor(() => {
       expect(mocks.listOrganizations).toHaveBeenCalled();
@@ -668,7 +765,7 @@ describe("organizations list", () => {
     expect(lastListParams()).toMatchObject({
       account_types: ["pro"],
       trial_states: ["running", "expired"],
-      disabled_states: ["active", "disabled"],
+      disabled_status: "all",
     });
 
     await openFilters("Type");
@@ -818,13 +915,14 @@ describe("organizations list", () => {
       expect(lastListParams().account_types).toEqual(["pro"]);
     });
 
-    await openFilters("Status");
+    await openFilters("Organization Status");
     fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
 
     await waitFor(() => {
       expect(lastListParams().account_types).toBeUndefined();
     });
-    expect(lastListParams().disabled_states).toBeUndefined();
+    expect(lastListParams().disabled_status).toBe("all");
+    expect(currentSearch(router)).not.toContain("disabled");
     // The term is not a filter this sheet holds. An operator who cleared the
     // filters has not asked to type it again.
     expect(lastListParams().q).toBe("acme");
@@ -843,10 +941,12 @@ describe("organizations list", () => {
       expect(lastListParams().account_types).toEqual([...ACCOUNT_TYPE_OPTIONS]);
     });
     // An organization can carry a type the picker does not offer, so every
-    // option at once is still a narrowing and must not read as "All types".
-    expect(filterTrigger("Type").getAttribute("aria-label")).toBe(
-      `Type filter: ${ACCOUNT_TYPE_OPTIONS.length} selected`,
-    );
+    // option at once is still a narrowing: show each applied value.
+    for (const type of ACCOUNT_TYPE_OPTIONS) {
+      expect(
+        screen.getByRole("button", { name: `Clear Type ${type}` }),
+      ).toBeTruthy();
+    }
   });
 
   it("keeps an account type the picker does not offer", async () => {
@@ -860,9 +960,9 @@ describe("organizations list", () => {
     await waitFor(() => {
       expect(lastListParams().account_types).toEqual(["startup"]);
     });
-    expect(filterTrigger("Type").getAttribute("aria-label")).toContain(
-      "startup",
-    );
+    expect(
+      screen.getByRole("button", { name: "Clear Type startup" }),
+    ).toBeTruthy();
 
     await openFilters("Type");
     fireEvent.click(picker("Type"));
@@ -894,10 +994,7 @@ describe("organizations list", () => {
     const params = lastListParams();
     expect(params.account_types).toBeUndefined();
     expect(params.trial_states).toBeUndefined();
-    expect(params.disabled_states).toBeUndefined();
-    expect(filterTrigger("Type").getAttribute("aria-label")).toContain(
-      "All types",
-    );
+    expect(screen.queryByRole("button", { name: /^Clear Type / })).toBeNull();
   });
 
   it("sends no filter for a group a link filled with whitespace", async () => {
@@ -911,10 +1008,9 @@ describe("organizations list", () => {
     const params = lastListParams();
     expect(params.account_types).toBeUndefined();
     expect(params.trial_states).toBeUndefined();
-    expect(params.disabled_states).toBeUndefined();
   });
 
-  it("opens on the group the operator asked for", async () => {
+  it("opens on the first field from Filters", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
     await openFilters("Trial");
@@ -922,7 +1018,7 @@ describe("organizations list", () => {
     // The sheet holds three pickers. Landing on the first would make the
     // operator walk to the one they pressed.
     await waitFor(() => {
-      expect(document.activeElement).toBe(picker("Trial"));
+      expect(document.activeElement).toBe(picker("Type"));
     });
   });
 
@@ -948,24 +1044,94 @@ describe("organizations list", () => {
     await waitFor(() => {
       expect(lastListParams().trial_states).toEqual([...TRIAL_STATES]);
     });
-    // Every organization holds exactly one of these, so all of them is the
-    // whole platform. "6 selected" reads as a narrowing that is not there.
-    expect(filterTrigger("Trial").getAttribute("aria-label")).toBe(
-      "Trial filter: All trial states",
-    );
+    // Every explicit selection remains readable, including the whole set.
+    for (const state of TRIAL_STATES) {
+      expect(
+        screen.getByRole("button", {
+          name: `Clear Trial ${TRIAL_LABELS[state]}`,
+        }),
+      ).toBeTruthy();
+    }
   });
+
+  it("preserves a legacy active-only bookmark until its restriction is cleared", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: urlFor({ disabled: ["active"], type: ["pro"] }),
+    });
+    await waitFor(() =>
+      expect(lastListParams().disabled_status).toEqual("active"),
+    );
+    expect(
+      screen.getByRole("button", { name: "Clear Organization Status Active" }),
+    ).toBeTruthy();
+    await openFilters("Organization Status");
+    expect(picker("Organization Status").textContent).toBe("Active");
+    await chooseFilter("Organization Status", "All");
+    applyFilters();
+    await waitFor(() => expect(lastListParams().disabled_status).toBe("all"));
+    expect(lastListParams().account_types).toEqual(["pro"]);
+  });
+
+  it.each(["Active", "Disabled"])(
+    "keeps %s a draft until Apply and clears it independently",
+    async (label) => {
+      const status = label.toLowerCase();
+      const { router } = await renderRouteTree(routeTree, {
+        initialPath: urlFor({
+          q: "org_exact_id",
+          type: ["pro"],
+          trial: ["running"],
+          dir: "asc",
+        }),
+      });
+      await waitFor(() => expect(lastListParams().disabled_status).toBe("all"));
+      await openFilters("Organization Status");
+      await chooseFilter("Organization Status", label);
+      expect(lastListParams().disabled_status).toBe("all");
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      await openFilters("Organization Status");
+      expect(picker("Organization Status").textContent).toBe("All");
+      await chooseFilter("Organization Status", label);
+      applyFilters();
+      await waitFor(() =>
+        expect(lastListParams().disabled_status).toBe(status),
+      );
+      expect(currentSearch(router)).toContain(`disabledStatus=${status}`);
+      expect(screen.getByText(`Status: ${label}`)).toBeTruthy();
+      expect(
+        screen.getByRole("button", {
+          name: `Clear Organization Status ${label}`,
+        }),
+      ).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: `Clear Organization Status ${label}`,
+        }),
+      );
+      await waitFor(() => expect(lastListParams().disabled_status).toBe("all"));
+      expect(lastListParams()).toMatchObject({
+        q: "org_exact_id",
+        account_types: ["pro"],
+        trial_states: ["running"],
+        direction: "asc",
+        page: 1,
+      });
+      expect(currentSearch(router)).not.toContain("disabledOnly");
+      expect(document.activeElement).toBe(filterTrigger("Organization Status"));
+    },
+  );
 
   it("keeps the sort when a filter is applied", async () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: urlFor({ sort: "created_at", dir: "asc" }),
     });
 
-    await openFilters("Status");
-    await chooseFilter("Status", "Disabled");
+    await openFilters("Organization Status");
+    await chooseFilter("Organization Status", "Disabled");
     applyFilters();
 
     await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+      expect(lastListParams().disabled_status).toBe("disabled");
     });
     const url = currentSearch(router);
     expect(url).toContain("sort=created_at");
@@ -996,7 +1162,7 @@ describe("organizations list", () => {
 
     // Nothing in the URL moves, so the pager cannot notice on its own. Page
     // three of a filter set is not the first page an operator asked for.
-    await openFilters("Status");
+    await openFilters("Organization Status");
     applyFilters();
 
     await waitFor(() => {
@@ -1042,33 +1208,65 @@ describe("organizations list", () => {
     expect(lastListParams().q).toBe("acme");
   });
 
-  it("resets the page when a filter changes", async () => {
-    mocks.listOrganizations.mockResolvedValue({
-      organizations: ORGS,
-      total: 101,
-    });
-    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+  it.each(["Active", "Disabled"])(
+    "resets the page in both directions for %s with other filters",
+    async (label) => {
+      mocks.listOrganizations.mockResolvedValue({
+        organizations: ORGS,
+        total: 101,
+      });
+      await renderRouteTree(routeTree, {
+        initialPath: urlFor({
+          q: "org_exact_id",
+          type: ["pro"],
+          trial: ["running"],
+          dir: "asc",
+        }),
+      });
 
-    const next = await screen.findByRole("button", { name: "Next" });
-    await waitFor(() => {
-      expect(next.hasAttribute("disabled")).toBe(false);
-    });
-    fireEvent.click(next);
-    await waitFor(() => {
-      expect(lastListParams().page).toBe(2);
-    });
+      const next = await screen.findByRole("button", { name: "Next" });
+      await waitFor(() => {
+        expect(next.hasAttribute("disabled")).toBe(false);
+      });
+      fireEvent.click(next);
+      await waitFor(() => {
+        expect(lastListParams().page).toBe(2);
+      });
 
-    await openFilters("Status");
-    await chooseFilter("Status", "Disabled");
-    applyFilters();
+      await openFilters("Organization Status");
+      await chooseFilter("Organization Status", label);
+      applyFilters();
 
-    await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["disabled"]);
-    });
-    // The page was fetched under the previous filter set and belongs to a
-    // different result set.
-    expect(lastListParams().page).toBe(1);
-  });
+      await waitFor(() => {
+        expect(lastListParams().disabled_status).toBe(label.toLowerCase());
+      });
+      // The page was fetched under the previous filter set and belongs to a
+      // different result set.
+      expect(lastListParams()).toMatchObject({
+        page: 1,
+        q: "org_exact_id",
+        account_types: ["pro"],
+        trial_states: ["running"],
+        direction: "asc",
+      });
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Next" }).hasAttribute("disabled"),
+        ).toBe(false),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => expect(lastListParams().page).toBe(2));
+      await openFilters("Organization Status");
+      await chooseFilter("Organization Status", "All");
+      applyFilters();
+      await waitFor(() =>
+        expect(lastListParams()).toMatchObject({
+          page: 1,
+          disabled_status: "all",
+        }),
+      );
+    },
+  );
 
   it("resets the page when the search box changes the term", async () => {
     mocks.listOrganizations.mockResolvedValue({
@@ -2442,7 +2640,9 @@ describe("organizations list write actions", () => {
     await openRowMenu(LIVE.name);
 
     expect(screen.getByRole("menuitem", { name: "Start trial" })).toBeTruthy();
-    expect(screen.queryByRole("menuitem", { name: "Extend trial" })).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", { name: "Change end date" }),
+    ).toBeNull();
     expect(screen.queryByRole("menuitem", { name: "Re-arm trial" })).toBeNull();
   });
 
@@ -2685,7 +2885,7 @@ describe("organizations list write actions", () => {
   it("speaks the same refusal twice when the operator presses through it", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await openRowMenu(TRIALLING_ORG.name);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Extend trial" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Change end date" }));
     await screen.findByRole("dialog");
 
     // The one refusal the calendar's own bounds cannot prevent: pressing the
@@ -2702,20 +2902,20 @@ describe("organizations list write actions", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
     });
     const first = liveRegion().textContent;
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
     });
 
     // Word for word the same sentence, and the region still changed: the
     // zero-width space alternates, so the second refusal reaches the
     // accessibility tree as a change rather than as silence. Nothing on screen
     // moves on that press, which is the whole reason this path announces.
-    expect(announcement()).toContain("Pick a date between");
+    expect(announcement()).toContain("Pick a future date (UTC).");
     expect(liveRegion().textContent).not.toBe(first);
-    expect(mocks.extendTrial).not.toHaveBeenCalled();
+    expect(mocks.changeTrialEndDate).not.toHaveBeenCalled();
   });
 
   it("will not let the Columns menu take the row menu away", async () => {
@@ -2757,34 +2957,37 @@ describe("organizations list write actions", () => {
     ).toBeTruthy();
   });
 
-  it("extends the trial from the panel and repaints the panel with the answer", async () => {
+  it("changes the trial end date from the panel and repaints with the answer", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await peekOn(TRIALLING_ORG.name);
 
     fireEvent.click(
       within(peekPanel()).getByRole("button", {
-        name: `Extend trial for ${TRIALLING_ORG.name}`,
+        name: `Change end date for ${TRIALLING_ORG.name}`,
       }),
     );
     await screen.findByRole("dialog");
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
     });
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).toBeNull();
     });
-    // The default day count, sent without the operator typing anything.
-    expect(mocks.extendTrial).toHaveBeenCalledWith({
+    // The current end date is selected initially, without adding extra days.
+    expect(mocks.changeTrialEndDate).toHaveBeenCalledWith({
       id: TRIALLING_ORG.id,
-      days: 14,
+      endsAt: new Date(
+        new Date(TRIALLING_ORG.trial_ends_at!).toISOString().slice(0, 10) +
+          "T00:00:00.000Z",
+      ),
     });
     // The panel is drawn from the row it is peeking at, so it repaints from the
     // same cache write the row does. Reading the old date here is the operator
-    // being shown the trial they just extended, unextended.
+    // being shown the previous end date after saving.
     expect(peekPanel().textContent).toContain(shortDate(EXTENDED_TRIAL_END));
     expect(announcement()).toBe(
-      `${TRIALLING_ORG.name} trial extended by 14 days.`,
+      `${TRIALLING_ORG.name} trial end date changed to ${shortDate(TRIALLING_ORG.trial_ends_at!)}.`,
     );
   });
 
@@ -2819,13 +3022,13 @@ describe("organizations list write actions", () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await peekOn(TRIALLING_ORG.name);
     const extend = within(peekPanel()).getByRole("button", {
-      name: `Extend trial for ${TRIALLING_ORG.name}`,
+      name: `Change end date for ${TRIALLING_ORG.name}`,
     });
 
     fireEvent.click(extend);
     await screen.findByRole("dialog");
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
     });
 
     await waitFor(() => {
@@ -2849,7 +3052,7 @@ describe("organizations list write actions", () => {
 
     fireEvent.click(
       within(peekPanel()).getByRole("button", {
-        name: `Extend trial for ${TRIALLING_ORG.name}`,
+        name: `Change end date for ${TRIALLING_ORG.name}`,
       }),
     );
     await screen.findByRole("dialog");
@@ -2882,7 +3085,7 @@ describe("organizations list write actions", () => {
 
     fireEvent.click(
       within(peekPanel()).getByRole("button", {
-        name: `Extend trial for ${TRIALLING_ORG.name}`,
+        name: `Change end date for ${TRIALLING_ORG.name}`,
       }),
     );
     await screen.findByRole("dialog");
@@ -2899,7 +3102,7 @@ describe("organizations list write actions", () => {
       expect(screen.queryByRole("dialog")).toBeNull();
     });
     expect(peekPanel()).toBeTruthy();
-    expect(mocks.extendTrial).not.toHaveBeenCalled();
+    expect(mocks.changeTrialEndDate).not.toHaveBeenCalled();
   });
 });
 
@@ -3338,12 +3541,12 @@ describe("organizations list bulk account type", () => {
 
     await tick(FIRST_ORG.name);
 
-    await openFilters("Status");
-    await chooseFilter("Status", "Disabled");
+    await openFilters("Organization Status");
+    await chooseFilter("Organization Status", "Disabled");
     applyFilters();
 
     await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["disabled"]);
+      expect(lastListParams().disabled_status).toBe("disabled");
     });
     expect(screen.getByText("Nothing selected")).toBeTruthy();
   });
@@ -4115,6 +4318,64 @@ describe("TableActionBar", () => {
 // value below is the whole object the route sees.
 describe("organizationsSearchSchema", () => {
   const cases: [string, Record<string, unknown>, OrganizationsSearch][] = [
+    ["defaults to unrestricted", {}, {}],
+    [
+      "reads canonical active",
+      { disabledStatus: "active" },
+      { disabledStatus: "active" },
+    ],
+    [
+      "reads canonical disabled",
+      { disabledStatus: "disabled" },
+      { disabledStatus: "disabled" },
+    ],
+    [
+      "canonical all overrides old restrictions",
+      { disabledStatus: "all", disabledOnly: true, disabled: "active" },
+      {},
+    ],
+    [
+      "canonical active overrides binary",
+      { disabledStatus: "active", disabledOnly: true },
+      { disabledStatus: "active" },
+    ],
+    ["invalid canonical falls back to all", { disabledStatus: "invalid" }, {}],
+    ["array canonical falls back to all", { disabledStatus: ["active"] }, {}],
+    [
+      "invalid canonical permits legacy translation",
+      { disabledStatus: "invalid", disabledOnly: true },
+      { disabledStatus: "disabled" },
+    ],
+    [
+      "reads disabled only",
+      { disabledOnly: true },
+      { disabledStatus: "disabled" },
+    ],
+    [
+      "reads a handwritten boolean",
+      { disabledOnly: "true" },
+      { disabledStatus: "disabled" },
+    ],
+    ["canonicalizes false", { disabledOnly: false }, {}],
+    ["canonicalizes handwritten false", { disabledOnly: "false" }, {}],
+    ["rejects invalid boolean", { disabledOnly: "yes" }, {}],
+    ["rejects numeric boolean", { disabledOnly: 1 }, {}],
+    ["rejects array boolean", { disabledOnly: [true] }, {}],
+    [
+      "new false overrides legacy active",
+      { disabledOnly: false, disabled: "active" },
+      {},
+    ],
+    [
+      "new true overrides legacy active",
+      { disabledOnly: true, disabled: "active" },
+      { disabledStatus: "disabled" },
+    ],
+    [
+      "preserves legacy active bookmark",
+      { disabled: "active" },
+      { disabledStatus: "active" },
+    ],
     ["reads a hand-written type", { type: "free" }, { type: ["free"] }],
     [
       "keeps a type the picker does not offer",
@@ -4151,12 +4412,12 @@ describe("organizationsSearchSchema", () => {
     [
       "reads a status the picker offers",
       { disabled: ["disabled"] },
-      { disabled: ["disabled"] },
+      { disabledStatus: "disabled" },
     ],
     [
       "reads the flag this list used to carry as both statuses",
       { disabled: true },
-      { disabled: ["active", "disabled"] },
+      {},
     ],
     ["drops a status outside the two", { disabled: ["retired"] }, {}],
     ["reads an all-digit term the router coerced", { q: 123 }, { q: "123" }],
@@ -4249,7 +4510,7 @@ describe("re-arming a trial from the peek panel", () => {
     expect(control.isConnected).toBe(false);
     expect(
       within(peekPanel()).getByRole("button", {
-        name: `Extend trial for ${DEMOTED_ORG.name}`,
+        name: `Change end date for ${DEMOTED_ORG.name}`,
       }),
     ).toBeTruthy();
 
@@ -4303,7 +4564,7 @@ describe("starting a trial from the peek panel", () => {
     expect(control.isConnected).toBe(false);
     expect(
       within(peekPanel()).getByRole("button", {
-        name: `Extend trial for ${org.name}`,
+        name: `Change end date for ${org.name}`,
       }),
     ).toBeTruthy();
 
@@ -4311,5 +4572,615 @@ describe("starting a trial from the peek panel", () => {
       expect(document.activeElement).toBe(peekPanel());
     });
     expect(document.activeElement).not.toBe(document.body);
+  });
+});
+
+afterEach(() => vi.useRealTimers());
+
+describe("member range filters", () => {
+  it("validates bounds in the route without forwarding malformed or reversed values", () => {
+    expect(
+      organizationsSearchSchema({
+        minMembers: "000",
+        maxMembers: "9223372036854775807",
+      }),
+    ).toMatchObject({ minMembers: "0", maxMembers: "9223372036854775807" });
+    expect(
+      organizationsSearchSchema({
+        minMembers: 9007199254740992,
+        maxMembers: "5",
+      }),
+    ).toMatchObject({ minMembers: undefined, maxMembers: "5" });
+    expect(
+      organizationsSearchSchema({ minMembers: "6", maxMembers: "5" }),
+    ).toMatchObject({ minMembers: undefined, maxMembers: undefined });
+  });
+
+  it("validates drafts accessibly, cancels without changes and applies exact decimal strings", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+    const trigger = await openFilters("Members");
+    const min = screen.getByRole("textbox", { name: "Min" });
+    const max = screen.getByRole("textbox", { name: "Max" });
+    await waitFor(() => expect(document.activeElement).toBe(picker("Type")));
+    for (const value of ["-1", "1.2", "1e3", "9223372036854775808", "bad"]) {
+      fireEvent.change(min, { target: { value } });
+      expect(min.getAttribute("aria-invalid")).toBe("true");
+      expect(
+        document
+          .getElementById(min.getAttribute("aria-describedby") ?? "")
+          ?.getAttribute("role"),
+      ).toBe("alert");
+      const apply = screen.getByRole("button", { name: "Apply" });
+      expect(apply.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(apply);
+      expect(currentSearch(router)).toBe("");
+    }
+    // Recover in the same open sheet, without remounting away the error.
+    for (const corrected of ["0", ""]) {
+      fireEvent.change(min, { target: { value: "bad" } });
+      const errorId = min.getAttribute("aria-describedby");
+      expect(errorId).toBeTruthy();
+      fireEvent.change(min, { target: { value: corrected } });
+      expect(min.getAttribute("aria-invalid")).toBe("false");
+      expect(min.hasAttribute("aria-describedby")).toBe(false);
+      expect(document.getElementById(errorId ?? "")).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Apply" }).hasAttribute("disabled"),
+      ).toBe(false);
+      expect(currentSearch(router)).toBe("");
+    }
+    fireEvent.change(min, { target: { value: "10" } });
+    fireEvent.change(max, { target: { value: "5" } });
+    expect(screen.getByRole("alert").textContent).toContain("Max must");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(currentSearch(router)).toBe("");
+    await openFilters("Members");
+    expect(
+      (screen.getByRole("textbox", { name: "Min" }) as HTMLInputElement).value,
+    ).toBe("");
+    fireEvent.change(screen.getByRole("textbox", { name: "Min" }), {
+      target: { value: " 0009007199254740993 " },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Max" }), {
+      target: { value: "9223372036854775807" },
+    });
+    applyFilters();
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        min_members: "9007199254740993",
+        max_members: "9223372036854775807",
+      }),
+    );
+    expect(currentSearch(router)).toContain('minMembers="9007199254740993"');
+    expect(currentSearch(router)).toContain('maxMembers="9223372036854775807"');
+  });
+
+  it.each(["Min", "Max"])(
+    "recovers a reversed pair by clearing %s while preserving other filters",
+    async (cleared) => {
+      await renderRouteTree(routeTree, {
+        initialPath:
+          "/organizations?q=fixture&type=pro&trial=running&disabledStatus=disabled&dir=asc",
+      });
+      await openFilters("Members");
+      fireEvent.change(screen.getByRole("textbox", { name: "Min" }), {
+        target: { value: "10" },
+      });
+      const max = screen.getByRole("textbox", { name: "Max" });
+      fireEvent.change(max, { target: { value: "5" } });
+      const errorId = max.getAttribute("aria-describedby");
+      expect(errorId).toBeTruthy();
+      expect(screen.getByRole("alert").textContent).toContain("Max must");
+      expect(
+        screen.getByRole("button", { name: "Apply" }).hasAttribute("disabled"),
+      ).toBe(true);
+      fireEvent.change(screen.getByRole("textbox", { name: cleared }), {
+        target: { value: "" },
+      });
+      expect(max.getAttribute("aria-invalid")).toBe("false");
+      expect(max.hasAttribute("aria-describedby")).toBe(false);
+      expect(document.getElementById(errorId ?? "")).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Apply" }).hasAttribute("disabled"),
+      ).toBe(false);
+      applyFilters();
+      await waitFor(() =>
+        expect(lastListParams()).toMatchObject({
+          min_members: cleared === "Min" ? undefined : "10",
+          max_members: cleared === "Max" ? undefined : "5",
+          q: "fixture",
+          account_types: ["pro"],
+          trial_states: ["running"],
+          disabled_status: "disabled",
+          direction: "asc",
+          sort: "created_at",
+          page: 1,
+        }),
+      );
+    },
+  );
+
+  it("resets pagination on either bound, preserves AND filters, and clears each bound with focus", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      total: 101,
+    });
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath:
+        "/organizations?q=fixture&type=pro&trial=running&disabledStatus=disabled&dir=asc&minMembers=%220%22&maxMembers=%2210%22",
+    });
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        min_members: "0",
+        max_members: "10",
+        q: "fixture",
+        account_types: ["pro"],
+        trial_states: ["running"],
+        disabled_status: "disabled",
+        direction: "asc",
+      }),
+    );
+    for (const key of ["minimum", "maximum"]) {
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => expect(lastListParams().page).toBe(2));
+      fireEvent.click(
+        screen.getByRole("button", { name: `Clear ${key} members` }),
+      );
+      await waitFor(() => expect(lastListParams().page).toBe(1));
+      expect(lastListParams()).toMatchObject({
+        q: "fixture",
+        account_types: ["pro"],
+        trial_states: ["running"],
+        disabled_status: "disabled",
+        direction: "asc",
+      });
+      expect(document.activeElement).toBe(filterTrigger("Members"));
+    }
+    expect(lastListParams().min_members).toBeUndefined();
+    expect(lastListParams().max_members).toBeUndefined();
+    expect(currentSearch(router)).not.toContain("Members");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(lastListParams().page).toBe(2));
+    await openFilters("Members");
+    fireEvent.change(screen.getByRole("textbox", { name: "Min" }), {
+      target: { value: "0" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Max" }), {
+      target: { value: "0" },
+    });
+    applyFilters();
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        min_members: "0",
+        max_members: "0",
+        page: 1,
+      }),
+    );
+    await openFilters("Members");
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    await waitFor(() => expect(lastListParams().min_members).toBeUndefined());
+    expect(lastListParams().max_members).toBeUndefined();
+    expect(lastListParams().disabled_status).toBe("all");
+    expect(lastListParams().account_types).toBeUndefined();
+    expect(lastListParams().trial_states).toBeUndefined();
+    expect(lastListParams().q).toBe("fixture");
+    expect(lastListParams().direction).toBe("asc");
+  });
+
+  it("rehydrates an open draft on history back and forward", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations?minMembers=%225%22",
+    });
+    await act(async () => {
+      await router.navigate({
+        to: "/organizations",
+        search: { minMembers: "10" },
+      });
+    });
+    await openFilters("Members");
+    fireEvent.change(screen.getByRole("textbox", { name: "Min" }), {
+      target: { value: "99" },
+    });
+    await act(async () => {
+      router.history.back();
+    });
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("textbox", { name: "Min" }) as HTMLInputElement)
+          .value,
+      ).toBe("5"),
+    );
+    await act(async () => {
+      router.history.forward();
+    });
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("textbox", { name: "Min" }) as HTMLInputElement)
+          .value,
+      ).toBe("10"),
+    );
+  });
+});
+
+describe("created date filters", () => {
+  it.each([
+    ["today", "Today", "2025-01-02"],
+    ["7", "Last 7 days", "2024-12-27"],
+    ["14", "Last 14 days", "2024-12-20"],
+    ["30", "Last 30 days", "2024-12-04"],
+  ])(
+    "renders one %s chip, preserves Custom and clears both relative bounds",
+    async (preset, label, from) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2025-01-02T12:00:00Z"));
+      try {
+        mocks.listOrganizations.mockResolvedValue({
+          organizations: ORGS,
+          total: 101,
+        });
+        const { router } = await renderRouteTree(routeTree, {
+          initialPath:
+            "/organizations?disabledStatus=active&minMembers=%225%22&maxMembers=%2225%22",
+        });
+        expect(screen.getByText("Status: Active")).toBeTruthy();
+        expect(screen.getByText("Members: ≥ 5")).toBeTruthy();
+        expect(screen.getByText("Members: ≤ 25")).toBeTruthy();
+        await openFilters("Created date");
+        await chooseCreated(label!);
+        applyFilters();
+        await waitFor(() =>
+          expect(screen.getByText(`Created: ${label}`)).toBeTruthy(),
+        );
+        expect(
+          screen.queryByRole("button", { name: "Clear created from" }),
+        ).toBeNull();
+        expect(lastListParams()).toMatchObject({
+          created_from: from,
+          created_to: "2025-01-02",
+        });
+        expect(router.state.location.search.createdPreset).toBe(preset);
+        await openFilters("Created date");
+        expect(picker("Created date").textContent).toContain(label);
+        await chooseCreated("Custom");
+        applyFilters();
+        await waitFor(() =>
+          expect(screen.queryByText(`Created: ${label}`)).toBeNull(),
+        );
+        expect(screen.getByText(`Created: From ≥ ${from} UTC`)).toBeTruthy();
+        expect(screen.getByText("Created: To ≤ 2025-01-02 UTC")).toBeTruthy();
+        await openFilters("Created date");
+        expect(picker("Created date").textContent).toContain("Custom");
+        fireEvent.click(screen.getByRole("button", { name: "Close" }));
+        await act(async () => {
+          router.history.back();
+        });
+        await waitFor(() =>
+          expect(screen.getByText(`Created: ${label}`)).toBeTruthy(),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Next" }));
+        await waitFor(() => expect(lastListParams().page).toBe(2));
+        fireEvent.click(
+          screen.getByRole("button", { name: "Clear created date" }),
+        );
+        await waitFor(() => expect(lastListParams().page).toBe(1));
+        expect(lastListParams()).toMatchObject({
+          created_from: undefined,
+          created_to: undefined,
+          disabled_status: "active",
+          min_members: "5",
+          max_members: "25",
+        });
+        expect(currentSearch(router)).not.toContain("created");
+        expect(document.activeElement).toBe(filterTrigger());
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  async function chooseCreated(option: string): Promise<void> {
+    openOn(picker("Created date"));
+    fireEvent.click(await screen.findByRole("option", { name: option }));
+  }
+  function dateInput(name: "From" | "To"): HTMLInputElement {
+    return screen.getByRole("textbox", { name: `${name} (UTC)` });
+  }
+  function changeDate(name: "From" | "To", value: string): void {
+    fireEvent.change(dateInput(name), { target: { value } });
+  }
+  it("validates UI-only preset metadata without moving immutable URL bounds", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2025-01-02T12:00:00Z"));
+    try {
+      for (const createdPreset of [
+        undefined,
+        "custom",
+        "invalid",
+        "7",
+        ["today"],
+        7,
+      ]) {
+        expect(
+          organizationsSearchSchema({
+            createdFrom: "2025-01-02",
+            createdTo: "2025-01-02",
+            createdPreset,
+          }),
+        ).toMatchObject({
+          createdFrom: "2025-01-02",
+          createdTo: "2025-01-02",
+          createdPreset: undefined,
+        });
+      }
+      for (const bounds of [
+        { createdFrom: "invalid", createdTo: "2025-01-02" },
+        { createdFrom: "2025-01-02" },
+        { createdFrom: "2025-01-03", createdTo: "2025-01-02" },
+      ]) {
+        expect(
+          organizationsSearchSchema({ ...bounds, createdPreset: "today" })
+            .createdPreset,
+        ).toBeUndefined();
+      }
+      const saved = organizationsSearchSchema({
+        createdFrom: "2025-01-02",
+        createdTo: "2025-01-02",
+        createdPreset: "today",
+      });
+      expect(saved.createdPreset).toBe("today");
+      vi.setSystemTime(new Date("2025-01-03T00:00:00Z"));
+      expect(organizationsSearchSchema(saved)).toMatchObject({
+        createdFrom: "2025-01-02",
+        createdTo: "2025-01-02",
+        createdPreset: undefined,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("reloads saved preset and Custom choices without changing requests or resetting pagination for metadata", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2025-01-02T12:00:00Z"));
+    try {
+      mocks.listOrganizations.mockResolvedValue({
+        organizations: ORGS,
+        total: 101,
+      });
+      const { router } = await renderRouteTree(routeTree, {
+        initialPath:
+          "/organizations?createdFrom=2025-01-02&createdTo=2025-01-02&createdPreset=today",
+      });
+      expect(screen.getByText("Created: Today")).toBeTruthy();
+      await waitFor(() =>
+        expect(
+          (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(false),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => expect(lastListParams().page).toBe(2));
+      const calls = mocks.listOrganizations.mock.calls.length;
+      await openFilters("Created date");
+      await chooseCreated("Custom");
+      fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(screen.queryByText("Created: Today")).toBeNull();
+      expect(screen.getByText("Created: From ≥ 2025-01-02 UTC")).toBeTruthy();
+      expect(lastListParams().page).toBe(2);
+      expect(mocks.listOrganizations.mock.calls.length).toBe(calls);
+      const path = router.state.location.href;
+      cleanup();
+      await renderRouteTree(routeTree, { initialPath: path });
+      await openFilters("Created date");
+      expect(picker("Created date").textContent).toContain("Custom");
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Clear created from" }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: "Clear created from" }),
+        ).toBeNull(),
+      );
+      expect(screen.getByText("Created: To ≤ 2025-01-02 UTC")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("validates URL endpoints independently and reversed pairs together", () => {
+    expect(
+      organizationsSearchSchema({
+        createdFrom: "2023-02-29",
+        createdTo: "2024-02-29",
+      }),
+    ).toMatchObject({ createdFrom: undefined, createdTo: "2024-02-29" });
+    expect(
+      organizationsSearchSchema({
+        createdFrom: "2024-03-01",
+        createdTo: "2024-02-29",
+      }),
+    ).toMatchObject({ createdFrom: undefined, createdTo: undefined });
+  });
+  it("opens on the selector, focuses Custom, preserves invalid drafts and recovers", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+    await openFilters("Created date");
+    await waitFor(() => expect(document.activeElement).toBe(picker("Type")));
+    await chooseCreated("Custom");
+    await waitFor(() => expect(document.activeElement).toBe(dateInput("From")));
+    for (const bad of ["2023-02-29", "2024-02-", "2024-04-31"]) {
+      changeDate("From", bad);
+      expect(dateInput("From").value).toBe(bad);
+      expect(dateInput("From").getAttribute("aria-invalid")).toBe("true");
+      expect(dateInput("From").getAttribute("aria-describedby")).toBeTruthy();
+      expect(screen.getByRole("alert").textContent).toContain("YYYY-MM-DD");
+      expect(
+        (screen.getByRole("button", { name: "Apply" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      expect(currentSearch(router)).not.toContain("created");
+    }
+    changeDate("From", "2024-03-01");
+    changeDate("To", "2024-02-29");
+    expect(screen.getByRole("alert").textContent).toContain("on or after");
+    changeDate("From", "2024-02-29");
+    applyFilters();
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        created_from: "2024-02-29",
+        created_to: "2024-02-29",
+      }),
+    );
+    expect(currentSearch(router)).toContain("createdFrom=2024-02-29");
+    await waitFor(() =>
+      expect(document.activeElement).toBe(filterTrigger("Created date")),
+    );
+    await openFilters("Created date");
+    changeDate("From", "2020-01-01");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await openFilters("Created date");
+    expect(dateInput("From").value).toBe("2024-02-29");
+  });
+  it("resolves selected presets at Apply across UTC midnight, then stores only dates", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2024-12-31T23:59:59Z"));
+    try {
+      const { router } = await renderRouteTree(routeTree, {
+        initialPath: "/organizations",
+      });
+      await openFilters("Created date");
+      await chooseCreated("Today");
+      vi.setSystemTime(new Date("2025-01-01T00:00:01Z"));
+      applyFilters();
+      await waitFor(() =>
+        expect(lastListParams()).toMatchObject({
+          created_from: "2025-01-01",
+          created_to: "2025-01-01",
+        }),
+      );
+      expect(router.state.location.search.createdPreset).toBe("today");
+      vi.setSystemTime(new Date("2025-01-02T00:00:01Z"));
+      await openFilters("Created date");
+      expect(picker("Created date").textContent).toContain("Custom");
+      expect(dateInput("From").value).toBe("2025-01-01");
+      for (const [label, from] of [
+        ["Last 7 days", "2024-12-27"],
+        ["Last 14 days", "2024-12-20"],
+        ["Last 30 days", "2024-12-04"],
+      ]) {
+        await chooseCreated(label!);
+        await chooseCreated("Custom");
+        expect(dateInput("From").value).toBe(from);
+        expect(dateInput("To").value).toBe("2025-01-02");
+      }
+      await chooseCreated("All time");
+      applyFilters();
+      await waitFor(() =>
+        expect(lastListParams().created_from).toBeUndefined(),
+      );
+      expect(lastListParams().created_to).toBeUndefined();
+      expect(currentSearch(router)).not.toContain("created");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("preserves other filters, resets either page direction, clears bounds separately and together", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      total: 101,
+    });
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath:
+        "/organizations?q=fixture&type=pro&trial=running&disabledStatus=active&minMembers=%220%22&maxMembers=%225%22&dir=asc&createdFrom=2024-01-01&createdTo=2024-02-29",
+    });
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        created_from: "2024-01-01",
+        created_to: "2024-02-29",
+      }),
+    );
+    expect(filterTrigger().textContent).toBe("Filters");
+    expect(
+      screen.getByRole("button", { name: "Clear created from" }),
+    ).toBeTruthy();
+    for (const bound of ["from", "to"]) {
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => expect(lastListParams().page).toBe(2));
+      fireEvent.click(
+        screen.getByRole("button", { name: `Clear created ${bound}` }),
+      );
+      await waitFor(() => expect(lastListParams().page).toBe(1));
+      expect(lastListParams()).toMatchObject({
+        q: "fixture",
+        account_types: ["pro"],
+        trial_states: ["running"],
+        disabled_status: "active",
+        min_members: "0",
+        max_members: "5",
+        direction: "asc",
+      });
+      expect(document.activeElement).toBe(filterTrigger("Created date"));
+    }
+    expect(currentSearch(router)).not.toContain("created");
+    await openFilters("Created date");
+    await chooseCreated("Custom");
+    changeDate("To", "2024-02-29");
+    applyFilters();
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        created_from: undefined,
+        created_to: "2024-02-29",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(lastListParams().page).toBe(2));
+    await act(async () => {
+      router.history.back();
+    });
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        page: 1,
+        created_to: undefined,
+      }),
+    );
+    await act(async () => {
+      router.history.forward();
+    });
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        page: 1,
+        created_to: "2024-02-29",
+      }),
+    );
+    await openFilters("Created date");
+    changeDate("To", "2023-01-01");
+    await act(async () => {
+      router.history.back();
+    });
+    await waitFor(() =>
+      expect(picker("Created date").textContent).toContain("All time"),
+    );
+    await act(async () => {
+      router.history.forward();
+    });
+    await waitFor(() => expect(dateInput("To").value).toBe("2024-02-29"));
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        created_from: undefined,
+        created_to: undefined,
+        min_members: undefined,
+        max_members: undefined,
+        disabled_status: "all",
+        q: "fixture",
+        direction: "asc",
+      }),
+    );
   });
 });

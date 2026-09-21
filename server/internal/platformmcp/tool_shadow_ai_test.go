@@ -31,7 +31,16 @@ func (s *stubLibraryReader) LoadLibrary(context.Context, string) (*aitargets.Org
 
 type stubAuthorizer struct{ err error }
 
-func (s stubAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error { return s.err }
+func (s stubAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
+	return contextWithPrincipal(ctx, principal), s.err
+}
+
+func (s stubAuthorizer) AuthorizeExternalCall(context.Context, Principal, ExternalAuthorization) error {
+	return s.err
+}
+
+func (s stubAuthorizer) RequireLiveMembership(context.Context, Principal) error { return s.err }
+func (s stubAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error   { return s.err }
 
 func allowingBudget() OperationBudget {
 	allow := func() Limiter { return &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}} }

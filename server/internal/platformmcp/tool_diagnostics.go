@@ -13,7 +13,7 @@ func registerDiagnosticsTools(reg *Registrar, diagnostics *DiagnosticsService) {
 		Title:       "Project Health Overview",
 		Description: "Summarize how one project's MCP servers have been behaving, and what has been failing, over a recent window. Start here for any question about how a project or its MCP servers are doing; only look further once this names a specific server or failure to investigate. Constraints: results are aggregated server-side and carry the window they cover, how fresh the underlying observations are, and whether there were any observations at all.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetProjectOverviewInput) (*mcp.CallToolResult, GetProjectOverviewOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetProjectOverviewInput) (*mcp.CallToolResult, GetProjectOverviewOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetProjectOverviewOutput{}, err
@@ -33,7 +33,7 @@ func registerDiagnosticsTools(reg *Registrar, diagnostics *DiagnosticsService) {
 		Title:       "Diagnose an MCP Server",
 		Description: "Work out why one MCP server is not working, using the mcp_id find_mcp or get_mcp returned. Returns the latest server-side check, this server's call outcomes alongside the organization's for comparison, which apps reported failures, and where the fault most likely lies: this platform's configuration, the provider, the app making the calls, or indeterminate. Indeterminate means the evidence does not separate them, and is preferred over a guess. Constraints: no observations is never evidence that the MCP server is healthy.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPDiagnosticsInput) (*mcp.CallToolResult, GetMCPDiagnosticsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPDiagnosticsInput) (*mcp.CallToolResult, GetMCPDiagnosticsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetMCPDiagnosticsOutput{}, err
@@ -63,6 +63,6 @@ func registerUnavailableDiagnosticsTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("diagnostics"))
+		}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, unavailableTool("diagnostics"))
 	}
 }

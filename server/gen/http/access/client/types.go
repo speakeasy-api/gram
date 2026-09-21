@@ -131,8 +131,12 @@ type ResolveChallengeRequestBody struct {
 	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
 	// How the challenge is being resolved.
 	ResolutionType string `form:"resolution_type" json:"resolution_type" xml:"resolution_type"`
-	// Role slug to assign (required when resolution_type=role_assigned).
+	// Custom role slug to add to the denied user before resolving (required when
+	// resolution_type=role_assigned).
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
+	// Confirms the administrator reviewed and accepts every permission granted by
+	// the complete role. Must be true when resolution_type=role_assigned.
+	RoleAssignmentConfirmed *bool `form:"role_assignment_confirmed,omitempty" json:"role_assignment_confirmed,omitempty" xml:"role_assignment_confirmed,omitempty"`
 }
 
 // ListRolesResponseBody is the type of the "access" service "listRoles"
@@ -5623,6 +5627,9 @@ type AuthzChallengeResponseBody struct {
 	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
 	// Resource ID of the check.
 	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// Complete selector captured for the check. Omitted for legacy or malformed
+	// challenge data.
+	Selector map[string]string `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
 	// Roles the principal had loaded.
 	RoleSlugs []string `form:"role_slugs,omitempty" json:"role_slugs,omitempty" xml:"role_slugs,omitempty"`
 	// Total grants evaluated.
@@ -5916,12 +5923,13 @@ func NewRequestAccessRequestBody(p *access.RequestAccessPayload) *RequestAccessR
 // of the "resolveChallenge" endpoint of the "access" service.
 func NewResolveChallengeRequestBody(p *access.ResolveChallengePayload) *ResolveChallengeRequestBody {
 	body := &ResolveChallengeRequestBody{
-		PrincipalUrn:   p.PrincipalUrn,
-		Scope:          p.Scope,
-		ResourceKind:   p.ResourceKind,
-		ResourceID:     p.ResourceID,
-		ResolutionType: p.ResolutionType,
-		RoleSlug:       p.RoleSlug,
+		PrincipalUrn:            p.PrincipalUrn,
+		Scope:                   p.Scope,
+		ResourceKind:            p.ResourceKind,
+		ResourceID:              p.ResourceID,
+		ResolutionType:          p.ResolutionType,
+		RoleSlug:                p.RoleSlug,
+		RoleAssignmentConfirmed: p.RoleAssignmentConfirmed,
 	}
 	if p.ChallengeIds != nil {
 		body.ChallengeIds = make([]string, len(p.ChallengeIds))
@@ -17842,8 +17850,8 @@ func ValidateAuthzChallengeResponseBody(body *AuthzChallengeResponseBody) (err e
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.timestamp", *body.Timestamp, goa.FormatDateTime))
 	}
 	if body.PrincipalType != nil {
-		if !(*body.PrincipalType == "user" || *body.PrincipalType == "api_key" || *body.PrincipalType == "assistant" || *body.PrincipalType == "agent") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.principal_type", *body.PrincipalType, []any{"user", "api_key", "assistant", "agent"}))
+		if !(*body.PrincipalType == "user" || *body.PrincipalType == "api_key" || *body.PrincipalType == "assistant" || *body.PrincipalType == "agent" || *body.PrincipalType == "workload") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.principal_type", *body.PrincipalType, []any{"user", "api_key", "assistant", "agent", "workload"}))
 		}
 	}
 	if body.Operation != nil {
@@ -17927,8 +17935,8 @@ func ValidateChallengeBucketResponseBody(body *ChallengeBucketResponseBody) (err
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_seen", *body.FirstSeen, goa.FormatDateTime))
 	}
 	if body.PrincipalType != nil {
-		if !(*body.PrincipalType == "user" || *body.PrincipalType == "api_key" || *body.PrincipalType == "assistant" || *body.PrincipalType == "agent") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.principal_type", *body.PrincipalType, []any{"user", "api_key", "assistant", "agent"}))
+		if !(*body.PrincipalType == "user" || *body.PrincipalType == "api_key" || *body.PrincipalType == "assistant" || *body.PrincipalType == "agent" || *body.PrincipalType == "workload") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.principal_type", *body.PrincipalType, []any{"user", "api_key", "assistant", "agent", "workload"}))
 		}
 	}
 	if body.Operation != nil {

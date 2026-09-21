@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 // Audience names a surface a tool may be served to.
@@ -49,12 +52,41 @@ const (
 	ProjectScopeDefaultable
 )
 
-// ToolMeta is what a tool declares beyond its schemas: who may call it, and
-// how it obtains its target.
+// ExternalAuthorization names the call-time authority required by the external
+// OAuth surface. It is independent from audience membership: members see one
+// stable catalogue, then authorization decides whether each call may run.
+type ExternalAuthorization string
+
+const (
+	// ExternalAuthorizationMember relies on live membership established while
+	// preparing the external request. The handler must enforce any narrower
+	// resource, ownership, or domain policy it needs.
+	ExternalAuthorizationMember   ExternalAuthorization = "member"
+	ExternalAuthorizationOrgAdmin ExternalAuthorization = "org_admin"
+)
+
+// ToolMeta is what a tool declares beyond its schemas: who may call it, how it
+// obtains its target, and which live policy protects external calls.
 type ToolMeta struct {
-	Audiences    []Audience
-	ProjectScope ProjectScope
+	Authorization ExternalAuthorization
+	Audiences     []Audience
+	ProjectScope  ProjectScope
+	// DiscoveryScopes are coarse requirements for tools/list. Any listed scope
+	// makes the tool discoverable somewhere; handlers still enforce the exact
+	// target. An empty list makes a member tool visible to every active member.
+	// Organization-admin tools derive org:admin automatically.
+	DiscoveryScopes []authz.Scope
 }
+
+var (
+	discoveryOrgRead             = []authz.Scope{authz.ScopeOrgRead}
+	discoveryProjectRead         = []authz.Scope{authz.ScopeProjectRead}
+	discoveryMCPRead             = []authz.Scope{authz.ScopeMCPRead}
+	discoveryMCPReadOrConnect    = []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPConnect}
+	discoveryOrgReadOrMCPConnect = []authz.Scope{authz.ScopeOrgRead, authz.ScopeMCPConnect}
+	discoverySkillRead           = []authz.Scope{authz.ScopeSkillRead}
+	discoverySkillWrite          = []authz.Scope{authz.ScopeSkillWrite}
+)
 
 func (m ToolMeta) servesAudience(audience Audience) bool {
 	return slices.Contains(m.Audiences, audience)
@@ -90,11 +122,13 @@ func (e *ToolRefusalError) Error() string {
 	return e.Payload
 }
 
-// ResourceMeta is what a resource declares beyond its content: who may read
-// it. Resources carry no project scope — a reviewed guide is the same document
-// for every project in the organization.
+// ResourceMeta is what a resource declares beyond its content: who may read it
+// and which live policy protects external reads. Resources carry no project
+// scope — a reviewed guide is the same document for every project in the
+// organization.
 type ResourceMeta struct {
-	Audiences []Audience
+	Authorization ExternalAuthorization
+	Audiences     []Audience
 }
 
 func (m ResourceMeta) servesAudience(audience Audience) bool {
@@ -135,14 +169,21 @@ func (d ResourceDescriptor) Read(ctx context.Context) (string, error) {
 // admitted audience are built from a single pass rather than two lists that can
 // drift.
 type Registrar struct {
-	server        *mcp.Server
-	descriptors   []Descriptor
-	resources     []ResourceDescriptor
-	riskTelemetry RiskTelemetry
+	server             *mcp.Server
+	descriptors        []Descriptor
+	resources          []ResourceDescriptor
+	riskTelemetry      RiskTelemetry
+	externalAuthorizer Authorizer
 }
 
 func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}}
+	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil}
+}
+
+func (r *Registrar) withExternalAuthorizer(authorizer Authorizer) {
+	if r != nil {
+		r.externalAuthorizer = authorizer
+	}
 }
 
 func (r *Registrar) withRiskTelemetry(telemetry RiskTelemetry) {
@@ -173,6 +214,82 @@ func (r *Registrar) For(audience Audience) []Descriptor {
 	return admitted
 }
 
+// FilterExternalTools applies caller-specific discovery policy to an already
+// composed tools/list result. This is only a discovery filter: exact resource
+// checks remain in each handler and run again when a listed tool is called.
+func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal, tools []*mcp.Tool) []*mcp.Tool {
+	if r == nil || principal.UserID == "" || principal.OrganizationID == "" {
+		return []*mcp.Tool{}
+	}
+	descriptors := make(map[string]Descriptor, len(r.descriptors))
+	for _, descriptor := range r.descriptors {
+		if descriptor.Meta.servesAudience(AudienceExternal) {
+			descriptors[descriptor.Name] = descriptor
+		}
+	}
+	grants, grantsLoaded := authz.GrantsFromContext(ctx)
+	visible := make([]*mcp.Tool, 0, len(tools))
+	for _, tool := range tools {
+		descriptor, ok := descriptors[tool.Name]
+		if !ok || !externalToolDiscoverable(grants, grantsLoaded, principal, descriptor.Meta) {
+			continue
+		}
+		visible = append(visible, tool)
+	}
+	return visible
+}
+
+func externalToolDiscoverable(grants []authz.Grant, grantsLoaded bool, principal Principal, meta ToolMeta) bool {
+	if !grantsLoaded {
+		return false
+	}
+	scopes := meta.DiscoveryScopes
+	switch meta.Authorization {
+	case ExternalAuthorizationMember:
+		if len(scopes) == 0 {
+			return true
+		}
+	case ExternalAuthorizationOrgAdmin:
+		scopes = []authz.Scope{authz.ScopeOrgAdmin}
+	default:
+		return false
+	}
+	return grantsAuthorizeAnyScope(grants, principal.OrganizationID, scopes)
+}
+
+func grantsAuthorizeAnyScope(grants []authz.Grant, organizationID string, scopes []authz.Scope) bool {
+	for _, scope := range scopes {
+		if grantsAuthorizeAnyResource(grants, organizationID, scope) {
+			return true
+		}
+	}
+	return false
+}
+
+func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, scope authz.Scope) bool {
+	for _, grant := range grants {
+		if grant.Scope != authz.ScopeRoot && !slices.Contains(authz.ScopeImplicationClosure(grant.Scope), scope) {
+			continue
+		}
+		resourceID := grant.Selector.ResourceID()
+		if scope.Parts().Resource == "org" {
+			resourceID = organizationID
+		} else if resourceID == "" || resourceID == authz.WildcardResource {
+			resourceID = "platform-mcp-catalogue-probe"
+		}
+		dimensions := maps.Clone(grant.Selector)
+		delete(dimensions, authz.SelectorKeyResourceKind)
+		delete(dimensions, authz.SelectorKeyResourceID)
+		allowed, err := authz.GrantsAuthorize(grants, authz.Check{
+			Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions,
+		})
+		if err == nil && allowed {
+			return true
+		}
+	}
+	return false
+}
+
 // ResourceFor returns one admitted resource by URI. An audience that is not
 // admitted to a resource cannot tell it apart from one that does not exist.
 func (r *Registrar) ResourceFor(audience Audience, uri string) (ResourceDescriptor, bool) {
@@ -190,6 +307,9 @@ func (r *Registrar) ResourceFor(audience Audience, uri string) (ResourceDescript
 // addResource registers one resource with the MCP server and records the
 // descriptor that lets an admitted non-MCP audience read the same content.
 func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read func(ctx context.Context) (string, error)) {
+	if meta.servesAudience(AudienceExternal) && meta.Authorization == "" {
+		panic(fmt.Sprintf("platformmcp: external resource %q declares no authorization policy", resource.URI))
+	}
 	// Registered with the MCP server only when the external endpoint is an
 	// admitted audience: the server IS that endpoint, so registering regardless
 	// would serve a resource the audience list says it withholds.
@@ -197,6 +317,16 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 		r.server.AddResource(resource, func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 			if request.Params.URI != resource.URI {
 				return nil, mcp.ResourceNotFoundError(request.Params.URI)
+			}
+			if r.externalAuthorizer == nil {
+				return nil, ErrUnavailable
+			}
+			principal, err := principalFromToolContext(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if err := r.externalAuthorizer.AuthorizeExternalCall(ctx, principal, meta.Authorization); err != nil {
+				return nil, fmt.Errorf("authorize external resource: %w", err)
 			}
 			text, err := read(ctx)
 			if err != nil {
@@ -231,6 +361,9 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 // that reads as a restriction while restricting nothing.
 func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler mcp.ToolHandlerFor[In, Out]) {
 	inputSchema, resolved := prepareInputSchema[In](tool)
+	if meta.servesAudience(AudienceExternal) && meta.Authorization == "" {
+		panic(fmt.Sprintf("platformmcp: external tool %q declares no authorization policy", tool.Name))
+	}
 
 	if meta.servesAudience(AudienceExternal) {
 		// Declared here rather than left to the SDK: the SDK infers the output
@@ -238,7 +371,23 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 		if tool.OutputSchema == nil {
 			tool.OutputSchema = inferOutputSchema[Out](tool.Name)
 		}
-		mcp.AddTool(r.server, tool, handler)
+		mcp.AddTool(r.server, tool, func(ctx context.Context, request *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
+			var zero Out
+			if r.externalAuthorizer == nil {
+				return nil, zero, ErrUnavailable
+			}
+			principal, err := principalFromToolContext(ctx)
+			if err != nil {
+				return nil, zero, err
+			}
+			if err := r.externalAuthorizer.AuthorizeExternalCall(ctx, principal, meta.Authorization); err != nil {
+				if result, ok := externalAuthorizationToolResult(err); ok {
+					return result, zero, nil
+				}
+				return nil, zero, fmt.Errorf("authorize external tool %q: %w", tool.Name, err)
+			}
+			return handler(ctx, request, input)
+		})
 	}
 
 	r.descriptors = append(r.descriptors, Descriptor{

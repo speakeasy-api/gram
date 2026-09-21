@@ -3,6 +3,8 @@ package jwks
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,11 +12,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func zeroCacheState() CacheState {
-	return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}}
+	return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}
 }
 
 func TestResolverResolve_FetchesAndParses(t *testing.T) {
@@ -60,6 +63,9 @@ func TestResolverResolve_ServesFreshCache(t *testing.T) {
 		ETag:        `"v1"`,
 		ExpiresAt:   time.Now().Add(time.Hour),
 		RefreshedAt: time.Now(),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}
 	result, err := resolver.Resolve(t.Context(), remoteSourceFor(t, server), cache)
 	require.NoError(t, err)
@@ -81,6 +87,9 @@ func TestResolverResolve_ConditionalNotModified(t *testing.T) {
 		ETag:        `"v1"`,
 		ExpiresAt:   time.Now().Add(-time.Minute),
 		RefreshedAt: time.Now().Add(-time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}
 	result, err := resolver.Resolve(t.Context(), remoteSourceFor(t, server), cache)
 	require.NoError(t, err)
@@ -107,6 +116,9 @@ func TestResolverResolve_StoredDocumentRescreened(t *testing.T) {
 		ETag:        `"v1"`,
 		ExpiresAt:   time.Now().Add(time.Hour),
 		RefreshedAt: time.Now(),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}
 	result, err := resolver.Resolve(t.Context(), remoteSourceFor(t, server), cache)
 	require.NoError(t, err)
@@ -166,6 +178,41 @@ func TestResolverResolve_Non200IsFetchFailure(t *testing.T) {
 
 	_, err = resolver.Resolve(t.Context(), source, zeroCacheState())
 	require.ErrorContains(t, err, "status 503")
+	require.ErrorIs(t, err, ErrKeySetUnavailable)
+}
+
+func TestResolverResolve_NotImplementedDoesNotPermitStaleKeys(t *testing.T) {
+	t.Parallel()
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	server.SetStatus(http.StatusNotImplemented)
+	_, err := resolverFor(t, server).Resolve(t.Context(), remoteSourceFor(t, server), zeroCacheState())
+	require.ErrorContains(t, err, "status 501")
+	require.NotErrorIs(t, err, ErrKeySetUnavailable)
+}
+
+func TestTransientFetchError_InterruptedSuccessBodyPermitsStaleKeys(t *testing.T) {
+	t.Parallel()
+	require.True(t, transientFetchError(t.Context(), http.StatusOK, io.ErrUnexpectedEOF))
+}
+
+func TestResolverResolve_TLSFailureDoesNotPermitStaleKeys(t *testing.T) {
+	t.Parallel()
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	resolver := newResolver(newFetchClientFrom(&http.Client{}), testenv.NewMeterProvider(t), testenv.NewLogger(t))
+	_, err := resolver.Resolve(t.Context(), remoteSourceFor(t, server), zeroCacheState())
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrKeySetUnavailable)
+}
+
+func TestResolverResolve_BlockedIPDoesNotPermitStaleKeys(t *testing.T) {
+	t.Parallel()
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{"127.0.0.0/8", "::1/128"})
+	require.NoError(t, err)
+	resolver := NewResolver(policy, testenv.NewMeterProvider(t), testenv.NewLogger(t))
+	_, err = resolver.Resolve(t.Context(), remoteSourceFor(t, server), zeroCacheState())
+	require.ErrorIs(t, err, guardian.ErrBlockedIP)
+	require.NotErrorIs(t, err, ErrKeySetUnavailable)
 }
 
 func TestResolverResolve_FetchedPrivateMaterialRejected(t *testing.T) {
@@ -218,6 +265,61 @@ func TestResolverResolve_ZeroSourceRejected(t *testing.T) {
 
 	resolver := newResolver(nil, testenv.NewMeterProvider(t), testenv.NewLogger(t))
 
-	_, err := resolver.Resolve(t.Context(), Source{kind: "", inline: nil, uri: "", origin: ""}, zeroCacheState())
+	_, err := resolver.Resolve(t.Context(), Source{kind: "", inline: nil, uri: "", origin: "", cacheKey: "", refreshNamespace: "", fetchScope: "", doer: nil}, zeroCacheState())
 	require.ErrorContains(t, err, "zero Source")
+}
+
+// recordingDoer stands in for a transport that reaches a key set the
+// resolver's own client cannot — a tunnel into a customer network.
+type recordingDoer struct {
+	inner *http.Client
+	calls int
+}
+
+func (d *recordingDoer) Do(req *http.Request) (*http.Response, error) {
+	d.calls++
+	resp, err := d.inner.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("recording doer: %w", err)
+	}
+	return resp, nil
+}
+
+func TestResolverResolve_UsesSourceTransport(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	doer := &recordingDoer{inner: server.server.Client(), calls: 0}
+
+	// The default egress policy blocks the loopback address this server listens
+	// on and distrusts its certificate, so a fetch that does not take the
+	// source's transport fails outright.
+	resolver := NewResolver(guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), testenv.NewMeterProvider(t), testenv.NewLogger(t))
+
+	result, err := resolver.Resolve(t.Context(), remoteSourceFor(t, server).WithTransport(doer), zeroCacheState())
+	require.NoError(t, err)
+	require.Equal(t, CacheOutcomeRefreshed, result.Outcome)
+	require.Len(t, result.KeySet.Keys, 1)
+	require.Equal(t, 1, doer.calls, "the fetch must go through the source's transport")
+	require.Equal(t, 1, server.Fetches())
+}
+
+func TestResolverResolve_CacheHitSkipsSourceTransport(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	doer := &recordingDoer{inner: server.server.Client(), calls: 0}
+	resolver := resolverFor(t, server)
+
+	cache := CacheState{
+		Document:    keySetJSON(t, testKey(t, "stored")),
+		ETag:        `"v1"`,
+		ExpiresAt:   time.Now().Add(time.Hour),
+		RefreshedAt: time.Now(),
+	}
+	result, err := resolver.Resolve(t.Context(), remoteSourceFor(t, server).WithTransport(doer), cache)
+	require.NoError(t, err)
+	require.Equal(t, CacheOutcomeCached, result.Outcome)
+	require.Zero(t, doer.calls)
+	require.Zero(t, server.Fetches())
 }

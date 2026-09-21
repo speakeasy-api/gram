@@ -2,7 +2,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import {
@@ -37,7 +37,7 @@ export function SettingsTab({
   client: RemoteSessionClient;
   issuerId: string;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const queryClient = useQueryClient();
   const persistedAuthMethod =
     narrowTokenEndpointAuthMethod(client.tokenEndpointAuthMethod, true) ?? "";
@@ -243,7 +243,7 @@ export function SettingsTab({
           clientLabel={remoteSessionClientDisplayName(client)}
           onClose={() => setShowDelete(false)}
           onDeleted={() =>
-            orgRoutes.remoteIdentityProviders.issuerDetail.goTo(issuerId)
+            routes.remoteIdentityProviders.issuerDetail.goTo(issuerId)
           }
         />
       )}

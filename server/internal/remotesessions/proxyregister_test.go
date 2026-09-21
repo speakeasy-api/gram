@@ -32,7 +32,7 @@ func TestRegisterDynamicClientDoesNotFollowRedirects(t *testing.T) {
 	serverURL, err := url.Parse(registration.URL)
 	require.NoError(t, err)
 
-	_, err = RegisterDynamicClient(t.Context(), policy, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL})
+	_, err = RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL})
 	require.Error(t, err)
 	require.Zero(t, redirectedTo.Load(), "DCR must not resend registration data to a redirect target")
 }
@@ -56,7 +56,7 @@ func TestRegisterDynamicClientCarriesRegistrationStamps(t *testing.T) {
 	serverURL, err := url.Parse(registration.URL)
 	require.NoError(t, err)
 
-	registered, err := RegisterDynamicClient(t.Context(), policy, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL + "/register"})
+	registered, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL + "/register"})
 	require.NoError(t, err)
 
 	require.True(t, registered.ClientIDIssuedAt.Valid)
@@ -85,7 +85,7 @@ func TestRegisterDynamicClientOmitsAbsentRegistrationStamps(t *testing.T) {
 	serverURL, err := url.Parse(registration.URL)
 	require.NoError(t, err)
 
-	registered, err := RegisterDynamicClient(t.Context(), policy, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL})
+	registered, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL})
 	require.NoError(t, err)
 
 	require.False(t, registered.ClientIDIssuedAt.Valid)
@@ -112,7 +112,7 @@ func TestRegisterDynamicClient_RefusesPlaintextNonLoopbackEndpoint(t *testing.T)
 		"ftp://idp.example.com/register",
 		"/register",
 	} {
-		_, err := RegisterDynamicClient(t.Context(), policy, serverURL, ProxyRegisterRequest{RegistrationEndpoint: endpoint})
+		_, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: endpoint})
 		require.ErrorIs(t, err, ErrInvalidDynamicClientRegistrationEndpoint, endpoint)
 	}
 }

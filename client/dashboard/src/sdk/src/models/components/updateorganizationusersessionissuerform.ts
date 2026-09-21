@@ -65,6 +65,10 @@ export type UpdateOrganizationUserSessionIssuerForm = {
    */
   slug?: string | undefined;
   /**
+   * Organization-level remote_session_client Gram uses with the trusted issuer. Omit to leave unchanged; pass an empty string to clear the link. The resulting issuer and client must either both be configured or both be absent.
+   */
+  trustedRemoteSessionClientId?: string | undefined;
+  /**
    * Organization-level or global remote_session_issuer whose assertions this issuer trusts. Omit to leave unchanged; pass an empty string to clear the link.
    */
   trustedRemoteSessionIssuerId?: string | undefined;
@@ -91,6 +95,7 @@ export type UpdateOrganizationUserSessionIssuerForm$Outbound = {
   id: string;
   session_duration_hours?: number | undefined;
   slug?: string | undefined;
+  trusted_remote_session_client_id?: string | undefined;
   trusted_remote_session_issuer_id?: string | undefined;
 };
 
@@ -110,6 +115,7 @@ export const UpdateOrganizationUserSessionIssuerForm$outboundSchema:
       id: z.string(),
       sessionDurationHours: z.optional(z.int()),
       slug: z.optional(z.string()),
+      trustedRemoteSessionClientId: z.optional(z.string()),
       trustedRemoteSessionIssuerId: z.optional(z.string()),
     }),
     z.transform((v) => {
@@ -117,6 +123,7 @@ export const UpdateOrganizationUserSessionIssuerForm$outboundSchema:
         authnChallengeMode: "authn_challenge_mode",
         clientIdMetadataAdmissionMode: "client_id_metadata_admission_mode",
         sessionDurationHours: "session_duration_hours",
+        trustedRemoteSessionClientId: "trusted_remote_session_client_id",
         trustedRemoteSessionIssuerId: "trusted_remote_session_issuer_id",
       });
     }),

@@ -27,6 +27,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -91,6 +92,8 @@ type Service struct {
 
 type BillingOperations interface {
 	GetPaygBillingSummaryForOrganization(context.Context, string) (*usage.PaygBillingSummary, error)
+	GetMeterUsageForOrganization(context.Context, string, *usagegen.GetMeterUsagePayload) (*usagegen.MeterUsageResponse, error)
+	GetSpendBreakdownForOrganization(context.Context, string, *usagegen.GetSpendBreakdownPayload) (*usagegen.SpendBreakdownResponse, error)
 	GetStripeCustomer(context.Context, string) (*stripeclient.CustomerDetails, error)
 	GetStripeSubscriptionForOrganization(context.Context, string) (*usage.StripeSubscription, error)
 	SetStripeSubscriptionCancelAtPeriodEndForOrganization(context.Context, string, usage.BillingActor, bool) (*usage.StripeSubscription, error)
@@ -367,10 +370,13 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// Goa lazily assigns a nil error formatter inside a shared request closure.
 	// Supply its default eagerly so concurrent error responses do not race.
 	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, goahttp.NewErrorResponse)
+	server.ListOrganizations = service.rejectEmptyOrganizationStatus(server.ListOrganizations)
 	server.GetSession = service.preauthorizeAdmin(server.GetSession)
 	server.GetOrganizationFeatures = service.preauthorizeAdmin(server.GetOrganizationFeatures)
 	server.GetOrganizationChatAnalysisSettings = service.preauthorizeAdmin(server.GetOrganizationChatAnalysisSettings)
 	server.GetStripeCustomer = service.preauthorizeAdmin(server.GetStripeCustomer)
+	server.GetMeterUsage = service.preauthorizeAdmin(server.GetMeterUsage)
+	server.GetSpendBreakdown = service.preauthorizeAdmin(server.GetSpendBreakdown)
 	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
 	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
@@ -388,8 +394,24 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.GetGlobalIssuerMigratePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerMigratePreflight)
 	server.MigrateToGlobalIssuer = service.strictAdminJSON(server.MigrateToGlobalIssuer, func() any { return new(adminserver.MigrateToGlobalIssuerRequestBody) })
 	server.UploadPlatformImage = service.preauthorizeAdmin(server.UploadPlatformImage)
+	server.GetSupportMatrix = service.preauthorizeAdmin(server.GetSupportMatrix)
+	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
 	adminserver.Mount(mux, server)
 
+}
+
+// Goa's optional string query decoder treats present-but-empty values as absent,
+// before enum validation. Keep that distinction for this status parameter only;
+// omission is unrestricted, but an explicit empty value is not a valid status.
+func (s *Service) rejectEmptyOrganizationStatus(next http.Handler) http.Handler {
+	return oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
+		query := r.URL.Query()
+		if query.Has("disabled_status") && query.Get("disabled_status") == "" {
+			return oops.E(oops.CodeInvalid, nil, "disabled_status must be all, active, or disabled")
+		}
+		next.ServeHTTP(w, r)
+		return nil
+	})
 }
 
 type adminPreauthorizedKey struct{}
@@ -688,35 +710,21 @@ var listOrganizationsSortColumns = map[string]bool{
 	"trial_ends_at": true,
 }
 
-// listOrganizationsFilters resolves the two set filters the SQL takes from the
-// four the payload offers. The scalar account_type and the include_disabled
-// boolean predate the sets and stay live, because this endpoint keeps serving
-// the dashboard that is on main until AGE-3207 retires them.
-//
-// Unknown values pass straight through to match nothing. An organization can
-// carry an account type from outside the list the dashboard knows, and an
-// operator pasting a colleague's URL is owed an empty table rather than a 422.
-func listOrganizationsFilters(payload *gen.ListOrganizationsPayload) (accountTypes []string, disabledStates []string) {
-	// Union, not override: a caller supplying both asks for both.
-	accountTypes = payload.AccountTypes
+// listOrganizationsFilters unions the legacy scalar account type with the set.
+// Unknown account types continue to match nothing.
+func listOrganizationsFilters(payload *gen.ListOrganizationsPayload) []string {
+	accountTypes := payload.AccountTypes
 	if payload.AccountType != nil {
 		accountTypes = append(append([]string{}, accountTypes...), *payload.AccountType)
 	}
-
-	// disabled_states overrides the boolean outright. The boolean only picks the
-	// fallback, and these two literals are the arms of the CASE in both queries.
-	disabledStates = payload.DisabledStates
-	if len(disabledStates) == 0 {
-		disabledStates = []string{"active"}
-		if conv.PtrValOr(payload.IncludeDisabled, false) {
-			disabledStates = append(disabledStates, "disabled")
-		}
-	}
-
-	return accountTypes, disabledStates
+	return accountTypes
 }
 
 func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrganizationsPayload) (*gen.AdminListOrganizationsResult, error) {
+	bounds, err := listOrganizationsBounds(payload)
+	if err != nil {
+		return nil, err
+	}
 	queries := repo.New(s.db)
 
 	limit := int32(listOrganizationsDefaultLimit)
@@ -760,7 +768,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		fetchLimit = limit + 1
 	}
 
-	accountTypes, disabledStates := listOrganizationsFilters(payload)
+	accountTypes := listOrganizationsFilters(payload)
 
 	// Trimmed once for both queries. A pasted id commonly arrives with the
 	// newline that ended the line it was copied from, and no arm matches through
@@ -772,7 +780,11 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		Q:              searchTerm,
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
-		DisabledStates: disabledStates,
+		DisabledStatus: bounds.disabledStatus,
+		MinMembers:     bounds.minMembers,
+		MaxMembers:     bounds.maxMembers,
+		CreatedAtGte:   bounds.createdAtGte,
+		CreatedAtLt:    bounds.createdAtLt,
 		AfterID:        afterID,
 		SortBy:         sortBy,
 		SortDir:        sortDir,
@@ -790,7 +802,11 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		Q:              searchTerm,
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
-		DisabledStates: disabledStates,
+		DisabledStatus: bounds.disabledStatus,
+		MinMembers:     bounds.minMembers,
+		MaxMembers:     bounds.maxMembers,
+		CreatedAtGte:   bounds.createdAtGte,
+		CreatedAtLt:    bounds.createdAtLt,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count organizations").LogError(ctx, s.logger)
@@ -1190,6 +1206,71 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 	)
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial extension")
+}
+
+func (s *Service) ChangeTrialEndDate(ctx context.Context, payload *gen.ChangeTrialEndDatePayload) (*gen.AdminOrganization, error) {
+	endsAt, err := time.Parse(time.RFC3339, payload.EndsAt)
+	if err != nil || !endsAt.After(time.Now()) {
+		return nil, oops.E(oops.CodeInvalid, err, "trial end date must be in the future")
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin trial end date change transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	changed, err := trialsRepo.New(tx).ChangeTrialEndDate(ctx, trialsRepo.ChangeTrialEndDateParams{
+		OrganizationID: payload.ID,
+		EndsAt:         conv.ToPGTimestamptz(endsAt),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// rejectTrialChange reads on the pool, so this connection goes back
+		// before it asks for a second one. The deferred rollback is idempotent.
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
+			"look up organization after unchanged trial",
+			"organization has no running enterprise trial to change")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "change trial end date").LogError(ctx, logger)
+	}
+
+	// Include the organization's display name in the audit entry.
+	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        payload.ID,
+		AllowSlug: false,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read organization for trial end date change").LogError(ctx, logger)
+	}
+
+	actor, actorDisplayName, operatorEmail := adminActor(ctx)
+	if err := s.audit.LogOrganizationEnterpriseTrialEndChanged(ctx, tx, audit.LogOrganizationEnterpriseTrialEndChangedEvent{
+		OrganizationID:      payload.ID,
+		Actor:               actor,
+		ActorDisplayName:    actorDisplayName,
+		ActorSlug:           nil,
+		OrganizationName:    organization.Name,
+		OrganizationSlug:    organization.Slug,
+		PreviousTrialEndsAt: changed.PreviousEndsAt.Time,
+		TrialEndsAt:         changed.EndsAt.Time,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log trial end date change").LogError(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit trial end date change").LogError(ctx, logger)
+	}
+
+	// Speakeasy-only, and the only place the email meets the entry's subject.
+	logger.InfoContext(ctx, "changed enterprise trial end date",
+		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
+	)
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial end date change")
 }
 
 // rejectTrialChange turns a trial write that touched no row into the error the

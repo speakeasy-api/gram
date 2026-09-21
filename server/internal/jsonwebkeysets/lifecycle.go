@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
+	"github.com/speakeasy-api/gram/server/internal/managedrows"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -49,6 +50,10 @@ func (s *Service) PublishKey(ctx context.Context, payload *gensvc.PublishKeyPayl
 		return nil, oops.E(oops.CodeNotFound, err, "key set not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading key set").LogError(ctx, logger)
+	}
+
+	if err := managedrows.RequireUnmanaged(set.IdentityProviderConnectionID, "this key set"); err != nil {
+		return nil, err
 	}
 
 	minted, err := s.mintFromExternalKey(ctx, logger, authCtx.ActiveOrganizationID, set.ExternalKeyID)
@@ -309,7 +314,12 @@ func (s *Service) beginKeyTransition(ctx context.Context, rawID string) (*contex
 		return nil, logger, noKey, nil, oops.E(oops.CodeUnexpected, err, "error loading key").LogError(ctx, logger)
 	}
 
-	if _, err := s.lockSetForKeyWrite(ctx, logger, q, authCtx.ActiveOrganizationID, key.JsonWebKeySetID, "key not found"); err != nil {
+	set, err := s.lockSetForKeyWrite(ctx, logger, q, authCtx.ActiveOrganizationID, key.JsonWebKeySetID, "key not found")
+	if err != nil {
+		return nil, logger, noKey, nil, err
+	}
+
+	if err := managedrows.RequireUnmanaged(set.IdentityProviderConnectionID, "this key set"); err != nil {
 		return nil, logger, noKey, nil, err
 	}
 

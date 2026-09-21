@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -18,9 +19,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -32,7 +36,10 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -51,6 +58,322 @@ func TestMain(m *testing.M) {
 		log.Fatalf("cleanup test infrastructure: %v", err)
 	}
 	os.Exit(code)
+}
+
+func TestLiveOrgAdminAuthorizerAcceptsOnlySafeDashboardURL(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{"http://app.example.test", "https://user@app.example.test"} {
+		parsed, err := url.Parse(raw)
+		require.NoError(t, err)
+		authorizer := NewLiveOrgAdminAuthorizer(nil, nil).WithDashboardURL(parsed)
+		require.Nil(t, authorizer.dashboardURL)
+	}
+
+	parsed, err := url.Parse("https://app.example.test/base")
+	require.NoError(t, err)
+	authorizer := NewLiveOrgAdminAuthorizer(nil, nil).WithDashboardURL(parsed)
+	require.NotNil(t, authorizer.dashboardURL)
+	parsed.Host = "mutated.example.test"
+	require.Equal(t, "app.example.test", authorizer.dashboardURL.Host)
+}
+
+func TestLiveExternalAuthorizationUsesCurrentMemberGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_member_authorization")
+	require.NoError(t, err)
+	organizationID := "org_" + uuid.NewString()
+	organizationSlug := "org-" + uuid.NewString()[:8]
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Platform MCP authorization test organization",
+		Slug:        organizationSlug,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, organizationID))
+
+	memberID := "member_" + uuid.NewString()
+	seedPlatformMCPAuthorizationMember(t, ctx, conn, organizationID, memberID, authz.SystemRoleMember)
+	dashboardURL, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
+	authorizer := NewLiveOrgAdminAuthorizer(conn, engine).WithDashboardURL(dashboardURL)
+	principal := Principal{UserID: memberID, OrganizationID: organizationID, ConnectionID: uuid.NewString(), Generation: uuid.NewString(), ClientID: "client-test", Surface: SurfacePlatformMCP}
+
+	// A caller context may already hold unrelated grants. The transport boundary
+	// must replace them with this verified user's current grants.
+	inherited := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, organizationID)})
+	prepared, err := authorizer.PrepareExternalContext(inherited, principal)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(prepared)
+	require.True(t, ok)
+	require.Equal(t, organizationID, authCtx.ActiveOrganizationID)
+	require.Equal(t, memberID, authCtx.UserID)
+	require.Equal(t, organizationSlug, authCtx.OrganizationSlug)
+
+	require.NoError(t, authorizer.AuthorizeExternalCall(prepared, principal, ExternalAuthorizationMember))
+	require.ErrorIs(t, authorizer.AuthorizeExternalCall(contextvalues.SetAuthContext(ctx, authCtx), principal, ExternalAuthorizationMember), ErrUnavailable)
+	err = authorizer.AuthorizeExternalCall(prepared, principal, ExternalAuthorizationOrgAdmin)
+	var denied *ExternalAuthorizationError
+	require.ErrorAs(t, err, &denied)
+	require.Equal(t, "org:admin", denied.RequiredScope)
+	require.Equal(t, "https://app.example.test/"+organizationSlug+"/request-access?resource_id="+organizationID+"&scope=org%3Aadmin", denied.RequestAccessURL)
+}
+
+func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_member_discovery")
+	require.NoError(t, err)
+	principal, allowedProject := seedRegistrationLifecycle(t, ctx, conn)
+	seedPlatformMCPAuthorizationMember(t, ctx, conn, principal.OrganizationID, principal.UserID, authz.SystemRoleMember)
+	deniedProject, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Hidden project", Slug: "hidden-" + uuid.NewString()[:8], OrganizationID: principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	seedRegistrationEligibleCohort(t, ctx, conn, deniedProject.ID)
+
+	allowedInventory, err := platformrepo.New(conn).ListPlatformMCPInventoryAuthorizationCandidates(ctx, principal.OrganizationID)
+	require.NoError(t, err)
+	var allowedMCPID, deniedMCPID uuid.UUID
+	for _, candidate := range allowedInventory {
+		switch candidate.ProjectID {
+		case allowedProject.ID:
+			allowedMCPID = candidate.ID
+		case deniedProject.ID:
+			deniedMCPID = candidate.ID
+		}
+	}
+	require.NotEqual(t, uuid.Nil, allowedMCPID)
+	require.NotEqual(t, uuid.Nil, deniedMCPID)
+
+	grant := func(scope authz.Scope, selector authz.Selector) {
+		encoded, encodeErr := selector.MarshalJSON()
+		require.NoError(t, encodeErr)
+		_, grantErr := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+			OrganizationID: principal.OrganizationID,
+			PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+			Scope:          string(scope),
+			Selectors:      encoded,
+		})
+		require.NoError(t, grantErr)
+	}
+	grant(authz.ScopeProjectRead, authz.NewSelector(authz.ScopeProjectRead, allowedProject.ID.String()))
+	// Put more than one internal page of hidden projects before a second visible
+	// project. list_projects must keep scanning after the first 100 candidates,
+	// without letting hidden rows consume the caller-visible response limit.
+	for i := 1; i <= projectCandidatePageSize+1; i++ {
+		_, err := testrepo.New(conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+			ID:             uuid.MustParse(fmt.Sprintf("00000000-0000-4000-8000-%012x", i)),
+			Name:           fmt.Sprintf("Hidden project %03d", i),
+			Slug:           fmt.Sprintf("hidden-project-%03d", i),
+			OrganizationID: principal.OrganizationID,
+		})
+		require.NoError(t, err)
+	}
+	lateVisibleID := uuid.MustParse("ffffffff-ffff-4fff-bfff-fffffffffffe")
+	_, err = testrepo.New(conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID: lateVisibleID, Name: "Late visible project", Slug: "late-visible-project", OrganizationID: principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	grant(authz.ScopeProjectRead, authz.NewSelector(authz.ScopeProjectRead, lateVisibleID.String()))
+
+	mcpSelector := authz.NewSelector(authz.ScopeMCPRead, allowedMCPID.String())
+	mcpSelector[authz.SelectorKeyProjectID] = allowedProject.ID.String()
+	grant(authz.ScopeMCPRead, mcpSelector)
+
+	// A large unrelated catalogue must not expand the live RBAC check set for a
+	// project-scoped lookup or a selective organization-wide search.
+	unrelatedToolsetID := uuid.New()
+	_, err = testrepo.New(conn).CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{
+		ID: unrelatedToolsetID, OrganizationID: principal.OrganizationID, ProjectID: deniedProject.ID,
+		Name: "Unrelated catalogue toolset", Slug: "unrelated-catalogue-toolset",
+	})
+	require.NoError(t, err)
+	inserted, err := testrepo.New(conn).CreateMCPServerCatalogueFixtures(ctx, testrepo.CreateMCPServerCatalogueFixturesParams{
+		ProjectID: deniedProject.ID, NamePrefix: "Unrelated server ", SlugPrefix: "unrelated-server-",
+		ToolsetID: uuid.NullUUID{UUID: unrelatedToolsetID, Valid: true}, Visibility: "private", ServerCount: maxInventoryAuthorizationCandidates + 1,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, maxInventoryAuthorizationCandidates+1, inserted)
+
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
+	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
+	require.NoError(t, err)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
+	reader.setInventoryCursorKey("member-discovery-key")
+
+	projects, err := reader.ListProjects(prepared, principal, ListProjectsInput{Limit: 1})
+	require.NoError(t, err)
+	require.Equal(t, []Project{{ID: allowedProject.ID.String(), Name: allowedProject.Name, Slug: allowedProject.Slug}}, projects.Projects)
+	require.True(t, projects.authorizationFiltered)
+	require.True(t, projects.Truncated)
+	encodedProjects, err := json.Marshal(projects)
+	require.NoError(t, err)
+	require.NotContains(t, string(encodedProjects), "filtered", "member responses must not disclose hidden projects")
+
+	projects, err = reader.ListProjects(prepared, principal, ListProjectsInput{Limit: 2})
+	require.NoError(t, err)
+	require.Equal(t, []Project{
+		{ID: allowedProject.ID.String(), Name: allowedProject.Name, Slug: allowedProject.Slug},
+		{ID: lateVisibleID.String(), Name: "Late visible project", Slug: "late-visible-project"},
+	}, projects.Projects)
+	require.True(t, projects.authorizationFiltered)
+	require.False(t, projects.Truncated)
+
+	inventory, err := reader.FindMCP(prepared, principal, FindMCPInput{Query: "cohort"})
+	require.NoError(t, err)
+	require.Len(t, inventory.MCPs, 1)
+	require.Equal(t, allowedMCPID.String(), inventory.MCPs[0].ID)
+
+	_, err = reader.FindMCP(prepared, principal, FindMCPInput{Query: "unrelated server"})
+	require.ErrorIs(t, err, ErrUnavailable, "an over-cap candidate set must fail closed")
+
+	for _, query := range []string{"", "cohort"} {
+		for _, selector := range []FindMCPInput{
+			{ProjectID: allowedProject.ID.String(), Query: query},
+			{ProjectSlug: allowedProject.Slug, Query: query},
+		} {
+			visible, err := reader.FindMCP(prepared, principal, selector)
+			require.NoError(t, err)
+			require.Len(t, visible.MCPs, 1)
+			require.Equal(t, allowedMCPID.String(), visible.MCPs[0].ID)
+		}
+		for _, selector := range []FindMCPInput{
+			{ProjectID: deniedProject.ID.String(), Query: query},
+			{ProjectSlug: deniedProject.Slug, Query: query},
+			{ProjectID: uuid.NewString(), Query: query},
+			{ProjectSlug: "missing-project", Query: query},
+		} {
+			hidden, err := reader.FindMCP(prepared, principal, selector)
+			require.ErrorIs(t, err, ErrForbidden, "hidden and missing projects must return the same error")
+			require.Equal(t, FindMCPOutput{}, hidden)
+		}
+	}
+
+	for _, target := range []GetMCPInput{
+		{ProjectID: deniedProject.ID.String(), MCPID: deniedMCPID.String()},
+		{ProjectID: deniedProject.ID.String(), MCPID: uuid.NewString()},
+	} {
+		_, err = reader.GetMCP(prepared, principal, target)
+		require.ErrorIs(t, err, ErrForbidden, "hidden and missing MCPs must return the same error")
+	}
+}
+
+func TestDelegatedDiagnosticsProjectReadAllowsCustomRoleAndDeniesOtherProjects(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_delegated_diagnostics_authorization")
+	require.NoError(t, err)
+	principal, allowedProject := seedRegistrationLifecycle(t, ctx, conn)
+	seedPlatformMCPAuthorizationMember(t, ctx, conn, principal.OrganizationID, principal.UserID, authz.SystemRoleMember)
+	deniedProject, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Denied diagnostics project", Slug: "denied-diagnostics-" + uuid.NewString()[:8], OrganizationID: principal.OrganizationID,
+	})
+	require.NoError(t, err)
+
+	role := seedAccessRole(t, ctx, conn, principal.OrganizationID, "diagnostics-reader", "Diagnostics Reader")
+	_, err = accessrepo.New(conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID: principal.OrganizationID, WorkosUserID: "workos-" + principal.UserID, WorkosRoleSlug: "diagnostics-reader",
+		UserID: conv.ToPGText(principal.UserID), WorkosMembershipID: conv.ToPGText("membership-" + principal.UserID), WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()), WorkosLastEventID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	selector := authz.NewSelector(authz.ScopeProjectRead, allowedProject.ID.String())
+	encoded, err := selector.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: principal.OrganizationID,
+		PrincipalUrn:   role,
+		Scope:          string(authz.ScopeProjectRead),
+		Selectors:      encoded,
+	})
+	require.NoError(t, err)
+
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
+	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
+	require.NoError(t, err)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
+
+	resolved, err := reader.ResolveProjectRead(prepared, principal, FindMCPInput{ProjectID: allowedProject.ID.String()})
+	require.NoError(t, err)
+	require.Equal(t, allowedProject.ID, resolved.ID)
+
+	_, err = reader.ResolveProjectRead(prepared, principal, FindMCPInput{ProjectID: deniedProject.ID.String()})
+	require.ErrorIs(t, err, ErrForbidden)
+}
+
+func TestLiveOrganizationSelectorAdmitsMembersWithoutOrgAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_member_org_selection")
+	require.NoError(t, err)
+	organizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID: organizationID, Name: "Member organization", Slug: "org-" + uuid.NewString()[:8], WorkosID: pgtype.Text{}, Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, organizationID))
+	memberID := "member_" + uuid.NewString()
+	seedPlatformMCPAuthorizationMember(t, ctx, conn, organizationID, memberID, authz.SystemRoleMember)
+
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
+	selector := NewLiveOrganizationSelector(conn, NewLiveOrgAdminAuthorizer(conn, engine))
+	options, err := selector.EligibleOrganizations(ctx, memberID)
+	require.NoError(t, err)
+	require.Equal(t, []OrganizationOption{{ID: organizationID, Name: "Member organization"}}, options)
+}
+
+func TestLiveExternalAuthorizationPreservesAdminAndRejectsDepartedMember(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_admin_and_departed_authorization")
+	require.NoError(t, err)
+	organizationID := "org_" + uuid.NewString()
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID: organizationID, Name: "Platform MCP admission test organization", Slug: "org-" + uuid.NewString()[:8], WorkosID: pgtype.Text{}, Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, organizationID))
+	adminID := "admin_" + uuid.NewString()
+	departedID := "departed_" + uuid.NewString()
+	seedPlatformMCPAuthorizationMember(t, ctx, conn, organizationID, adminID, authz.SystemRoleAdmin)
+	seedPlatformMCPAuthorizationMember(t, ctx, conn, organizationID, departedID, authz.SystemRoleMember)
+	require.NoError(t, organizationsrepo.New(conn).DeleteOrganizationUserRelationship(ctx, organizationsrepo.DeleteOrganizationUserRelationshipParams{OrganizationID: organizationID, UserID: conv.ToPGText(departedID)}))
+
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
+	authorizer := NewLiveOrgAdminAuthorizer(conn, engine)
+	admin := Principal{UserID: adminID, OrganizationID: organizationID, ConnectionID: uuid.NewString(), Generation: uuid.NewString(), ClientID: "client-test", Surface: SurfacePlatformMCP}
+	prepared, err := authorizer.PrepareExternalContext(ctx, admin)
+	require.NoError(t, err)
+	require.NoError(t, authorizer.AuthorizeExternalCall(prepared, admin, ExternalAuthorizationOrgAdmin))
+
+	departed := Principal{UserID: departedID, OrganizationID: organizationID, ConnectionID: uuid.NewString(), Generation: uuid.NewString(), ClientID: "client-test", Surface: SurfacePlatformMCP}
+	_, err = authorizer.PrepareExternalContext(ctx, departed)
+	require.ErrorIs(t, err, ErrForbidden)
+}
+
+func seedPlatformMCPAuthorizationMember(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID, roleSlug string) {
+	t.Helper()
+	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID: userID, Email: userID + "@example.test", DisplayName: userID, PhotoUrl: conv.PtrToPGText(nil), Admin: false,
+	})
+	require.NoError(t, err)
+	_, err = organizationsrepo.New(conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID, UserID: conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID: organizationID, WorkosUserID: userID, UserID: conv.ToPGText(userID), WorkosMembershipID: conv.ToPGText("membership_" + userID), WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()), WorkosLastEventID: conv.ToPGTextEmpty(""), WorkosRoleSlug: roleSlug,
+	})
+	require.NoError(t, err)
 }
 
 func TestPostgresOAuthStoreRefreshReplayRecordsTerminalTransitionOnce(t *testing.T) {
@@ -1050,15 +1373,54 @@ func seedRegistrationLifecycle(t *testing.T, ctx context.Context, conn *pgxpool.
 	require.NoError(t, err)
 
 	return Principal{
-		UserID:         userID,
-		OrganizationID: organizationID,
-		ConnectionID:   connectionID.String(),
-		Generation:     generation.String(),
-	}, ResolvedProject{
-		ID:   projectRow.ID,
-		Name: projectRow.Name,
-		Slug: projectRow.Slug,
-	}
+			UserID:         userID,
+			OrganizationID: organizationID,
+			ConnectionID:   connectionID.String(),
+			Generation:     generation.String(),
+		}, ResolvedProject{
+			ID:   projectRow.ID,
+			Name: projectRow.Name,
+			Slug: projectRow.Slug,
+		}
+}
+
+func TestPlatformMCPInventoryReturnsDashboardManagedRemoteUpstreamURL(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_inventory_remote_url")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+
+	inventory := platformrepo.New(conn)
+	rows, err := inventory.ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
+		OrganizationID:          principal.OrganizationID,
+		ConnectionID:            uuid.NullUUID{UUID: connectionIDFromPrincipal(t, principal), Valid: true},
+		ConnectionGeneration:    uuid.NullUUID{UUID: connectionIDFromPrincipalGeneration(t, principal), Valid: true},
+		SkipAuthorizationFilter: true,
+		UserID:                  pgtype.Text{},
+		ActingSurface:           pgtype.Text{},
+		ProjectID:               uuid.NullUUID{UUID: project.ID, Valid: true},
+		AfterMcpID:              uuid.NullUUID{},
+		QueryText:               "Registration cohort server",
+		ReadinessState:          pgtype.Text{},
+		LimitValue:              10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "https://cohort.example.test/mcp", rows[0].UpstreamUrl)
+
+	detail, err := inventory.GetPlatformMCPInventoryItem(ctx, platformrepo.GetPlatformMCPInventoryItemParams{
+		OrganizationID:       principal.OrganizationID,
+		ConnectionID:         uuid.NullUUID{UUID: connectionIDFromPrincipal(t, principal), Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: connectionIDFromPrincipalGeneration(t, principal), Valid: true},
+		UserID:               pgtype.Text{},
+		ActingSurface:        pgtype.Text{},
+		McpServerID:          rows[0].McpServerID,
+		ProjectID:            project.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, rows[0].UpstreamUrl, detail.UpstreamUrl)
 }
 
 func seedRegistrationEligibleCohort(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) {

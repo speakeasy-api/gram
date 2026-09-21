@@ -21,6 +21,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/exaring/otelpgx"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/multitracer"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
@@ -72,6 +73,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
@@ -475,6 +477,7 @@ func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, 
 
 	tracingInterceptor, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{
 		TextMapPropagator: otel.GetTextMapPropagator(),
+		SpanStarter:       temporal.StartTracingSpan,
 	})
 	if err != nil {
 		return nil, nilShutdownFunc, fmt.Errorf("failed to create temporal tracing interceptor: %w", err)
@@ -641,8 +644,8 @@ func newStripeClient(
 
 	catalog := stripeclient.Catalog{
 		PriceIDTUM:            c.String("stripe-price-id-tum"),
-		MeterIDTUM:            c.String("stripe-meter-id-tum"),
-		MeterEventName:        c.String("stripe-meter-event-name"),
+		PriceIDMCPEgress:      c.String("stripe-price-id-mcp-egress"),
+		PriceIDRiskScans:      c.String("stripe-price-id-risk-scans"),
 		PortalConfigurationID: c.String("stripe-portal-configuration-id"),
 	}
 	if err := catalog.Validate(); err != nil {
@@ -662,7 +665,7 @@ func newStripeMeterEventClient(
 	guardianPolicy *guardian.Policy,
 	c *cli.Context,
 ) (stripeclient.V2MeterEventClient, error) {
-	if !c.Bool(stripeTUMMeterStreamingFlagName) && !c.Bool(stripeMeterEventExportFlagName) {
+	if !c.Bool(stripeMeterEventExportFlagName) {
 		return stripeclient.NewNoopV2MeterEventClient(), nil
 	}
 
@@ -679,12 +682,11 @@ func newStripeMeterEventClient(
 
 func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 	tumMeterEventName := c.String("stripe-meter-event-name")
-	tumMeterStreamingEnabled := c.Bool(stripeTUMMeterStreamingFlagName)
 	meterExportEnabled := c.Bool(stripeMeterEventExportFlagName)
 	return metering.StripeCatalogFunc(func(definition metering.Definition) (string, error) {
 		switch definition {
 		case metering.AgentSessionStorage():
-			if !tumMeterStreamingEnabled {
+			if !meterExportEnabled {
 				return "", nil
 			}
 			if !stripeclient.IsConfigured(tumMeterEventName) {
@@ -751,6 +753,15 @@ func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 				return "", nil
 			}
 			name := c.String("stripe-meter-event-name-risk-cli-destructive")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskLLMAnalyzer():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-llm-analyzer")
 			if !stripeclient.IsConfigured(name) {
 				return "", nil
 			}
@@ -1349,6 +1360,12 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "customRulesAnalysis", pub: customRulesAnalysis})
 
+	llmAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.LLMAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for llm analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "llmAnalysis", pub: llmAnalysis})
+
 	riskFindings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.Finding{})
 	if err != nil {
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
@@ -1452,6 +1469,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PromptInjectionAnalysis: promptInjectionAnalysis,
 		PromptPolicyAnalysis:    promptPolicyAnalysis,
 		CustomRulesAnalysis:     customRulesAnalysis,
+		LLMAnalysis:             llmAnalysis,
 		RiskFindings:            riskFindings,
 		MeterReadings:           meterReadings,
 		TelemetryLogs:           telemetryLogs,
@@ -1504,17 +1522,40 @@ func newKMSSigningClients(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		return gcpkms.NewSigningClient, nil
 	}
 
-	alg := defaultLocalSigningAlgorithm
-	if configured := strings.TrimSpace(c.String("local-kms-signing-algorithm")); configured != "" {
-		parsed, err := gcpkms.ParseSignatureAlgorithm(configured)
-		if err != nil {
-			return nil, fmt.Errorf("parse local kms signing algorithm: %w", err)
-		}
-		alg = parsed
+	alg, err := localKMSSigningAlgorithm(c)
+	if err != nil {
+		return nil, err
 	}
 
 	logger.WarnContext(ctx, fmt.Sprintf("using in-process kms signing client signing %s: local development has no cloud kms to reach", alg))
 
+	client, err := newPersistentLocalKMSClient(alg)
+	if err != nil {
+		return nil, err
+	}
+
+	// Close is a no-op for the local client, so every caller can retain the
+	// production ownership contract while server and worker reuse one key.
+	return func(_ context.Context, _ oauth2.TokenSource) (gcpkms.SigningClient, error) {
+		return client, nil
+	}, nil
+}
+
+// localKMSSigningAlgorithm is the algorithm the local KMS stand-in is configured to sign with.
+func localKMSSigningAlgorithm(c *cli.Context) (jose.SignatureAlgorithm, error) {
+	configured := strings.TrimSpace(c.String("local-kms-signing-algorithm"))
+	if configured == "" {
+		return defaultLocalSigningAlgorithm, nil
+	}
+	parsed, err := gcpkms.ParseSignatureAlgorithm(configured)
+	if err != nil {
+		return "", fmt.Errorf("parse local kms signing algorithm: %w", err)
+	}
+	return parsed, nil
+}
+
+// newPersistentLocalKMSClient loads or mints the in-process signing key every local KMS stand-in shares.
+func newPersistentLocalKMSClient(alg jose.SignatureAlgorithm) (*gcpkms.LocalSigningClient, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("resolve local kms signing key directory: %w", err)
@@ -1544,11 +1585,72 @@ func newKMSSigningClients(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		return nil, fmt.Errorf("load local kms signing key: %w", err)
 	}
 
-	// Close is a no-op for the local client, so every caller can retain the
-	// production ownership contract while server and worker reuse one key.
-	return func(_ context.Context, _ oauth2.TokenSource) (gcpkms.SigningClient, error) {
-		return client, nil
-	}, nil
+	return client, nil
+}
+
+// newIdentityProviderConnectionsProvisioner builds the provisioner, or nil when
+// no signing credential is configured. Locally it provisions through the same
+// in-process client kmsSigningClients hands the assertion signer, so a revoked
+// key version is refused by both and the signing algorithm agrees; managed keys
+// are RS256, so any other configured local algorithm leaves the feature off.
+func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsSigningClients gcpkms.SigningClientFactory, auditLogger *audit.Logger, serverURL *url.URL) (*identityproviderconnections.Provisioner, error) {
+	rawCredentialID := strings.TrimSpace(c.String(identityProviderSigningCredentialIDFlag))
+	if rawCredentialID == "" {
+		logger.WarnContext(ctx, "identity provider connections are unavailable: no signing credential configured")
+		return nil, nil
+	}
+	credentialID, err := uuid.Parse(rawCredentialID)
+	if err != nil {
+		return nil, fmt.Errorf("parse identity provider signing credential id: %w", err)
+	}
+
+	keyRing := strings.TrimSpace(c.String(identityProviderKMSKeyRingFlag))
+	local := c.String("environment") == "local"
+	if keyRing == "" {
+		if !local {
+			return nil, errors.New("identity provider kms key ring is required when a signing credential is configured")
+		}
+		keyRing = identityProviderKMSKeyRingLocalDefault
+	}
+
+	kmsClients := gcpkms.NewProvisioningClient
+	if local {
+		alg, err := localKMSSigningAlgorithm(c)
+		if err != nil {
+			return nil, err
+		}
+		if alg != identityproviderconnections.ManagedKeyAlgorithm {
+			logger.WarnContext(ctx, fmt.Sprintf("identity provider connections are unavailable: local kms signs %s but managed keys are %s", alg, identityproviderconnections.ManagedKeyAlgorithm))
+			return nil, nil
+		}
+		shared, err := kmsSigningClients(ctx, nil)
+		if err != nil {
+			return nil, fmt.Errorf("load local kms signing client: %w", err)
+		}
+		client, ok := shared.(gcpkms.ProvisioningClient)
+		if !ok {
+			return nil, fmt.Errorf("local kms signing client %T cannot provision keys", shared)
+		}
+		kmsClients = func(_ context.Context, _ oauth2.TokenSource) (gcpkms.ProvisioningClient, error) {
+			return client, nil
+		}
+	}
+
+	provisioner, err := identityproviderconnections.NewProvisioner(logger, db, gcpIdentity, kmsClients, auditLogger, identityproviderconnections.Config{
+		KeyRing:             keyRing,
+		SigningCredentialID: credentialID,
+		ServerURL:           serverURL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build identity provider connections provisioner: %w", err)
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	if err := provisioner.ProbeSigningCredential(probeCtx); err != nil {
+		logger.WarnContext(ctx, "identity provider connections signing credential is unusable; creates will fail until it is fixed", attr.SlogError(err))
+	}
+	return provisioner, nil
 }
 
 // preserveLegacyLocalSigningKey publishes a private copy without replacing a

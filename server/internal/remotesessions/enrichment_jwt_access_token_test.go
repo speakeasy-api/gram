@@ -26,7 +26,7 @@ func newJWTAccessTokenEnricher(t *testing.T, issuer *idTokenIssuer) *remotesessi
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	cache := jwks.NewMemoryCache()
 	require.NoError(t, cache.Put(t.Context(), issuer.jwksURI, jwks.CacheState{
-		Document: issuer.keySet, ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now(),
+		Document: issuer.keySet, ETag: "", ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now(), LastErrorAt: time.Time{}, LastError: "", Revision: "",
 	}))
 	keys, err := jwks.NewKeyResolver(
 		jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger),
@@ -36,7 +36,7 @@ func newJWTAccessTokenEnricher(t *testing.T, issuer *idTokenIssuer) *remotesessi
 		logger,
 	)
 	require.NoError(t, err)
-	return remotesessions.NewSessionEnricher(logger, nil, policy, keys, nil, nil)
+	return remotesessions.NewSessionEnricher(logger, nil, policy, keys, nil, nil, nil)
 }
 
 func mintAccessToken(t *testing.T, issuer *idTokenIssuer, typ *string, claims map[string]any) string {
@@ -305,7 +305,7 @@ func TestSessionEnricherJWTAccessTokenSkipsWithoutKeySet(t *testing.T) {
 	require.Empty(t, result.Reason)
 
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
-	noKeys := remotesessions.NewSessionEnricher(testenv.NewLogger(t), nil, policy, nil, nil, nil)
+	noKeys := remotesessions.NewSessionEnricher(testenv.NewLogger(t), nil, policy, nil, nil, nil, nil)
 	target := remotesessions.JWTAccessTokenTarget{IssuerID: uuid.New(), IssuerURL: issuer.issuerURL, JWKSURI: issuer.jwksURI, ExternalClientID: "oauth-client"}
 	result = noKeys.JWTAccessToken(t.Context(), target, raw)
 	require.False(t, result.Ran, "an enricher without a key resolver never records the interface")
@@ -318,10 +318,14 @@ func TestSessionEnricherJWTAccessTokenSkipsWithoutKeySet(t *testing.T) {
 type failingJWKSCache struct{}
 
 func (failingJWKSCache) Get(context.Context, string) (jwks.CacheState, error) {
-	return jwks.CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}}, errors.New("cache unavailable")
+	return jwks.CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}, errors.New("cache unavailable")
 }
 
 func (failingJWKSCache) Put(context.Context, string, jwks.CacheState) error { return nil }
+
+func (failingJWKSCache) PutIfUnchanged(context.Context, string, jwks.CacheState, jwks.CacheState) (bool, error) {
+	return false, errors.New("cache unavailable")
+}
 
 func TestSessionEnricherJWTAccessTokenTransientKeySetFailureIsNotRecorded(t *testing.T) {
 	t.Parallel()
@@ -337,7 +341,7 @@ func TestSessionEnricherJWTAccessTokenTransientKeySetFailureIsNotRecorded(t *tes
 		logger,
 	)
 	require.NoError(t, err)
-	enricher := remotesessions.NewSessionEnricher(logger, nil, policy, keys, nil, nil)
+	enricher := remotesessions.NewSessionEnricher(logger, nil, policy, keys, nil, nil, nil)
 	target := remotesessions.JWTAccessTokenTarget{IssuerID: uuid.New(), IssuerURL: issuer.issuerURL, JWKSURI: issuer.jwksURI, ExternalClientID: "oauth-client"}
 	result := enricher.JWTAccessToken(t.Context(), target, mintAccessToken(t, issuer, new("at+jwt"), accessTokenClaims(issuer.issuerURL, "oauth-client")))
 	require.False(t, result.Ran, "a key set that could not be consulted says nothing about the token")

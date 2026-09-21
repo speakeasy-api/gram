@@ -11,6 +11,46 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const changeTrialEndDate = `-- name: ChangeTrialEndDate :one
+WITH previous AS (
+    SELECT trials.organization_id, trials.ends_at
+    FROM trials
+    WHERE trials.organization_id = $2
+      AND trials.converted_at IS NULL
+      AND trials.demoted_at IS NULL
+      AND trials.ends_at > clock_timestamp()
+    FOR UPDATE
+)
+UPDATE trials
+SET ends_at = $1::timestamptz,
+    updated_at = clock_timestamp()
+FROM previous
+WHERE trials.organization_id = previous.organization_id
+  AND previous.ends_at > clock_timestamp()
+  AND $1::timestamptz > clock_timestamp()
+RETURNING previous.ends_at AS previous_ends_at, trials.ends_at
+`
+
+type ChangeTrialEndDateParams struct {
+	EndsAt         pgtype.Timestamptz
+	OrganizationID string
+}
+
+type ChangeTrialEndDateRow struct {
+	PreviousEndsAt pgtype.Timestamptz
+	EndsAt         pgtype.Timestamptz
+}
+
+// Lock before checking lifecycle state, just as ExtendTrial does. Validate the
+// requested and locked previous ends again after acquiring the lock. A blocker
+// may roll back without changing the row after its old deadline has passed.
+func (q *Queries) ChangeTrialEndDate(ctx context.Context, arg ChangeTrialEndDateParams) (ChangeTrialEndDateRow, error) {
+	row := q.db.QueryRow(ctx, changeTrialEndDate, arg.EndsAt, arg.OrganizationID)
+	var i ChangeTrialEndDateRow
+	err := row.Scan(&i.PreviousEndsAt, &i.EndsAt)
+	return i, err
+}
+
 const createTrial = `-- name: CreateTrial :exec
 INSERT INTO trials (organization_id, tier, ends_at)
 VALUES ($1, $2, $3)

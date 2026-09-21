@@ -100,7 +100,9 @@ export function ConvertToUserSessionsButton({
   const [sheetOpen, setSheetOpen] = useState(false);
   const target = useToolsetAuthTarget(toolset);
   // No issuer wired yet, so every issuer this project can see is selectable.
-  const { data: issuersResult } = useRemoteSessionIssuers();
+  // Pinned to the maximum page size so a large platform catalog does not push
+  // this project's own issuers out of the picker. See AuthenticationSection.
+  const { data: issuersResult } = useRemoteSessionIssuers({ limit: 100 });
   const selectableIssuers = issuersResult?.result.items ?? [];
 
   return (

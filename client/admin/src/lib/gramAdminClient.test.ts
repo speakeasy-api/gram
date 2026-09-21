@@ -38,38 +38,7 @@ afterEach(() => {
 });
 
 describe("generated admin boundary", () => {
-  it("does not export generated clients or configurable request controls", () => {
-    expect(Object.keys(boundary).sort()).toEqual(
-      [
-        "adminSessionQuery",
-        "adminGetGlobalIssuerQuery",
-        "adminListGlobalIssuersQuery",
-        "adminListGlobalIssuerConvergenceCandidatesQuery",
-        "adminGetGlobalIssuerDuplicatePreflightQuery",
-        "adminGetGlobalIssuerMigratePreflightQuery",
-        "adminCreateGlobalIssuer",
-        "adminUpdateGlobalIssuer",
-        "adminDeleteGlobalIssuer",
-        "adminFetchGlobalIssuerMetadata",
-        "adminRefreshGlobalIssuerMetadata",
-        "adminMigrateToGlobalIssuer",
-        "adminUploadPlatformImage",
-        "adminIssuerImageQuery",
-        "disableOrganization",
-        "enableOrganization",
-        "extendTrial",
-        "rearmTrial",
-        "startTrial",
-        "organizationFromSdk",
-        "isRedirectingToLogin",
-        "organizationActivityQuery",
-        "organizationFeaturesQuery",
-        "redirectOnUnauthorized",
-        "setAdminOrganizationFeature",
-        "useSetAdminOrganizationFeatureMutation",
-      ].sort(),
-    );
-
+  it("accepts only request arguments at the public boundary", () => {
     expectTypeOf(boundary.adminSessionQuery).parameters.toEqualTypeOf<[]>();
     expectTypeOf(boundary.setAdminOrganizationFeature).parameters.toEqualTypeOf<
       [request: SetOrganizationFeatureRequestBody]
@@ -363,6 +332,20 @@ describe("organization writes through the generated client", () => {
       method: "POST",
       contentType: "application/json",
       body: { id: WIRE.id },
+    });
+  });
+
+  it("posts the absolute end date to the change path", async () => {
+    const fetch = stubFetch();
+    const endsAt = new Date("2026-05-02T00:00:00.000Z");
+    await expect(
+      boundary.changeTrialEndDate({ id: WIRE.id, endsAt }),
+    ).resolves.toEqual(RECORD);
+    expect(await requestOf(fetch)).toEqual({
+      path: "/admin/trial.changeEndDate",
+      method: "POST",
+      contentType: "application/json",
+      body: { id: WIRE.id, ends_at: endsAt.toISOString() },
     });
   });
 

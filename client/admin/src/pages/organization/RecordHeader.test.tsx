@@ -112,7 +112,7 @@ describe("RecordHeader", () => {
       screen.queryByRole("button", { name: `Disable ${org.name}` }),
     ).toBeNull();
     expect(
-      screen.queryByRole("button", { name: `Extend trial ${org.name}` }),
+      screen.queryByRole("button", { name: `Change end date ${org.name}` }),
     ).toBeNull();
     expect(
       screen.queryByRole("button", { name: `Start trial for ${org.name}` }),

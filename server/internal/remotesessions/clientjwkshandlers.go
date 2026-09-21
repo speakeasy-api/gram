@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/managedrows"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -80,7 +81,7 @@ func requireKeySetEligibleClient(ctx context.Context, logger *slog.Logger, clien
 // deleteSet. The set must be live and in the client's organization; anything
 // else reads as not found rather than leaking whether a set exists elsewhere.
 func resolveAttachableKeySet(ctx context.Context, logger *slog.Logger, txRepo *repo.Queries, keySetID uuid.UUID, organizationID string) error {
-	_, err := txRepo.LockJsonWebKeySetForClientAttach(ctx, repo.LockJsonWebKeySetForClientAttachParams{
+	set, err := txRepo.LockJsonWebKeySetForClientAttach(ctx, repo.LockJsonWebKeySetForClientAttachParams{
 		ID:             keySetID,
 		OrganizationID: organizationID,
 	})
@@ -91,7 +92,7 @@ func resolveAttachableKeySet(ctx context.Context, logger *slog.Logger, txRepo *r
 		return oops.E(oops.CodeUnexpected, err, "lock json web key set").LogError(ctx, logger)
 	}
 
-	return nil
+	return managedrows.RequireUnmanaged(set.IdentityProviderConnectionID, "this json web key set")
 }
 
 // AttachKeySet attaches an organization JSON Web Key Set to a project-tier
@@ -274,6 +275,10 @@ func (s *Service) mutateOrganizationClientKeySet(ctx context.Context, logger *sl
 			return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
+	}
+
+	if err := managedrows.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+		return nil, err
 	}
 
 	return s.settleClientKeySet(ctx, logger, dbtx, txRepo, authCtx, existing.RemoteSessionClient, existing.UserSessionIssuerIds, target, func(ctx context.Context) (repo.RemoteSessionClient, error) {

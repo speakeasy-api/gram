@@ -8,9 +8,51 @@ import { Text } from "@/components/ui/Text";
 import { useStep } from "./step/use-step";
 import { useStepper } from "./stepper/use-stepper";
 
+/**
+ * The naming step when the upload replaces a document that already has a
+ * name: nothing to type, so it confirms what is being replaced and moves on.
+ */
+function ConfirmExistingDocumentStep({
+  name,
+  slug,
+  onContinue,
+}: {
+  name: string;
+  slug: string;
+  onContinue: () => void;
+}): React.JSX.Element {
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onContinue();
+      }}
+    >
+      <Stack gap={2}>
+        <Text>New version of {name}</Text>
+        <Stack
+          direction={"horizontal"}
+          gap={2}
+          className="z-10 max-w-sm items-center"
+        >
+          <Input value={slug} disabled className="h-9 py-0" />
+          <Button type="submit" variant="brand">
+            CONTINUE
+          </Button>
+        </Stack>
+        <Text small muted>
+          The slug stays the same, so tools keep their names and every server
+          that carries them picks up the new version.
+        </Text>
+      </Stack>
+    </form>
+  );
+}
+
 export default function NameDeploymentStep(): React.JSX.Element | null {
   const stepper = useStepper();
   const step = useStep();
+  const existingDocument = stepper.meta.current.existingDocument;
 
   const latestDeployment = useLatestDeployment();
 
@@ -52,6 +94,20 @@ export default function NameDeploymentStep(): React.JSX.Element | null {
     setValue(next);
   }
 
+  if (step.isCurrentStep && step.state === "idle" && existingDocument) {
+    return (
+      <ConfirmExistingDocumentStep
+        name={existingDocument.name}
+        slug={existingDocument.slug}
+        onContinue={() => {
+          stepper.meta.current.assetName = existingDocument.name;
+          step.setState("completed");
+          stepper.next();
+        }}
+      />
+    );
+  }
+
   if (step.isCurrentStep && step.state === "idle") {
     return (
       <form
@@ -87,6 +143,8 @@ export default function NameDeploymentStep(): React.JSX.Element | null {
         </Stack>
       </form>
     );
+  } else if (step.state === "completed" && existingDocument) {
+    return <Text>✓ New version of {existingDocument.name}</Text>;
   } else if (step.state === "completed") {
     return <Text>✓ Source named "{stepper.meta.current.assetName}"</Text>;
   } else if (!step.isCurrentStep) {

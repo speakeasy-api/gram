@@ -64,6 +64,10 @@ import (
 // Strict enough to prevent path traversal in API URL construction.
 var validGitHubUsername = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$`)
 
+// marketplaceCollaboratorPermission is admin because some marketplace setup
+// (e.g. Cursor's "Serve Marketplace From Cursor") requires repo admin.
+const marketplaceCollaboratorPermission = "admin"
+
 // GitHubPublisher is the interface for creating repos and pushing files to GitHub.
 type GitHubPublisher interface {
 	CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error
@@ -171,8 +175,10 @@ type Service struct {
 	distributionAdmission *admission.Guard
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
@@ -1338,6 +1344,8 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		filename = "observability-copilot"
 	case "openclaw":
 		filename = "observability-openclaw"
+	case "pi":
+		filename = "observability-pi"
 	}
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
@@ -1911,10 +1919,15 @@ func requirePluginAPIKeyCreator(ctx context.Context, db usersrepo.DBTX, organiza
 		return fmt.Errorf("get plugin api key creator: %w", err)
 	}
 	if len(members) == 0 {
-		return fmt.Errorf("created by user id %q is not a member of the organization", userID)
+		return fmt.Errorf("%w: created by user id %q", ErrPluginAPIKeyCreatorNotMember, userID)
 	}
 	return nil
 }
+
+// ErrPluginAPIKeyCreatorNotMember reports that the publish actor is not a
+// current member of the project's organization. Retrying the same publish
+// cannot change that.
+var ErrPluginAPIKeyCreatorNotMember = errors.New("plugin publish actor is not a member of the organization")
 
 func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput) (*PublishProjectResult, error) {
 	if !UsableAPIKeyCreatorID(input.CreatedByUserID) {
@@ -2317,7 +2330,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	}
 
 	for _, username := range input.GitHubUsernames {
-		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, username, "pull"); err != nil {
+		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, username, marketplaceCollaboratorPermission); err != nil {
 			s.logger.WarnContext(ctx, "failed to add collaborator (non-fatal)",
 				attr.SlogOrganizationID(input.OrganizationID),
 				attr.SlogGitHubUsername(username),

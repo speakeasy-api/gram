@@ -275,7 +275,7 @@ describe("CommandPalette", () => {
     expect(mocks.listOrganizations).toHaveBeenCalledWith(
       expect.objectContaining({
         q: "umbrella",
-        disabled_states: ["active", "disabled"],
+        disabled_status: "all",
       }),
     );
   });
