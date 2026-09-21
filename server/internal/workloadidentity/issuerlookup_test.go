@@ -56,8 +56,8 @@ func TestResolveIssuerByURL_PlainHTTPIssuerNeverReachesTheDatabase(t *testing.T)
 	require.NotErrorIs(t, err, workloadidentity.ErrIssuerNotFound)
 }
 
-// A row carrying a plain-http issuer can be written by hand, since the table
-// does not constrain the scheme, but it never resolves.
+// A row carrying a plain-http issuer can be stored, since the table does not
+// constrain the scheme, but it never resolves.
 func TestResolveIssuerByURL_PlainHTTPRowNeverResolves(t *testing.T) {
 	t.Parallel()
 

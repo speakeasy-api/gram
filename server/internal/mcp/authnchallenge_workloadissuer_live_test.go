@@ -130,8 +130,8 @@ func (f liveWorkloadFixture) seedIssuer(t *testing.T, organizationID string, pro
 	return f.seedIssuerRow(t, organizationID, projectID, f.issuer.OAuth21URL, f.jwksURI)
 }
 
-// seedIssuerRow registers an issuer row with the given identifier and
-// jwks_uri, for tests that need a row registration would never write.
+// seedIssuerRow writes an issuer row with the given identifier and jwks_uri
+// directly, so tests can store values that validation would refuse.
 func (f liveWorkloadFixture) seedIssuerRow(t *testing.T, organizationID string, projectID uuid.NullUUID, issuerURL, jwksURI string) uuid.UUID {
 	t.Helper()
 
