@@ -42,7 +42,7 @@ describe("AGENT_PLATFORMS", () => {
     });
   });
 
-  it("includes restricted egress allowlisting before Cowork telemetry export", () => {
+  it("ends Cowork setup with restricted egress allowlisting after telemetry export", () => {
     const steps = AGENT_PLATFORMS.find(
       ({ id }) => id === "claude-cowork",
     )!.setupSteps;
@@ -50,9 +50,10 @@ describe("AGENT_PLATFORMS", () => {
       ({ title }) => title === "Allow Cowork to send events to Speakeasy",
     );
     expect(index).toBeGreaterThanOrEqual(0);
-    expect(index).toBeLessThan(
+    expect(index).toBeGreaterThan(
       steps.findIndex(({ title }) => title === "Enable OTEL export"),
     );
+    expect(index).toBe(steps.length - 1);
     const step = steps[index]!;
     expect(step.description).toContain(
       "Admin settings → Capabilities → Domain allowlist",
@@ -69,9 +70,11 @@ describe("AGENT_PLATFORMS", () => {
     expect(step.afterFields).toContain("start a Cowork session");
   });
 
-  it("ends Cowork setup with authenticated OTEL export instructions", () => {
+  it("includes authenticated OTEL export instructions", () => {
     const cowork = AGENT_PLATFORMS.find(({ id }) => id === "claude-cowork");
-    const step = cowork?.setupSteps.at(-1);
+    const step = cowork?.setupSteps.find(
+      ({ title }) => title === "Enable OTEL export",
+    );
 
     expect(step).toMatchObject({
       title: "Enable OTEL export",

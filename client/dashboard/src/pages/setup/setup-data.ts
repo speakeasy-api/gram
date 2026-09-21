@@ -144,16 +144,6 @@ const SETUP_AGENT_PLATFORMS: Array<{
         },
       },
       {
-        title: "Allow Cowork to send events to Speakeasy",
-        description:
-          "On claude.ai, open Admin settings → Capabilities → Domain allowlist. If Package managers only is selected, add the domain below under Additional allowed domains and save. All domains also permits access, but adding only this domain keeps egress restricted.",
-        fields: [
-          { label: "Additional allowed domains", value: "app.getgram.ai" },
-        ],
-        afterFields:
-          "Without this exception, Cowork hooks cannot leave the sandbox and no events reach Speakeasy. After completing Cowork setup, including OTEL export, start a Cowork session and confirm its events arrive in the traffic section below.",
-      },
-      {
         title: "Enable OTEL export",
         description:
           "In the Cowork tab of the Claude org settings, scroll to Monitoring and enter the values below.",
@@ -171,6 +161,16 @@ const SETUP_AGENT_PLATFORMS: Array<{
         ],
         afterFields: "Save the settings in Claude.",
         requiresApiKey: true,
+      },
+      {
+        title: "Allow Cowork to send events to Speakeasy",
+        description:
+          "On claude.ai, open Admin settings → Capabilities → Domain allowlist. If Package managers only is selected, add the domain below under Additional allowed domains and save. All domains also permits access, but adding only this domain keeps egress restricted.",
+        fields: [
+          { label: "Additional allowed domains", value: "app.getgram.ai" },
+        ],
+        afterFields:
+          "Without this exception, Cowork hooks cannot leave the sandbox and no events reach Speakeasy. After completing Cowork setup, including OTEL export, start a Cowork session and confirm its events arrive in the traffic section below.",
       },
     ],
   },
