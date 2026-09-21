@@ -257,6 +257,12 @@ func admitWorkloadAssertion(
 		MaxLifetime:  workloadAssertionMaxLifetime,
 	}); err != nil {
 		reason := workload.ReasonOf(err)
+		switch {
+		case errors.Is(err, jwks.ErrRefreshRateLimited), errors.Is(err, jwks.ErrFetchRateLimited):
+			// The key set could not be consulted, which decides nothing about
+			// the assertion's kid.
+			return presented, workloadGrantStageUnavailable("issuer_keys_rate_limited", err)
+		}
 		switch reason {
 		case workload.ReasonKeyUnresolvable, workload.ReasonReplayStoreUnavailable:
 			return presented, workloadGrantStageUnavailable(string(reason), err)
@@ -343,7 +349,9 @@ func (s *Service) handleWorkloadAssertionGrant(
 	}
 	enabled, err := s.workloadAssertionGrantEnabled(ctx, endpoint)
 	if err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("grant_flag_unavailable", err))
+		// Fails closed to the answer the endpoint gives with the grant off.
+		logger.WarnContext(ctx, "workload assertion grant flag unavailable, refusing as disabled", attr.SlogError(err))
+		return refuseClientlessTokenGrant(ctx, w, r, endpoint, creds, baseURL, logger)
 	}
 	if !enabled {
 		return refuseClientlessTokenGrant(ctx, w, r, endpoint, creds, baseURL, logger)

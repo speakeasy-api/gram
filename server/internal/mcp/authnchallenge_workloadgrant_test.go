@@ -148,6 +148,27 @@ func (f workloadGrantFixture) workloadSessions(t *testing.T) []usersessionsrepo.
 	return rows
 }
 
+// requireWorkloadSession asserts an exchange minted a workload session for the
+// fixture's subject, with no refresh token and the given issuer, and that the
+// MCP side admits it.
+func (f workloadGrantFixture) requireWorkloadSession(t *testing.T, w *httptest.ResponseRecorder, wantIssuer string) {
+	t.Helper()
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.NotContains(t, resp, "refresh_token")
+
+	claims := accessTokenClaims(t, w.Body.Bytes())
+	require.Equal(t, wantIssuer, claims["iss"])
+	require.Equal(t, urn.NewWorkloadSubject(f.issuerID, f.subject).String(), claims["sub"])
+
+	accessToken, ok := resp["access_token"].(string)
+	require.True(t, ok)
+	_, _, _, err := f.ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), accessToken, f.ti.serverURL.String(), workloadSessionEndpoint(f.fx))
+	require.NoError(t, err, "the MCP side must admit the session the grant minted")
+}
+
 func requireWorkloadGrantRefused(t *testing.T, w *httptest.ResponseRecorder) {
 	t.Helper()
 
@@ -208,7 +229,8 @@ func TestWorkloadAssertionGrant_TokenEndpointAudienceAccepted(t *testing.T) {
 	f := newWorkloadGrantFixture(t)
 
 	w := f.exchange(t, f.assertion(t, f.advertisedIssuer+"/token"), f.resource)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	f.requireWorkloadSession(t, w, f.advertisedIssuer)
+	require.Len(t, f.workloadSessions(t), 1)
 }
 
 // A genuine token from the admitted issuer for a subject this tenant never
@@ -322,7 +344,7 @@ func TestWorkloadAssertionGrant_AuthenticationHostIssuer(t *testing.T) {
 	t.Parallel()
 
 	f := newWorkloadGrantFixture(t)
-	useAuthenticationHost(t, t.Context(), f.ti, f.fx.target.UserSessionIssuerID)
+	useAuthenticationHost(t, t.Context(), f.ti, f.fx.orgID, f.fx.target.UserSessionIssuerID)
 	harness := newAuthenticationHostHarness(t, f.ti)
 	slug := f.fx.toolset.McpSlug.String
 	authIssuer := testAuthenticationHostURL + "/mcp/" + slug
@@ -332,13 +354,12 @@ func TestWorkloadAssertionGrant_AuthenticationHostIssuer(t *testing.T) {
 	form.Set("assertion", f.assertion(t, authIssuer))
 	form.Set("resource", f.resource)
 	w := harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", form)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	require.Equal(t, authIssuer, accessTokenClaims(t, w.Body.Bytes())["iss"])
+	f.requireWorkloadSession(t, w, authIssuer)
 
 	// The authentication host's token URL is the endpoint half of the pair.
 	form.Set("assertion", f.assertion(t, authenticationHostTokenURL(slug)))
 	w = harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", form)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	f.requireWorkloadSession(t, w, authIssuer)
 }
 
 // syncBuffer is a bytes.Buffer safe for the concurrent writes a service's
@@ -376,9 +397,9 @@ func TestWorkloadAssertionGrant_NoTokenBytesInLogs(t *testing.T) {
 	var secrets []string
 	present := func(assertion string) *httptest.ResponseRecorder {
 		secrets = append(secrets, assertion)
-		// The signature is checked on its own too, so a log line carrying a
-		// truncated token is still caught.
-		secrets = append(secrets, assertion[strings.LastIndex(assertion, ".")+1:])
+		// Each JWS segment is checked on its own too, so a log line carrying
+		// part of a token is still caught.
+		secrets = append(secrets, strings.Split(assertion, ".")...)
 		return f.exchange(t, assertion, f.resource)
 	}
 
@@ -409,8 +430,10 @@ func TestWorkloadAssertionGrant_NoTokenBytesInLogs(t *testing.T) {
 
 // A cold exchange, which fetches the issuer's key set before admitting the
 // workload, completes well inside the roughly ten seconds Claude Tag waits.
-func TestWorkloadAssertionGrant_ColdExchangeFitsTheClientTimeout(t *testing.T) {
-	t.Parallel()
+//
+// Not parallel: the measurement must not compete with the package's other
+// fixtures for the same database and CPU.
+func TestWorkloadAssertionGrant_ColdExchangeFitsTheClientTimeout(t *testing.T) { //nolint:paralleltest // wall-clock measurement
 
 	f := newWorkloadGrantFixture(t)
 
