@@ -15,6 +15,7 @@ import (
 )
 
 func TestUnavailableHTTPResponse(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	endpoint := middleware.MapErrors()(func(context.Context, any) (any, error) {
 		return nil, oops.E(oops.CodeUnavailable, errors.New("feature flag backend unavailable"), "okta connections availability could not be determined")
@@ -27,6 +28,7 @@ func TestUnavailableHTTPResponse(t *testing.T) {
 		"reset":   gen.EncodeResetError(goahttp.ResponseEncoder, nil),
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			response := httptest.NewRecorder()
 			require.NoError(t, encode(ctx, response, err))
 			require.Equal(t, http.StatusServiceUnavailable, response.Code)

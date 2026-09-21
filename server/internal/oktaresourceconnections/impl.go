@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -66,7 +65,6 @@ type Service struct {
 	authz    *authz.Engine
 	audit    *audit.Logger
 	features feature.Provider
-	now      func() time.Time
 }
 
 var (
@@ -92,7 +90,6 @@ func NewService(
 		authz:    authzEngine,
 		audit:    auditLogger,
 		features: features,
-		now:      time.Now,
 	}
 }
 
