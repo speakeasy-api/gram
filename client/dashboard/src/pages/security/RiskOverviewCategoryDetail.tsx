@@ -38,6 +38,7 @@ import {
   RevealAllToggle,
   RuleLabel,
 } from "./risk-ui";
+import { OPEN_AT_FINDING_HINT } from "./unmask";
 import { useDismissFinding } from "./useDismissFinding";
 import { useSetupExclusionRule } from "./useSetupExclusionRule";
 
@@ -74,9 +75,12 @@ function RiskOverviewCategoryDetailContent() {
   const client = useSdkClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
+  // The evidence row the transcript was opened from, so the panel can point at
+  // that finding's message instead of the session's first one.
+  const selectedFindingId = searchParams.get("finding_id");
   const ruleFilter = searchParams.get("rule_id") ?? "";
-  const setSelectedChatId = useCallback(
-    (chatId: string | null) => {
+  const setSelectedChat = useCallback(
+    (chatId: string | null, findingId?: string) => {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -85,12 +89,24 @@ function RiskOverviewCategoryDetailContent() {
           } else {
             next.delete("chat_id");
           }
+          if (chatId && findingId) {
+            next.set("finding_id", findingId);
+          } else {
+            next.delete("finding_id");
+          }
           return next;
         },
         { replace: true },
       );
     },
     [setSearchParams],
+  );
+  const openFinding = useCallback(
+    (result: RiskResult) => {
+      if (!result.chatId) return;
+      setSelectedChat(result.chatId, result.id);
+    },
+    [setSelectedChat],
   );
   const setRuleFilter = useCallback(
     (ruleId: string) => {
@@ -292,7 +308,7 @@ function RiskOverviewCategoryDetailContent() {
                 scrollRef={scrollRef}
                 headerRowRef={headerMeasure.ref}
                 onScroll={handleScroll}
-                onSelectChat={setSelectedChatId}
+                onOpenFinding={openFinding}
                 selection={selection}
                 onDismiss={(r) => dismiss([r])}
                 onSetupExclusion={(r) => exclusionRule.open([r])}
@@ -304,8 +320,9 @@ function RiskOverviewCategoryDetailContent() {
 
       <ChatDetailSheet
         chatId={selectedChatId}
-        onClose={() => setSelectedChatId(null)}
-        onDelete={() => setSelectedChatId(null)}
+        onClose={() => setSelectedChat(null)}
+        onDelete={() => setSelectedChat(null)}
+        focusedFindingId={selectedFindingId ?? undefined}
         riskFocus
       />
     </RevealAllProvider>
@@ -318,7 +335,7 @@ function ResultsTable({
   scrollRef,
   headerRowRef,
   onScroll,
-  onSelectChat,
+  onOpenFinding,
   selection,
   onDismiss,
   onSetupExclusion,
@@ -328,7 +345,7 @@ function ResultsTable({
   scrollRef: React.RefObject<HTMLDivElement | null>;
   headerRowRef: (node: HTMLTableRowElement | null) => void;
   onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
-  onSelectChat: (chatId: string) => void;
+  onOpenFinding: (result: RiskResult) => void;
   selection: RowSelection<RiskResult>;
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
@@ -394,14 +411,13 @@ function ResultsTable({
               key={result.id}
               role={result.chatId ? "button" : undefined}
               tabIndex={result.chatId ? 0 : undefined}
-              onClick={() => {
-                if (result.chatId) onSelectChat(result.chatId);
-              }}
+              aria-label={result.chatId ? OPEN_AT_FINDING_HINT : undefined}
+              onClick={() => onOpenFinding(result)}
               onKeyDown={(e) => {
                 if (!result.chatId) return;
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  onSelectChat(result.chatId);
+                  onOpenFinding(result);
                 }
               }}
               className={
