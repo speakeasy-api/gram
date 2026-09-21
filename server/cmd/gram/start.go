@@ -1903,6 +1903,7 @@ func newStartCommand() *cli.Command {
 						MCPRegistryClient:            mcpRegistryClient,
 						TelemetryLogger:              telemLogger,
 						ClickhouseConn:               chDB,
+						MeterReadConn:                meterReadConn,
 						TelemetryRepo:                telemetryrepo.New(chDB),
 						TriggersApp:                  triggerApp,
 						CacheAdapter:                 cache.NewRedisCacheAdapter(redisClient),
