@@ -581,6 +581,14 @@ func TestExportChecklist(t *testing.T) {
 	require.Contains(t, lines[1], `"0oanotionclient"`)
 	require.Contains(t, lines[1], `"https://tenant-admin.okta.com/admin/workload-principals/ai-agents/wlp1/resource-connections/create"`)
 
+	// A label that starts a formula is neutralized on the service path too.
+	_, body, err = si.svc.ExportChecklist(ctx, &gen.ExportChecklistPayload{SessionToken: nil, Format: "csv", IncludeAll: true})
+	require.NoError(t, err)
+	raw, err = io.ReadAll(body)
+	require.NoError(t, err)
+	require.NoError(t, body.Close())
+	require.Contains(t, string(raw), "\r\n\"'=Legacy\",")
+
 	_, err = confirm(t, ctx, si, audience, nil, f.serverID)
 	require.NoError(t, err)
 	res, body, err = si.svc.ExportChecklist(ctx, &gen.ExportChecklistPayload{SessionToken: nil, Format: "markdown", IncludeAll: true})
@@ -593,6 +601,42 @@ func TestExportChecklist(t *testing.T) {
 	require.Contains(t, string(raw), "| not_applicable |")
 	require.Contains(t, string(raw), "| connected | ")
 	require.Contains(t, string(raw), "| "+audience+" |")
+}
+
+func TestListReadiness_SkipsRevokedTunnels(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	recordAgent(t, ctx, si, "wlp1")
+	f := capableServer(t, ctx, si, "Notion")
+
+	tunneled := func(name, status string) uuid.UUID {
+		slug := strings.ToLower(name) + "-" + uuid.NewString()[:8]
+		backendID, err := si.q.CreateTunneledBackendFixture(ctx, repo.CreateTunneledBackendFixtureParams{
+			ProjectID: f.projectID, Name: name, KeyHash: "hash-" + slug, KeyPrefix: "gram_tun", Status: status,
+			ResourceIdentifier: conv.ToPGText("https://" + slug + ".example/mcp"),
+		})
+		require.NoError(t, err)
+		id, err := si.q.CreateTunneledMCPServerFixture(ctx, repo.CreateTunneledMCPServerFixtureParams{
+			ProjectID: f.projectID, Name: conv.ToPGText(name), Slug: conv.ToPGText(slug),
+			TunneledMcpServerID:   uuid.NullUUID{UUID: backendID, Valid: true},
+			RemoteSessionIssuerID: uuid.NullUUID{UUID: f.issuerID, Valid: true},
+		})
+		require.NoError(t, err)
+		return id
+	}
+	live := tunneled("Live", "active")
+	revoked := tunneled("Revoked", "revoked")
+
+	res := list(t, ctx, si, true)
+	ids := make([]string, 0, len(res.Servers))
+	for _, server := range res.Servers {
+		ids = append(ids, server.McpServerID)
+	}
+	require.Contains(t, ids, live.String())
+	require.NotContains(t, ids, revoked.String())
+
+	_, err := confirm(t, ctx, si, audience, nil, revoked)
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 func TestReadiness_Guards(t *testing.T) {
