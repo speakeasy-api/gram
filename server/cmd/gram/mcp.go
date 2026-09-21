@@ -197,9 +197,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err := validateServerURL(serverURL, serviceEnv); err != nil {
 		return fmt.Errorf("invalid server url: %w", err)
 	}
-	authenticationHost, err := mcp.NewAuthenticationHost(c.String("mcp-authentication-host-url"), serverURL, serviceEnv)
+	authenticationHost, err := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, serviceEnv)
 	if err != nil {
-		return fmt.Errorf("invalid mcp authentication host url: %w", err)
+		return fmt.Errorf("invalid authentication host url: %w", err)
 	}
 
 	enc, err := encryption.New(c.String("encryption-key"))

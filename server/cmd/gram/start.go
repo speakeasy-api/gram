@@ -313,9 +313,9 @@ const probeDrainTimeout = 20 * time.Second
 func mcpRuntimeFlags() []cli.Flag {
 	flags := []cli.Flag{
 		&cli.StringFlag{
-			Name:    "mcp-authentication-host-url",
-			Usage:   "Base URL of an alternate host that serves the per-server MCP OAuth authorization server, kept apart from MCP traffic. Issuers opt in to announcing it. Empty disables it.",
-			EnvVars: []string{"GRAM_MCP_AUTHENTICATION_HOST_URL"},
+			Name:    "authentication-host-url",
+			Usage:   "Base URL of the alternate authentication host. It serves the per-server MCP OAuth authorization server, kept apart from MCP traffic. Issuers opt in to announcing it. Empty disables it.",
+			EnvVars: []string{"GRAM_AUTHENTICATION_HOST_URL"},
 		},
 		&cli.BoolFlag{
 			Name:    "network-ingress-enabled",
@@ -829,9 +829,9 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("invalid server url: %w", err)
 			}
 
-			mcpAuthenticationHost, err := mcp.NewAuthenticationHost(c.String("mcp-authentication-host-url"), serverURL, c.String("environment"))
+			mcpAuthenticationHost, err := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, c.String("environment"))
 			if err != nil {
-				return fmt.Errorf("invalid mcp authentication host url: %w", err)
+				return fmt.Errorf("invalid authentication host url: %w", err)
 			}
 
 			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
