@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -260,6 +261,12 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 		resolved, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+consentID)
 		require.NoError(t, err)
 		require.Nil(t, resolved.Federation)
+		require.NotNil(t, resolved.Browser)
+		if rotate == nil {
+			require.Equal(t, state.Browser, resolved.Browser)
+		} else {
+			require.NotEqual(t, state.Browser.CookieID, resolved.Browser.CookieID)
+		}
 		require.NotNil(t, resolved.Subject)
 		require.Equal(t, mockidp.MockUserID, resolved.AuthorizerUserID)
 		require.Equal(t, scenario == "first_party", resolved.FirstParty)
@@ -405,9 +412,13 @@ func (f *federationLoginFixture) begin(t *testing.T, ctx context.Context, firstP
 	initial, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+initialID)
 	require.NoError(t, err)
 	require.NotNil(t, initial.Federation)
-	require.Empty(t, initial.Federation.BrowserHash)
+	require.NotEmpty(t, initial.Federation.BrowserHash)
 	begin := httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleIDPCallback(begin, httptest.NewRequest(http.MethodGet, bootstrap.String(), nil).WithContext(ctx)))
+	bootstrapRequest := httptest.NewRequest(http.MethodGet, bootstrap.String(), nil).WithContext(ctx)
+	cookies := start.Result().Cookies()
+	require.Len(t, cookies, 1)
+	bootstrapRequest.AddCookie(cookies[0])
+	require.NoError(t, ti.service.HandleIDPCallback(begin, bootstrapRequest))
 	upstream, err := url.Parse(begin.Header().Get("Location"))
 	require.NoError(t, err)
 	require.Equal(t, provider.URL+"/authorize", upstream.Scheme+"://"+upstream.Host+upstream.Path)
@@ -423,8 +434,7 @@ func (f *federationLoginFixture) begin(t *testing.T, ctx context.Context, firstP
 	digest := sha256.Sum256([]byte(state.Federation.Verifier))
 	require.Equal(t, base64.RawURLEncoding.EncodeToString(digest[:]), upstream.Query().Get("code_challenge"))
 	require.Equal(t, "S256", upstream.Query().Get("code_challenge_method"))
-	cookies := begin.Result().Cookies()
-	require.Len(t, cookies, 1)
+	require.Empty(t, begin.Result().Cookies())
 	cookie := cookies[0]
 	require.Empty(t, cookie.Domain)
 	require.Equal(t, "/", cookie.Path)
@@ -434,4 +444,48 @@ func (f *federationLoginFixture) begin(t *testing.T, ctx context.Context, firstP
 	require.Contains(t, cookie.Name, "__Host-")
 	require.Error(t, ti.service.HandleIDPCallback(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, bootstrap.String(), nil).WithContext(ctx)), "bootstrap is single-use")
 	return req, id, nonce, upstream.Query().Get("code_challenge"), state, cookie
+}
+
+// A bootstrap URL is not a browser proof, for either MCP or first-party login.
+func TestFederatedLoginBootstrapCannotTransferBrowsers(t *testing.T) {
+	t.Parallel()
+	for _, firstParty := range []bool{false, true} {
+		for _, wrongCookie := range []bool{false, true} {
+			t.Run(fmt.Sprintf("firstparty=%t/wrongcookie=%t", firstParty, wrongCookie), func(t *testing.T) {
+				t.Parallel()
+				ctx, f := newFederationLoginFixture(t, true)
+				query := url.Values{"response_type": {"code"}, "client_id": {f.downstreamClientID}, "redirect_uri": {"http://127.0.0.1/callback"}, "state": {"downstream-state"}, "code_challenge": {"downstream-pkce"}, "code_challenge_method": {"S256"}}
+				route := chi.NewRouteContext()
+				route.URLParams.Add("mcpSlug", f.toolsetSlug)
+				req := httptest.NewRequest(http.MethodGet, "/mcp/"+f.toolsetSlug+"/authorize?"+query.Encode(), nil).WithContext(context.WithValue(ctx, chi.RouteCtxKey, route))
+				start := httptest.NewRecorder()
+				var err error
+				if firstParty {
+					err = f.ti.service.HandleFirstPartyConnect(start, req)
+				} else {
+					err = f.ti.service.HandleAuthorize(start, req)
+				}
+				require.NoError(t, err)
+				cookies := start.Result().Cookies()
+				require.Len(t, cookies, 1, "bind at authorize, not at the transferable callback URL")
+				victim := httptest.NewRequest(http.MethodGet, start.Header().Get("Location"), nil).WithContext(ctx)
+				if wrongCookie {
+					cookie := *cookies[0]
+					cookie.Value = "victim-browser"
+					victim.AddCookie(&cookie)
+				}
+				response := httptest.NewRecorder()
+				err = f.ti.service.HandleIDPCallback(response, victim)
+				if firstParty {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+					failure := assertFederationErrorRedirect(t, response)
+					require.Equal(t, "access_denied", failure.Query().Get("error"))
+				}
+				require.NotContains(t, response.Header().Get("Location"), f.provider.URL)
+				require.Zero(t, f.provider.exchangeCount())
+			})
+		}
+	}
 }

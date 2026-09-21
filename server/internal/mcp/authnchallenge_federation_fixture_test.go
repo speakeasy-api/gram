@@ -170,7 +170,10 @@ func TestFederatedLoginCredentialRotation(t *testing.T) {
 		start := httptest.NewRecorder()
 		require.NoError(t, ti.service.HandleAuthorize(start, authorize))
 		begin := httptest.NewRecorder()
-		require.NoError(t, ti.service.HandleIDPCallback(begin, httptest.NewRequest(http.MethodGet, start.Header().Get("Location"), nil).WithContext(ctx)))
+		bootstrap := httptest.NewRequest(http.MethodGet, start.Header().Get("Location"), nil).WithContext(ctx)
+		require.Len(t, start.Result().Cookies(), 1)
+		bootstrap.AddCookie(start.Result().Cookies()[0])
+		require.NoError(t, ti.service.HandleIDPCallback(begin, bootstrap))
 		upstream, err := url.Parse(begin.Header().Get("Location"))
 		require.NoError(t, err)
 		id, nonce := upstream.Query().Get("state"), upstream.Query().Get("nonce")
@@ -181,8 +184,7 @@ func TestFederatedLoginCredentialRotation(t *testing.T) {
 		provider.issueCode(t, "rotated-one-use-code", federationToken{challenge: upstream.Query().Get("code_challenge"), nonce: nonce, email: mockidp.MockUserEmail, issuer: provider.URL, verified: true, secret: "rotated-secret"})
 		query := url.Values{"state": {id}, "code": {"rotated-one-use-code"}, "iss": {provider.URL}}
 		callback := httptest.NewRequest(http.MethodGet, ti.serverURL.String()+"/mcp/idp_callback?"+query.Encode(), nil).WithContext(ctx)
-		require.Len(t, begin.Result().Cookies(), 1)
-		callback.AddCookie(begin.Result().Cookies()[0])
+		callback.AddCookie(start.Result().Cookies()[0])
 		// Shared completion assertions prove success, no retention, and no replay.
 		return callback, nonce, id
 	})

@@ -21,6 +21,7 @@ import (
 // FederatedChallenge is server-side, short-lived state, never an identity or a
 // retained credential. The upstream verifier is unrelated to downstream PKCE.
 type FederatedChallenge struct {
+	StartPhase     string    `json:"start_phase"`
 	OrganizationID string    `json:"organization_id"`
 	IssuerID       uuid.UUID `json:"issuer_id"`
 	ClientID       uuid.UUID `json:"client_id"`
@@ -60,9 +61,10 @@ func (s *Service) federatedProvider(ctx context.Context, endpoint *ResolvedMcpEn
 }
 
 // prepareFederatedLogin leaves WorkOS entirely unchanged when no trusted client
-// is linked. Federation first visits the callback origin to establish a host-only
-// browser binding: custom-domain authorize pages cannot set that origin's cookie.
-func (s *Service) prepareFederatedLogin(ctx context.Context, endpoint *ResolvedMcpEndpoint, state *AuthnChallengeState) (*url.URL, error) {
+// is linked. Bind the initiating origin first; custom domains then prove
+// ownership of that binding before starting login on the callback origin.
+func (s *Service) prepareFederatedLogin(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state *AuthnChallengeState) (*url.URL, error) {
+	ctx := r.Context()
 	provider, issuerID, clientID, version, err := s.federatedProvider(ctx, endpoint)
 	if err != nil || provider == nil {
 		return nil, err
@@ -83,10 +85,26 @@ func (s *Service) prepareFederatedLogin(ctx context.Context, endpoint *ResolvedM
 	if err != nil {
 		return nil, err
 	}
-	state.Federation = &FederatedChallenge{OrganizationID: endpoint.OrganizationID, IssuerID: issuerID, ClientID: clientID, Configuration: version, CallbackURL: callback, Nonce: nonce, Verifier: verifier, BrowserHash: ""}
+	// Bind the initiating browser before exposing any transferable state URL.
+	origin, err := federatedCallbackURL(state.mintOriginOr(s.serverURL.String()))
+	if err != nil {
+		return nil, err
+	}
+	browser, err := generateOpaqueToken()
+	if err != nil {
+		return nil, err
+	}
+	state.Browser = &ChallengeBrowserBinding{CookieID: state.ID, OriginHash: sha256Hex(browser), CallbackHash: ""}
+	phase, callbackHash := "bootstrap", ""
+	if origin.Scheme == target.Scheme && origin.Host == target.Host {
+		phase, callbackHash = "ready", state.Browser.OriginHash
+		state.Browser.CallbackHash = callbackHash
+	}
+	state.Federation = &FederatedChallenge{StartPhase: phase, OrganizationID: endpoint.OrganizationID, IssuerID: issuerID, ClientID: clientID, Configuration: version, CallbackURL: callback, Nonce: nonce, Verifier: verifier, BrowserHash: callbackHash}
 	if err := s.authnChallengeCache.Store(ctx, *state); err != nil {
 		return nil, fmt.Errorf("store federated login challenge: %w", err)
 	}
+	http.SetCookie(w, federatedBrowserCookie(state.Browser.CookieID, browser, int(state.TTL().Seconds())))
 	target.RawQuery = url.Values{"state": {state.ID}, "federated_start": {"1"}}.Encode()
 	return target, nil
 }
@@ -102,16 +120,11 @@ func federatedBrowserCookie(id, value string, maxAge int) *http.Cookie {
 	}
 }
 
-// startFederatedLogin is entered only after atomically consuming the initial
-// challenge. Rotating its ID means the bootstrap link cannot reveal or reuse the
-// callback state, including when a link is opened in two browsers.
+// startFederatedLogin is entered only after consuming a browser-bound challenge.
+// Rotate the URL state, but preserve both host-only browser proofs through consent.
 func (s *Service) startFederatedLogin(w http.ResponseWriter, r *http.Request, state *AuthnChallengeState, provider *remotesessions.FederatedProvider) error {
-	browser, err := generateOpaqueToken()
-	if err != nil {
-		return err
-	}
 	state.ID = uuid.NewString()
-	state.Federation.BrowserHash = sha256Hex(browser)
+	state.Federation.StartPhase = "login"
 	target, err := provider.BuildAuthorizationURL(state.Federation.CallbackURL, state.ID, state.Federation.Nonce, state.Federation.Verifier)
 	if err != nil {
 		return fmt.Errorf("build federated authorization URL: %w", err)
@@ -119,7 +132,6 @@ func (s *Service) startFederatedLogin(w http.ResponseWriter, r *http.Request, st
 	if err := s.authnChallengeCache.Store(r.Context(), *state); err != nil {
 		return fmt.Errorf("store bound federated login challenge: %w", err)
 	}
-	http.SetCookie(w, federatedBrowserCookie(state.ID, browser, int(state.TTL().Seconds())))
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	http.Redirect(w, r, target.String(), http.StatusFound)
@@ -130,7 +142,11 @@ func validateFederatedBrowser(r *http.Request, state AuthnChallengeState) error 
 	if state.Federation == nil || state.Federation.BrowserHash == "" || state.CreatedAt.IsZero() || time.Since(state.CreatedAt) > state.TTL() || state.CreatedAt.After(time.Now().Add(time.Minute)) {
 		return errors.New("invalid federated challenge")
 	}
-	cookie, err := r.Cookie(federationCookieName(state.ID))
+	cookieID := state.ID
+	if state.Browser != nil {
+		cookieID = state.Browser.CookieID
+	}
+	cookie, err := r.Cookie(federationCookieName(cookieID))
 	if err != nil || subtle.ConstantTimeCompare([]byte(sha256Hex(cookieValue(cookie))), []byte(state.Federation.BrowserHash)) != 1 {
 		return errors.New("federated browser binding failed")
 	}

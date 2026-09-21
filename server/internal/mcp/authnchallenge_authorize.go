@@ -201,6 +201,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	}
 	agentTarget, _ := agentAuthorizationTarget(endpoint)
 	challengeState := AuthnChallengeState{
+		Browser:                  nil,
 		Federation:               nil,
 		ID:                       challengeID,
 		FlowID:                   flowID,
@@ -233,7 +234,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	logger.InfoContext(ctx, "oauth flow started")
 
 	if forceIDP {
-		federatedURL, err := s.prepareFederatedLogin(ctx, endpoint, &challengeState)
+		federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
 		if err != nil {
 			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
 			failureCode, cause := federatedFailure(err)

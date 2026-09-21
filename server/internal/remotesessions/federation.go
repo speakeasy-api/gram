@@ -48,9 +48,10 @@ func (p *FederatedProvider) GoString() string    { return p.String() }
 func (p *FederatedProvider) Fingerprint() string { return p.fingerprint }
 
 // ValidateResponseIssuer implements RFC 9207 before the code leaves Gram.
-// The response issuer is never used to select a provider.
+// The response issuer is never used to select a provider. The shared callback
+// has no issuer-specific redirect URI fallback, so iss is always required.
 func (p *FederatedProvider) ValidateResponseIssuer(issuer string) error {
-	if p == nil || (issuer == "" && p.metadata.AuthorizationResponseIssParameterSupported) || (issuer != "" && issuer != p.issuer.Issuer) {
+	if p == nil || issuer == "" || issuer != p.issuer.Issuer {
 		return ErrFederatedIdentity
 	}
 	return nil
@@ -108,6 +109,11 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 	}
 	jwksURL, err := url.Parse(doc.JwksURI)
 	if err != nil || jwksURL.Scheme != "https" {
+		return nil, ErrFederatedConfiguration
+	}
+	// A shared callback needs response issuer identification before code exchange
+	// (RFC 9700 section 4.4.2); a state-selected provider alone is insufficient.
+	if !doc.AuthorizationResponseIssParameterSupported {
 		return nil, ErrFederatedConfiguration
 	}
 	if doc.ResponseTypesSupported != nil && !slices.Contains(doc.ResponseTypesSupported, "code") {
@@ -240,7 +246,7 @@ type FederatedIdentity struct {
 	Subject       string
 	Email         string
 	EmailVerified *bool
-	credentials   *EphemeralFederatedCredentials
+	credentials   *federatedCredentialState
 }
 
 // ExchangeFederatedCode must run only after browser/state/issuer validation and
@@ -290,7 +296,7 @@ func (m *ChallengeManager) ExchangeFederatedCode(ctx context.Context, p *Federat
 	if err != nil {
 		return nil, err
 	}
-	identity.credentials = &EphemeralFederatedCredentials{idToken: tok.IDToken, refreshToken: tok.RefreshToken, expiresIn: tok.ExpiresIn, refreshExpiresIn: tok.RefreshExpiresIn, receivedAt: time.Now()}
+	identity.credentials = &federatedCredentialState{value: EphemeralFederatedCredentials{idToken: tok.IDToken, refreshToken: tok.RefreshToken, expiresIn: tok.ExpiresIn, refreshExpiresIn: tok.RefreshExpiresIn, receivedAt: time.Now()}}
 	return identity, nil
 }
 
@@ -363,6 +369,13 @@ func validateFederatedClaims(all map[string]json.RawMessage, p *FederatedProvide
 	if len(claims.Audience) > 1 && azp != p.client.ClientID {
 		return nil, ErrFederatedIdentity
 	}
+	// No co-audiences are configured as trusted for federation. A matching azp
+	// identifies the authorized party, not trust in other recipients.
+	for _, audience := range claims.Audience {
+		if audience != p.client.ClientID {
+			return nil, ErrFederatedIdentity
+		}
+	}
 	for name, value := range map[string]string{"at_hash": tok.AccessToken, "c_hash": code} {
 		if _, present := all[name]; present && !validFederatedTokenHash(claimString(all, name), value, algorithm) {
 			return nil, ErrFederatedIdentity
@@ -395,7 +408,8 @@ func validFederatedTokenHash(claim, value, algorithm string) bool {
 	case "RS384", "PS384", "ES384":
 		sum := sha512.Sum384([]byte(value))
 		digest = sum[:]
-	case "RS512", "PS512", "ES512":
+	// The shared verifier supports only the Ed25519 EdDSA variant, not Ed448.
+	case "RS512", "PS512", "ES512", "EdDSA":
 		sum := sha512.Sum512([]byte(value))
 		digest = sum[:]
 	default:

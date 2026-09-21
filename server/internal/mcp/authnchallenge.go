@@ -118,8 +118,9 @@ type EndpointRef struct {
 // round-trip through the IDP and land on /connect, short enough that
 // abandoned flows don't pile up.
 type AuthnChallengeState struct {
-	Federation *FederatedChallenge `json:"federation,omitempty"`
-	ID         string              `json:"id"`
+	Federation *FederatedChallenge      `json:"federation,omitempty"`
+	Browser    *ChallengeBrowserBinding `json:"browser,omitempty"`
+	ID         string                   `json:"id"`
 	// FlowID is the stable correlation identifier for the whole OAuth flow,
 	// minted once at /authorize. Unlike ID — which idp_callback rotates to
 	// rotate the Redis cache key — FlowID is preserved across the rotation

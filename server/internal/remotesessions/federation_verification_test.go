@@ -77,7 +77,7 @@ func TestFederatedSignatureVerification(t *testing.T) {
 func TestFederatedCredentialsHandoff(t *testing.T) {
 	t.Parallel()
 	credentials := EphemeralFederatedCredentials{idToken: "secret-id-token", refreshToken: "secret-refresh-token", expiresIn: 3600}
-	identity := &FederatedIdentity{Subject: "subject", credentials: &credentials}
+	identity := &FederatedIdentity{Subject: "subject", credentials: &federatedCredentialState{value: credentials}}
 	for _, value := range []any{credentials, &credentials, identity, *identity} {
 		data, err := json.Marshal(value)
 		require.NoError(t, err)
@@ -95,8 +95,26 @@ func TestFederatedCredentialsHandoff(t *testing.T) {
 	})
 	require.True(t, called)
 	require.ErrorIs(t, err, consumerError)
-	require.Empty(t, credentials.IDToken())
-	require.Nil(t, identity.credentials)
+	require.Empty(t, identity.credentials.value.IDToken())
 	require.Error(t, identity.WithCredentials(func(EphemeralFederatedCredentials) error { t.Fatal("replayed credential handoff"); return nil }))
 	identity.DiscardCredentials()
+}
+
+func TestFederatedRejectsWeakRSA(t *testing.T) {
+	t.Parallel()
+	key, keys, _ := newRSAKeyPolicyFixture(t, 1024)
+	p := federatedFixture(t)
+	p.metadata.JwksURI = rsaKeyPolicyJWKSURI
+	m := &ChallengeManager{idTokens: NewIDTokenVerifier(keys)}
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: key}, (&jose.SignerOptions{}).WithHeader("kid", "example-key"))
+	require.NoError(t, err)
+	payload, err := json.Marshal(federatedClaims(t, p, time.Now()))
+	require.NoError(t, err)
+	signed, err := signer.Sign(payload)
+	require.NoError(t, err)
+	raw, err := signed.CompactSerialize()
+	require.NoError(t, err)
+	identity, err := m.verifyFederatedIdentity(t.Context(), p, tokenResponse{IDToken: raw}, "code", "nonce", nil)
+	require.ErrorIs(t, err, ErrFederatedIdentity)
+	require.Nil(t, identity)
 }

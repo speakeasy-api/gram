@@ -23,7 +23,7 @@ func federatedFixture(t *testing.T) *FederatedProvider {
 	t.Helper()
 	issuer := repo.RemoteSessionIssuer{ID: uuid.New(), Issuer: "https://idp.example.test/tenant"}
 	client := repo.RemoteSessionClient{ID: uuid.New(), RemoteSessionIssuerID: issuer.ID, ClientID: "upstream-client", Scope: []string{"openid", "email", "profile", "offline_access"}, TokenEndpointAuthMethod: pgtype.Text{String: "client_secret_basic", Valid: true}, ClientSecretEncrypted: pgtype.Text{String: "fixture-secret", Valid: true}}
-	doc := rfc8414Document{Issuer: issuer.Issuer, AuthorizationEndpoint: "https://idp.example.test/authorize", TokenEndpoint: "https://idp.example.test/token", JwksURI: "https://idp.example.test/jwks", CodeChallengeMethodsSupported: []string{"S256"}, IDTokenSigningAlgValuesSupported: []string{"RS256"}}
+	doc := rfc8414Document{AuthorizationResponseIssParameterSupported: true, Issuer: issuer.Issuer, AuthorizationEndpoint: "https://idp.example.test/authorize", TokenEndpoint: "https://idp.example.test/token", JwksURI: "https://idp.example.test/jwks", CodeChallengeMethodsSupported: []string{"S256"}, IDTokenSigningAlgValuesSupported: []string{"RS256"}}
 	p, err := newFederatedProvider("org-test", issuer, client, doc)
 	require.NoError(t, err)
 	return p
@@ -54,10 +54,10 @@ func TestFederatedAuthorization(t *testing.T) {
 func TestFederatedResponseIssuer(t *testing.T) {
 	t.Parallel()
 	p := federatedFixture(t)
-	require.NoError(t, p.ValidateResponseIssuer(""))
+	require.ErrorIs(t, p.ValidateResponseIssuer(""), ErrFederatedIdentity)
 	require.NoError(t, p.ValidateResponseIssuer(p.issuer.Issuer))
 	require.ErrorIs(t, p.ValidateResponseIssuer(p.issuer.Issuer+"/"), ErrFederatedIdentity)
-	p.metadata.AuthorizationResponseIssParameterSupported = true
+	p.metadata.AuthorizationResponseIssParameterSupported = false
 	require.ErrorIs(t, p.ValidateResponseIssuer(""), ErrFederatedIdentity)
 	require.NoError(t, p.ValidateResponseIssuer(p.issuer.Issuer))
 }
@@ -69,6 +69,7 @@ func TestFederatedConfiguration(t *testing.T) {
 		mutate func(*FederatedProvider)
 	}{
 		{"exact discovery issuer", func(p *FederatedProvider) { p.metadata.Issuer += "/" }},
+		{"missing response issuer support", func(p *FederatedProvider) { p.metadata.AuthorizationResponseIssParameterSupported = false }},
 		{"missing jwks", func(p *FederatedProvider) { p.metadata.JwksURI = "" }},
 		{"insecure token endpoint", func(p *FederatedProvider) { p.metadata.TokenEndpoint = "http://idp.example.test/token" }},
 		{"endpoint fragment", func(p *FederatedProvider) { p.metadata.AuthorizationEndpoint += "#fragment" }},
@@ -100,7 +101,6 @@ func TestFederatedFingerprint(t *testing.T) {
 			p.client.ClientSecretEncrypted = pgtype.Text{String: "encrypted-secret", Valid: true}
 		},
 		func(p *FederatedProvider) { p.metadata.TokenEndpoint += "/new" },
-		func(p *FederatedProvider) { p.metadata.AuthorizationResponseIssParameterSupported = true },
 		func(p *FederatedProvider) { p.client.Scope = append(p.client.Scope, "extra") },
 		func(p *FederatedProvider) { p.organizationID = "other-org" },
 	} {

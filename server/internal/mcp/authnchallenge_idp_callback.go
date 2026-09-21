@@ -159,16 +159,24 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		if callbackErr != nil || federation.OrganizationID != endpoint.OrganizationID || federation.IssuerID != trustedIssuerID || federation.ClientID != trustedClientID || federation.Configuration != configuration || federation.CallbackURL != callbackURL || challengeState.CreatedAt.IsZero() || time.Since(challengeState.CreatedAt) > challengeState.TTL() {
 			return finishFederation(oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration, "Login configuration changed or expired. Restart login", false)
 		}
-		if q.Get("federated_start") == "1" && federation.BrowserHash == "" && q.Get("code") == "" && q.Get("error") == "" {
+		if q.Get("federated_start") == "1" && q.Get("code") == "" && q.Get("error") == "" {
+			if federation.StartPhase == "bootstrap" {
+				if err := s.prepareFederatedBrowserHandoff(w, r, endpoint, &challengeState); err != nil {
+					return failFederationDependency(err, "Federated browser handoff failed. Restart login")
+				}
+				return nil
+			}
+			if federation.StartPhase != "ready" || validateChallengeBrowser(r, challengeState, true) != nil {
+				return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Login browser binding is invalid. Restart login", false)
+			}
 			if err := s.startFederatedLogin(w, r, &challengeState, provider); err != nil {
 				return failFederationDependency(err, "Federated login is unavailable. Restart login or contact your administrator")
 			}
 			return nil
 		}
-		if err := validateFederatedBrowser(r, challengeState); err != nil {
+		if err := validateFederatedBrowser(r, challengeState); err != nil || federation.StartPhase != "login" || q.Get("federated_start") != "" {
 			return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Login browser binding is invalid. Restart login", false)
 		}
-		http.SetCookie(w, federatedBrowserCookie(challengeState.ID, "", -1))
 		if err := provider.ValidateResponseIssuer(q.Get("iss")); err != nil {
 			return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Login provider response is invalid. Restart login", false)
 		}
@@ -335,7 +343,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	challengeState.ID = uuid.NewString()
 	challengeState.Subject = &subject
 	challengeState.AuthorizerUserID = gramUserID
-	challengeState.Federation = nil // Drop nonce, PKCE and browser state before consent.
+	challengeState.Federation = nil // Drop nonce and PKCE; Browser must survive consent and remote linking.
 	challengeState.AuthorizerImpersonated = &impersonated
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)

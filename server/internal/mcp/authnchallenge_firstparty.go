@@ -66,6 +66,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
 	}
 	challengeState := AuthnChallengeState{
+		Browser:    nil,
 		Federation: nil,
 
 		ID:                       challengeID,
@@ -95,7 +96,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
 
-	federatedURL, err := s.prepareFederatedLogin(ctx, endpoint, &challengeState)
+	federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
 	if err != nil {
 		_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
 		failureCode, cause := federatedFailure(err)

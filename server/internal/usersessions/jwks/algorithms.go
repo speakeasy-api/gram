@@ -12,7 +12,8 @@ import (
 // nothing, and every HS* is excluded because an HMAC verification key IS the
 // signing key — a verifier holding it could forge the assertions it exists to
 // check. Per-client or per-issuer algorithm pinning is deliberately not
-// stored anywhere; this list is the reason.
+// stored anywhere. This family allowlist does not establish one algorithm per
+// key; see SECURITY_FOLLOWUPS.md for the open binding-policy work.
 var allowedSignatureAlgorithms = []jose.SignatureAlgorithm{
 	jose.RS256,
 	jose.RS384,
