@@ -2888,7 +2888,10 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   delegated_grants_version INTEGER,
 
   jti TEXT NOT NULL,
-  refresh_token_hash TEXT NOT NULL,
+  -- NULL when the session was issued without a refresh token, such as a
+  -- workload session. refresh_expires_at is still set: it is the session's
+  -- authorization deadline, not the refresh token's.
+  refresh_token_hash TEXT,
   refresh_expires_at timestamptz NOT NULL,
   expires_at timestamptz NOT NULL,
   -- Tool selection the subject chose on the consent screen, carried across
