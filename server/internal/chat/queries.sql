@@ -1887,13 +1887,48 @@ WHERE chat_id = @chat_id AND project_id = @project_id
   AND origin = 'anthropic-inference' AND external_message_id IS NOT NULL
   AND external_message_id NOT LIKE '%/block:%';
 
+-- name: FindInferenceTranscriptOwner :one
+-- Resolves the chat an Anthropic inference delivery belongs to, which is not
+-- always its own conversation: an organization can run inference hooks
+-- alongside the lanes that already record the same session — agent hooks for
+-- a locally run harness, a compliance import for a provider-hosted chat — and
+-- those lanes archive the turns the frame carries.
+--
+-- The inference conversation wins when it exists, so a lane that appears
+-- mid-conversation never splits an archived transcript in two; otherwise the
+-- hook-captured session (keyed by the chat id derived from the harness
+-- session id) or the imported conversation (keyed by the provider's chat id)
+-- owns it. Soft-deleted chats still count: a session the user deleted must
+-- not come back through another lane. Every branch is an index lookup.
+--
+-- The owner's attribution comes back with it: session identifiers can be
+-- client asserted, so the caller checks that a candidate is the delivery's
+-- own conversation before letting it stand in for one.
+WITH candidates AS (
+  SELECT c.id AS chat_id, c.user_id, c.external_user_id, 0 AS priority FROM chats c
+  WHERE c.id = @inference_chat_id AND c.project_id = @project_id
+  UNION ALL
+  SELECT c.id AS chat_id, c.user_id, c.external_user_id, 1 AS priority FROM chats c
+  WHERE c.id = @session_chat_id AND c.project_id = @project_id
+  UNION ALL
+  SELECT c.id AS chat_id, c.user_id, c.external_user_id, 2 AS priority FROM chats c
+  WHERE c.organization_id = @organization_id AND c.external_chat_id = @external_chat_id
+    AND c.project_id = @project_id
+)
+SELECT candidates.chat_id, candidates.user_id, candidates.external_user_id FROM candidates
+ORDER BY candidates.priority
+LIMIT 1;
+
+-- The checkpoint is keyed by chat id rather than external_chat_id because a
+-- delivery whose transcript another lane owns carries its marker on that
+-- lane's conversation, which has no inference external id.
 -- name: GetInferenceAcceptedCheckpoint :one
 SELECT inference_accepted_checkpoint FROM chats
-WHERE project_id = @project_id AND external_chat_id = @external_chat_id;
+WHERE project_id = @project_id AND id = @chat_id;
 
 -- name: SetInferenceAcceptedCheckpoint :execrows
 UPDATE chats SET inference_accepted_checkpoint = @checkpoint
-WHERE project_id = @project_id AND external_chat_id = @external_chat_id
+WHERE project_id = @project_id AND id = @chat_id
   AND inference_accepted_checkpoint IS NOT DISTINCT FROM sqlc.narg('expected_checkpoint')::bytea;
 
 -- name: InferencePolicyRevision :one

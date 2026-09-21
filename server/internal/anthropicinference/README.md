@@ -58,6 +58,28 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
 - Conversation identity is scoped to the project, Anthropic tenant, and actor.
   Client-asserted session identifiers cannot join another actor's conversation.
   Missing session identifiers or actor identities fall back to the request identifier.
+- An organization that also runs the capture lanes recording the same sessions —
+  agent hooks on a locally run harness, the Anthropic compliance import for
+  claude.ai conversations — would otherwise get two conversations per session,
+  metered and analyzed twice. A delivery whose session identifier resolves to a
+  chat one of those lanes owns in the same project adopts it instead: the
+  transcript is not archived a second time, and the acceptance checkpoint is
+  written to the owning conversation. The lanes are matched on the identity each
+  keys its chat by — the chat id derived from a harness session id, or an
+  imported conversation's provider chat id — and only within the bound project,
+  since another project's transcript is a different tenant's. A conversation
+  this endpoint already archived keeps its transcript even when a lane appears
+  later, so a session is never split across two conversations. Soft-deleted
+  chats still count as owners: a session the user deleted must not come back
+  through another lane. Request-scoped frames, which carry no session
+  identifier, are never adopted. Because session identifiers are client
+  asserted, a conversation attributed to another resolved user, email address,
+  or provider account is not adopted: asserting a colleague's session cannot
+  keep a transcript out of the record. Identities are compared only where both
+  sides carry the same kind, so an unattributed conversation, or a frame that
+  omits the actor email, contradicts nothing and keeps its binding.
+  Suppressing the second archive does not suppress enforcement: every delivery
+  is still evaluated in full.
 - Archival deduplication is separate from acceptance. Storage uses message hashes
   to align a delivery with recent archived history, loading at least a full
   incoming frame so repeated messages beyond 512 entries remain idempotent.

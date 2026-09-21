@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -98,7 +97,7 @@ func testConcurrentCheckpoints(t *testing.T, singleConnection bool) {
 	}
 	require.Equal(t, "allow", (<-firstVerdict).Action)
 	readMarker := func() []byte {
-		marker, err := chatrepo.New(db).GetInferenceAcceptedCheckpoint(t.Context(), chatrepo.GetInferenceAcceptedCheckpointParams{ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText("anthropic-inference:" + conversationID(config, frame).String())})
+		marker, err := chatrepo.New(db).GetInferenceAcceptedCheckpoint(t.Context(), chatrepo.GetInferenceAcceptedCheckpointParams{ProjectID: config.ProjectID, ChatID: conversationID(config, frame)})
 		require.NoError(t, err)
 		return marker
 	}
@@ -120,7 +119,7 @@ func testConcurrentCheckpoints(t *testing.T, singleConnection bool) {
 	require.NoError(t, err)
 	require.Equal(t, "allow", verdict.Action)
 	require.Equal(t, int32(4), secondCalls.Load())
-	session, err := store.Begin(t.Context(), config, frame, "")
+	session, err := beginFrame(t, store, config, frame, "")
 	require.NoError(t, err)
 	hashes, err := session.Load(t.Context())
 	require.NoError(t, err)
@@ -150,7 +149,7 @@ func TestPostgresCheckpointRequiresSuccessfulEvaluation(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "deny", verdict.Action)
 		raw, err := chatrepo.New(db).GetInferenceAcceptedCheckpoint(t.Context(), chatrepo.GetInferenceAcceptedCheckpointParams{
-			ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText("anthropic-inference:" + conversationID(config, frame).String()),
+			ProjectID: config.ProjectID, ChatID: conversationID(config, frame),
 		})
 		require.NoError(t, err)
 		require.Empty(t, raw)
@@ -165,7 +164,7 @@ func TestPostgresCheckpointRequiresSuccessfulEvaluation(t *testing.T) {
 	verdict, err := service.Process(t.Context(), config, frame)
 	require.NoError(t, err)
 	require.Equal(t, "allow", verdict.Action)
-	checkpoint, err := store.Begin(t.Context(), config, frame, "")
+	checkpoint, err := beginFrame(t, store, config, frame, "")
 	require.NoError(t, err)
 	hashes, err := checkpoint.Load(t.Context())
 	require.NoError(t, err)
@@ -187,11 +186,11 @@ func TestPostgresCheckpointInvalidation(t *testing.T) {
 		raw, err := json.Marshal(cp)
 		require.NoError(t, err)
 		_, err = chatrepo.New(db).SetInferenceAcceptedCheckpoint(t.Context(), chatrepo.SetInferenceAcceptedCheckpointParams{
-			ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText("anthropic-inference:" + conversationID(config, frame).String()), Checkpoint: raw, ExpectedCheckpoint: expected,
+			ProjectID: config.ProjectID, ChatID: conversationID(config, frame), Checkpoint: raw, ExpectedCheckpoint: expected,
 		})
 		require.NoError(t, err)
 		expected = raw
-		session, err := store.Begin(t.Context(), config, frame, "")
+		session, err := beginFrame(t, store, config, frame, "")
 		require.NoError(t, err)
 		hashes, err := session.Load(t.Context())
 		require.NoError(t, err)
@@ -241,7 +240,7 @@ func TestPostgresCanceledEvaluationPreservesPreviousCheckpoint(t *testing.T) {
 	})
 	_, err = service.Process(ctx, config, frame)
 	require.ErrorIs(t, err, context.Canceled)
-	session, err := store.Begin(t.Context(), config, frame, "")
+	session, err := beginFrame(t, store, config, frame, "")
 	require.NoError(t, err)
 	hashes, err := session.Load(t.Context())
 	require.NoError(t, err)
@@ -263,16 +262,16 @@ func TestCheckpointCASDetectsIdenticalInterveningAcceptance(t *testing.T) {
 	frame := exampleFrame()
 	saveFrame(t, store, config, frame, "")
 	hashes := transcriptHashes(frame.Messages)
-	initial, err := store.Begin(t.Context(), config, frame, "")
+	initial, err := beginFrame(t, store, config, frame, "")
 	require.NoError(t, err)
 	_, err = initial.Load(t.Context())
 	require.NoError(t, err)
 	require.NoError(t, initial.Accept(t.Context(), hashes))
-	first, err := store.Begin(t.Context(), config, frame, "")
+	first, err := beginFrame(t, store, config, frame, "")
 	require.NoError(t, err)
 	_, err = first.Load(t.Context())
 	require.NoError(t, err)
-	second, err := store.Begin(t.Context(), config, frame, "")
+	second, err := beginFrame(t, store, config, frame, "")
 	require.NoError(t, err)
 	_, err = second.Load(t.Context())
 	require.NoError(t, err)
@@ -292,7 +291,7 @@ func TestPostgresLastKnownGoodPreservesDeniedAttempts(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "allow", verdict.Action)
 	readMarker := func() [][]byte {
-		session, err := store.Begin(t.Context(), config, frame, "")
+		session, err := beginFrame(t, store, config, frame, "")
 		require.NoError(t, err)
 		hashes, err := session.Load(t.Context())
 		require.NoError(t, err)
