@@ -1,4 +1,9 @@
-import { IdentityLink } from "@/components/identity-link";
+import {
+  auditActorPrincipal,
+  auditSubjectPrincipal,
+  useAuditPrincipals,
+} from "@/components/auditlogs/audit-principals";
+import { AuditPrincipalLink } from "@/components/auditlogs/principals";
 import {
   ActionIconTile,
   AuditFeedFooter,
@@ -66,6 +71,7 @@ export function ResourceAuditFeed({
     () => data?.pages.flatMap((page) => page.result.logs) ?? [],
     [data],
   );
+  const identities = useAuditPrincipals(logs);
   const dateGroups = useMemo(
     () => groupLogsByDate(logs, TIMESTAMP_MODE),
     [logs],
@@ -112,7 +118,12 @@ export function ResourceAuditFeed({
           <React.Fragment key={group.key}>
             <DateGroupHeader date={group.date} mode={TIMESTAMP_MODE} />
             {group.logs.map((log) => (
-              <ResourceAuditRow key={log.id} log={log} orgSlug={orgSlug} />
+              <ResourceAuditRow
+                key={log.id}
+                log={log}
+                orgSlug={orgSlug}
+                identities={identities}
+              />
             ))}
           </React.Fragment>
         ))}
@@ -154,9 +165,11 @@ export function ResourceAuditFeed({
 }
 
 function ResourceAuditRow({
+  identities,
   log,
   orgSlug,
 }: {
+  identities: ReturnType<typeof useAuditPrincipals>;
   log: AuditLog;
   orgSlug: string | undefined;
 }): JSX.Element {
@@ -169,18 +182,22 @@ function ResourceAuditRow({
       <ActionIconTile action={log.action} />
       <div className="min-w-0 flex-1 text-sm leading-5">
         <strong className="text-foreground font-semibold">
-          {/* Only user actors are people; API keys and system actors resolve
-              to no profile. */}
-          <IdentityLink
-            identifier={
-              log.actorType === "user" ? { userId: log.actorId } : null
-            }
-          >
-            {getActorLabel(log)}
-          </IdentityLink>
+          <AuditPrincipalLink
+            principal={auditActorPrincipal(log)}
+            identities={identities}
+            projectSlug={log.projectSlug || undefined}
+            fallback={getActorLabel(log)}
+          />
         </strong>{" "}
         <span className="text-muted-foreground">{renderVerb(log)}</span>{" "}
-        {href ? (
+        {auditSubjectPrincipal(log) ? (
+          <AuditPrincipalLink
+            principal={auditSubjectPrincipal(log)}
+            identities={identities}
+            projectSlug={log.projectSlug || undefined}
+            fallback={label}
+          />
+        ) : href ? (
           <TextLink
             asChild
             size="xs"
