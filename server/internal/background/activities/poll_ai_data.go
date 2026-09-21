@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -55,6 +56,7 @@ type stageFailureDetail struct {
 }
 
 type PollAIData struct {
+	logger                        *slog.Logger
 	integrations                  *aiintegrations.Store
 	cursorUsagePoller             *aiintegrations.UsagePollService
 	anthropicComplianceImporter   *aiintegrations.ComplianceImportService
@@ -106,6 +108,7 @@ func NewPollAIData(
 		})
 	}
 	return &PollAIData{
+		logger:       logger.With(attr.SlogComponent("activities.poll_ai_data")),
 		integrations: store,
 		cursorUsagePoller: aiintegrations.NewUsagePollService(store, telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
 			activity.RecordHeartbeat(ctx, map[string]any{
@@ -163,6 +166,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		// retrying within this run can't help: a rejected api key, or a
 		// provider outage whose retry cadence the schedule-level backoff
 		// already owns — so it's visible to the user in the dashboard.
+		recorded := false
 		if attempt >= PollUsageMaxAttempts || rejected || unavailable {
 			recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 			defer cancel()
@@ -176,10 +180,23 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 			shareableErr := shareablePollError(schedule, err)
 			if recordErr := p.integrations.RecordSchedulePollFailure(recordCtx, cfg.ID, schedule, endTime, shareableErr, pauseAfter); recordErr != nil {
 				err = errors.Join(err, fmt.Errorf("record ai integration schedule failure: %w", recordErr))
+			} else {
+				recorded = true
 			}
 		}
 
-		err = newPollFailureError(cfg.ID, cfg.Provider, attempt, rejected, unavailable, err)
+		final := finalizePollFailure(cfg.ID, cfg.Provider, attempt, rejected, unavailable, recorded, err)
+		if final == nil {
+			p.logger.WarnContext(ctx, "ai integration poll ended in a provider failure",
+				attr.SlogError(err),
+				attr.SlogAIIntegrationConfigID(cfg.ID.String()),
+				attr.SlogAIIntegrationSyncSchedule(schedule),
+				attr.SlogProvider(cfg.Provider),
+				attr.SlogAIIntegrationPollProviderRejected(rejected),
+				attr.SlogAIIntegrationPollProviderUnavailable(unavailable),
+			)
+		}
+		err = final
 	}()
 
 	switch schedule {
@@ -452,6 +469,25 @@ func pollUnavailableHTTPStatus(err error) int {
 		return codexErr.StatusCode
 	}
 	return 0
+}
+
+// finalizePollFailure decides what a failed poll returns to Temporal. A
+// failure the provider owns — it refused the configuration, or it was down —
+// and that is already recorded on the schedule returns nil: the outcome is
+// durable in Postgres and shown in the dashboard, the schedule owns the retry
+// cadence (backoff, and auto-pause for rejections), and running the activity
+// again cannot change the provider's answer. Failing the activity on top of
+// that would put a single misconfigured integration — several schedules
+// polling every few minutes, re-armed by every re-save — into activity
+// failure alerting, which exists to catch Gram's own unexpected errors.
+//
+// Everything else still fails the activity: an unrecorded failure (the user
+// would otherwise see nothing), and any failure that is ours to explain.
+func finalizePollFailure(configID uuid.UUID, provider string, attempt int32, rejected bool, unavailable bool, recorded bool, cause error) error {
+	if recorded && (rejected || unavailable) {
+		return nil
+	}
+	return newPollFailureError(configID, provider, attempt, rejected, unavailable, cause)
 }
 
 // newPollFailureError wraps a poll failure in a typed Temporal application
