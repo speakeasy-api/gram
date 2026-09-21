@@ -2,6 +2,7 @@ package plugins_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
+//nolint:paralleltest // Operations mutate and delete the same plugin and server, so subtests must run sequentially.
 func TestPluginWriteAuthorization(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"plugin_write", "org_admin", "skill_write", "wrong_project", "no_grants", "blocked_admin", "blocked_writer"} {
@@ -65,19 +67,31 @@ func TestPluginWriteAuthorization(t *testing.T) {
 			}{
 				{"create", func(ctx context.Context) error {
 					_, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Authorized content"})
-					return err
+					if err != nil {
+						return fmt.Errorf("plugin write operation: %w", err)
+					}
+					return nil
 				}},
 				{"update", func(ctx context.Context) error {
 					_, err := ti.service.UpdatePlugin(ctx, &gen.UpdatePluginPayload{ID: plugin.ID, Name: "Updated content", Slug: "updated-content"})
-					return err
+					if err != nil {
+						return fmt.Errorf("plugin write operation: %w", err)
+					}
+					return nil
 				}},
 				{"add_server", func(ctx context.Context) error {
 					_, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(anotherToolset.ID.String()), Policy: "required"})
-					return err
+					if err != nil {
+						return fmt.Errorf("plugin write operation: %w", err)
+					}
+					return nil
 				}},
 				{"update_server", func(ctx context.Context) error {
 					_, err := ti.service.UpdatePluginServer(ctx, &gen.UpdatePluginServerPayload{ID: server.ID, PluginID: plugin.ID, DisplayName: "Updated reference", Policy: "required"})
-					return err
+					if err != nil {
+						return fmt.Errorf("plugin write operation: %w", err)
+					}
+					return nil
 				}},
 				{"remove_server", func(ctx context.Context) error {
 					return ti.service.RemovePluginServer(ctx, &gen.RemovePluginServerPayload{ID: server.ID, PluginID: plugin.ID})

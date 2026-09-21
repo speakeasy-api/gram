@@ -134,6 +134,21 @@ func TestSkillsAPIKeyAuthCollectionProjectResources(t *testing.T) {
 	}
 }
 
+func TestPluginWriteCannotAuthorSkills(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "plugin-write-authoring", "Authoring boundary.")
+	// Project read passes the transport gate, but cannot replace skill write.
+	scoped := authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeProjectRead, ti.projectID.String()),
+		authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String()),
+	)
+	_, err := ti.service.Create(scoped, &gen.CreatePayload{Content: capturedManifest("unauthorized-skill", "Authoring boundary.", "body")})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.Update(scoped, &gen.UpdatePayload{ID: created.Skill.ID, Name: "unauthorized-rename", DisplayName: "Unauthorized rename"})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 func TestSkillsAuthoringAPIKeyAuthRetainsProjectRead(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

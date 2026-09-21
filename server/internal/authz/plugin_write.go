@@ -9,7 +9,7 @@ import "context"
 // still win over either allow alternative.
 func (e *Engine) RequirePluginWrite(ctx context.Context, organizationID, projectID string) error {
 	return e.RequireAnyUnblocked(ctx,
-		Check{Scope: ScopePluginWrite, ResourceKind: ResourceKindProject, ResourceID: projectID, Dimensions: nil},
-		Check{Scope: ScopeOrgAdmin, ResourceKind: ResourceKindOrg, ResourceID: organizationID, Dimensions: nil},
+		Check{Scope: ScopePluginWrite, ResourceKind: ResourceKindProject, ResourceID: projectID, Dimensions: nil, selectorMatch: selectorMatchNormal},
+		Check{Scope: ScopeOrgAdmin, ResourceKind: ResourceKindOrg, ResourceID: organizationID, Dimensions: nil, selectorMatch: selectorMatchNormal},
 	)
 }

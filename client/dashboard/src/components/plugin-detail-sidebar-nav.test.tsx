@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   canRead: false,
   canAdmin: false,
+  canWritePlugin: false,
   plugin: vi.fn(),
   publishStatus: vi.fn(),
   audiences: vi.fn(),
@@ -11,7 +12,7 @@ const state = vi.hoisted(() => ({
   members: vi.fn(),
 }));
 vi.mock("@/hooks/usePluginWriteAccess", () => ({
-  usePluginWriteAccess: () => state.canAdmin,
+  usePluginWriteAccess: () => state.canWritePlugin,
 }));
 const queries = [
   state.plugin,
@@ -24,6 +25,7 @@ afterEach(cleanup);
 beforeEach(() => {
   state.canRead = false;
   state.canAdmin = false;
+  state.canWritePlugin = false;
   for (const query of queries) {
     query.mockReset().mockImplementation(() => {
       throw new Error("Privileged sidebar query mounted");
@@ -40,7 +42,11 @@ vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     isLoading: false,
     hasScope: (scope: string) =>
-      scope === "org:read" ? state.canRead : state.canAdmin,
+      scope === "org:read"
+        ? state.canRead
+        : scope === "org:admin"
+          ? state.canAdmin
+          : false,
   }),
 }));
 vi.mock("@/routes", () => ({
@@ -123,11 +129,16 @@ describe("skill-only plugin sidebar", () => {
 });
 
 describe("organization plugin sidebar", () => {
-  it.each([false, true])(
-    "preserves organization navigation with admin=%s",
-    (canAdmin) => {
+  it.each([
+    { canAdmin: false, canWritePlugin: false },
+    { canAdmin: false, canWritePlugin: true },
+    { canAdmin: true, canWritePlugin: true },
+  ])(
+    "preserves organization navigation with admin=$canAdmin and plugin write=$canWritePlugin",
+    ({ canAdmin, canWritePlugin }) => {
       state.canRead = true;
       state.canAdmin = canAdmin;
+      state.canWritePlugin = canWritePlugin;
       for (const query of queries) query.mockReturnValue({ data: undefined });
       render(
         <MemoryRouter initialEntries={["/plugins/plugin-a"]}>
@@ -149,7 +160,7 @@ describe("organization plugin sidebar", () => {
       }
       for (const title of ["Settings", "Assignments"]) {
         expect(screen.queryByRole("link", { name: title }) !== null).toBe(
-          canAdmin,
+          title === "Settings" ? canWritePlugin : canAdmin,
         );
       }
       expect(state.plugin).toHaveBeenCalledWith({ id: "plugin-a" }, undefined, {

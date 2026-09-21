@@ -89,7 +89,7 @@ const picker = () => (
 );
 afterEach(cleanup);
 beforeEach(() => {
-  state.grants = [grant("plugin:write", "project-a")];
+  state.grants = [grant("plugin:write", "project-a"), grant("skill:read", "*")];
   state.mutateAsync.mockReset().mockResolvedValue({});
   state.complete.mockReset();
 });
@@ -107,8 +107,14 @@ describe("plugin skill picker authorization", () => {
         },
       }),
     );
+    await waitFor(() =>
+      expect(state.complete).toHaveBeenCalledWith({
+        addedCount: 1,
+        failedCount: 0,
+      }),
+    );
   });
-  it.each(["skill:write", "skill:read"])(
+  it.each(["plugin:write", "skill:write", "skill:read"])(
     "does not grant distribution from %s",
     (scope) => {
       state.grants = [grant(scope, "project-a")];
@@ -116,8 +122,28 @@ describe("plugin skill picker authorization", () => {
       expect(screen.queryByRole("checkbox")).toBeNull();
     },
   );
+  it("only offers readable skills", () => {
+    state.grants = [
+      grant("plugin:write", "project-a"),
+      grant("skill:read", "skill-a"),
+    ];
+    render(picker());
+    expect(screen.getByText("First skill")).toBeTruthy();
+    expect(screen.queryByText("Second skill")).toBeNull();
+  });
+  it("rechecks skill read after selection", () => {
+    const view = render(picker());
+    fireEvent.click(screen.getAllByRole("checkbox")[0]!);
+    state.grants.push(grant("skill:blocked_read", "skill-a"));
+    view.rerender(picker());
+    fireEvent.click(screen.getByRole("button", { name: "Distribute" }));
+    expect(state.mutateAsync).not.toHaveBeenCalled();
+  });
   it("rejects plugin write in another project", () => {
-    state.grants = [grant("plugin:write", "project-b")];
+    state.grants = [
+      grant("plugin:write", "project-b"),
+      grant("skill:read", "*"),
+    ];
     render(picker());
     expect(screen.queryByRole("checkbox")).toBeNull();
   });

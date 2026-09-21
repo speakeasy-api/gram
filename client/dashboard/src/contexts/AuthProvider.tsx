@@ -1,5 +1,4 @@
 import { FullPageError } from "@/components/full-page-error";
-import { ProjectResourcePrefetch } from "@/components/project/ProjectResourcePrefetch";
 import { GramLogo } from "@/components/gram-logo";
 import { HatchRule } from "@/components/hatch-rule";
 import { SidebarNavSkeleton } from "@/components/sidebar-nav-skeleton";
@@ -532,10 +531,7 @@ export const ProjectProvider = ({
   });
 
   return (
-    <ProjectContext.Provider value={value}>
-      <ProjectResourcePrefetch />
-      {children}
-    </ProjectContext.Provider>
+    <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>
   );
 };
 

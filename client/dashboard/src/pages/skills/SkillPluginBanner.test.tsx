@@ -66,6 +66,7 @@ import { SkillPluginBanner } from "./SkillPluginBanner";
 
 afterEach(cleanup);
 beforeEach(() => {
+  discovery.mockClear();
   permissions.hasScope
     .mockReset()
     .mockImplementation(

@@ -66,6 +66,7 @@ func TestRuntimeScopeAllowlist(t *testing.T) {
 		authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite, authz.ScopeMCPBlockedConnect,
 		authz.ScopeEnvironmentBlockedRead, authz.ScopeEnvironmentBlockedWrite,
 		authz.ScopeSkillBlockedRead, authz.ScopeSkillBlockedWrite,
+		authz.ScopePluginWrite, authz.ScopePluginBlockedWrite,
 		authz.ScopeRiskPolicyBypass, authz.ScopeRiskPolicyBlock,
 		authz.ScopeChatRead, authz.ScopeChatWrite,
 		authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer,

@@ -57,6 +57,38 @@ describe("plugin write capability", () => {
     state.grants[0]!.selectors![0]!.projectId = "project-b";
     expect(allowed()).toBe(false);
   });
+  it.each(["skill", "plugin"])(
+    "rejects %s identifier selectors",
+    (resourceKind) => {
+      state.grants = [
+        {
+          scope: "plugin:write",
+          selectors: [
+            {
+              resourceKind,
+              resourceId: `${resourceKind}-1`,
+              projectId: "project-a",
+            },
+          ],
+        },
+      ];
+      expect(allowed()).toBe(false);
+    },
+  );
+  it("rejects admin access in another organization", () => {
+    state.grants = [
+      {
+        scope: "org:admin",
+        selectors: [
+          {
+            resourceKind: "org",
+            resourceId: "org-b",
+          },
+        ],
+      },
+    ];
+    expect(allowed()).toBe(false);
+  });
   it.each(["plugin:blocked_write", "org:blocked_admin", "org:blocked_read"])(
     "honors %s even with both allows",
     (scope) => {

@@ -464,7 +464,7 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 	}
 
 	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authorize plugin write: %w", err)
 	}
 
 	var slug string
@@ -556,7 +556,7 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 	}
 
 	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authorize plugin write: %w", err)
 	}
 
 	pluginID, err := uuid.Parse(payload.ID)
@@ -661,7 +661,7 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 	}
 
 	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
-		return err
+		return fmt.Errorf("authorize plugin write: %w", err)
 	}
 
 	pluginID, err := uuid.Parse(payload.ID)
@@ -784,7 +784,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	}
 
 	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authorize plugin write: %w", err)
 	}
 
 	pluginID, err := uuid.Parse(payload.PluginID)
@@ -989,7 +989,7 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 	}
 
 	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authorize plugin write: %w", err)
 	}
 
 	serverID, err := uuid.Parse(payload.ID)
@@ -1063,7 +1063,7 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 	}
 
 	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
-		return err
+		return fmt.Errorf("authorize plugin write: %w", err)
 	}
 
 	serverID, err := uuid.Parse(payload.ID)
@@ -1832,7 +1832,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	}
 
 	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authorize plugin write: %w", err)
 	}
 
 	if s.github == nil {

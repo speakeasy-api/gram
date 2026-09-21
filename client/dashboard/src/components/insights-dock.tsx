@@ -23,7 +23,6 @@ import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
 import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";
 import { useOrganization, useSession } from "@/contexts/Auth";
-import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { emailsMatch, resolveChatOwner } from "@/lib/chat-owner";
 import {
@@ -996,14 +995,9 @@ export function InsightsProvider({
   // chat API, not `access.listMembers`).
   const organization = useOrganization();
   const { hasScope } = useRBAC();
-  const requestProjectSlug = useProjectSlugForRequests();
-  const requestProjectId = organization.projects.find(
-    (project) => project.slug === requestProjectSlug,
-  )?.id;
+  const canReadMembers = hasScope("org:read", organization.id);
   const { data: membersData } = useMembers(undefined, undefined, {
-    enabled:
-      hasScope("org:read", organization.id) ||
-      (!!requestProjectId && hasScope("project:read", requestProjectId)),
+    enabled: canReadMembers,
   });
   const resolveCreator = useCallback(
     ({
@@ -1013,7 +1007,8 @@ export function InsightsProvider({
       userId?: string;
       externalUserId?: string;
     }) => {
-      if (!userId && !externalUserId) return undefined;
+      // Disabled queries retain cached data; authorization also gates its use.
+      if (!canReadMembers || (!userId && !externalUserId)) return undefined;
       // Chats started from the dashboard itself have no `userId` at capture
       // time and stash the caller's email in `externalUserId` instead —
       // resolveChatOwner falls back to a case-insensitive email match so
@@ -1030,7 +1025,7 @@ export function InsightsProvider({
         }
       );
     },
-    [membersData],
+    [canReadMembers, membersData],
   );
 
   // The backend only lets a chat's creator send into it (see

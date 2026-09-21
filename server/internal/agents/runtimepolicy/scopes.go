@@ -84,6 +84,8 @@ var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeSkillBlockedRead:        activeRuntimeScope(),
 	authz.ScopeSkillWrite:              safeRuntimeScope(),
 	authz.ScopeSkillBlockedWrite:       activeRuntimeScope(),
+	authz.ScopePluginWrite:             activeRuntimeScope(),
+	authz.ScopePluginBlockedWrite:      activeRuntimeScope(),
 	authz.ScopeRiskPolicyEvaluate:      safeRuntimeScope(),
 	authz.ScopeRiskPolicyBypass:        activeRuntimeScope(),
 	authz.ScopeRiskPolicyBlock:         activeRuntimeScope(),

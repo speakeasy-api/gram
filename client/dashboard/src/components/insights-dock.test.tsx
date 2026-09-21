@@ -1,14 +1,23 @@
 import { cleanup, render } from "@testing-library/react";
 import { type ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHideInsightsDock } from "./insights-context";
 import { InsightsProvider } from "./insights-dock";
 import { GramElementsProvider } from "@/elements";
 
 const mocks = vi.hoisted(() => ({
-  activeRoute: "detail" as "detail" | "new",
+  activeRoute: "detail" as "detail" | "new" | "home",
+  resolveCreator: undefined as
+    | ((chat: { userId: string }) => unknown)
+    | undefined,
   hasScope: vi.fn((_scope: string, _resourceId?: string) => false),
-  members: vi.fn(() => ({ data: undefined })),
+  members: vi.fn(() => ({
+    data: {
+      members: [
+        { id: "member-a", name: "Member", email: "member@example.com" },
+      ],
+    },
+  })),
 }));
 
 vi.mock("@/elements", async () => {
@@ -21,8 +30,19 @@ vi.mock("@/elements", async () => {
     ChatComposer: () => null,
     ChatHistory: () => null,
     focusChatComposer: vi.fn(),
-    GramElementsProvider: ({ children }: { children: ReactNode }) => {
-      if (useContext(RuntimeContext)) {
+    GramElementsProvider: ({
+      children,
+      config,
+    }: {
+      children: ReactNode;
+      config: { history?: { resolveCreator?: typeof mocks.resolveCreator } };
+    }) => {
+      const hasRuntime = useContext(RuntimeContext);
+      if (config.history) {
+        mocks.resolveCreator = config.history.resolveCreator;
+        if (mocks.activeRoute === "home") return null;
+      }
+      if (hasRuntime) {
         throw new Error(
           "useRemoteThreadListRuntime cannot be nested inside another RemoteThreadListRuntime",
         );
@@ -117,6 +137,11 @@ vi.mock("@/routes", () => ({
 }));
 
 afterEach(cleanup);
+beforeEach(() => {
+  mocks.activeRoute = "detail";
+  mocks.resolveCreator = undefined;
+  mocks.hasScope.mockReturnValue(false);
+});
 
 function AssistantEditor(): JSX.Element {
   useHideInsightsDock();
@@ -126,9 +151,38 @@ function AssistantEditor(): JSX.Element {
 }
 
 describe("InsightsProvider", () => {
+  it("ignores cached members after directory permission is revoked", () => {
+    mocks.activeRoute = "home";
+    mocks.hasScope.mockImplementation((scope) => scope === "org:read");
+    // Keep the cached result unchanged across the authorization transition.
+    mocks.members.mockReturnValue(mocks.members());
+    const provider = () => (
+      <InsightsProvider
+        mcpConfig={{ projectSlug: "project" } as never}
+        title="Assistant"
+        subtitle=""
+      >
+        <div />
+      </InsightsProvider>
+    );
+    const { rerender } = render(provider());
+    expect(mocks.resolveCreator).toBeDefined();
+    expect(mocks.resolveCreator?.({ userId: "member-a" })).toMatchObject({
+      name: "Member",
+      email: "member@example.com",
+    });
+
+    mocks.hasScope.mockReturnValue(false);
+    rerender(provider());
+    expect(mocks.members).toHaveBeenLastCalledWith(undefined, undefined, {
+      enabled: false,
+    });
+    expect(mocks.resolveCreator?.({ userId: "member-a" })).toBeUndefined();
+  });
+
   it.each([
     ["org:read", "organization", true],
-    ["project:read", "project-a", true],
+    ["project:read", "project-a", false],
     ["project:read", "unrelated-project", false],
     ["skill:read", "project-a", false],
   ] as const)(
