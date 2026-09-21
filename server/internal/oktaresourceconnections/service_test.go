@@ -513,6 +513,7 @@ func TestReadinessQueries_ValidateUserSessionIssuerScope(t *testing.T) {
 		{name: "deleted", organizationID: conv.ToPGText(si.orgID), deleted: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			loginID, err := si.q.CreateReadinessUserSessionIssuerFixture(ctx, repo.CreateReadinessUserSessionIssuerFixtureParams{
 				ProjectID:      tc.projectID,
 				OrganizationID: tc.organizationID,
