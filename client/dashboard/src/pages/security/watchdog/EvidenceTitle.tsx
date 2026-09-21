@@ -257,15 +257,26 @@ function flaggedMessageText(message: ChatMessage): string {
   const parts = [messageText(message.content)];
   for (const call of parseToolCalls(message.toolCalls) ?? []) {
     const name = call.function?.name ?? call.name;
-    const args = argsToString(call.function?.arguments);
+    const args = canonicalArgs(call.function?.arguments);
     parts.push([name, args].filter(Boolean).join("\n"));
   }
   return parts.filter(Boolean).join("\n\n");
 }
 
-/** Whether a secret flagged on this message can't be found in `text`, e.g. the
- * provider escaped it differently (`\u00e9`, `\/`), so it would print in the
- * clear. A match in the stripped harness envelope is never shown, so it's fine. */
+/** Tool call arguments re-serialized, so a provider's own escaping (`\u00e9`,
+ * `\/`) becomes the form `jsonEscaped` produces and every finding in the chat
+ * lines up. Arguments that don't parse are kept as written. */
+function canonicalArgs(args: string | object | undefined): string | undefined {
+  if (typeof args !== "string") return argsToString(args);
+  try {
+    return argsToString(JSON.parse(args));
+  } catch {
+    return argsToString(args);
+  }
+}
+
+/** Whether a secret flagged on this message can't be found in `text`, e.g. in
+ * arguments that don't parse, so it would print in the clear. A match in the stripped harness envelope is never shown, so it's fine. */
 function hasUnlocatedSecret(
   findings: RiskResult[],
   message: ChatMessage,

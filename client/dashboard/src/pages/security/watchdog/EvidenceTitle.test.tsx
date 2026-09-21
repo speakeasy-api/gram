@@ -192,6 +192,42 @@ describe("EvidenceTitle", () => {
     expect(message.textContent).not.toContain("hun");
   });
 
+  it("masks a secret the provider escaped differently, flagged on another message", async () => {
+    hasScope.mockReturnValue(true);
+    loadChat.mockResolvedValue({
+      messages: [
+        {
+          id: "msg-flagged",
+          role: "assistant",
+          content: "Logging in now.",
+          toolCalls: JSON.stringify([
+            {
+              id: "call-1",
+              function: {
+                name: "login",
+                arguments: '{"password":"caf\\u00e9\\/pw"}',
+              },
+            },
+          ]),
+        },
+      ],
+    });
+    listFindings.mockResolvedValue({
+      results: [
+        { source: "gitleaks", match: "café/pw", chatMessageId: "msg-other" },
+      ],
+    });
+    renderTitle("chat-1");
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Show flagged message" }));
+
+    expect(await screen.findByText(/Logging in now/)).toBeTruthy();
+    expect(screen.queryByText(/u00e9/)).toBeNull();
+    expect(screen.queryByText(/café/)).toBeNull();
+  });
+
   it("refuses to show a message whose flagged secret can't be found in its text", async () => {
     hasScope.mockReturnValue(true);
     loadChat.mockResolvedValue({
@@ -205,9 +241,9 @@ describe("EvidenceTitle", () => {
               id: "call-1",
               function: {
                 name: "login",
-                // The provider escaped the secret in a form JSON.stringify
-                // wouldn't, so neither the match nor its escaped form lines up.
-                arguments: '{"password":"caf\\u00e9/pw"}',
+                // Truncated, so the provider's escaping can't be normalized
+                // and neither the match nor its escaped form lines up.
+                arguments: '{"password":"caf\\u00e9/pw',
               },
             },
           ]),
