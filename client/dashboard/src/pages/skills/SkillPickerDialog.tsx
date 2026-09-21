@@ -56,7 +56,7 @@ export function SkillPickerDialog({
   const { grants, isLoading: isLoadingPermissions } = useRBAC();
   const canReadSkills =
     !isLoadingPermissions &&
-    hasScopeInGrants(grants ?? [], "skill:read", undefined, project.id);
+    hasScopeInGrants(grants ?? [], "skill:read", project.id, project.id);
   const canLoadSkills = !target.pluginId || (canWritePlugin && canReadSkills);
   const [search, setSearch] = useState("");
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
@@ -86,7 +86,7 @@ export function SkillPickerDialog({
               hasScopeInGrants(
                 grants ?? [],
                 "skill:read",
-                skill.id,
+                [skill.id, project.id],
                 project.id,
               ))),
       ),
@@ -138,7 +138,13 @@ export function SkillPickerDialog({
       target.pluginId &&
       (!canLoadSkills ||
         selectedSkillIds.some(
-          (id) => !hasScopeInGrants(grants ?? [], "skill:read", id, project.id),
+          (id) =>
+            !hasScopeInGrants(
+              grants ?? [],
+              "skill:read",
+              [id, project.id],
+              project.id,
+            ),
         ))
     )
       return;

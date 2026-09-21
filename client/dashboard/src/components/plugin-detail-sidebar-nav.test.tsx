@@ -133,6 +133,7 @@ describe("organization plugin sidebar", () => {
     { canAdmin: false, canWritePlugin: false },
     { canAdmin: false, canWritePlugin: true },
     { canAdmin: true, canWritePlugin: true },
+    { canAdmin: true, canWritePlugin: false },
   ])(
     "preserves organization navigation with admin=$canAdmin and plugin write=$canWritePlugin",
     ({ canAdmin, canWritePlugin }) => {

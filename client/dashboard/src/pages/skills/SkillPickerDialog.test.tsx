@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
     effect?: string;
     selectors: Array<Record<string, string>>;
   }>,
+  skillsQuery: vi.fn(),
   mutateAsync: vi.fn(),
   complete: vi.fn(),
 }));
@@ -40,32 +41,35 @@ vi.mock("@/hooks/useDrainInfiniteQuery", () => ({
   useDrainInfiniteQuery: () => undefined,
 }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
-  useSkillsInfinite: () => ({
-    isPending: false,
-    hasNextPage: false,
-    data: {
-      pages: [
-        {
-          result: {
-            skills: [
-              {
-                id: "skill-a",
-                name: "first",
-                displayName: "First skill",
-                hasValidVersion: true,
-              },
-              {
-                id: "skill-b",
-                name: "second",
-                displayName: "Second skill",
-                hasValidVersion: true,
-              },
-            ],
+  useSkillsInfinite: (...args: unknown[]) => {
+    state.skillsQuery(...args);
+    return {
+      isPending: false,
+      hasNextPage: false,
+      data: {
+        pages: [
+          {
+            result: {
+              skills: [
+                {
+                  id: "skill-a",
+                  name: "first",
+                  displayName: "First skill",
+                  hasValidVersion: true,
+                },
+                {
+                  id: "skill-b",
+                  name: "second",
+                  displayName: "Second skill",
+                  hasValidVersion: true,
+                },
+              ],
+            },
           },
-        },
-      ],
-    },
-  }),
+        ],
+      },
+    };
+  },
 }));
 vi.mock("@gram/client/react-query/distributeSkill.js", () => ({
   useDistributeSkillMutation: () => ({ mutateAsync: state.mutateAsync }),
@@ -92,6 +96,7 @@ beforeEach(() => {
   state.grants = [grant("plugin:write", "project-a"), grant("skill:read", "*")];
   state.mutateAsync.mockReset().mockResolvedValue({});
   state.complete.mockReset();
+  state.skillsQuery.mockClear();
 });
 describe("plugin skill picker authorization", () => {
   it("distributes readable skills with plugin write and no skill write", async () => {
@@ -122,12 +127,29 @@ describe("plugin skill picker authorization", () => {
       expect(screen.queryByRole("checkbox")).toBeNull();
     },
   );
-  it("only offers readable skills", () => {
+  it("does not load the collection with only a resource-scoped grant", () => {
     state.grants = [
       grant("plugin:write", "project-a"),
       grant("skill:read", "skill-a"),
     ];
     render(picker());
+    expect(state.skillsQuery).toHaveBeenCalledWith({ limit: 200 }, undefined, {
+      throwOnError: false,
+      enabled: false,
+    });
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+  it("supports project collection grants while excluding blocked skills", () => {
+    state.grants = [
+      grant("plugin:write", "project-a"),
+      grant("skill:read", "project-a"),
+      grant("skill:blocked_read", "skill-b"),
+    ];
+    render(picker());
+    expect(state.skillsQuery).toHaveBeenCalledWith({ limit: 200 }, undefined, {
+      throwOnError: false,
+      enabled: true,
+    });
     expect(screen.getByText("First skill")).toBeTruthy();
     expect(screen.queryByText("Second skill")).toBeNull();
   });
