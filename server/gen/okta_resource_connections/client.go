@@ -42,6 +42,7 @@ func NewClient(list, confirm, reset goa.Endpoint) *Client {
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - error: internal error
 func (c *Client) List(ctx context.Context, p *ListPayload) (res *ListOktaResourceConnectionsResult, err error) {
@@ -66,6 +67,7 @@ func (c *Client) List(ctx context.Context, p *ListPayload) (res *ListOktaResourc
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - error: internal error
 func (c *Client) Confirm(ctx context.Context, p *ConfirmPayload) (res *ConfirmOktaResourceConnectionsResult, err error) {
@@ -89,6 +91,7 @@ func (c *Client) Confirm(ctx context.Context, p *ConfirmPayload) (res *ConfirmOk
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - error: internal error
 func (c *Client) Reset(ctx context.Context, p *ResetPayload) (res *OktaResourceConnectionServer, err error) {

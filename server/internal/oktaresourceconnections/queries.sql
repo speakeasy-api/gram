@@ -6,6 +6,7 @@ SELECT
   , c.status
   , o.org_url
   , o.agent_id
+  , o.agent_app_id
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -41,7 +42,7 @@ FOR UPDATE;
 SELECT
     ms.id
   , ms.project_id
-  , ms.user_session_issuer_id
+  , usi.id AS user_session_issuer_id
   , p.slug AS project_slug
   , ms.name
   , ms.slug
@@ -64,6 +65,14 @@ JOIN remote_session_issuers AS i
    i.project_id = ms.project_id
    OR (i.project_id IS NULL AND i.organization_id = @organization_id)
    OR (i.project_id IS NULL AND i.organization_id IS NULL)
+ )
+LEFT JOIN user_session_issuers AS usi
+  ON usi.id = ms.user_session_issuer_id
+ AND usi.deleted IS FALSE
+ AND (
+   usi.project_id = ms.project_id
+   OR (usi.project_id IS NULL AND usi.organization_id = @organization_id)
+   OR (usi.project_id IS NULL AND usi.organization_id IS NULL)
  )
 LEFT JOIN tunneled_mcp_servers AS t
   ON t.id = ms.tunneled_mcp_server_id
@@ -90,7 +99,7 @@ ORDER BY ms.name ASC NULLS LAST, ms.id ASC;
 SELECT
     ms.id
   , ms.project_id
-  , ms.user_session_issuer_id
+  , usi.id AS user_session_issuer_id
   , p.slug AS project_slug
   , ms.name
   , ms.slug
@@ -113,6 +122,14 @@ JOIN remote_session_issuers AS i
    i.project_id = ms.project_id
    OR (i.project_id IS NULL AND i.organization_id = @organization_id)
    OR (i.project_id IS NULL AND i.organization_id IS NULL)
+ )
+LEFT JOIN user_session_issuers AS usi
+  ON usi.id = ms.user_session_issuer_id
+ AND usi.deleted IS FALSE
+ AND (
+   usi.project_id = ms.project_id
+   OR (usi.project_id IS NULL AND usi.organization_id = @organization_id)
+   OR (usi.project_id IS NULL AND usi.organization_id IS NULL)
  )
 LEFT JOIN tunneled_mcp_servers AS t
   ON t.id = ms.tunneled_mcp_server_id
@@ -323,3 +340,9 @@ RETURNING id;
 SELECT id, issuer, attachment_scope
 FROM remote_session_issuers
 WHERE id = @id;
+
+-- Test fixture: login issuers at each supported attachment scope.
+-- name: CreateReadinessUserSessionIssuerFixture :one
+INSERT INTO user_session_issuers (project_id, organization_id, slug, authn_challenge_mode, session_duration, deleted_at)
+VALUES (sqlc.narg(project_id)::uuid, sqlc.narg(organization_id)::text, @slug, 'interactive', interval '1 hour', sqlc.narg(deleted_at)::timestamptz)
+RETURNING id;

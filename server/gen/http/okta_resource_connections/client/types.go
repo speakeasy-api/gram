@@ -292,6 +292,24 @@ type ListGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListUnavailableResponseBody is the type of the "oktaResourceConnections"
+// service "list" endpoint HTTP response body for the "unavailable" error.
+type ListUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListFailedPreconditionResponseBody is the type of the
 // "oktaResourceConnections" service "list" endpoint HTTP response body for the
 // "failed_precondition" error.
@@ -493,6 +511,24 @@ type ConfirmGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ConfirmUnavailableResponseBody is the type of the "oktaResourceConnections"
+// service "confirm" endpoint HTTP response body for the "unavailable" error.
+type ConfirmUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ConfirmFailedPreconditionResponseBody is the type of the
 // "oktaResourceConnections" service "confirm" endpoint HTTP response body for
 // the "failed_precondition" error.
@@ -679,6 +715,24 @@ type ResetUnexpectedResponseBody struct {
 // ResetGatewayErrorResponseBody is the type of the "oktaResourceConnections"
 // service "reset" endpoint HTTP response body for the "gateway_error" error.
 type ResetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResetUnavailableResponseBody is the type of the "oktaResourceConnections"
+// service "reset" endpoint HTTP response body for the "unavailable" error.
+type ResetUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -978,6 +1032,21 @@ func NewListGatewayError(body *ListGatewayErrorResponseBody) *goa.ServiceError {
 	return v
 }
 
+// NewListUnavailable builds a oktaResourceConnections service list endpoint
+// unavailable error.
+func NewListUnavailable(body *ListUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListFailedPrecondition builds a oktaResourceConnections service list
 // endpoint failed_precondition error.
 func NewListFailedPrecondition(body *ListFailedPreconditionResponseBody) *goa.ServiceError {
@@ -1147,6 +1216,21 @@ func NewConfirmUnexpected(body *ConfirmUnexpectedResponseBody) *goa.ServiceError
 // NewConfirmGatewayError builds a oktaResourceConnections service confirm
 // endpoint gateway_error error.
 func NewConfirmGatewayError(body *ConfirmGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewConfirmUnavailable builds a oktaResourceConnections service confirm
+// endpoint unavailable error.
+func NewConfirmUnavailable(body *ConfirmUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1341,6 +1425,21 @@ func NewResetUnexpected(body *ResetUnexpectedResponseBody) *goa.ServiceError {
 // NewResetGatewayError builds a oktaResourceConnections service reset endpoint
 // gateway_error error.
 func NewResetGatewayError(body *ResetGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResetUnavailable builds a oktaResourceConnections service reset endpoint
+// unavailable error.
+func NewResetUnavailable(body *ResetUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1713,6 +1812,30 @@ func ValidateListGatewayErrorResponseBody(body *ListGatewayErrorResponseBody) (e
 	return
 }
 
+// ValidateListUnavailableResponseBody runs the validations defined on
+// list_unavailable_response_body
+func ValidateListUnavailableResponseBody(body *ListUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListFailedPreconditionResponseBody runs the validations defined on
 // list_failed_precondition_response_body
 func ValidateListFailedPreconditionResponseBody(body *ListFailedPreconditionResponseBody) (err error) {
@@ -1977,6 +2100,30 @@ func ValidateConfirmGatewayErrorResponseBody(body *ConfirmGatewayErrorResponseBo
 	return
 }
 
+// ValidateConfirmUnavailableResponseBody runs the validations defined on
+// confirm_unavailable_response_body
+func ValidateConfirmUnavailableResponseBody(body *ConfirmUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateConfirmFailedPreconditionResponseBody runs the validations defined
 // on confirm_failed_precondition_response_body
 func ValidateConfirmFailedPreconditionResponseBody(body *ConfirmFailedPreconditionResponseBody) (err error) {
@@ -2220,6 +2367,30 @@ func ValidateResetUnexpectedResponseBody(body *ResetUnexpectedResponseBody) (err
 // ValidateResetGatewayErrorResponseBody runs the validations defined on
 // reset_gateway_error_response_body
 func ValidateResetGatewayErrorResponseBody(body *ResetGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResetUnavailableResponseBody runs the validations defined on
+// reset_unavailable_response_body
+func ValidateResetUnavailableResponseBody(body *ResetUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -169,7 +169,7 @@ func createProject(t *testing.T, ctx context.Context, si *instance, orgID, slug 
 // discovered metadata; capable ones advertise the ID-JAG profile and jwt-bearer.
 func createResourceIssuer(t *testing.T, ctx context.Context, si *instance, orgID string, projectID uuid.UUID, capable bool) uuid.UUID {
 	t.Helper()
-	issuerID := createUndiscoveredIssuer(t, ctx, si, orgID, projectID)
+	issuerID := provisiontest.CreateIssuer(t, ctx, si.conn, orgID, uuid.NullUUID{UUID: projectID, Valid: true}, "https://as.example/token")
 	grants, profiles := []string{"authorization_code"}, []string{}
 	if capable {
 		grants = append(grants, oauthwire.GrantTypeJWTBearer)
@@ -187,7 +187,7 @@ func createResourceIssuer(t *testing.T, ctx context.Context, si *instance, orgID
 
 func createUndiscoveredIssuer(t *testing.T, ctx context.Context, si *instance, orgID string, projectID uuid.UUID) uuid.UUID {
 	t.Helper()
-	return provisiontest.CreateIssuer(t, ctx, si.conn, orgID, uuid.NullUUID{UUID: projectID, Valid: true}, "https://as.example/token")
+	return provisiontest.CreateIssuer(t, ctx, si.conn, orgID, uuid.NullUUID{UUID: projectID, Valid: true}, "")
 }
 
 func createServer(t *testing.T, ctx context.Context, si *instance, projectID, issuerID uuid.UUID, name string) uuid.UUID {

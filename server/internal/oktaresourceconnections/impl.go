@@ -486,8 +486,8 @@ type confirmation struct {
 	appID    pgtype.Text
 }
 
-// parseConfirmations validates and dedupes the request; the last item for a
-// server wins. Items are sorted so concurrent calls lock rows in one order.
+// parseConfirmations validates and dedupes identical requests for a server.
+// Items are sorted so concurrent calls lock rows in one order.
 func parseConfirmations(items []*srv.OktaResourceConnectionConfirmation) ([]confirmation, error) {
 	byServer := make(map[uuid.UUID]confirmation, len(items))
 	for _, item := range items {
@@ -508,6 +508,9 @@ func parseConfirmations(items []*srv.OktaResourceConnectionConfirmation) ([]conf
 				return nil, oops.E(oops.CodeBadRequest, nil, "invalid identity provider application id")
 			}
 			appID = conv.ToPGText(*item.OktaApplicationID)
+		}
+		if previous, ok := byServer[id]; ok && (previous.audience != audience || previous.appID != appID) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "conflicting confirmations for the same server")
 		}
 		byServer[id] = confirmation{serverID: id, audience: audience, appID: appID}
 	}
@@ -562,7 +565,25 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 		return nil, err
 	}
 
-	out := make([]*srv.OktaResourceConnectionServer, 0, len(items))
+	// RecordAgent takes this same lock before changing the agent and clearing
+	// its resource connections. Never confirm using the pre-lock agent snapshot.
+	current, err := q.GetLiveConnection(ctx, authCtx.ActiveOrganizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeConflict, nil, "identity provider connection changed; refresh and retry")
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "reload identity provider connection").LogError(ctx, logger)
+	}
+	if current.ID != snap.connection.ID || current.AgentID != snap.connection.AgentID || current.AgentAppID != snap.connection.AgentAppID {
+		return nil, oops.E(oops.CodeConflict, nil, "identity provider agent changed; refresh and retry")
+	}
+	snap.connection = current
+	snap.deepLink = deepLink(current)
+
+	// All keys belong to the locked connection. Validate aliases before any
+	// writes: multiple servers can refer to the same issuer and resource.
+	servers := make([]repo.ListEligibleServersRow, 0, len(items))
+	byUpstream := make(map[upstreamKey]confirmation, len(items))
 	for _, item := range items {
 		sv, err := q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: authCtx.ActiveOrganizationID, McpServerID: item.serverID})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -584,6 +605,22 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 		if resource == "" {
 			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server has no resource indicator")
 		}
+		key := upstreamKey{issuerID: server.IssuerID, resource: resource}
+		if previous, ok := byUpstream[key]; ok && (previous.audience != item.audience || previous.appID != item.appID) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "conflicting confirmations for the same resource")
+		}
+		byUpstream[key] = item
+		servers = append(servers, server)
+	}
+
+	written := make(map[upstreamKey]bool, len(byUpstream))
+	for _, server := range servers {
+		resource := resourceIndicator(server)
+		key := upstreamKey{issuerID: server.IssuerID, resource: resource}
+		if written[key] {
+			continue
+		}
+		item := byUpstream[key]
 		before, err := resourceConnectionForUpdate(ctx, q, authCtx.ActiveOrganizationID, snap.connection.ID, server.IssuerID, resource)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "load resource connection").LogError(ctx, logger)
@@ -618,10 +655,14 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 		if err := s.audit.LogOktaResourceConnectionConfirm(ctx, dbtx, s.auditEvent(authCtx, principal, snap, r, before, rc)); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log confirmation").LogError(ctx, logger)
 		}
-		out = append(out, buildRow(snap, r))
+		written[key] = true
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit confirmation").LogError(ctx, logger)
+	}
+	out := make([]*srv.OktaResourceConnectionServer, 0, len(servers))
+	for _, server := range servers {
+		out = append(out, buildRow(snap, snap.derive(server)))
 	}
 	return &srv.ConfirmOktaResourceConnectionsResult{Servers: out}, nil
 }
@@ -645,6 +686,9 @@ func resourceConnectionForUpdate(ctx context.Context, q *repo.Queries, organizat
 func (s *Service) Reset(ctx context.Context, payload *srv.ResetPayload) (*srv.OktaResourceConnectionServer, error) {
 	authCtx, logger, err := s.authorize(ctx, true)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(payload.McpServerID)
