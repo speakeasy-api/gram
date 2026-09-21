@@ -81,7 +81,7 @@ func (d coverageDerivation) record(ctx context.Context, recorder IdentityCoverag
 // ownership cannot become stale. Metrics are observational and never reject a
 // call; enforcement is owned by the separately registered checkpoints.
 type IdentityCoverageCheckpoint struct {
-	principal *AuthenticatedUserPrincipalAdapter
+	principal killswitches.PrincipalAdapter
 	resource  *MCPServerResourceAdapter
 	recorder  IdentityCoverageRecorder
 }
@@ -93,7 +93,7 @@ func NewIdentityCoverageCheckpoint(db *pgxpool.Pool, recorder IdentityCoverageRe
 		return nil
 	}
 	return &IdentityCoverageCheckpoint{
-		principal: NewAuthenticatedUserPrincipalAdapter(db),
+		principal: &authenticatedPrincipalAdapter{PrincipalAdapter: NewAuthenticatedUserPrincipalAdapter(db), agent: NewAgentPrincipalAdapter(db)},
 		resource:  NewMCPServerResourceAdapter(db),
 		recorder:  recorder,
 	}

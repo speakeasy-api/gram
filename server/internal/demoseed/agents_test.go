@@ -6,9 +6,12 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
+	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -30,7 +33,7 @@ func TestAgentGrantsReseed(t *testing.T) {
 			seedLocalPostgres(ctx, t, db, spec)
 			agentsBefore, err := fixtures.ListDemoSeedAgentsFixture(ctx, spec.OrgID)
 			require.NoError(t, err)
-			require.Len(t, agentsBefore, 3)
+			require.Len(t, agentsBefore, 4)
 			principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agentsBefore[0].ID.String())
 
 			// Use the target agent's URN in both organizations to catch cleanup
@@ -48,6 +51,17 @@ func TestAgentGrantsReseed(t *testing.T) {
 			require.NoError(t, err)
 
 			for range 2 {
+				remote := remoterepo.New(db)
+				issuer, err := remote.CreateRemoteSessionIssuer(ctx, remoterepo.CreateRemoteSessionIssuerParams{
+					OrganizationID: pgtype.Text{String: spec.OrgID, Valid: true}, Slug: "org-owned-cleanup", Issuer: "https://cleanup.example.com",
+					ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{}, TokenEndpointAuthMethodsSupported: []string{},
+				})
+				require.NoError(t, err)
+				client, err := remote.CreateRemoteSessionClient(ctx, remoterepo.CreateRemoteSessionClientParams{
+					OrganizationID: pgtype.Text{String: spec.OrgID, Valid: true}, RemoteSessionIssuerID: issuer.ID, ClientID: "org-owned-cleanup",
+				})
+				require.NoError(t, err)
+
 				// Also plant an orphan: no FK ties grants to the agents table.
 				for _, p := range []urn.Principal{principal, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())} {
 					_, err = fixtures.InsertDemoSeedPrincipalGrantFixture(ctx, testrepo.InsertDemoSeedPrincipalGrantFixtureParams{
@@ -57,10 +71,14 @@ func TestAgentGrantsReseed(t *testing.T) {
 					require.NoError(t, err)
 				}
 				seedLocalPostgres(ctx, t, db, spec)
+				_, err = remote.GetRemoteSessionClientWithIssuerByID(ctx, client.ID)
+				require.ErrorIs(t, err, pgx.ErrNoRows, "reseed must remove organization-owned clients")
+				_, err = remote.GetRemoteSessionIssuerByID(ctx, remoterepo.GetRemoteSessionIssuerByIDParams{ID: issuer.ID, OrganizationID: pgtype.Text{String: spec.OrgID, Valid: true}, IncludeOrganizational: true})
+				require.ErrorIs(t, err, pgx.ErrNoRows, "reseed must remove organization-owned issuers")
 
 				grants, err := fixtures.CountDemoSeedAgentGrantsFixture(ctx, spec.OrgID)
 				require.NoError(t, err)
-				require.Zero(t, grants, "recreated deterministic agents must not inherit stale policies")
+				require.EqualValues(t, 2, grants, "recreated agents must retain only the two scoped seed policies")
 				keys, err := fixtures.CountDemoSeedAPIKeysFixture(ctx, spec.OrgID)
 				require.NoError(t, err)
 				require.Zero(t, keys, "shared SQL must never leave usable API keys")

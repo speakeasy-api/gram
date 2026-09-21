@@ -37,9 +37,12 @@
           {{/* Client and server are both named in the title: the server slug
           carries the organization prefix ({org}-{server}), so inside a running
           sentence the one identity being handed access gets buried. */}}
-          <h1 class="text-display-xs flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 class="text-display-xs flex flex-wrap items-baseline gap-x-3 gap-y-1"
+          >
             <span>{{.ClientName}}</span>
-            <span class="text-muted-foreground" aria-hidden="true">&rsaquo;</span>
+            <span class="text-muted-foreground" aria-hidden="true"
+              >&rsaquo;</span
+            >
             <span class="break-all">{{.MCPSlug}}</span>
           </h1>
           {{end}}
@@ -133,10 +136,12 @@
             </p>
             <p class="text-muted-foreground text-xs">
               Access stays fixed to connecting to this server
-              (<span class="font-mono">mcp:connect</span>). The agent's and its
-              owner's permissions are checked again when you authorize. Service
-              connections and tool access apply only when you connect as
-              yourself.
+              (<span
+                class="font-mono"
+                >mcp:connect</span
+              >). The agent's and its
+              owner's permissions are checked again when you authorize.{{if .RemoteSessionCards}} Attach your service connections below before
+              continuing.{{end}} The agent's tool policy is never changed here.
             </p>
           </div>
           <p class="text-muted-foreground text-xs">
@@ -168,7 +173,11 @@
         {{end}}
 
         {{if .RemoteSessionCards}}
-        <div data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8">
+        <div
+          data-service-connections
+          data-action-url="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect/remote-session"
+          class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"
+        >
           <div class="flex items-baseline justify-between gap-3">
             <h2 class="text-eyebrow">Connected services</h2>
             <p class="text-xs text-muted-foreground">
@@ -180,9 +189,11 @@
             {{if .ValidationDeadlineMS}}data-verify-deadline-ms="{{.ValidationDeadlineMS}}"{{end}}
           >
             {{range .RemoteSessionCards}}
-            <li class="flex flex-col px-4 py-3 not-first:border-t">
+
+            <li data-remote-client="{{.ClientID}}" data-remote-display="{{.IssuerDisplay}}" data-connected-as="{{.ConnectedAs}}" class="flex flex-col px-4 py-3 not-first:border-t">
               <div class="flex items-start justify-between gap-3">
               <div class="flex min-w-0 items-start gap-3">
+
                 {{if .IssuerLogoURL}}<img
                   class="size-6 shrink-0 object-contain"
                   src="{{.IssuerLogoURL}}"
@@ -317,6 +328,7 @@
                 </button>
                 {{end}}
               </form>
+
               </div>
               {{$panel := .Panel}} {{if $panel.ShowDetails}}
                 {{/* The descriptive detail, collapsed by default; Panel decides
@@ -438,6 +450,14 @@
                   </div>
                 </details>
               {{end}}
+              {{if $.AgentSelectionEnabled}}
+              <div
+                data-agent-access
+                hidden
+                class="flex w-full flex-col gap-2 border-t pt-3"
+                aria-live="polite"
+              ></div>
+              {{end}}
             </li>
             {{end}}
           </ul>
@@ -445,7 +465,8 @@
         {{end}}
 
         {{if .ShowToolsIsland}}
-        <div data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8">
+        <div data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"
+        >
           <h2 class="text-eyebrow">Tool access</h2>
           <div
             id="consent-tools-root"
@@ -456,7 +477,9 @@
             data-approve-button-id="consent-approve-button"
             data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"
             data-server-name="{{.MCPSlug}}"
-            {{if .ConsentToolsPrefill}}data-prefill="{{.ConsentToolsPrefill}}"{{end}}
+            {{if
+            .ConsentToolsPrefill}}data-prefill="{{.ConsentToolsPrefill}}"
+            {{end}}
             aria-live="polite"
           >
             <p class="text-sm text-muted-foreground">
@@ -475,7 +498,9 @@
           >
             <span class="text-xs text-muted-foreground truncate">
               <span data-consent-subject-mode>Signing in as</span>
-              <span class="text-foreground font-mono" data-consent-subject-display>{{.SubjectDisplay}}</span
+              <span class="text-foreground font-mono"
+                data-consent-subject-display
+                >{{.SubjectDisplay}}</span
               >{{if .SelectedSessionDuration}} for
               <span class="text-foreground" data-session-duration-label
                 >{{.SelectedSessionDuration}}</span

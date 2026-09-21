@@ -56,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chatanalysis"
 	chatsessionssvc "github.com/speakeasy-api/gram/server/internal/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/cliauth"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -69,6 +70,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalcredentials"
 	"github.com/speakeasy-api/gram/server/internal/externalkeys"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
@@ -104,6 +106,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
@@ -158,14 +161,13 @@ import (
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/trialemails"
-	"github.com/speakeasy-api/gram/server/internal/triggers"
-	"github.com/speakeasy-api/gram/server/internal/unproxiedmcp"
-
 	"github.com/speakeasy-api/gram/server/internal/tokenexchange"
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	"github.com/speakeasy-api/gram/server/internal/triggers"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp"
+	"github.com/speakeasy-api/gram/server/internal/unproxiedmcp"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/variations"
@@ -1593,6 +1595,24 @@ func newStartCommand() *cli.Command {
 			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner)), productFeatures)
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, tunnelHTTPClient, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient), clientAssertionSigner))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
+			remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+				authCtx, ok := contextvalues.GetAuthContext(ctx)
+				if !ok || authCtx == nil {
+					return oops.C(oops.CodeNotFound)
+				}
+				for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentIdentityCredentials} {
+					evaluation, err := feature.EvaluateFlag(ctx, featureFlags, flag, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+					if err != nil || evaluation != feature.EvaluationEnabled {
+						return oops.C(oops.CodeNotFound)
+					}
+				}
+				_, _, err := agentmanagement.NewAuthorizer(authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
+				if err != nil {
+					return fmt.Errorf("authorize attachment owner: %w", err)
+				}
+				return nil
+			})
+			mcpService.SetConsentBindingService(remoteSessionsService)
 			remotesessions.Attach(mux, remoteSessionsService)
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService).
 				WithDistributionAdmission(distributionAdmission))

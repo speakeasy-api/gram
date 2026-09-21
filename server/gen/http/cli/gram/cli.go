@@ -171,7 +171,7 @@ func UsageCommands() []string {
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
-		"remote-sessions (list-remote-sessions|revoke-remote-session)",
+		"remote-sessions (list-bindings|attach-binding|detach-binding|list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
@@ -2725,7 +2725,25 @@ func ParseEndpoint(
 
 		remoteSessionsFlags = flag.NewFlagSet("remote-sessions", flag.ContinueOnError)
 
+		remoteSessionsListBindingsFlags                   = flag.NewFlagSet("list-bindings", flag.ExitOnError)
+		remoteSessionsListBindingsPrincipalIDFlag         = remoteSessionsListBindingsFlags.String("principal-id", "REQUIRED", "")
+		remoteSessionsListBindingsUserSessionIssuerIDFlag = remoteSessionsListBindingsFlags.String("user-session-issuer-id", "REQUIRED", "")
+		remoteSessionsListBindingsSessionTokenFlag        = remoteSessionsListBindingsFlags.String("session-token", "", "")
+		remoteSessionsListBindingsProjectSlugInputFlag    = remoteSessionsListBindingsFlags.String("project-slug-input", "", "")
+
+		remoteSessionsAttachBindingFlags                = flag.NewFlagSet("attach-binding", flag.ExitOnError)
+		remoteSessionsAttachBindingBodyFlag             = remoteSessionsAttachBindingFlags.String("body", "REQUIRED", "")
+		remoteSessionsAttachBindingSessionTokenFlag     = remoteSessionsAttachBindingFlags.String("session-token", "", "")
+		remoteSessionsAttachBindingProjectSlugInputFlag = remoteSessionsAttachBindingFlags.String("project-slug-input", "", "")
+
+		remoteSessionsDetachBindingFlags                = flag.NewFlagSet("detach-binding", flag.ExitOnError)
+		remoteSessionsDetachBindingBodyFlag             = remoteSessionsDetachBindingFlags.String("body", "REQUIRED", "")
+		remoteSessionsDetachBindingSessionTokenFlag     = remoteSessionsDetachBindingFlags.String("session-token", "", "")
+		remoteSessionsDetachBindingProjectSlugInputFlag = remoteSessionsDetachBindingFlags.String("project-slug-input", "", "")
+
 		remoteSessionsListRemoteSessionsFlags                     = flag.NewFlagSet("list-remote-sessions", flag.ExitOnError)
+		remoteSessionsListRemoteSessionsPrincipalIDFlag           = remoteSessionsListRemoteSessionsFlags.String("principal-id", "", "")
+		remoteSessionsListRemoteSessionsUserSessionIssuerIDFlag   = remoteSessionsListRemoteSessionsFlags.String("user-session-issuer-id", "", "")
 		remoteSessionsListRemoteSessionsSubjectUrnFlag            = remoteSessionsListRemoteSessionsFlags.String("subject-urn", "", "")
 		remoteSessionsListRemoteSessionsRemoteSessionClientIDFlag = remoteSessionsListRemoteSessionsFlags.String("remote-session-client-id", "", "")
 		remoteSessionsListRemoteSessionsCursorFlag                = remoteSessionsListRemoteSessionsFlags.String("cursor", "", "")
@@ -4913,6 +4931,9 @@ func ParseEndpoint(
 	organizationRemoteSessionsRevokeAllClientSessionsFlags.Usage = organizationRemoteSessionsRevokeAllClientSessionsUsage
 
 	remoteSessionsFlags.Usage = remoteSessionsUsage
+	remoteSessionsListBindingsFlags.Usage = remoteSessionsListBindingsUsage
+	remoteSessionsAttachBindingFlags.Usage = remoteSessionsAttachBindingUsage
+	remoteSessionsDetachBindingFlags.Usage = remoteSessionsDetachBindingUsage
 	remoteSessionsListRemoteSessionsFlags.Usage = remoteSessionsListRemoteSessionsUsage
 	remoteSessionsRevokeRemoteSessionFlags.Usage = remoteSessionsRevokeRemoteSessionUsage
 
@@ -7106,6 +7127,15 @@ func ParseEndpoint(
 
 		case "remote-sessions":
 			switch epn {
+			case "list-bindings":
+				epf = remoteSessionsListBindingsFlags
+
+			case "attach-binding":
+				epf = remoteSessionsAttachBindingFlags
+
+			case "detach-binding":
+				epf = remoteSessionsDetachBindingFlags
+
 			case "list-remote-sessions":
 				epf = remoteSessionsListRemoteSessionsFlags
 
@@ -9744,9 +9774,18 @@ func ParseEndpoint(
 		case "remote-sessions":
 			c := remotesessionsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "list-bindings":
+				endpoint = c.ListBindings()
+				data, err = remotesessionsc.BuildListBindingsPayload(*remoteSessionsListBindingsPrincipalIDFlag, *remoteSessionsListBindingsUserSessionIssuerIDFlag, *remoteSessionsListBindingsSessionTokenFlag, *remoteSessionsListBindingsProjectSlugInputFlag)
+			case "attach-binding":
+				endpoint = c.AttachBinding()
+				data, err = remotesessionsc.BuildAttachBindingPayload(*remoteSessionsAttachBindingBodyFlag, *remoteSessionsAttachBindingSessionTokenFlag, *remoteSessionsAttachBindingProjectSlugInputFlag)
+			case "detach-binding":
+				endpoint = c.DetachBinding()
+				data, err = remotesessionsc.BuildDetachBindingPayload(*remoteSessionsDetachBindingBodyFlag, *remoteSessionsDetachBindingSessionTokenFlag, *remoteSessionsDetachBindingProjectSlugInputFlag)
 			case "list-remote-sessions":
 				endpoint = c.ListRemoteSessions()
-				data, err = remotesessionsc.BuildListRemoteSessionsPayload(*remoteSessionsListRemoteSessionsSubjectUrnFlag, *remoteSessionsListRemoteSessionsRemoteSessionClientIDFlag, *remoteSessionsListRemoteSessionsCursorFlag, *remoteSessionsListRemoteSessionsLimitFlag, *remoteSessionsListRemoteSessionsSessionTokenFlag, *remoteSessionsListRemoteSessionsApikeyTokenFlag, *remoteSessionsListRemoteSessionsProjectSlugInputFlag)
+				data, err = remotesessionsc.BuildListRemoteSessionsPayload(*remoteSessionsListRemoteSessionsPrincipalIDFlag, *remoteSessionsListRemoteSessionsUserSessionIssuerIDFlag, *remoteSessionsListRemoteSessionsSubjectUrnFlag, *remoteSessionsListRemoteSessionsRemoteSessionClientIDFlag, *remoteSessionsListRemoteSessionsCursorFlag, *remoteSessionsListRemoteSessionsLimitFlag, *remoteSessionsListRemoteSessionsSessionTokenFlag, *remoteSessionsListRemoteSessionsApikeyTokenFlag, *remoteSessionsListRemoteSessionsProjectSlugInputFlag)
 			case "revoke-remote-session":
 				endpoint = c.RevokeRemoteSession()
 				data, err = remotesessionsc.BuildRevokeRemoteSessionPayload(*remoteSessionsRevokeRemoteSessionIDFlag, *remoteSessionsRevokeRemoteSessionSessionTokenFlag, *remoteSessionsRevokeRemoteSessionApikeyTokenFlag, *remoteSessionsRevokeRemoteSessionProjectSlugInputFlag)
@@ -22219,15 +22258,88 @@ func remoteSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-sessions COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list-remote-sessions: List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
+	fmt.Fprintln(os.Stderr, `    list-bindings: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `    attach-binding: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `    detach-binding: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `    list-remote-sessions: List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
 	fmt.Fprintln(os.Stderr, `    revoke-remote-session: Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s remote-sessions COMMAND --help\n", os.Args[0])
 }
+func remoteSessionsListBindingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions list-bindings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -principal-id STRING")
+	fmt.Fprint(os.Stderr, " -user-session-issuer-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -principal-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions list-bindings --principal-id \"550e8400-e29b-41d4-a716-446655440000\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionsAttachBindingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions attach-binding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions attach-binding --body '{\n      \"principal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionsDetachBindingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions detach-binding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions detach-binding --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func remoteSessionsListRemoteSessionsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions list-remote-sessions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -principal-id STRING")
+	fmt.Fprint(os.Stderr, " -user-session-issuer-id STRING")
 	fmt.Fprint(os.Stderr, " -subject-urn STRING")
 	fmt.Fprint(os.Stderr, " -remote-session-client-id STRING")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
@@ -22239,9 +22351,11 @@ func remoteSessionsListRemoteSessionsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
+	fmt.Fprintln(os.Stderr, `List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -principal-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -subject-urn STRING: `)
 	fmt.Fprintln(os.Stderr, `    -remote-session-client-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
@@ -22252,7 +22366,7 @@ func remoteSessionsListRemoteSessionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions list-remote-sessions --subject-urn \"abc123\" --remote-session-client-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions list-remote-sessions --principal-id \"550e8400-e29b-41d4-a716-446655440000\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --subject-urn \"abc123\" --remote-session-client-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionsRevokeRemoteSessionUsage() {
