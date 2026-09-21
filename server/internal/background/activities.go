@@ -441,7 +441,7 @@ func NewActivities(
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                      activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:              activities.NewRefreshBillingUsage(logger, db, billingRepo),
-		snapshotBillingCycleUsage:        activities.NewSnapshotBillingCycleUsage(logger, db, chConn, cacheAdapter, emailService),
+		snapshotBillingCycleUsage:        activities.NewSnapshotBillingCycleUsage(logger, db, chConn),
 		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, meterReadConn, emailService, siteURL),
 		forwardTokenUsageToPostHog:       activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
 		refreshOpenRouterKey:             activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
