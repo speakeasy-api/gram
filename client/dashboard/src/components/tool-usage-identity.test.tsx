@@ -5,7 +5,9 @@ import type { ReactNode } from "react";
 import { ToolUsageIdentity } from "./tool-usage-identity";
 
 vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ agents: { href: () => "/example/agent-management" } }),
+  useRoutes: () => ({
+    agents: { href: () => "/example/project/agent-management" },
+  }),
 }));
 vi.mock("@/components/identity-link", () => ({
   IdentityLink: ({
@@ -33,7 +35,7 @@ describe("ToolUsageIdentity", () => {
     );
     const link = screen.getByRole("link", { name: "Research agent" });
     expect(link.getAttribute("href")).toBe(
-      "/example/agent-management?id=agent-1",
+      "/example/project/agent-management?id=agent-1",
     );
     expect(link.className).toContain("decoration-dotted");
     expect(screen.getByRole("img", { name: "Agent" })).toBeTruthy();
