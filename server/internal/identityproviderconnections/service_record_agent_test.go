@@ -26,6 +26,8 @@ func TestRecordAgent_DeletesResourceConnectionsOnlyOnChange(t *testing.T) {
 		{name: "changed agent", agentID: "0oaagent000000000002", agentAppID: agentAppID},
 		{name: "changed app", agentID: agentID, agentAppID: "0oassoapp00000000002"},
 		{name: "cleared agent"},
+		{name: "cleared agent, kept app", agentAppID: agentAppID},
+		{name: "cleared app, kept agent", agentID: agentID},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

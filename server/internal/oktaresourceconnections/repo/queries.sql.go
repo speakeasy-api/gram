@@ -711,6 +711,7 @@ LEFT JOIN okta_applications AS a
  AND a.removed_at IS NULL
 WHERE r.organization_id = $1
   AND r.identity_provider_connection_id = $2
+ORDER BY r.created_at, r.id
 `
 
 type ListResourceConnectionsParams struct {

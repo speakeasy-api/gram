@@ -199,7 +199,8 @@ LEFT JOIN okta_applications AS a
  AND a.okta_app_id = r.okta_application_id
  AND a.removed_at IS NULL
 WHERE r.organization_id = @organization_id
-  AND r.identity_provider_connection_id = @identity_provider_connection_id;
+  AND r.identity_provider_connection_id = @identity_provider_connection_id
+ORDER BY r.created_at, r.id;
 
 -- name: GetOktaApplicationLabel :one
 SELECT label

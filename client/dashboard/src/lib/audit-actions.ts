@@ -147,6 +147,8 @@ export const AUDIT_ACTIONS = [
   "organization_invitation:update_role",
   "otel_destination:create",
   "otel_destination:delete",
+  "okta-resource-connection:confirm",
+  "okta-resource-connection:reset",
   "otel_destination:update",
   "platform-mcp-diagnostics:attribution_read",
   "platform-mcp-diagnostics:user_status_read",
@@ -263,8 +265,6 @@ export const AUDIT_ACTIONS = [
   "wake:cancelled",
   "wake:fired",
   "wake:scheduled",
-  "okta-resource-connection:confirm",
-  "okta-resource-connection:reset",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
