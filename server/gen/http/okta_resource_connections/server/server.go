@@ -8,9 +8,7 @@
 package server
 
 import (
-	"bufio"
 	"context"
-	"io"
 	"net/http"
 
 	oktaresourceconnections "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
@@ -20,11 +18,10 @@ import (
 
 // Server lists the oktaResourceConnections service endpoint HTTP handlers.
 type Server struct {
-	Mounts          []*MountPoint
-	List            http.Handler
-	Confirm         http.Handler
-	Reset           http.Handler
-	ExportChecklist http.Handler
+	Mounts  []*MountPoint
+	List    http.Handler
+	Confirm http.Handler
+	Reset   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -57,12 +54,10 @@ func New(
 			{"List", "GET", "/rpc/oktaResourceConnections.list"},
 			{"Confirm", "POST", "/rpc/oktaResourceConnections.confirm"},
 			{"Reset", "POST", "/rpc/oktaResourceConnections.reset"},
-			{"ExportChecklist", "GET", "/rpc/oktaResourceConnections.exportChecklist"},
 		},
-		List:            NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
-		Confirm:         NewConfirmHandler(e.Confirm, mux, decoder, encoder, errhandler, formatter),
-		Reset:           NewResetHandler(e.Reset, mux, decoder, encoder, errhandler, formatter),
-		ExportChecklist: NewExportChecklistHandler(e.ExportChecklist, mux, decoder, encoder, errhandler, formatter),
+		List:    NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
+		Confirm: NewConfirmHandler(e.Confirm, mux, decoder, encoder, errhandler, formatter),
+		Reset:   NewResetHandler(e.Reset, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -74,7 +69,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.List = m(s.List)
 	s.Confirm = m(s.Confirm)
 	s.Reset = m(s.Reset)
-	s.ExportChecklist = m(s.ExportChecklist)
 }
 
 // MethodNames returns the methods served.
@@ -85,7 +79,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListHandler(mux, h.List)
 	MountConfirmHandler(mux, h.Confirm)
 	MountResetHandler(mux, h.Reset)
-	MountExportChecklistHandler(mux, h.ExportChecklist)
 }
 
 // Mount configures the mux to serve the oktaResourceConnections endpoints.
@@ -248,95 +241,6 @@ func NewResetHandler(
 			if errhandler != nil {
 				errhandler(ctx, w, err)
 			}
-		}
-	})
-}
-
-// MountExportChecklistHandler configures the mux to serve the
-// "oktaResourceConnections" service "exportChecklist" endpoint.
-func MountExportChecklistHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("GET", "/rpc/oktaResourceConnections.exportChecklist", f)
-}
-
-// NewExportChecklistHandler creates a HTTP handler which loads the HTTP
-// request and calls the "oktaResourceConnections" service "exportChecklist"
-// endpoint.
-func NewExportChecklistHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeExportChecklistRequest(mux, decoder)
-		encodeResponse = EncodeExportChecklistResponse(encoder)
-		encodeError    = EncodeExportChecklistError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "exportChecklist")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "oktaResourceConnections")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		o := res.(*oktaresourceconnections.ExportChecklistResponseData)
-		defer o.Body.Close()
-		if wt, ok := o.Body.(io.WriterTo); ok {
-			if err := encodeResponse(ctx, w, o.Result); err != nil {
-				if errhandler != nil {
-					errhandler(ctx, w, err)
-				}
-				return
-			}
-			n, err := wt.WriteTo(w)
-			if err != nil {
-				if n == 0 {
-					if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-						errhandler(ctx, w, err)
-					}
-				} else {
-					http.NewResponseController(w).Flush()
-					panic(http.ErrAbortHandler) // too late to write an error
-				}
-			}
-			return
-		}
-		// handle immediate read error like a returned error
-		buf := bufio.NewReader(o.Body)
-		if _, err := buf.Peek(1); err != nil && err != io.EOF {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, o.Result); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if _, err := io.Copy(w, buf); err != nil {
-			http.NewResponseController(w).Flush()
-			panic(http.ErrAbortHandler) // too late to write an error
 		}
 	})
 }

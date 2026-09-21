@@ -373,7 +373,6 @@ trackedFiles:
   src/funcs/networkIngressRotateCredentials.ts: {}
   src/funcs/networkIngressUpdateIngress.ts: {}
   src/funcs/oktaResourceConnectionsConfirm.ts: {}
-  src/funcs/oktaResourceConnectionsExportChecklist.ts: {}
   src/funcs/oktaResourceConnectionsList.ts: {}
   src/funcs/oktaResourceConnectionsReset.ts: {}
   src/funcs/organizationAssetsUploadImage.ts: {}
@@ -1978,7 +1977,6 @@ trackedFiles:
   src/models/operations/evaluatepromptguardrail.ts: {}
   src/models/operations/evolvedeployment.ts: {}
   src/models/operations/exportmcpmetadata.ts: {}
-  src/models/operations/exportoktaresourceconnectionschecklist.ts: {}
   src/models/operations/fetchglobalremotesessionissuermetadata.ts: {}
   src/models/operations/fetchimagefromurl.ts: {}
   src/models/operations/fetchopenapiv3fromurl.ts: {}
@@ -3059,8 +3057,6 @@ trackedFiles:
   src/react-query/networkIngressGetDeleteImpact.ts: {}
   src/react-query/oktaResourceConnections.core.ts: {}
   src/react-query/oktaResourceConnections.ts: {}
-  src/react-query/oktaResourceConnectionsExportChecklist.core.ts: {}
-  src/react-query/oktaResourceConnectionsExportChecklist.ts: {}
   src/react-query/onboardingStatus.core.ts: {}
   src/react-query/onboardingStatus.ts: {}
   src/react-query/organization.core.ts: {}

@@ -153,7 +153,7 @@ func UsageCommands() []string {
 		"meta-mcp (create-meta-mcp-server|get-meta-mcp-server|list-meta-mcp-servers|update-meta-mcp-server|delete-meta-mcp-server|list-meta-mcp-members|add-meta-mcp-member|update-meta-mcp-member|remove-meta-mcp-member)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"network-ingress (get-ingress|create-ingress|update-ingress|rotate-credentials|get-delete-impact|delete-ingress|check-health)",
-		"okta-resource-connections (list|confirm|reset|export-checklist)",
+		"okta-resource-connections (list|confirm|reset)",
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task)",
 		"otel (logs|metrics|traces|list-event-log|get-event-volume|get-event-facets)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
@@ -1903,11 +1903,6 @@ func ParseEndpoint(
 		oktaResourceConnectionsResetFlags            = flag.NewFlagSet("reset", flag.ExitOnError)
 		oktaResourceConnectionsResetBodyFlag         = oktaResourceConnectionsResetFlags.String("body", "REQUIRED", "")
 		oktaResourceConnectionsResetSessionTokenFlag = oktaResourceConnectionsResetFlags.String("session-token", "", "")
-
-		oktaResourceConnectionsExportChecklistFlags            = flag.NewFlagSet("export-checklist", flag.ExitOnError)
-		oktaResourceConnectionsExportChecklistFormatFlag       = oktaResourceConnectionsExportChecklistFlags.String("format", "csv", "")
-		oktaResourceConnectionsExportChecklistIncludeAllFlag   = oktaResourceConnectionsExportChecklistFlags.String("include-all", "", "")
-		oktaResourceConnectionsExportChecklistSessionTokenFlag = oktaResourceConnectionsExportChecklistFlags.String("session-token", "", "")
 
 		organizationsFlags = flag.NewFlagSet("organizations", flag.ContinueOnError)
 
@@ -4753,7 +4748,6 @@ func ParseEndpoint(
 	oktaResourceConnectionsListFlags.Usage = oktaResourceConnectionsListUsage
 	oktaResourceConnectionsConfirmFlags.Usage = oktaResourceConnectionsConfirmUsage
 	oktaResourceConnectionsResetFlags.Usage = oktaResourceConnectionsResetUsage
-	oktaResourceConnectionsExportChecklistFlags.Usage = oktaResourceConnectionsExportChecklistUsage
 
 	organizationsFlags.Usage = organizationsUsage
 	organizationsGetFlags.Usage = organizationsGetUsage
@@ -6596,9 +6590,6 @@ func ParseEndpoint(
 
 			case "reset":
 				epf = oktaResourceConnectionsResetFlags
-
-			case "export-checklist":
-				epf = oktaResourceConnectionsExportChecklistFlags
 
 			}
 
@@ -9248,9 +9239,6 @@ func ParseEndpoint(
 			case "reset":
 				endpoint = c.Reset()
 				data, err = oktaresourceconnectionsc.BuildResetPayload(*oktaResourceConnectionsResetBodyFlag, *oktaResourceConnectionsResetSessionTokenFlag)
-			case "export-checklist":
-				endpoint = c.ExportChecklist()
-				data, err = oktaresourceconnectionsc.BuildExportChecklistPayload(*oktaResourceConnectionsExportChecklistFormatFlag, *oktaResourceConnectionsExportChecklistIncludeAllFlag, *oktaResourceConnectionsExportChecklistSessionTokenFlag)
 			}
 		case "organizations":
 			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -18375,7 +18363,6 @@ func oktaResourceConnectionsUsage() {
 	fmt.Fprintln(os.Stderr, `    list: List the Okta resource connection and derived state of every eligible MCP server. Requires org:admin and a live identity provider connection.`)
 	fmt.Fprintln(os.Stderr, `    confirm: Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one Okta resource connection. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin and the okta-connections rollout.`)
 	fmt.Fprintln(os.Stderr, `    reset: Delete the Okta resource connection for this server's upstream so it, and every server sharing that upstream, shows as pending again. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    export-checklist: Download the checklist of pending servers as CSV or Markdown, with the values to enter for each. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s okta-resource-connections COMMAND --help\n", os.Args[0])
@@ -18438,28 +18425,6 @@ func oktaResourceConnectionsResetUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "okta-resource-connections reset --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
-}
-
-func oktaResourceConnectionsExportChecklistUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] okta-resource-connections export-checklist", os.Args[0])
-	fmt.Fprint(os.Stderr, " -format STRING")
-	fmt.Fprint(os.Stderr, " -include-all BOOL")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Download the checklist of pending servers as CSV or Markdown, with the values to enter for each. Requires org:admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -format STRING: `)
-	fmt.Fprintln(os.Stderr, `    -include-all BOOL: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "okta-resource-connections export-checklist --format \"markdown\" --include-all false --session-token \"abc123\"")
 }
 
 // organizationsUsage displays the usage of the organizations command and its

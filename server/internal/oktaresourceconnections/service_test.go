@@ -3,7 +3,6 @@ package oktaresourceconnections_test
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"strings"
@@ -560,49 +559,6 @@ func TestSharedUpstream_OneRowManyServers(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeFailedPrecondition)
 }
 
-func TestExportChecklist(t *testing.T) {
-	t.Parallel()
-	ctx, si := newTestService(t)
-	recordAgent(t, ctx, si, "wlp1")
-	f := capableServer(t, ctx, si, "Notion")
-	createServer(t, ctx, si, f.projectID, createResourceIssuer(t, ctx, si, si.orgID, f.projectID, false), "=Legacy")
-
-	res, body, err := si.svc.ExportChecklist(ctx, &gen.ExportChecklistPayload{SessionToken: nil, Format: "csv", IncludeAll: false})
-	require.NoError(t, err)
-	require.Equal(t, "text/csv; charset=utf-8", res.ContentType)
-	require.True(t, strings.HasPrefix(res.ContentDisposition, `attachment; filename="xaa-checklist-`))
-	raw, err := io.ReadAll(body)
-	require.NoError(t, err)
-	require.NoError(t, body.Close())
-	lines := strings.Split(strings.TrimSpace(string(raw)), "\r\n")
-	require.Len(t, lines, 2, "header plus the one pending server")
-	require.Contains(t, lines[1], `"Notion"`)
-	require.Contains(t, lines[1], `"needs_connection"`)
-	require.Contains(t, lines[1], `"0oanotionclient"`)
-	require.Contains(t, lines[1], `"https://tenant-admin.okta.com/admin/workload-principals/ai-agents/wlp1/resource-connections/create"`)
-
-	// A label that starts a formula is neutralized on the service path too.
-	_, body, err = si.svc.ExportChecklist(ctx, &gen.ExportChecklistPayload{SessionToken: nil, Format: "csv", IncludeAll: true})
-	require.NoError(t, err)
-	raw, err = io.ReadAll(body)
-	require.NoError(t, err)
-	require.NoError(t, body.Close())
-	require.Contains(t, string(raw), "\r\n\"'=Legacy\",")
-
-	_, err = confirm(t, ctx, si, audience, nil, f.serverID)
-	require.NoError(t, err)
-	res, body, err = si.svc.ExportChecklist(ctx, &gen.ExportChecklistPayload{SessionToken: nil, Format: "markdown", IncludeAll: true})
-	require.NoError(t, err)
-	require.Equal(t, "text/markdown; charset=utf-8", res.ContentType)
-	raw, err = io.ReadAll(body)
-	require.NoError(t, err)
-	require.NoError(t, body.Close())
-	require.Contains(t, string(raw), "| =Legacy | ")
-	require.Contains(t, string(raw), "| not_applicable |")
-	require.Contains(t, string(raw), "| connected | ")
-	require.Contains(t, string(raw), "| "+audience+" |")
-}
-
 func TestResourceConnections_OnlyServersTheAdminCanRead(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
@@ -616,14 +572,6 @@ func TestResourceConnections_OnlyServersTheAdminCanRead(t *testing.T) {
 	require.Len(t, res.Servers, 1)
 	require.Equal(t, visible.serverID.String(), res.Servers[0].McpServerID)
 	require.Equal(t, 1, res.TotalCount)
-
-	_, body, err := si.svc.ExportChecklist(narrow, &gen.ExportChecklistPayload{SessionToken: nil, Format: "csv", IncludeAll: true})
-	require.NoError(t, err)
-	raw, err := io.ReadAll(body)
-	require.NoError(t, err)
-	require.NoError(t, body.Close())
-	require.Contains(t, string(raw), `"Notion"`)
-	require.NotContains(t, string(raw), `"Linear"`)
 
 	_, err = confirm(t, narrow, si, audience, nil, hidden.serverID)
 	requireOopsCode(t, err, oops.CodeNotFound)

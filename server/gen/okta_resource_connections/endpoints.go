@@ -9,7 +9,6 @@ package oktaresourceconnections
 
 import (
 	"context"
-	"io"
 
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
@@ -17,19 +16,9 @@ import (
 
 // Endpoints wraps the "oktaResourceConnections" service endpoints.
 type Endpoints struct {
-	List            goa.Endpoint
-	Confirm         goa.Endpoint
-	Reset           goa.Endpoint
-	ExportChecklist goa.Endpoint
-}
-
-// ExportChecklistResponseData holds both the result and the HTTP response body
-// reader of the "exportChecklist" method.
-type ExportChecklistResponseData struct {
-	// Result is the method result.
-	Result *ExportChecklistResult
-	// Body streams the HTTP response body.
-	Body io.ReadCloser
+	List    goa.Endpoint
+	Confirm goa.Endpoint
+	Reset   goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "oktaResourceConnections" service with
@@ -38,10 +27,9 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		List:            NewListEndpoint(s, a.APIKeyAuth),
-		Confirm:         NewConfirmEndpoint(s, a.APIKeyAuth),
-		Reset:           NewResetEndpoint(s, a.APIKeyAuth),
-		ExportChecklist: NewExportChecklistEndpoint(s, a.APIKeyAuth),
+		List:    NewListEndpoint(s, a.APIKeyAuth),
+		Confirm: NewConfirmEndpoint(s, a.APIKeyAuth),
+		Reset:   NewResetEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -51,7 +39,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.List = m(e.List)
 	e.Confirm = m(e.Confirm)
 	e.Reset = m(e.Reset)
-	e.ExportChecklist = m(e.ExportChecklist)
 }
 
 // NewListEndpoint returns an endpoint function that calls the method "list" of
@@ -120,32 +107,5 @@ func NewResetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpo
 			return nil, err
 		}
 		return s.Reset(ctx, p)
-	}
-}
-
-// NewExportChecklistEndpoint returns an endpoint function that calls the
-// method "exportChecklist" of service "oktaResourceConnections".
-func NewExportChecklistEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ExportChecklistPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		res, body, err := s.ExportChecklist(ctx, p)
-		if err != nil {
-			return nil, err
-		}
-		return &ExportChecklistResponseData{Result: res, Body: body}, nil
 	}
 }

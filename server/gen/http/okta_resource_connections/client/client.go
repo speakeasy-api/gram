@@ -11,7 +11,6 @@ import (
 	"context"
 	"net/http"
 
-	oktaresourceconnections "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -27,10 +26,6 @@ type Client struct {
 
 	// Reset Doer is the HTTP client used to make requests to the reset endpoint.
 	ResetDoer goahttp.Doer
-
-	// ExportChecklist Doer is the HTTP client used to make requests to the
-	// exportChecklist endpoint.
-	ExportChecklistDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -56,7 +51,6 @@ func NewClient(
 		ListDoer:            doer,
 		ConfirmDoer:         doer,
 		ResetDoer:           doer,
-		ExportChecklistDoer: doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -134,34 +128,5 @@ func (c *Client) Reset() goa.Endpoint {
 			return nil, goahttp.ErrRequestError("oktaResourceConnections", "reset", err)
 		}
 		return decodeResponse(resp)
-	}
-}
-
-// ExportChecklist returns an endpoint that makes HTTP requests to the
-// oktaResourceConnections service exportChecklist server.
-func (c *Client) ExportChecklist() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeExportChecklistRequest(c.encoder)
-		decodeResponse = DecodeExportChecklistResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildExportChecklistRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.ExportChecklistDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("oktaResourceConnections", "exportChecklist", err)
-		}
-		res, err := decodeResponse(resp)
-		if err != nil {
-			resp.Body.Close()
-			return nil, err
-		}
-		return &oktaresourceconnections.ExportChecklistResponseData{Result: res.(*oktaresourceconnections.ExportChecklistResult), Body: resp.Body}, nil
 	}
 }

@@ -9,7 +9,6 @@ package oktaresourceconnections
 
 import (
 	"context"
-	"io"
 
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
@@ -34,13 +33,6 @@ type Service interface {
 	// every server sharing that upstream, shows as pending again. Requires
 	// org:admin.
 	Reset(context.Context, *ResetPayload) (res *OktaResourceConnectionServer, err error)
-	// Download the checklist of pending servers as CSV or Markdown, with the
-	// values to enter for each. Requires org:admin.
-
-	// If body implements [io.WriterTo], that implementation will be used instead.
-	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
-	// implementations.
-	ExportChecklist(context.Context, *ExportChecklistPayload) (res *ExportChecklistResult, body io.ReadCloser, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -63,7 +55,7 @@ const ServiceName = "oktaResourceConnections"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"list", "confirm", "reset", "exportChecklist"}
+var MethodNames = [3]string{"list", "confirm", "reset"}
 
 // ConfirmOktaResourceConnectionsResult is the result type of the
 // oktaResourceConnections service confirm method.
@@ -78,23 +70,6 @@ type ConfirmPayload struct {
 	SessionToken *string
 	// Servers to confirm with their configured values.
 	Connections []*OktaResourceConnectionConfirmation
-}
-
-// ExportChecklistPayload is the payload type of the oktaResourceConnections
-// service exportChecklist method.
-type ExportChecklistPayload struct {
-	SessionToken *string
-	Format       string
-	// Include connected and not-applicable servers.
-	IncludeAll bool
-}
-
-// ExportChecklistResult is the result type of the oktaResourceConnections
-// service exportChecklist method.
-type ExportChecklistResult struct {
-	// text/csv or text/markdown, with charset.
-	ContentType        string
-	ContentDisposition string
 }
 
 // ListOktaResourceConnectionsResult is the result type of the

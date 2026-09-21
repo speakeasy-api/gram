@@ -9,27 +9,24 @@ package oktaresourceconnections
 
 import (
 	"context"
-	"io"
 
 	goa "goa.design/goa/v3/pkg"
 )
 
 // Client is the "oktaResourceConnections" service client.
 type Client struct {
-	ListEndpoint            goa.Endpoint
-	ConfirmEndpoint         goa.Endpoint
-	ResetEndpoint           goa.Endpoint
-	ExportChecklistEndpoint goa.Endpoint
+	ListEndpoint    goa.Endpoint
+	ConfirmEndpoint goa.Endpoint
+	ResetEndpoint   goa.Endpoint
 }
 
 // NewClient initializes a "oktaResourceConnections" service client given the
 // endpoints.
-func NewClient(list, confirm, reset, exportChecklist goa.Endpoint) *Client {
+func NewClient(list, confirm, reset goa.Endpoint) *Client {
 	return &Client{
-		ListEndpoint:            list,
-		ConfirmEndpoint:         confirm,
-		ResetEndpoint:           reset,
-		ExportChecklistEndpoint: exportChecklist,
+		ListEndpoint:    list,
+		ConfirmEndpoint: confirm,
+		ResetEndpoint:   reset,
 	}
 }
 
@@ -101,29 +98,4 @@ func (c *Client) Reset(ctx context.Context, p *ResetPayload) (res *OktaResourceC
 		return
 	}
 	return ires.(*OktaResourceConnectionServer), nil
-}
-
-// ExportChecklist calls the "exportChecklist" endpoint of the
-// "oktaResourceConnections" service.
-// ExportChecklist may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
-//   - error: internal error
-func (c *Client) ExportChecklist(ctx context.Context, p *ExportChecklistPayload) (res *ExportChecklistResult, resp io.ReadCloser, err error) {
-	var ires any
-	ires, err = c.ExportChecklistEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	o := ires.(*ExportChecklistResponseData)
-	return o.Result, o.Body, nil
 }
