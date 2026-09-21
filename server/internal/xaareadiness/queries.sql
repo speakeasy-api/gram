@@ -69,6 +69,7 @@ LEFT JOIN tunneled_mcp_servers AS t
   ON t.id = ms.tunneled_mcp_server_id
  AND t.project_id = ms.project_id
  AND t.deleted IS FALSE
+ AND t.status <> 'revoked'
 LEFT JOIN remote_mcp_servers AS r
   ON r.id = ms.remote_mcp_server_id
  AND r.project_id = ms.project_id
@@ -117,6 +118,7 @@ LEFT JOIN tunneled_mcp_servers AS t
   ON t.id = ms.tunneled_mcp_server_id
  AND t.project_id = ms.project_id
  AND t.deleted IS FALSE
+ AND t.status <> 'revoked'
 LEFT JOIN remote_mcp_servers AS r
   ON r.id = ms.remote_mcp_server_id
  AND r.project_id = ms.project_id
@@ -283,6 +285,16 @@ RETURNING id;
 -- name: CreateRemoteBackendFixture :one
 INSERT INTO remote_mcp_servers (project_id, name, slug, transport_type, url)
 VALUES (@project_id, @name, @slug, 'streamable_http', @url)
+RETURNING id;
+
+-- name: CreateTunneledBackendFixture :one
+INSERT INTO tunneled_mcp_servers (project_id, name, key_hash, key_prefix, status, resource_identifier)
+VALUES (@project_id, @name, @key_hash, @key_prefix, @status, @resource_identifier)
+RETURNING id;
+
+-- name: CreateTunneledMCPServerFixture :one
+INSERT INTO mcp_servers (project_id, name, slug, tunneled_mcp_server_id, remote_session_issuer_id, visibility)
+VALUES (@project_id, @name, @slug, @tunneled_mcp_server_id, @remote_session_issuer_id, 'private')
 RETURNING id;
 
 -- name: CreateEligibleMCPServerFixture :one

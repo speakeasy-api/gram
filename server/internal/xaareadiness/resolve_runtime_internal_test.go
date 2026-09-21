@@ -12,12 +12,23 @@ import (
 
 func TestResourceIndicatorRuntimeNormalization(t *testing.T) {
 	t.Parallel()
-	for _, server := range []repo.ListEligibleServersRow{
-		{TunneledResourceIdentifier: pgtype.Text{String: "https://mcp.example/mcp///", Valid: true}},
-		{RemoteUrl: pgtype.Text{String: "https://mcp.example/mcp///", Valid: true}},
-		{UnproxiedUrl: pgtype.Text{String: "https://mcp.example/mcp///", Valid: true}},
+	text := func(s string) pgtype.Text { return pgtype.Text{String: s, Valid: true} }
+	for _, tt := range []struct {
+		name   string
+		server repo.ListEligibleServersRow
+		want   string
+	}{
+		{name: "tunneled", server: repo.ListEligibleServersRow{TunneledResourceIdentifier: text("https://tunneled.example/mcp///")}, want: "https://tunneled.example/mcp"},
+		{name: "remote", server: repo.ListEligibleServersRow{RemoteUrl: text("https://remote.example/mcp///")}, want: "https://remote.example/mcp"},
+		{name: "unproxied", server: repo.ListEligibleServersRow{UnproxiedUrl: text("https://unproxied.example/mcp///")}, want: "https://unproxied.example/mcp"},
+		{name: "tunneled wins over remote and unproxied", server: repo.ListEligibleServersRow{TunneledResourceIdentifier: text("https://tunneled.example/mcp"), RemoteUrl: text("https://remote.example/mcp"), UnproxiedUrl: text("https://unproxied.example/mcp")}, want: "https://tunneled.example/mcp"},
+		{name: "remote wins over unproxied", server: repo.ListEligibleServersRow{RemoteUrl: text("https://remote.example/mcp"), UnproxiedUrl: text("https://unproxied.example/mcp")}, want: "https://remote.example/mcp"},
+		{name: "empty tunneled identifier falls through", server: repo.ListEligibleServersRow{TunneledResourceIdentifier: text(""), RemoteUrl: text("https://remote.example/mcp")}, want: "https://remote.example/mcp"},
 	} {
-		require.Equal(t, "https://mcp.example/mcp", resourceIndicator(server))
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, resourceIndicator(tt.server))
+		})
 	}
 }
 

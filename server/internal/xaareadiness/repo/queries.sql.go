@@ -185,6 +185,62 @@ func (q *Queries) CreateRemoteBackendFixture(ctx context.Context, arg CreateRemo
 	return id, err
 }
 
+const createTunneledBackendFixture = `-- name: CreateTunneledBackendFixture :one
+INSERT INTO tunneled_mcp_servers (project_id, name, key_hash, key_prefix, status, resource_identifier)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id
+`
+
+type CreateTunneledBackendFixtureParams struct {
+	ProjectID          uuid.UUID
+	Name               string
+	KeyHash            string
+	KeyPrefix          string
+	Status             string
+	ResourceIdentifier pgtype.Text
+}
+
+func (q *Queries) CreateTunneledBackendFixture(ctx context.Context, arg CreateTunneledBackendFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createTunneledBackendFixture,
+		arg.ProjectID,
+		arg.Name,
+		arg.KeyHash,
+		arg.KeyPrefix,
+		arg.Status,
+		arg.ResourceIdentifier,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createTunneledMCPServerFixture = `-- name: CreateTunneledMCPServerFixture :one
+INSERT INTO mcp_servers (project_id, name, slug, tunneled_mcp_server_id, remote_session_issuer_id, visibility)
+VALUES ($1, $2, $3, $4, $5, 'private')
+RETURNING id
+`
+
+type CreateTunneledMCPServerFixtureParams struct {
+	ProjectID             uuid.UUID
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
+	TunneledMcpServerID   uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
+}
+
+func (q *Queries) CreateTunneledMCPServerFixture(ctx context.Context, arg CreateTunneledMCPServerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createTunneledMCPServerFixture,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+		arg.TunneledMcpServerID,
+		arg.RemoteSessionIssuerID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const deleteReadinessForConnection = `-- name: DeleteReadinessForConnection :execrows
 DELETE FROM okta_resource_connections
 WHERE organization_id = $1
@@ -237,6 +293,7 @@ LEFT JOIN tunneled_mcp_servers AS t
   ON t.id = ms.tunneled_mcp_server_id
  AND t.project_id = ms.project_id
  AND t.deleted IS FALSE
+ AND t.status <> 'revoked'
 LEFT JOIN remote_mcp_servers AS r
   ON r.id = ms.remote_mcp_server_id
  AND r.project_id = ms.project_id
@@ -523,6 +580,7 @@ LEFT JOIN tunneled_mcp_servers AS t
   ON t.id = ms.tunneled_mcp_server_id
  AND t.project_id = ms.project_id
  AND t.deleted IS FALSE
+ AND t.status <> 'revoked'
 LEFT JOIN remote_mcp_servers AS r
   ON r.id = ms.remote_mcp_server_id
  AND r.project_id = ms.project_id
