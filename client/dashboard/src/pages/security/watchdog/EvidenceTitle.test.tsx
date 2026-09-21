@@ -7,23 +7,21 @@ import { EvidenceTitle } from "./EvidenceTitle";
 
 const hasScope = vi.fn<(scope: string) => boolean>();
 const loadChat = vi.fn<() => Promise<unknown>>();
+const listFindings = vi.fn<(req: { cursor?: string }) => Promise<unknown>>();
 
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope }),
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
-  useSdkClient: () => ({ chat: { load: loadChat } }),
+  useSdkClient: () => ({
+    chat: { load: loadChat },
+    risk: { results: { list: listFindings } },
+  }),
 }));
 
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ agentSessions: { href: () => "/agent-sessions" } }),
-}));
-
-vi.mock("@gram/client/react-query/riskListResults.js", () => ({
-  useRiskListResults: () => ({
-    data: { results: [{ source: "presidio", match: "4111 1111 1111 1111" }] },
-  }),
 }));
 
 const TITLE = "Please refund order #4023. Customer card";
@@ -52,6 +50,16 @@ afterEach(cleanup);
 beforeEach(() => {
   hasScope.mockReset();
   loadChat.mockReset();
+  listFindings.mockReset();
+  // The card number's finding sits on the second page, so masking only works
+  // if every page of the chat's findings is collected.
+  listFindings.mockImplementation(({ cursor }) =>
+    Promise.resolve(
+      cursor
+        ? { results: [{ source: "presidio", match: "4111 1111 1111 1111" }] }
+        : { results: [], nextCursor: "page-2" },
+    ),
+  );
   loadChat.mockResolvedValue({
     messages: [
       { role: "system", content: "You are a support agent." },
@@ -70,6 +78,7 @@ describe("EvidenceTitle", () => {
     expect(screen.queryByRole("link")).toBeNull();
     expect(hasScope).toHaveBeenCalledWith("chat:read");
     expect(loadChat).not.toHaveBeenCalled();
+    expect(listFindings).not.toHaveBeenCalled();
   });
 
   it("opens the session from the title and links to Agent Sessions", async () => {
@@ -96,6 +105,7 @@ describe("EvidenceTitle", () => {
     const mark = await screen.findByText("•".repeat(19));
     expect(mark.tagName).toBe("MARK");
     expect(screen.queryByText(/4111/)).toBeNull();
+    expect(listFindings).toHaveBeenCalledTimes(2);
     expect(loadChat).toHaveBeenCalledWith(
       expect.objectContaining({ id: "chat-1", fromStart: true }),
     );

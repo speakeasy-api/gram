@@ -210,7 +210,13 @@ export function SignalDrawer({
     null,
   );
   const [collecting, setCollecting] = useState(false);
-  const [openChatId, setOpenChatId] = useState<string | null>(null);
+  // Remembered with the signal it was opened from and derived below, so a
+  // chat left open when the signal is swapped or cleared by the parent (which
+  // fires no close event here) never reappears under a different signal.
+  const [openChat, setOpenChat] = useState<{
+    signalKey: string;
+    chatId: string;
+  } | null>(null);
   // Set when leaving the exclusion editor so the remounting detail view
   // slides back in from the left — but never on the drawer's first open,
   // where the Sheet's own slide already animates the content.
@@ -220,6 +226,9 @@ export function SignalDrawer({
     setExclusionState(null);
     setReturningFromEditor(true);
   };
+
+  const openChatId =
+    openChat && openChat.signalKey === signal?.key ? openChat.chatId : null;
 
   const ruleId = signal?.ruleId ?? "";
   // The list endpoint's rule filter is substring-match, so an id that is a
@@ -337,7 +346,7 @@ export function SignalDrawer({
             setExclusionState(null);
             setReturningFromEditor(false);
             setPendingDismiss(null);
-            setOpenChatId(null);
+            setOpenChat(null);
             onClose();
           }
         }}
@@ -585,7 +594,9 @@ export function SignalDrawer({
                                 })
                               }
                               onDismiss={(r) => dismiss([r])}
-                              onOpenChat={setOpenChatId}
+                              onOpenChat={(chatId) =>
+                                setOpenChat({ signalKey: signal.key, chatId })
+                              }
                             />
                           )}
                         />
@@ -601,8 +612,8 @@ export function SignalDrawer({
               instead of reading as an outside click. */}
           <ChatDetailSheet
             chatId={openChatId}
-            onClose={() => setOpenChatId(null)}
-            onDelete={() => setOpenChatId(null)}
+            onClose={() => setOpenChat(null)}
+            onDelete={() => setOpenChat(null)}
             riskFocus
           />
         </SheetContent>

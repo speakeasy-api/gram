@@ -8,7 +8,7 @@ import {
 } from "@/pages/chatLogs/chatHelpers";
 import { messageText } from "@/pages/chatLogs/transcript";
 import { useRoutes } from "@/routes";
-import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { useLayoutEffect, useRef, useState } from "react";
@@ -118,7 +118,7 @@ const OPENING_MESSAGE_LOOKAHEAD = 20;
  * Every flagged match in it stays dotted out, as in the transcript: revealing
  * a match is an audited action this preview must not bypass. Returns null
  * while loading or when it can't be shown (no chat:read, or the findings
- * needed for masking failed to load), leaving the title in place.
+ * needed for masking failed to load or could not be fully paged), leaving the title in place.
  */
 function useFullMessage(
   chatId: string | undefined,
@@ -137,19 +137,48 @@ function useFullMessage(
     enabled: active,
     throwOnError: false,
   });
-  const findingsQuery = useRiskListResults(
-    { chatId: chatId ?? "" },
-    undefined,
-    { enabled: active, throwOnError: false },
-  );
+  // Every finding in the chat, not just the first page: a match the masking
+  // pass never sees would print in the clear. A chat with more findings than
+  // the page budget resolves to null, which keeps the message hidden.
+  const findingsQuery = useQuery({
+    queryKey: ["chat", chatId, "all-findings"],
+    queryFn: () => collectChatFindings(client, chatId ?? ""),
+    enabled: active,
+    throwOnError: false,
+  });
   if (!messageQuery.data || !findingsQuery.data) return null;
   const opening = messageQuery.data.messages.find((m) => m.role === "user");
   const text = opening ? messageText(opening.content) : "";
   if (!text) return null;
   return highlightMatches(
     text,
-    getMatchStrings(findingsQuery.data.results),
+    getMatchStrings(findingsQuery.data),
     true,
     true,
   );
+}
+
+const FINDINGS_PAGE_SIZE = 200;
+const FINDINGS_MAX_PAGES = 25;
+
+/** Pages `risk.listResults` for one chat to the end. Returns null when the
+ * chat has more findings than the page budget, so the caller can refuse to
+ * render rather than mask from a partial set. */
+async function collectChatFindings(
+  client: ReturnType<typeof useSdkClient>,
+  chatId: string,
+): Promise<RiskResult[] | null> {
+  const all: RiskResult[] = [];
+  let cursor: string | undefined = undefined;
+  for (let page = 0; page < FINDINGS_MAX_PAGES; page++) {
+    const res = await client.risk.results.list({
+      chatId,
+      cursor,
+      limit: FINDINGS_PAGE_SIZE,
+    });
+    all.push(...res.results);
+    cursor = res.nextCursor ?? undefined;
+    if (!cursor) return all;
+  }
+  return null;
 }
