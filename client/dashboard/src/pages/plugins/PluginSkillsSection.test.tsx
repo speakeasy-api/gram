@@ -194,7 +194,12 @@ describe("plugin membership authorization", () => {
         selectors: [{ projectId: "project-a", resourceId: "project-a" }],
       },
     ];
-    render(<PluginSkillsSection pluginId="plugin-a" onMutated={vi.fn()} />);
+    render(
+      <PluginSkillsSection
+        pluginId="plugin-a"
+        onMutated={vi.fn<(message: string) => void>()}
+      />,
+    );
     expect(state.query).toHaveBeenCalledWith(
       { pluginId: "plugin-a", skillId: undefined, limit: 50 },
       undefined,
