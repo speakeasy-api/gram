@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import {
   getMatchStrings,
   highlightMatches,
+  matchRanges,
+  resultsAreSensitive,
 } from "@/pages/chatLogs/chatHelpers";
 import { messageText } from "@/pages/chatLogs/transcript";
 import { useRoutes } from "@/routes";
@@ -20,9 +22,9 @@ import { REVEAL_SCOPE } from "../unmask";
  * right after it, and the finding's age on the right. Clicking the title opens
  * the session transcript over the drawer, the link opens the same session in
  * Agent Sessions in a new tab, and the chevron swaps the title for the whole
- * message, in place. A prompt-derived title is cut to 80 runes when the chat
- * is saved, so the rest of the message never reaches this list and has to be
- * loaded: the full text is the session's opening user message. Findings with
+ * message the finding was flagged in, in place. The card otherwise shows only
+ * the matched span, and the title is a session label cut to 80 runes, so the
+ * message itself never reaches this list and has to be loaded. Findings with
  * no chat, and viewers without chat:read, only get the chevron when the title
  * visually overflows, and it just un-clips the title.
  */
@@ -30,11 +32,14 @@ export function EvidenceTitle({
   title,
   createdAt,
   chatId: findingChatId,
+  chatMessageId,
   onOpenChat,
 }: {
   title: string;
   createdAt: Date;
   chatId: string | undefined;
+  /** The message the finding was flagged in; what the chevron expands to. */
+  chatMessageId: string | undefined;
   onOpenChat: (chatId: string) => void;
 }): JSX.Element {
   const routes = useRoutes();
@@ -59,7 +64,7 @@ export function EvidenceTitle({
     if (!el || expanded) return;
     setClipped(el.scrollWidth > el.clientWidth);
   }, [title, expanded]);
-  const fullMessage = useFullMessage(chatId, expanded);
+  const flaggedMessage = useFlaggedMessage(chatId, chatMessageId, expanded);
   const titleClassName = cn(
     "text-muted-foreground min-w-0 font-mono text-xs",
     expanded ? "break-words whitespace-pre-wrap" : "truncate",
@@ -75,7 +80,7 @@ export function EvidenceTitle({
             className={cn(titleClassName, "hover:text-foreground text-left")}
             onClick={() => onOpenChat(chatId)}
           >
-            {(expanded && fullMessage) || title}
+            {(expanded && flaggedMessage) || title}
           </button>
         ) : (
           <span ref={titleRef} className={titleClassName}>
@@ -86,7 +91,7 @@ export function EvidenceTitle({
           <button
             type="button"
             aria-expanded={expanded}
-            aria-label={expanded ? "Collapse message" : "Show full message"}
+            aria-label={expanded ? "Collapse message" : "Show flagged message"}
             className="text-muted-foreground hover:text-foreground shrink-0"
             onClick={() => setExpanded((prev) => !prev)}
           >
@@ -116,29 +121,33 @@ export function EvidenceTitle({
   );
 }
 
-// Enough to reach the first user turn past any system or developer preamble.
-const OPENING_MESSAGE_LOOKAHEAD = 20;
+// The transcript's own risk-view request: windows of messages around every
+// flagged one, which is the cheapest load guaranteed to include this finding's
+// message for all but very long sessions.
+const RISK_WINDOW_LIMIT = 200;
 
 /**
- * The session's opening user message, loaded once the header is expanded.
- * Every flagged match in it stays dotted out, as in the transcript: revealing
- * a match is an audited action this preview must not bypass. Returns null
- * while loading or when it can't be shown (no chat:read, or the findings
- * needed for masking failed to load or could not be fully paged), leaving the title in place.
+ * The message this finding was flagged in, loaded once the header is expanded.
+ * Flagged secrets in it stay dotted out, as in the transcript: revealing one
+ * is an audited action this preview must not bypass. Returns null
+ * while loading or when it can't be shown (the message is outside the first
+ * risk window, or the findings needed for masking failed to load or could not
+ * be fully paged), leaving the title in place.
  */
-function useFullMessage(
+function useFlaggedMessage(
   chatId: string | undefined,
+  chatMessageId: string | undefined,
   enabled: boolean,
 ): React.ReactNode {
   const client = useSdkClient();
-  const active = enabled && Boolean(chatId);
+  const active = enabled && Boolean(chatId) && Boolean(chatMessageId);
   const messageQuery = useQuery({
-    queryKey: ["chat", chatId, "opening-message"],
+    queryKey: ["chat", chatId, "risk-window"],
     queryFn: () =>
       client.chat.load({
         id: chatId ?? "",
-        fromStart: true,
-        limit: OPENING_MESSAGE_LOOKAHEAD,
+        riskOnly: true,
+        limit: RISK_WINDOW_LIMIT,
       }),
     enabled: active,
     throwOnError: false,
@@ -153,15 +162,23 @@ function useFullMessage(
     throwOnError: false,
   });
   if (!messageQuery.data || !findingsQuery.data) return null;
-  const opening = messageQuery.data.messages.find((m) => m.role === "user");
-  const text = opening ? messageText(opening.content) : "";
-  if (!text) return null;
-  return highlightMatches(
-    text,
-    getMatchStrings(findingsQuery.data),
-    true,
-    true,
+  const flagged = messageQuery.data.messages.find(
+    (m) => m.id === chatMessageId,
   );
+  if (!flagged) return null;
+  // A flagged tool call carries its payload in toolCalls, with no content.
+  const text = messageText(flagged.content) || flagged.toolCalls || "";
+  if (!text) return null;
+  // The transcript's masking rule: literal secrets and PII (gitleaks, presidio)
+  // are dotted out, other matches such as a flagged command are highlighted but
+  // readable. Judged against every finding in the chat, so a secret flagged on
+  // another message is still masked if it recurs in this one.
+  const findings = findingsQuery.data;
+  const secretMatches = getMatchStrings(
+    findings.filter((r) => resultsAreSensitive([r])),
+  );
+  const masked = matchRanges(text, secretMatches).length > 0;
+  return highlightMatches(text, getMatchStrings(findings), masked, masked);
 }
 
 const FINDINGS_PAGE_SIZE = 200;

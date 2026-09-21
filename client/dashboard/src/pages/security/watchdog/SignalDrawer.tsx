@@ -137,6 +137,7 @@ function EvidenceRow({
         title={result.chatTitle || getRuleTitleFallback(result.ruleId)}
         createdAt={result.createdAt}
         chatId={result.chatId}
+        chatMessageId={result.chatMessageId}
         onOpenChat={onOpenChat}
       />
       {judge ? (

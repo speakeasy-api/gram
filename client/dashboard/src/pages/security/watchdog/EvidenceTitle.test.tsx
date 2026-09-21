@@ -38,6 +38,7 @@ function renderTitle(
           title={TITLE}
           createdAt={new Date()}
           chatId={chatId}
+          chatMessageId="msg-flagged"
           onOpenChat={onOpenChat}
         />
       </MemoryRouter>
@@ -62,8 +63,8 @@ beforeEach(() => {
   );
   loadChat.mockResolvedValue({
     messages: [
-      { role: "system", content: "You are a support agent." },
-      { role: "user", content: FULL },
+      { id: "msg-opening", role: "user", content: "Hi, I need help." },
+      { id: "msg-flagged", role: "user", content: FULL },
     ],
   });
 });
@@ -94,21 +95,42 @@ describe("EvidenceTitle", () => {
     ).toBe("/agent-sessions?chatId=chat-1");
   });
 
-  it("expands to the opening user message with flagged matches masked", async () => {
+  it("expands to the flagged message, not the opening one, with matches masked", async () => {
     hasScope.mockReturnValue(true);
     renderTitle("chat-1");
 
     await userEvent
       .setup()
-      .click(screen.getByRole("button", { name: "Show full message" }));
+      .click(screen.getByRole("button", { name: "Show flagged message" }));
 
     const mark = await screen.findByText("•".repeat(19));
     expect(mark.tagName).toBe("MARK");
     expect(screen.queryByText(/4111/)).toBeNull();
+    expect(screen.queryByText(/I need help/)).toBeNull();
     expect(listFindings).toHaveBeenCalledTimes(2);
     expect(loadChat).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "chat-1", fromStart: true }),
+      expect.objectContaining({ id: "chat-1", riskOnly: true }),
     );
+  });
+
+  it("highlights a non-secret match without masking it", async () => {
+    hasScope.mockReturnValue(true);
+    loadChat.mockResolvedValue({
+      messages: [
+        { id: "msg-flagged", role: "tool", content: "bash cmd=printenv" },
+      ],
+    });
+    listFindings.mockResolvedValue({
+      results: [{ source: "custom", match: "printenv" }],
+    });
+    renderTitle("chat-1");
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Show flagged message" }));
+
+    const mark = await screen.findByText("printenv");
+    expect(mark.tagName).toBe("MARK");
   });
 
   it("stays plain text for findings with no chat", () => {
