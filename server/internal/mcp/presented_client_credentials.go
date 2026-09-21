@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"net/http"
+	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
@@ -24,12 +25,23 @@ type presentedClientCredentials struct {
 
 	// assertion is the client_assertion pair, zero when absent.
 	assertion privatekeyjwt.Assertion
+
+	// namedInForm is true when the form carried any client authentication
+	// parameter, even with an empty value. The values above cannot tell an
+	// empty client_id from an absent one, and dispatch must: a request that
+	// sends client_id= is attempting client authentication and has to fail it,
+	// rather than be handled as a caller that presented no client at all.
+	namedInForm bool
 }
 
+// clientAuthFormParameters are the form parameters that make up client
+// authentication at the token endpoint.
+var clientAuthFormParameters = []string{"client_id", "client_secret", "client_assertion", "client_assertion_type"}
+
 // presented reports whether the request offered any client authentication
-// parameter at all, valid or not.
+// parameter at all, valid or not, including one sent with an empty value.
 func (c presentedClientCredentials) presented() bool {
-	return c.clientID != "" || c.secret != "" || c.assertion.Presented()
+	return c.namedInForm || c.clientID != "" || c.secret != "" || c.assertion.Presented()
 }
 
 // extractClientCredentials reads every client authentication parameter a
@@ -44,13 +56,17 @@ func extractClientCredentials(r *http.Request) presentedClientCredentials {
 		Type:  r.PostForm.Get("client_assertion_type"),
 	}
 	hasFormCredentials := formID != "" || formSecret != ""
+	namedInForm := slices.ContainsFunc(clientAuthFormParameters, func(key string) bool {
+		_, ok := r.PostForm[key]
+		return ok
+	})
 
 	if id, secret, ok := r.BasicAuth(); ok && id != "" {
 		method := oauthwire.AuthMethodClientSecretBasic
 		if hasFormCredentials || assertion.Presented() {
 			method = "multiple"
 		}
-		return presentedClientCredentials{clientID: id, secret: secret, method: method, assertion: assertion}
+		return presentedClientCredentials{clientID: id, secret: secret, method: method, assertion: assertion, namedInForm: namedInForm}
 	}
 
 	method := oauthwire.AuthMethodNone
@@ -62,7 +78,7 @@ func extractClientCredentials(r *http.Request) presentedClientCredentials {
 	case assertion.Presented():
 		method = oauthwire.AuthMethodPrivateKeyJWT
 	}
-	return presentedClientCredentials{clientID: formID, secret: formSecret, method: method, assertion: assertion}
+	return presentedClientCredentials{clientID: formID, secret: formSecret, method: method, assertion: assertion, namedInForm: namedInForm}
 }
 
 // resolvePresentedClientID returns the client_id a request is authenticating
