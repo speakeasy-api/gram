@@ -117,6 +117,27 @@ func TestTokenGrantForDeclaresClientAuthentication(t *testing.T) {
 	}
 }
 
+// A client authentication parameter sent with an empty value is still an
+// attempt at client authentication. The request takes the authenticated branch
+// and fails client authentication there, rather than being handled as a caller
+// that presented no client.
+func TestTokenGrantForEmptyClientAuthParameterRequiresClientAuth(t *testing.T) {
+	t.Parallel()
+
+	service, _, _ := newTokenDispatchTestService(t)
+	for _, key := range clientAuthFormParameters {
+		r := newTokenDispatchRequest(t, url.Values{"grant_type": {oauthwire.GrantTypeJWTBearer}, key: {""}})
+		grant, ok := service.tokenGrantFor(r, oauthwire.GrantTypeJWTBearer, extractClientCredentials(r))
+		require.True(t, ok, key)
+		require.Equal(t, tokenClientAuthRequired, grant.clientAuth, "an empty %s must not be treated as clientless", key)
+	}
+
+	r := newTokenDispatchRequest(t, url.Values{"grant_type": {oauthwire.GrantTypeJWTBearer}})
+	grant, ok := service.tokenGrantFor(r, oauthwire.GrantTypeJWTBearer, extractClientCredentials(r))
+	require.True(t, ok)
+	require.Equal(t, tokenClientAuthNone, grant.clientAuth, "a request naming no client authentication parameter stays clientless")
+}
+
 // A grant that omits its client-authentication requirement, or pairs it with
 // the wrong handler, is refused without running any handler.
 func TestServeTokenGrantFailsClosedWithoutDeclaredClientAuthentication(t *testing.T) {
