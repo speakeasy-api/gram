@@ -216,6 +216,21 @@ func TestConfirm_ConcurrentCallsForOneUpstreamKeepOneRow(t *testing.T) {
 	require.Equal(t, "connected", rowFor(t, list(t, ctx, si, true), f.serverID).State)
 }
 
+func TestConfirm_RejectsServersWithoutIDJAG(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	recordAgent(t, ctx, si, "wlp1")
+	f := capableServer(t, ctx, si, "Notion")
+	incapable := createServer(t, ctx, si, f.projectID, createResourceIssuer(t, ctx, si, si.orgID, f.projectID, false), "Legacy")
+
+	_, err := confirm(t, ctx, si, audience, nil, f.serverID, incapable)
+	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+
+	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
+	require.NoError(t, err)
+	require.Empty(t, rows, "the batch is all or nothing")
+}
+
 func TestConfirm_RejectsRemovedApplication(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)

@@ -587,6 +587,9 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 		} else if len(visible) == 0 {
 			return nil, oops.E(oops.CodeNotFound, nil, "server not found")
 		}
+		if !AdvertisesIDJAG(server.GrantTypesSupported, server.AuthorizationGrantProfilesSupported) {
+			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server's authorization server does not support Cross App Access")
+		}
 		resource := resourceIndicator(server)
 		if resource == "" {
 			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server has no resource indicator")
