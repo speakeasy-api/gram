@@ -195,11 +195,13 @@ var _ = Service("agents", func() {
 		Payload(func() {
 			security.SessionPayload()
 			Extend(AgentIDForm)
+			Attribute("toolset_id", String, "Optional MCP authorization resource identifier: the toolset ID when present, otherwise the MCP server ID. Narrows discovery to this server and its project before evaluating exclusions.", func() { Format(FormatUUID) })
 		})
 		Result(ArrayOf(PolicyGrantForm))
 		HTTP(func() {
 			GET("/rpc/agents.listDelegableGrants")
 			Param("agent_id")
+			Param("toolset_id")
 			security.SessionHeader()
 			Response(StatusOK)
 		})

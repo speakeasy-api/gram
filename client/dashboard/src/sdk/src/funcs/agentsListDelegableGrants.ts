@@ -108,6 +108,7 @@ async function $do(
 
   const query = encodeFormQuery({
     "agent_id": payload.agent_id,
+    "toolset_id": payload.toolset_id,
   });
 
   const headers = new Headers(compactMap({

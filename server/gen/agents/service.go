@@ -196,6 +196,10 @@ type GetPayload struct {
 // listDelegableGrants method.
 type ListDelegableGrantsPayload struct {
 	SessionToken *string
+	// Optional MCP authorization resource identifier: the toolset ID when present,
+	// otherwise the MCP server ID. Narrows discovery to this server and its
+	// project before evaluating exclusions.
+	ToolsetID *string
 	// First-class agent identifier
 	AgentID string
 }
