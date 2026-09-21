@@ -10,6 +10,7 @@ import { Text } from "@/components/ui/Text";
 import { ViewToggle } from "@/components/ui/ViewToggle";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
 import type { SkillDistribution } from "@gram/client/models/components/skilldistribution.js";
@@ -24,7 +25,7 @@ import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { SettingsSection } from "@/components/detail/settings-section";
 import {
@@ -40,13 +41,18 @@ import { SectionEmptyState } from "./SectionEmptyState";
  */
 export function PluginSkillsSection({
   pluginId,
+  skillId,
   onMutated,
 }: {
   pluginId: string;
+  /** Concrete authorization context for resource-scoped skill readers. */
+  skillId?: string;
   /** Invoked after a successful change, e.g. to offer a marketplace publish. */
   onMutated: (message: string) => void;
 }): JSX.Element {
+  const { hasScope, hasAnyScopeInProject } = useRBAC();
   const project = useProject();
+  const canReadAllSkills = hasAnyScopeInProject(["skill:read"], project.id);
   const queryClient = useQueryClient();
   const [isAddSkillOpen, setIsAddSkillOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -54,9 +60,9 @@ export function PluginSkillsSection({
   const [viewMode, setViewMode] = useViewMode();
 
   const distributionsQuery = useSkillDistributionsInfinite(
-    { pluginId, limit: 50 },
+    { pluginId, skillId: canReadAllSkills ? undefined : skillId, limit: 50 },
     undefined,
-    { throwOnError: false },
+    { throwOnError: false, enabled: canReadAllSkills || !!skillId },
   );
   // The full membership backs both the list and the add-picker's exclusion
   // set, so partial pages would offer already-distributed skills.
@@ -108,6 +114,7 @@ export function PluginSkillsSection({
   };
 
   const handleRemoveSkill = (distribution: SkillDistribution) => {
+    if (!hasScope("skill:write", distribution.skillId)) return;
     undistribute.mutate(
       {
         request: {
@@ -220,11 +227,7 @@ export function PluginSkillsSection({
               />
             </>
           )}
-          <RequireScope
-            scope="skill:write"
-            resourceId={project.id}
-            level="component"
-          >
+          <RequireScope scope="skill:write" level="section">
             <Button
               variant="secondary"
               size="sm"
@@ -241,17 +244,19 @@ export function PluginSkillsSection({
       </div>
       {listContent}
 
-      <SkillPickerDialog
-        open={isAddSkillOpen}
-        onOpenChange={setIsAddSkillOpen}
-        excludedSkillIds={distributions.map((item) => item.skillId)}
-        target={{ pluginId }}
-        title="Add Skills"
-        description="Distribute project skills to this plugin bundle."
-        actionLabel="Add"
-        emptyMessage="No skills available to add. Record a skill in this project first."
-        onBatchComplete={handleAddSkillsComplete}
-      />
+      {isAddSkillOpen && (
+        <SkillPickerDialog
+          open={isAddSkillOpen}
+          onOpenChange={setIsAddSkillOpen}
+          excludedSkillIds={distributions.map((item) => item.skillId)}
+          target={{ pluginId }}
+          title="Add Skills"
+          description="Distribute project skills to this plugin bundle."
+          actionLabel="Add"
+          emptyMessage="No skills available to add. Record a skill in this project first."
+          onBatchComplete={handleAddSkillsComplete}
+        />
+      )}
     </SettingsSection>
   );
 }
@@ -265,18 +270,10 @@ function PluginSkillCard({
   isRemoving: boolean;
   onRemove: () => void;
 }): JSX.Element {
-  const project = useProject();
   const routes = useRoutes();
-  const navigate = useNavigate();
 
   return (
-    <Card.Entity
-      className="cursor-pointer"
-      onClick={() => {
-        void navigate(routes.skills.detail.href(distribution.skillId));
-      }}
-      icon={<Sparkles className="text-muted-foreground h-8 w-8" />}
-    >
+    <Card.Entity icon={<Sparkles className="text-muted-foreground h-8 w-8" />}>
       <div className="mb-2 flex items-start justify-between gap-2">
         <Text
           variant="subheading"
@@ -300,8 +297,8 @@ function PluginSkillCard({
       <div className="mt-auto flex items-center justify-end gap-2 pt-2">
         <RequireScope
           scope="skill:write"
-          resourceId={project.id}
-          level="component"
+          resourceId={distribution.skillId}
+          level="section"
         >
           <UiButton
             type="button"
@@ -317,6 +314,7 @@ function PluginSkillCard({
             }}
           >
             <Trash2 className="h-4 w-4" />
+            Remove
           </UiButton>
         </RequireScope>
       </div>
@@ -333,7 +331,6 @@ function PluginSkillTableRow({
   isRemoving: boolean;
   onRemove: () => void;
 }): JSX.Element {
-  const project = useProject();
   const routes = useRoutes();
   const href = routes.skills.detail.href(distribution.skillId);
 
@@ -364,8 +361,8 @@ function PluginSkillTableRow({
       <td className="px-3 py-3">
         <RequireScope
           scope="skill:write"
-          resourceId={project.id}
-          level="component"
+          resourceId={distribution.skillId}
+          level="section"
         >
           <div
             className="relative z-20 flex items-center justify-end"

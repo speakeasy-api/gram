@@ -22,7 +22,8 @@ import {
 import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
 import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";
-import { useSession } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { emailsMatch, resolveChatOwner } from "@/lib/chat-owner";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
@@ -992,7 +993,11 @@ export function InsightsProvider({
   // extra request, and avoids the cross-origin auth mismatch a direct fetch
   // from inside Elements would hit (its request headers are scoped to the
   // chat API, not `access.listMembers`).
-  const { data: membersData } = useMembers();
+  const organization = useOrganization();
+  const { hasScope } = useRBAC();
+  const { data: membersData } = useMembers(undefined, undefined, {
+    enabled: hasScope("org:read", organization.id),
+  });
   const resolveCreator = useCallback(
     ({
       userId,

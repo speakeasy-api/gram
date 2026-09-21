@@ -25,6 +25,8 @@ var _ = Service("plugins", func() {
 		})
 	})
 
+	distributionMethods()
+
 	Method("listPlugins", func() {
 		Description("List all plugins for the current project.")
 

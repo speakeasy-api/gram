@@ -16,6 +16,8 @@ import (
 
 // Client is the "plugins" service client.
 type Client struct {
+	ListDistributionPluginsEndpoint     goa.Endpoint
+	GetDistributionPluginEndpoint       goa.Endpoint
 	ListPluginsEndpoint                 goa.Endpoint
 	GetPluginEndpoint                   goa.Endpoint
 	CreatePluginEndpoint                goa.Endpoint
@@ -36,8 +38,10 @@ type Client struct {
 }
 
 // NewClient initializes a "plugins" service client given the endpoints.
-func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin, addPluginServer, updatePluginServer, removePluginServer, setPluginAssignments, listAudiences, downloadPluginPackage, downloadObservabilityPlugin, downloadCodexInstallScript, getPublishStatus, publishPlugins, getMarketplaceSettings, updateMarketplaceSettings goa.Endpoint) *Client {
+func NewClient(listDistributionPlugins, getDistributionPlugin, listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin, addPluginServer, updatePluginServer, removePluginServer, setPluginAssignments, listAudiences, downloadPluginPackage, downloadObservabilityPlugin, downloadCodexInstallScript, getPublishStatus, publishPlugins, getMarketplaceSettings, updateMarketplaceSettings goa.Endpoint) *Client {
 	return &Client{
+		ListDistributionPluginsEndpoint:     listDistributionPlugins,
+		GetDistributionPluginEndpoint:       getDistributionPlugin,
 		ListPluginsEndpoint:                 listPlugins,
 		GetPluginEndpoint:                   getPlugin,
 		CreatePluginEndpoint:                createPlugin,
@@ -56,6 +60,54 @@ func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin,
 		GetMarketplaceSettingsEndpoint:      getMarketplaceSettings,
 		UpdateMarketplaceSettingsEndpoint:   updateMarketplaceSettings,
 	}
+}
+
+// ListDistributionPlugins calls the "listDistributionPlugins" endpoint of the
+// "plugins" service.
+// ListDistributionPlugins may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - error: internal error
+func (c *Client) ListDistributionPlugins(ctx context.Context, p *ListDistributionPluginsPayload) (res *ListDistributionPluginsResult, err error) {
+	var ires any
+	ires, err = c.ListDistributionPluginsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListDistributionPluginsResult), nil
+}
+
+// GetDistributionPlugin calls the "getDistributionPlugin" endpoint of the
+// "plugins" service.
+// GetDistributionPlugin may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - error: internal error
+func (c *Client) GetDistributionPlugin(ctx context.Context, p *GetDistributionPluginPayload) (res *DistributionPlugin, err error) {
+	var ires any
+	ires, err = c.GetDistributionPluginEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DistributionPlugin), nil
 }
 
 // ListPlugins calls the "listPlugins" endpoint of the "plugins" service.

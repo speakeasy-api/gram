@@ -1,0 +1,126 @@
+package skills_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	goa "goa.design/goa/v3/pkg"
+	"goa.design/goa/v3/security"
+
+	gen "github.com/speakeasy-api/gram/server/gen/skills"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+)
+
+func TestSkillsAPIKeyAuthDelegatesProjectAccessToScopedHandlers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "auth-boundary-skill", "Authentication boundary.")
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "auth-boundary-target")
+	for _, tc := range []struct {
+		name     string
+		scope    authz.Scope
+		resource string
+		write    bool
+	}{
+		{"project read", authz.ScopeSkillRead, ti.projectID.String(), false},
+		{"project write", authz.ScopeSkillWrite, ti.projectID.String(), true},
+		{"resource read", authz.ScopeSkillRead, created.Skill.ID, false},
+		{"resource write", authz.ScopeSkillWrite, created.Skill.ID, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scoped := authztest.WithExactGrants(t, ctx, authz.NewGrant(tc.scope, tc.resource))
+			authorize := func(method string) context.Context {
+				t.Helper()
+				authenticated, err := ti.service.APIKeyAuth(context.WithValue(scoped, goa.MethodKey, method), *ti.authContext.ProjectSlug, &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema})
+				require.NoError(t, err)
+				return authenticated
+			}
+			got, err := ti.service.Get(authorize("get"), &gen.GetPayload{ID: created.Skill.ID})
+			require.NoError(t, err)
+			require.Equal(t, created.Skill.ID, got.Skill.ID)
+			_, err = ti.service.ListDistributions(authorize("listDistributions"), &gen.ListDistributionsPayload{SkillID: &created.Skill.ID, Limit: 50})
+			require.NoError(t, err)
+			_, err = ti.service.Distribute(authorize("distribute"), &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
+			if tc.write {
+				require.NoError(t, err)
+			} else {
+				requireOopsCode(t, err, oops.CodeForbidden)
+			}
+			err = ti.service.Undistribute(authorize("undistribute"), &gen.UndistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
+			if tc.write {
+				require.NoError(t, err)
+			} else {
+				requireOopsCode(t, err, oops.CodeForbidden)
+			}
+		})
+	}
+}
+
+func TestSkillsAPIKeyAuthRetainsTenantScoping(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	cloned := *ti.authContext
+	cloned.ActiveOrganizationID = "other-organization"
+	mismatched := contextvalues.SetAuthContext(ctx, &cloned)
+	_, err := ti.service.APIKeyAuth(context.WithValue(mismatched, goa.MethodKey, "get"), *ti.authContext.ProjectSlug, &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestSkillsAPIKeyAuthCollectionProjectDimensions(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	_, otherProjectID := createProjectContext(t, ctx, ti, authz.ScopeSkillWrite)
+	for _, method := range []string{"list", "listDistributions", "create"} {
+		t.Run(method, func(t *testing.T) {
+			for _, tc := range []struct {
+				name, allowProject, blockedProject string
+				allowed                            bool
+			}{
+				{"other project grant", otherProjectID.String(), "", false},
+				{"matching project grant", ti.projectID.String(), "", true},
+				{"matching project exclusion", ti.projectID.String(), ti.projectID.String(), false},
+				{"unrelated project exclusion", ti.projectID.String(), otherProjectID.String(), true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					grant := authz.NewGrant(authz.ScopeSkillWrite, authz.WildcardResource)
+					grant.Selector[authz.SelectorKeyProjectID] = tc.allowProject
+					grants := []authz.Grant{grant}
+					if tc.blockedProject != "" {
+						scope := authz.ScopeSkillBlockedRead
+						if method == "create" {
+							scope = authz.ScopeSkillBlockedWrite
+						}
+						blocked := authz.NewGrant(scope, authz.WildcardResource)
+						blocked.Selector[authz.SelectorKeyProjectID] = tc.blockedProject
+						grants = append(grants, blocked)
+					}
+					scoped := authztest.WithExactGrants(t, ctx, grants...)
+					authenticated, err := ti.service.APIKeyAuth(context.WithValue(scoped, goa.MethodKey, method), *ti.authContext.ProjectSlug, &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema})
+					require.NoError(t, err, "authentication must reach the scoped handler without project grants")
+					switch method {
+					case "list":
+						_, err = ti.service.List(authenticated, &gen.ListPayload{Limit: 10})
+					case "listDistributions":
+						_, err = ti.service.ListDistributions(authenticated, &gen.ListDistributionsPayload{Limit: 50})
+					case "create":
+						name := "dimension-created"
+						if tc.name == "unrelated project exclusion" {
+							name = "dimension-unrelated"
+						}
+						_, err = ti.service.Create(authenticated, &gen.CreatePayload{Content: skillManifest(name, "Dimension scope.", "body")})
+					}
+					if tc.allowed {
+						require.NoError(t, err)
+					} else {
+						requireOopsCode(t, err, oops.CodeForbidden)
+					}
+				})
+			}
+		})
+	}
+}

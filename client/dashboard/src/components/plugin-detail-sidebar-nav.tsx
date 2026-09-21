@@ -1,3 +1,5 @@
+import { useOrganization } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { MemberFacepile } from "@/components/member-facepile";
 import {
   DetailSidebarInfoLabel,
@@ -48,6 +50,46 @@ import * as React from "react";
 import { useLocation, useParams } from "react-router";
 
 export function PluginDetailSidebarNav(): React.JSX.Element | null {
+  const { hasScope, isLoading } = useRBAC();
+  const organization = useOrganization();
+  if (isLoading) return null;
+  return hasScope("org:read", organization.id) ? (
+    <OrganizationPluginSidebarNav />
+  ) : (
+    <DistributionPluginSidebarNav />
+  );
+}
+
+function DistributionPluginSidebarNav(): React.JSX.Element | null {
+  const routes = useRoutes();
+  const location = useLocation();
+  const { pluginId } = useParams<{ pluginId: string }>();
+  if (!pluginId) return null;
+  const skillId = new URLSearchParams(location.search).get("skillId");
+  return (
+    <DetailSidebarNav
+      backHref={
+        skillId ? routes.skills.detail.href(skillId) : routes.skills.href()
+      }
+      backLabel={skillId ? "Back to skill" : "Back to skills"}
+      itemsTitle="Distribution"
+      items={[
+        {
+          key: PLUGIN_SKILLS_SECTION_ID,
+          title: "Skills",
+          Icon: Sparkles,
+          href: `${pluginSectionHref(routes, pluginId, PLUGIN_SKILLS_SECTION_ID)}${location.search}`,
+          active: true,
+        },
+      ]}
+    />
+  );
+}
+
+function OrganizationPluginSidebarNav(): React.JSX.Element | null {
+  const { hasScope } = useRBAC();
+  const organization = useOrganization();
+  const canAdmin = hasScope("org:admin", organization.id);
   const routes = useRoutes();
   const location = useLocation();
   const { pluginId } = useParams<{ pluginId: string }>();
@@ -57,10 +99,17 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
     enabled: !!pluginId,
   });
   const { data: publishStatus } = usePublishStatus();
-  const { data: membersData } = useMembers();
-  const { data: rolesData } = useRoles();
-  const { data: audiencesData } = useAudiences();
-  const showAssignments = usePluginAssignmentsVisible();
+  const { data: membersData } = useMembers(undefined, undefined, {
+    enabled: canAdmin,
+  });
+  const { data: rolesData } = useRoles(undefined, undefined, {
+    enabled: canAdmin,
+  });
+  const { data: audiencesData } = useAudiences(undefined, undefined, {
+    enabled: canAdmin,
+  });
+  const assignmentsVisible = usePluginAssignmentsVisible();
+  const showAssignments = canAdmin && assignmentsVisible;
 
   const memberByUrn = React.useMemo(
     () => memberMapByUrn(membersData?.members ?? []),
@@ -97,7 +146,9 @@ export function PluginDetailSidebarNav(): React.JSX.Element | null {
     ...(showAssignments
       ? [sectionItem(PLUGIN_ASSIGNMENTS_SECTION_ID, "Assignments", Users)]
       : []),
-    sectionItem(PLUGIN_SETTINGS_SECTION_ID, "Settings", SettingsIcon),
+    ...(canAdmin
+      ? [sectionItem(PLUGIN_SETTINGS_SECTION_ID, "Settings", SettingsIcon)]
+      : []),
   ];
 
   const assignments = plugin?.assignments ?? [];

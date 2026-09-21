@@ -27,6 +27,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
 	redisCache "github.com/go-redis/cache/v9"
@@ -259,6 +260,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	// Only the minimal discovery handlers own skill-scoped project access.
+	// Keep the existing upstream project checks for every full/admin endpoint.
+	switch ctx.Value(goa.MethodKey) {
+	case "listDistributionPlugins", "getDistributionPlugin":
+		return s.auth.AuthorizeWithHandlerProjectAccess(ctx, key, schema)
+	}
 	return s.auth.Authorize(ctx, key, schema)
 }
 

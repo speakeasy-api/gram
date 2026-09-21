@@ -161,7 +161,7 @@ func UsageCommands() []string {
 		"platform-killswitches (list-definitions|activate-prescription|change-prescription|deactivate-prescription|get-prescription|list-prescriptions)",
 		"admin-open-router-keys (list-keys|get-key-usage|disable-key|enable-key)",
 		"platform-mcp (get-onboarding|start-onboarding|record-dashboard-cta-event|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
+		"plugins (list-distribution-plugins|get-distribution-plugin|list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|update-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|probe-url|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
@@ -2150,6 +2150,17 @@ func ParseEndpoint(
 		platformMcpDismissOnboardingSessionTokenFlag = platformMcpDismissOnboardingFlags.String("session-token", "", "")
 
 		pluginsFlags = flag.NewFlagSet("plugins", flag.ContinueOnError)
+
+		pluginsListDistributionPluginsFlags                = flag.NewFlagSet("list-distribution-plugins", flag.ExitOnError)
+		pluginsListDistributionPluginsSkillIDFlag          = pluginsListDistributionPluginsFlags.String("skill-id", "REQUIRED", "")
+		pluginsListDistributionPluginsSessionTokenFlag     = pluginsListDistributionPluginsFlags.String("session-token", "", "")
+		pluginsListDistributionPluginsProjectSlugInputFlag = pluginsListDistributionPluginsFlags.String("project-slug-input", "", "")
+
+		pluginsGetDistributionPluginFlags                = flag.NewFlagSet("get-distribution-plugin", flag.ExitOnError)
+		pluginsGetDistributionPluginSkillIDFlag          = pluginsGetDistributionPluginFlags.String("skill-id", "REQUIRED", "")
+		pluginsGetDistributionPluginIDFlag               = pluginsGetDistributionPluginFlags.String("id", "REQUIRED", "")
+		pluginsGetDistributionPluginSessionTokenFlag     = pluginsGetDistributionPluginFlags.String("session-token", "", "")
+		pluginsGetDistributionPluginProjectSlugInputFlag = pluginsGetDistributionPluginFlags.String("project-slug-input", "", "")
 
 		pluginsListPluginsFlags                = flag.NewFlagSet("list-plugins", flag.ExitOnError)
 		pluginsListPluginsSessionTokenFlag     = pluginsListPluginsFlags.String("session-token", "", "")
@@ -4806,6 +4817,8 @@ func ParseEndpoint(
 	platformMcpDismissOnboardingFlags.Usage = platformMcpDismissOnboardingUsage
 
 	pluginsFlags.Usage = pluginsUsage
+	pluginsListDistributionPluginsFlags.Usage = pluginsListDistributionPluginsUsage
+	pluginsGetDistributionPluginFlags.Usage = pluginsGetDistributionPluginUsage
 	pluginsListPluginsFlags.Usage = pluginsListPluginsUsage
 	pluginsGetPluginFlags.Usage = pluginsGetPluginUsage
 	pluginsCreatePluginFlags.Usage = pluginsCreatePluginUsage
@@ -6772,6 +6785,12 @@ func ParseEndpoint(
 
 		case "plugins":
 			switch epn {
+			case "list-distribution-plugins":
+				epf = pluginsListDistributionPluginsFlags
+
+			case "get-distribution-plugin":
+				epf = pluginsGetDistributionPluginFlags
+
 			case "list-plugins":
 				epf = pluginsListPluginsFlags
 
@@ -9419,6 +9438,12 @@ func ParseEndpoint(
 		case "plugins":
 			c := pluginsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "list-distribution-plugins":
+				endpoint = c.ListDistributionPlugins()
+				data, err = pluginsc.BuildListDistributionPluginsPayload(*pluginsListDistributionPluginsSkillIDFlag, *pluginsListDistributionPluginsSessionTokenFlag, *pluginsListDistributionPluginsProjectSlugInputFlag)
+			case "get-distribution-plugin":
+				endpoint = c.GetDistributionPlugin()
+				data, err = pluginsc.BuildGetDistributionPluginPayload(*pluginsGetDistributionPluginSkillIDFlag, *pluginsGetDistributionPluginIDFlag, *pluginsGetDistributionPluginSessionTokenFlag, *pluginsGetDistributionPluginProjectSlugInputFlag)
 			case "list-plugins":
 				endpoint = c.ListPlugins()
 				data, err = pluginsc.BuildListPluginsPayload(*pluginsListPluginsSessionTokenFlag, *pluginsListPluginsProjectSlugInputFlag)
@@ -19651,6 +19676,8 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage distributable plugin bundles of MCP servers and hooks.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] plugins COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-distribution-plugins: List minimal distribution targets for a skill the caller can read. Requires skill:read, not org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-distribution-plugin: Get minimal distribution target metadata for a skill the caller can read. Requires skill:read, not org:read.`)
 	fmt.Fprintln(os.Stderr, `    list-plugins: List all plugins for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-plugin: Get a plugin with its servers and assignments.`)
 	fmt.Fprintln(os.Stderr, `    create-plugin: Create a new plugin.`)
@@ -19672,6 +19699,52 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s plugins COMMAND --help\n", os.Args[0])
 }
+func pluginsListDistributionPluginsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins list-distribution-plugins", os.Args[0])
+	fmt.Fprint(os.Stderr, " -skill-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List minimal distribution targets for a skill the caller can read. Requires skill:read, not org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -skill-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins list-distribution-plugins --skill-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsGetDistributionPluginUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-distribution-plugin", os.Args[0])
+	fmt.Fprint(os.Stderr, " -skill-id STRING")
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get minimal distribution target metadata for a skill the caller can read. Requires skill:read, not org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -skill-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-distribution-plugin --skill-id \"550e8400-e29b-41d4-a716-446655440000\" --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func pluginsListPluginsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] plugins list-plugins", os.Args[0])

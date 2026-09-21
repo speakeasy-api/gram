@@ -1,3 +1,4 @@
+import { useMcpDiscoveryAccess } from "./useMcpDiscoveryAccess";
 import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
@@ -32,7 +33,9 @@ export function useObservabilityMcpConfig({
   const { projectSlug } = useSlugs();
   const client = useGramContext();
   const { session } = useSession();
-  const enabled = Boolean(projectSlug);
+  const { canReadServers, canReadEndpoints } =
+    useMcpDiscoveryAccess(projectSlug);
+  const enabled = canReadServers;
   const request = projectSlug ? { gramProject: projectSlug } : undefined;
   const { data: toolsetsData, isLoading: toolsetsLoading } = useListToolsets(
     request,
@@ -47,7 +50,7 @@ export function useObservabilityMcpConfig({
   const { data: endpointsData, isLoading: endpointsLoading } = useMcpEndpoints(
     request,
     undefined,
-    { enabled },
+    { enabled: canReadEndpoints },
   );
 
   const getSession = useCallback(async (): Promise<string> => {
@@ -130,7 +133,7 @@ export function useObservabilityMcpConfig({
  * Used to show a setup prompt in the AI Insights sidebar.
  */
 export function useNoToolsetsConfigured(projectSlug?: string): boolean {
-  const enabled = Boolean(projectSlug);
+  const { canReadServers: enabled } = useMcpDiscoveryAccess(projectSlug);
   const request = projectSlug ? { gramProject: projectSlug } : undefined;
   const {
     data: toolsetsData,

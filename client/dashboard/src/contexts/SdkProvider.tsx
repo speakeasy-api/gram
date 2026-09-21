@@ -9,8 +9,6 @@ import { getApiBaseURL } from "@/lib/utils";
 import { datadogRum } from "@datadog/browser-rum";
 import { Gram } from "@gram/client";
 import { HTTPClient } from "@gram/client/lib/http.js";
-import { buildLatestDeploymentQuery } from "@gram/client/react-query/latestDeployment.core.js";
-import { buildListToolsetsQuery } from "@gram/client/react-query/listToolsets.core.js";
 import { GramProvider } from "@gram/client/react-query/_context.js";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
@@ -104,15 +102,9 @@ export const SdkProvider = ({
       httpClient,
     });
 
-    // Prefetch key queries immediately so they run in parallel with auth.info
-    // instead of waiting for auth to resolve before components mount and fire them.
-    // Only prefetch when the user is actually on a project route — the
-    // "default" fallback used for org-scoped pages shouldn't trigger work the
-    // user will never see.
-    if (pathProjectSlug) {
-      void queryClient.prefetchQuery(buildLatestDeploymentQuery(gram));
-      void queryClient.prefetchQuery(buildListToolsetsQuery(gram));
-    }
+    // Resource queries are loaded by their permission-gated consumers. Do not
+    // prefetch before auth/grants resolve: skill-only sessions cannot read
+    // deployments or MCP toolsets, even when visiting a valid project route.
 
     return gram;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- telemetry is stable context value; including it would recreate the SDK client unnecessarily

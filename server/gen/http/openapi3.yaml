@@ -45465,6 +45465,115 @@ paths:
             tags:
                 - plugins
             x-speakeasy-name-override: downloadPluginPackage
+    /rpc/plugins.getDistributionPlugin:
+        get:
+            description: Get minimal distribution target metadata for a skill the caller can read. Requires skill:read, not org:read.
+            operationId: getDistributionPlugin
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: skill_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DistributionPlugin'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getDistributionPlugin plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: getDistributionPlugin
+            x-speakeasy-react-hook:
+                name: DistributionPlugin
     /rpc/plugins.getMarketplaceSettings:
         get:
             description: Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.
@@ -45852,6 +45961,108 @@ paths:
             x-speakeasy-name-override: listAudiences
             x-speakeasy-react-hook:
                 name: Audiences
+    /rpc/plugins.listDistributionPlugins:
+        get:
+            description: List minimal distribution targets for a skill the caller can read. Requires skill:read, not org:read.
+            operationId: listDistributionPlugins
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: skill_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDistributionPluginsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listDistributionPlugins plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: listDistributionPlugins
+            x-speakeasy-react-hook:
+                name: DistributionPlugins
     /rpc/plugins.listPlugins:
         get:
             description: List all plugins for the current project.
@@ -81146,6 +81357,23 @@ components:
                 plugin_id: 550e8400-e29b-41d4-a716-446655440001
             required:
                 - id
+        DistributionPlugin:
+            type: object
+            properties:
+                description:
+                    type: string
+                id:
+                    type: string
+                    format: uuid
+                is_default:
+                    type: boolean
+                name:
+                    type: string
+            description: Minimal plugin metadata for distributing an authorized skill. Does not expose configuration or assignments.
+            required:
+                - id
+                - name
+                - is_default
         DomainDNSConfig:
             type: object
             properties:
@@ -86315,6 +86543,15 @@ components:
                 - organization_id
                 - provider
                 - schedules
+        ListDistributionPluginsResult:
+            type: object
+            properties:
+                plugins:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DistributionPlugin'
+            required:
+                - plugins
         ListEnvironmentsResult:
             type: object
             properties:

@@ -86,7 +86,10 @@ export function useServerAssistantTransport(
     { gramProject: projectSlug },
     undefined,
     {
-      enabled: enabled && !!projectSlug,
+      enabled:
+        enabled &&
+        !!targetProjectId &&
+        hasScope("project:read", targetProjectId),
       retry: false,
       throwOnError: false,
       refetchOnWindowFocus: false,

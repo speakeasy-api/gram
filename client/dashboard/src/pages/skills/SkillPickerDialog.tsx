@@ -1,3 +1,4 @@
+import { useRBAC } from "@/hooks/useRBAC";
 import { Page } from "@/components/page-layout";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -48,6 +49,7 @@ export function SkillPickerDialog({
   renderSelectionNotice?: (selectedCount: number) => ReactNode;
   onBatchComplete: (result: SkillPickerResult) => void | Promise<void>;
 }): JSX.Element {
+  const { hasScope } = useRBAC();
   const [search, setSearch] = useState("");
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const [isBatchAdding, setIsBatchAdding] = useState(false);
@@ -67,9 +69,13 @@ export function SkillPickerDialog({
     return prioritizeAddableSkills(
       (
         skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? []
-      ).filter((skill) => !excluded.has(skill.id)),
+      ).filter(
+        (skill) =>
+          !excluded.has(skill.id) &&
+          (!target.pluginId || hasScope("skill:write", skill.id)),
+      ),
     );
-  }, [excludedSkillIds, skillsQuery.data?.pages]);
+  }, [excludedSkillIds, skillsQuery.data?.pages, target.pluginId, hasScope]);
   const visibleSkills = useMemo(
     () => filterSkills(availableSkills, search, [], []),
     [availableSkills, search],
@@ -105,6 +111,11 @@ export function SkillPickerDialog({
 
   const handleSubmit = async () => {
     if (selectedSkillIds.length === 0 || isBatchAdding) return;
+    if (
+      target.pluginId &&
+      selectedSkillIds.some((id) => !hasScope("skill:write", id))
+    )
+      return;
     setIsBatchAdding(true);
     try {
       const results = await Promise.allSettled(

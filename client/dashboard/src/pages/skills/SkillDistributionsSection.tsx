@@ -3,7 +3,6 @@ import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
-import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import type { PluginSkillDistribution } from "@gram/client/models/components/pluginskilldistribution.js";
@@ -29,7 +28,6 @@ export function SkillDistributionsSection({
 }: {
   skillId: string;
 }): JSX.Element {
-  const project = useProject();
   const queryClient = useQueryClient();
   const routes = useRoutes();
   const distributionsQuery = useSkillDistributionsInfinite(
@@ -96,7 +94,7 @@ export function SkillDistributionsSection({
             >
               <div className="min-w-0">
                 <Link
-                  to={routes.plugins.detail.href(distribution.pluginId)}
+                  to={`${routes.plugins.detail.href(distribution.pluginId)}?skillId=${encodeURIComponent(skillId)}`}
                   className="text-sm font-medium hover:underline"
                 >
                   {distribution.pluginName}
@@ -114,7 +112,7 @@ export function SkillDistributionsSection({
                 <VersionTrackingBadge distribution={distribution} />
                 <RequireScope
                   scope="skill:write"
-                  resourceId={project.id}
+                  resourceId={skillId}
                   level="component"
                 >
                   <Button
