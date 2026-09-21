@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
+//nolint:paralleltest,tparallel // Subtests mutate the same distribution edge and verify its state.
 func TestSkillsAPIKeyAuthDelegatesProjectAccessToScopedHandlers(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -77,6 +78,7 @@ func TestSkillsAPIKeyAuthCollectionProjectDimensions(t *testing.T) {
 	_, otherProjectID := createProjectContext(t, ctx, ti, authz.ScopeSkillWrite)
 	for _, method := range []string{"list", "listDistributions", "create"} {
 		t.Run(method, func(t *testing.T) {
+			t.Parallel()
 			for _, tc := range []struct {
 				name, allowProject, blockedProject string
 				allowed                            bool
@@ -87,6 +89,7 @@ func TestSkillsAPIKeyAuthCollectionProjectDimensions(t *testing.T) {
 				{"unrelated project exclusion", ti.projectID.String(), otherProjectID.String(), true},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
 					grant := authz.NewGrant(authz.ScopeSkillWrite, authz.WildcardResource)
 					grant.Selector[authz.SelectorKeyProjectID] = tc.allowProject
 					grants := []authz.Grant{grant}

@@ -617,6 +617,7 @@ func TestSkillScopedReads(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
+//nolint:paralleltest,tparallel // Subtests mutate the same distribution edge and verify its state.
 func TestSkillDistributionScopedAuthorizationBoundaries(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -681,6 +682,7 @@ func TestSkillDistributionScopedAuthorizationBoundaries(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest,tparallel // Subtests mutate the same distribution edge and verify its state.
 func TestAssistantDistributionPreservesProjectWriteAndSkillRead(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -724,6 +726,7 @@ func TestAssistantDistributionPreservesProjectWriteAndSkillRead(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest,tparallel // The parent verifies the shared distribution after all denied operations.
 func TestSkillScopedAccessRejectsMismatchedOrganization(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -760,6 +763,7 @@ func TestSkillScopedAccessRejectsMismatchedOrganization(t *testing.T) {
 	require.Len(t, listed.Distributions, 1)
 }
 
+//nolint:paralleltest,tparallel // Subtests mutate the same distribution edge and verify its state.
 func TestSkillScopedExclusionsOverrideProjectAllow(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

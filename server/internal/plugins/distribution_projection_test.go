@@ -14,6 +14,7 @@ import (
 	"testing"
 )
 
+//nolint:paralleltest,tparallel // Complete reads before the parent changes the shared plugin assignments.
 func TestDistributionPluginProjection(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestPluginsService(t)
@@ -30,7 +31,8 @@ func TestDistributionPluginProjection(t *testing.T) {
 			require.NotEmpty(t, result.Plugins)
 			detail, err := ti.service.GetDistributionPlugin(readCtx, &gen.GetDistributionPluginPayload{SkillID: skill.ID.String(), ID: plugin.ID})
 			require.NoError(t, err)
-			data, err := json.Marshal(detail)
+			// This deliberately checks the field surface of the generated service model, not an HTTP body.
+			data, err := json.Marshal(detail) //nolint:musttag // Goa service models do not carry transport JSON tags.
 			require.NoError(t, err)
 			var fields map[string]any
 			require.NoError(t, json.Unmarshal(data, &fields))

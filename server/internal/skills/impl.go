@@ -192,7 +192,7 @@ func (s *Service) requireSkillGrant(ctx context.Context, scope authz.Scope, proj
 	// allow matching ignores dimensions absent from a check, while strict
 	// exclusion matching requires them to be present.
 	dimensions := map[string]string{authz.SelectorKeyProjectID: projectID}
-	checks := []authz.Check{{Scope: scope, ResourceID: projectID, Dimensions: dimensions}}
+	checks := []authz.Check{{Scope: scope, ResourceKind: "", ResourceID: projectID, Dimensions: dimensions}}
 	if skillID != "" {
 		checks = append(checks, authz.Check{
 			Scope: scope, ResourceKind: authz.ResourceKindSkill,
@@ -1523,7 +1523,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 	if target.mutationScope() == authz.ScopeSkillWrite {
 		mutationErr = s.requireSkillGrant(ctx, authz.ScopeSkillWrite, authCtx.ProjectID.String(), payload.ID)
 	} else {
-		mutationErr = s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()})
+		mutationErr = s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
 	}
 	if err := mutationErr; err != nil {
 		return nil, err
@@ -1703,7 +1703,7 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 	if target.mutationScope() == authz.ScopeSkillWrite {
 		mutationErr = s.requireSkillGrant(ctx, authz.ScopeSkillWrite, authCtx.ProjectID.String(), payload.ID)
 	} else {
-		mutationErr = s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()})
+		mutationErr = s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
 	}
 	if err := mutationErr; err != nil {
 		return err

@@ -33,6 +33,7 @@ func TestRequireAnyUnblocked(t *testing.T) {
 		{"no grants", nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := GrantsToContext(enterpriseSessionCtx(t), tc.grants)
 			err := engine.RequireAnyUnblocked(ctx, checks...)
 			if tc.allowed {
@@ -45,6 +46,7 @@ func TestRequireAnyUnblocked(t *testing.T) {
 		})
 	}
 	t.Run("every admitted policy can exclude", func(t *testing.T) {
+		t.Parallel()
 		allow := []Grant{NewGrant(ScopeSkillRead, "project-one")}
 		deny := []Grant{NewGrant(ScopeSkillRead, "project-one"), NewGrant(ScopeSkillBlockedRead, "skill-one")}
 		for i := range 3 {
@@ -57,6 +59,7 @@ func TestRequireAnyUnblocked(t *testing.T) {
 		}
 	})
 	t.Run("admitted policies cannot combine different allow alternatives", func(t *testing.T) {
+		t.Parallel()
 		ctx := principalPolicyTestContext(t,
 			[]Grant{NewGrant(ScopeSkillRead, "project-one")},
 			[]Grant{NewGrant(ScopeSkillRead, "skill-one")},

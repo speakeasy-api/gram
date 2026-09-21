@@ -42,6 +42,7 @@ func TestDistributionPluginsHTTPSkillOnlyAuthorization(t *testing.T) {
 		{"invalid session", "invalid-session", http.StatusUnauthorized},
 	} {
 		t.Run(denied.name, func(t *testing.T) {
+			t.Parallel()
 			req := httptest.NewRequest(http.MethodGet, "/rpc/plugins.listDistributionPlugins?skill_id="+skill.ID.String(), nil).WithContext(authztest.WithExactGrants(t, ctx))
 			req.Header.Set("Gram-Session", denied.session)
 			req.Header.Set("Gram-Project", *ac.ProjectSlug)
@@ -52,6 +53,7 @@ func TestDistributionPluginsHTTPSkillOnlyAuthorization(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.path, func(t *testing.T) {
+			t.Parallel()
 			// Exercise real session authentication, generated HTTP method routing, and
 			// Gram-Project resolution with only an exact skill grant (no project grant).
 			requestCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillRead, skill.ID.String()))

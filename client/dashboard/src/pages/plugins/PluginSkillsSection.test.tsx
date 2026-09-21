@@ -82,7 +82,7 @@ describe("plugin membership authorization", () => {
           <PluginSkillsSection
             pluginId="plugin-a"
             skillId="skill-a"
-            onMutated={vi.fn()}
+            onMutated={vi.fn<(message: string) => void>()}
           />
         </MemoryRouter>
       </TooltipProvider>,
@@ -105,7 +105,7 @@ describe("plugin membership authorization", () => {
       <PluginSkillsSection
         pluginId="plugin-a"
         skillId="skill-a"
-        onMutated={vi.fn()}
+        onMutated={vi.fn<(message: string) => void>()}
       />,
     );
     expect(state.query).toHaveBeenCalledWith(
@@ -120,7 +120,7 @@ describe("plugin membership authorization", () => {
       <PluginSkillsSection
         pluginId="plugin-a"
         skillId="skill-a"
-        onMutated={vi.fn()}
+        onMutated={vi.fn<(message: string) => void>()}
       />,
     );
     expect(state.query).toHaveBeenCalledWith(
@@ -130,7 +130,12 @@ describe("plugin membership authorization", () => {
     );
   });
   it("does not request an unscoped membership without project permission", () => {
-    render(<PluginSkillsSection pluginId="plugin-a" onMutated={vi.fn()} />);
+    render(
+      <PluginSkillsSection
+        pluginId="plugin-a"
+        onMutated={vi.fn<(message: string) => void>()}
+      />,
+    );
     expect(state.query).toHaveBeenCalledWith(
       { pluginId: "plugin-a", skillId: undefined, limit: 50 },
       undefined,

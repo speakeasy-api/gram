@@ -2,7 +2,10 @@ import { useOrganization } from "@/contexts/Auth";
 import { hasScopeInGrants, useRBAC } from "./useRBAC";
 
 /** The insights shell can target a project other than the URL-active project. */
-export function useMcpDiscoveryAccess(projectSlug?: string) {
+export function useMcpDiscoveryAccess(projectSlug?: string): {
+  canReadServers: boolean;
+  canReadEndpoints: boolean;
+} {
   const organization = useOrganization();
   const { grants } = useRBAC();
   const projectId = organization.projects.find(

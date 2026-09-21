@@ -51,7 +51,9 @@ export function PluginDistributionDetail(): JSX.Element {
               <PluginSkillsSection
                 pluginId={plugin.data.id}
                 skillId={skillId}
-                onMutated={(message) => toast.success(message)}
+                onMutated={(message) => {
+                  toast.success(message);
+                }}
               />
             </>
           ) : (

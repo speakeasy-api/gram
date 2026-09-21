@@ -4,7 +4,11 @@ import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints";
 
-export function usePluginServerQueries() {
+export function usePluginServerQueries(): {
+  toolsetsQuery: ReturnType<typeof useListToolsets>;
+  serversQuery: ReturnType<typeof useMcpServers>;
+  endpointsQuery: ReturnType<typeof useMcpEndpoints>;
+} {
   const project = useProject();
   const { grants } = useRBAC();
   // Toolsets/servers filter by accessible MCP resources. Endpoint listing

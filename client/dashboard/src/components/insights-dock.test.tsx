@@ -68,7 +68,11 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
     error: undefined,
   }),
 }));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasScope: () => false }),
+}));
 vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "organization" }),
   useSession: () => ({ user: { id: "user", email: "user@example.com" } }),
 }));
 vi.mock("@/lib/assistantEntityLinks", () => ({
