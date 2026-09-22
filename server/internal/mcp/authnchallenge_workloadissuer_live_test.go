@@ -189,7 +189,7 @@ func (f liveWorkloadFixture) present(t *testing.T, endpoint *mcp.ResolvedMcpEndp
 func (f liveWorkloadFixture) presentClaims(t *testing.T, endpoint *mcp.ResolvedMcpEndpoint, claims jwt.Claims) error {
 	t.Helper()
 
-	raw := oauthtest.MintWorkloadAssertion(t, f.issuer, claims)
+	raw := oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", claims)
 
 	err := mcp.AdmitWorkloadAssertion(t.Context(), f.conn, f.verifier, endpoint, []string{
 		liveWorkloadAudience,
