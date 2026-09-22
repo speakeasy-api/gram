@@ -16,6 +16,7 @@ describe("support matrix model", () => {
     ["claude-chat-web", "chat"],
     ["cowork-desktop", "cowork"],
     ["cursor", "cursor"],
+    ["codex-cli", "codex"],
     ["openai", "codex"],
     ["chatgpt-web", "codex"],
     ["gemini", "other"],

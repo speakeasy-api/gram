@@ -325,7 +325,7 @@ function EvidenceCell({
       : capability === "cost"
         ? (evidence?.tokens ?? 0)
         : null;
-  const observed = value !== null && value > 0;
+  const observed = telemetryStatus === "ready" && value !== null && value > 0;
   const label = unsupportedLabel
     ? unsupportedLabel
     : telemetryStatus === "loading"
