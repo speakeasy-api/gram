@@ -40,6 +40,7 @@ import {
 import { Line } from "react-chartjs-2";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
+import { agentSessionHref } from "@/pages/chatLogs/agentSessionLink";
 import skillEfficacyMethodology from "../../../../../docs/skills/measuring-skill-efficacy.md?raw";
 
 ChartJS.register(
@@ -611,7 +612,10 @@ function ScoredSessionsTable({
       render: (session) =>
         session.gramChatId ? (
           <Link
-            to={`${routes.agentSessions.href()}?${new URLSearchParams({ chatId: session.gramChatId })}`}
+            to={agentSessionHref(
+              routes.agentSessions.href(),
+              session.gramChatId,
+            )}
             className="text-primary text-sm underline underline-offset-2"
           >
             Open

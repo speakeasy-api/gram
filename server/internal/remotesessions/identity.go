@@ -212,7 +212,7 @@ func (v *jwksIDTokenVerifier) Verify(ctx context.Context, rawIDToken string, exp
 	}
 	var claims jwt.Claims
 	var all map[string]json.RawMessage
-	if _, err := verifyIssuerSignedJWT(ctx, v.keys, expect.jwksURI, conv.Default(expect.fetchScope, expect.issuer), expect.transport, rawIDToken, algorithms, &claims, &all); err != nil {
+	if _, err := verifyIssuerSignedJWTWithKeyPolicy(ctx, v.keys, expect.jwksURI, conv.Default(expect.fetchScope, expect.issuer), expect.transport, rawIDToken, algorithms, validateJWTVerificationKeyStrength, &claims, &all); err != nil {
 		return UpstreamIdentity{}, err
 	}
 	if claims.Expiry == nil {
@@ -306,7 +306,7 @@ func verifyIssuerSignedJWTWithKeyPolicy(ctx context.Context, keys *jwks.KeyResol
 	return header, nil
 }
 
-// RFC 7518 §§3.3, 3.5: RSA (RS* and PS*) access-token verification keys must be at least 2048 bits.
+// RFC 7518 §§3.3, 3.5: RSA (RS* and PS*) JWT verification keys must be at least 2048 bits.
 func validateJWTVerificationKeyStrength(key *jose.JSONWebKey) error {
 	if public, ok := key.Key.(*rsa.PublicKey); ok && public.N.BitLen() < 2048 {
 		return errors.New("rsa verification key is smaller than 2048 bits")

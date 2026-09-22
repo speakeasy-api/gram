@@ -222,7 +222,7 @@ func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, 
 	if utf8.RuneCountInString(name) > maxAPIKeyNameRunes {
 		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, nil, "key name must not exceed %d characters", maxAPIKeyNameRunes)
 	}
-	if versionRaw != int(runtimepolicy.CurrentDelegatedPolicyVersion) {
+	if versionRaw < int(runtimepolicy.DelegatedPolicyVersion1) || versionRaw > int(runtimepolicy.CurrentDelegatedPolicyVersion) {
 		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, runtimepolicy.ErrInvalidDelegatedPolicy, "unsupported delegated grants version")
 	}
 

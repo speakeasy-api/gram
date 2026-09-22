@@ -201,6 +201,8 @@ func operationBudgetActorKey(principal Principal) (string, error) {
 // operations. Every value is injected at composition; no production defaults
 // are assigned here.
 type OperationBudgets struct {
+	// RiskFindings meters row-level Watchdog reads independently.
+	RiskFindings   OperationBudget
 	Catalog        OperationBudget
 	Registration   OperationBudget
 	ReviewRequests OperationBudget
@@ -295,5 +297,5 @@ func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, l
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.ReviewRequests.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Plugins.valid() && b.AccessReads.valid() && b.AccessRoleMutations.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.DrilldownVolume.valid()
+	return b.RiskFindings.valid() && b.Catalog.valid() && b.Registration.valid() && b.ReviewRequests.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Plugins.valid() && b.AccessReads.valid() && b.AccessRoleMutations.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.DrilldownVolume.valid()
 }

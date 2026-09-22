@@ -48,6 +48,7 @@ import {
 import { Page } from "@/components/page-layout";
 import { type DateRangePreset, getPresetRange } from "@/elements";
 import { isValidPreset } from "@/components/observe/observeFilterUtils";
+import { AGENT_SESSION_CHAT_PARAM } from "@/pages/chatLogs/agentSessionLink";
 
 type SortField = "chronological" | "messageCount";
 type SortOrder = "asc" | "desc";
@@ -228,9 +229,9 @@ export function LogsAgentsContent(): JSX.Element {
         {
           onSuccess: () => {
             setSearchParams((prev) => {
-              if (prev.get("chatId") !== chatId) return prev;
+              if (prev.get(AGENT_SESSION_CHAT_PARAM) !== chatId) return prev;
               const next = new URLSearchParams(prev);
-              next.delete("chatId");
+              next.delete(AGENT_SESSION_CHAT_PARAM);
               return next;
             });
             setCachedChat((current) =>
@@ -248,7 +249,7 @@ export function LogsAgentsContent(): JSX.Element {
   const urlFrom = searchParams.get("from");
   const urlTo = searchParams.get("to");
   const urlSearch = searchParams.get("search");
-  const urlChatId = searchParams.get("chatId");
+  const urlChatId = searchParams.get(AGENT_SESSION_CHAT_PARAM);
   const urlHasRisk = searchParams.get("has_risk");
   const urlAccountType = searchParams.get("account_type");
   const urlPinned = searchParams.get("pinned");
@@ -534,9 +535,9 @@ export function LogsAgentsContent(): JSX.Element {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         if (chat) {
-          next.set("chatId", chat.id);
+          next.set(AGENT_SESSION_CHAT_PARAM, chat.id);
         } else {
-          next.delete("chatId");
+          next.delete(AGENT_SESSION_CHAT_PARAM);
         }
         return next;
       });
@@ -552,7 +553,7 @@ export function LogsAgentsContent(): JSX.Element {
     (chatID: string) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
-        next.set("chatId", chatID);
+        next.set(AGENT_SESSION_CHAT_PARAM, chatID);
         return next;
       });
     },

@@ -692,7 +692,7 @@ RETURNING s.*;
 UPDATE user_sessions
 SET deleted_at = clock_timestamp()
 WHERE user_session_issuer_id = @user_session_issuer_id
-  AND refresh_token_hash = @refresh_token_hash
+  AND refresh_token_hash = @refresh_token_hash::text
   AND deleted IS FALSE
 RETURNING *;
 
@@ -757,7 +757,7 @@ WHERE user_session_issuer_id = @user_session_issuer_id
 SELECT *
 FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id
-  AND refresh_token_hash = @refresh_token_hash
+  AND refresh_token_hash = @refresh_token_hash::text
   AND deleted IS FALSE;
 
 -- The Create* queries below are exercised by tests and by the OAuth surface
@@ -1221,6 +1221,11 @@ UPDATE user_session_clients
 SET token_endpoint_auth_method = NULL
 WHERE id = @id
 RETURNING *;
+
+-- name: AdvanceOrganizationUserSessionIssuerVersionFixture :exec
+-- Test fixture: invalidate in-flight login configuration without changing its identity.
+UPDATE user_session_issuers SET updated_at = updated_at + interval '1 second'
+WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL;
 
 -- name: ListWorkloadSessionLabels :many
 -- Resolves the workloads behind one page of workload sessions into something

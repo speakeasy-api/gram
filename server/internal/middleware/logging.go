@@ -309,6 +309,7 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 			if requestContext.RefererHost != "" {
 				attrs = append(attrs, attr.SlogHTTPReferrerHost(requestContext.RefererHost))
 			}
+			attrs = append(attrs, agentDeviceIdentityAttrs(r)...)
 			wide.Push(ctx, attrs...)
 
 			next.ServeHTTP(rw, r)

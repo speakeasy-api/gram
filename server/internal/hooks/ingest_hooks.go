@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -181,6 +182,9 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		authedCtx, err := s.authorizePluginRequest(ctx, apikey, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
 		if err != nil {
 			outcome = hookMetricOutcomeUnauthorized
+			if errors.Is(err, errAgentHooksDenied) {
+				return nil, oops.E(oops.CodeForbidden, err, "forbidden")
+			}
 			return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized")
 		}
 		ctx = authedCtx
@@ -199,6 +203,15 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		}, nil
 	}
 	orgSlug = authCtx.OrganizationSlug
+	if payload.Session != nil {
+		if sessionID, changed := scopedSessionPtr(ctx, payload.Session.ID); changed {
+			session := *payload.Session
+			session.ID = sessionID
+			scoped := *payload
+			scoped.Session = &session
+			payload = &scoped
+		}
+	}
 	actor := s.resolveCanonicalActor(ctx, payload, authCtx)
 
 	sessionID := canonicalSessionID(payload)
@@ -442,6 +455,10 @@ type canonicalActor struct {
 // used as a fallback: an event from such a key with no self-reported email
 // stays unattributed rather than crediting every machine to the publisher.
 func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) canonicalActor {
+	// An agent key is the actor itself; it has no human identity to resolve.
+	if isAgentActor(ctx) {
+		return canonicalActor{UserID: "", Email: ""}
+	}
 	tokenEmail := ""
 	if authCtx.Email != nil {
 		tokenEmail = strings.TrimSpace(*authCtx.Email)
@@ -881,7 +898,7 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 	// it while the entries write failed would leave the session claiming a read
 	// it cannot back up — and under block_all every later meta-tool call denies
 	// for the rest of the session.
-	if !inventoryRead {
+	if !inventoryRead || !s.claimMCPListSnapshot(ctx, sessionID) {
 		return
 	}
 	if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
@@ -1011,7 +1028,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	// OTEL path needs the cached hostname to stamp Claude cost rows so the
 	// user breakdown can fall back to the device.
 	if (strings.TrimSpace(payload.Event.Type) == "session.started" || metadata.ServiceName == "claude-tag") &&
-		metadata.SessionID != "" && (metadata.ServiceName == "claude-tag" || metadata.UserID != "" || metadata.UserEmail != "" || metadata.Hostname != "") {
+		metadata.SessionID != "" && !isAgentActor(ctx) && (metadata.ServiceName == "claude-tag" || metadata.UserID != "" || metadata.UserEmail != "" || metadata.Hostname != "") {
 		cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
 		err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
 		cancel()
@@ -1089,6 +1106,9 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 
 	if cached, err := s.getSessionMetadata(ctx, metadata.SessionID); err == nil &&
 		cached.GramOrgID == metadata.GramOrgID && cached.ProjectID == metadata.ProjectID {
+		if isAgentActor(ctx) {
+			cached = agentSessionView(cached, metadata.GramOrgID, metadata.ProjectID)
+		}
 		// Surface-specificity merge: the OTEL path caches "cowork" from the
 		// resource service.name, which must survive this event's re-cache —
 		// cowork ships the same "claude-code-desktop" adapter slug as Claude
@@ -1112,7 +1132,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		// ingest keys with no self-reported email): the device bridge may have
 		// attributed the owning employee. A resolved identity is never
 		// overwritten.
-		if authenticatedIngestOptions(ctx).AllowSessionIdentityFallback {
+		if authenticatedIngestOptions(ctx).AllowSessionIdentityFallback && !isAgentActor(ctx) {
 			if metadata.UserEmail == "" {
 				metadata.UserEmail = cached.UserEmail
 			}
@@ -1132,6 +1152,10 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 	// to the OTEL path, which carries the account identity this payload lacks.
 	if strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "codex") {
 		metadata.Provider = providerOpenAI
+		// Account attribution links sessions to employees; an agent actor has none.
+		if isAgentActor(ctx) {
+			return metadata
+		}
 		identityChanged := !sameCodexIdentity(metadata.ObservedUserEmail, metadata.UserEmail)
 		if metadata.AccountType == "" || identityChanged {
 			if identityChanged {
@@ -1346,7 +1370,7 @@ func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.A
 			FunctionID:     nil,
 		},
 		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
-		Attributes: attrs,
+		Attributes: withAgentActor(ctx, attrs),
 	})
 }
 

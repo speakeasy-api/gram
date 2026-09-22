@@ -16,7 +16,7 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNow } from "date-fns";
+import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { Loader2 } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -28,14 +28,18 @@ import {
   RevealAllToggle,
 } from "../risk-ui";
 import {
+  evidenceShowsRuleTitle,
   getCategoryCodeForFinding,
   getRuleTitleFallback,
   hasJudgeSource,
+  hasOnlyRationaleSources,
   isJudgeSource,
+  isRationaleSource,
   scoreToRating,
 } from "../risk-utils";
 import { useDismissFinding } from "../useDismissFinding";
 import { collectFindingsForRules } from "./collect-findings";
+import { EvidenceTitle } from "./EvidenceTitle";
 import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
 import { SuppressMenu } from "./SuppressMenu";
 import { SCORE_TEXT_COLOR } from "./signals-helpers";
@@ -114,10 +118,12 @@ function EvidenceRow({
   result,
   onExclude,
   onDismiss,
+  onOpenChat,
 }: {
   result: RiskResult;
   onExclude: (result: RiskResult) => void;
   onDismiss: (result: RiskResult) => void;
+  onOpenChat: (chatId: string, chatMessageId?: string) => void;
 }): JSX.Element {
   // A judge finding's "match" is the entire flagged event (often absent on
   // the realtime path), and its description carries the verdict rationale —
@@ -127,18 +133,26 @@ function EvidenceRow({
   // the whole detector), so the row offers only suppression. Every other
   // detector gets the shared Suppress menu: a one-off manual suppression or
   // exclusion rule creation, same affordance as the drawer and list actions.
+  //
+  // LLM analyzer findings sit in between: their evidence is the model's
+  // rationale (no match to redact), and their single rule per category
+  // restates the category code, so the footer names the category alone
+  // (except the dead-letter sentinel, whose title is the only hint that the
+  // analysis never ran) — but a rule exclusion silences just that category,
+  // so they keep the menu.
   const judge = isJudgeSource(result.source);
+  const rationale = isRationaleSource(result.source);
+  const showRuleTitle = evidenceShowsRuleTitle(result.source, result.ruleId);
   return (
     <div className="border-border overflow-hidden rounded-md border">
-      <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <span className="text-muted-foreground truncate font-mono text-xs">
-          {result.chatTitle || getRuleTitleFallback(result.ruleId)}
-        </span>
-        <span className="text-muted-foreground shrink-0 font-mono text-xs">
-          {formatDistanceToNow(result.createdAt, { addSuffix: true })}
-        </span>
-      </div>
-      {judge ? (
+      <EvidenceTitle
+        title={result.chatTitle || getRuleTitleFallback(result.ruleId)}
+        createdAt={result.createdAt}
+        chatId={result.chatId}
+        chatMessageId={result.chatMessageId}
+        onOpenChat={onOpenChat}
+      />
+      {rationale ? (
         <div className="px-3 py-3">
           <EventMatchDialog
             resultId={result.id}
@@ -161,9 +175,11 @@ function EvidenceRow({
       <div className="flex items-center justify-between gap-2 px-3 py-2">
         <Text small muted className="truncate font-mono">
           {/* Category code, never the raw scanner source — and no rule title
-              for judge findings, whose single rule restates the category. */}
+              for judge or LLM analyzer category findings, whose single rule
+              restates the category. */}
           Triggered: {getCategoryCodeForFinding(result.source, result.ruleId)}
-          {!judge && ` · ${getRuleTitleFallback(result.ruleId)}`} (conf{" "}
+          {showRuleTitle &&
+            ` · ${getRuleTitleFallback(result.ruleId)}`} (conf{" "}
           {(result.confidence ?? 0).toFixed(2)})
         </Text>
         <span className="flex shrink-0 gap-1">
@@ -209,6 +225,12 @@ export function SignalDrawer({
     null,
   );
   const [collecting, setCollecting] = useState(false);
+  // Keyed to its signal, so a chat left open never reappears under another.
+  const [openChat, setOpenChat] = useState<{
+    signalKey: string;
+    chatId: string;
+    chatMessageId: string | undefined;
+  } | null>(null);
   // Set when leaving the exclusion editor so the remounting detail view
   // slides back in from the left — but never on the drawer's first open,
   // where the Sheet's own slide already animates the content.
@@ -218,6 +240,9 @@ export function SignalDrawer({
     setExclusionState(null);
     setReturningFromEditor(true);
   };
+
+  const shownChat =
+    openChat && openChat.signalKey === signal?.key ? openChat : null;
 
   const ruleId = signal?.ruleId ?? "";
   // The list endpoint's rule filter is substring-match, so an id that is a
@@ -263,6 +288,12 @@ export function SignalDrawer({
   // action, scoped to this signal's rule.
   const judgeSignal =
     signal !== null && hasJudgeSource(signal.detectionSources);
+  // Judge and LLM analyzer evidence shows rationales, not redacted matches,
+  // so for a signal backed only by such sources the "redacted" label and the
+  // reveal-all toggle (which only drives MaskedMatch rows) would both
+  // mislead.
+  const rationaleSignal =
+    signal !== null && hasOnlyRationaleSources(signal.detectionSources);
 
   // The signal lives in the URL, so back/forward can swap it mid-collection;
   // bumping the token makes an in-flight collection drop its result instead
@@ -335,6 +366,7 @@ export function SignalDrawer({
             setExclusionState(null);
             setReturningFromEditor(false);
             setPendingDismiss(null);
+            setOpenChat(null);
             onClose();
           }
         }}
@@ -531,15 +563,11 @@ export function SignalDrawer({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <Text small muted className="font-medium uppercase">
-                            {/* Judge evidence shows rationales, not redacted
-                                matches, so the label and the reveal-all
-                                toggle (which only drives MaskedMatch rows)
-                                would both mislead there. */}
-                            {judgeSignal
+                            {rationaleSignal
                               ? "Latest evidence"
                               : "Latest evidence · redacted"}
                           </Text>
-                          {!judgeSignal && <RevealAllToggle />}
+                          {!rationaleSignal && <RevealAllToggle />}
                         </div>
                         {evidenceQuery.isLoading && (
                           <Text small muted>
@@ -582,6 +610,13 @@ export function SignalDrawer({
                                 })
                               }
                               onDismiss={(r) => dismiss([r])}
+                              onOpenChat={(chatId, chatMessageId) =>
+                                setOpenChat({
+                                  signalKey: signal.key,
+                                  chatId,
+                                  chatMessageId,
+                                })
+                              }
                             />
                           )}
                         />
@@ -592,6 +627,15 @@ export function SignalDrawer({
               </div>
             </RevealAllProvider>
           )}
+          {/* Nested in this sheet so closing it doesn't read as an outside
+              click and close the drawer too. */}
+          <ChatDetailSheet
+            chatId={shownChat?.chatId ?? null}
+            focusedMessageId={shownChat?.chatMessageId}
+            onClose={() => setOpenChat(null)}
+            onDelete={() => setOpenChat(null)}
+            riskFocus
+          />
         </SheetContent>
       </Sheet>
       <SuppressFindingsDialog

@@ -1,4 +1,5 @@
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
+import { agentSessionHref } from "@/pages/chatLogs/agentSessionLink";
 
 // Builds the dashboard path to an audit subject's detail page, or null when the
 // subject has no navigable page (or is missing the slug/id needed to route to
@@ -36,10 +37,9 @@ export function subjectHref(log: AuditLog, orgSlug: string): string | null {
         ? `${projectBase}/risk-policies?policy=${log.subjectId}`
         : null;
     case "chat_session":
-      // The agent-sessions list opens the session's transcript drawer via
-      // `?chatId=<id>`; subjectId is the chat session UUID.
+      // subjectId is the chat session UUID.
       return projectBase
-        ? `${projectBase}/agent-sessions?chatId=${log.subjectId}`
+        ? agentSessionHref(`${projectBase}/agent-sessions`, log.subjectId)
         : null;
     case "project":
       return log.subjectSlug ? `/${orgSlug}/projects/${log.subjectSlug}` : null;

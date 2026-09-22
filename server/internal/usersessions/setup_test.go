@@ -352,7 +352,7 @@ func seedUserSessionFull(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 		UserSessionClientID: clientID,
 		SubjectUrn:          principalURN,
 		Jti:                 "jti-" + uuid.NewString(),
-		RefreshTokenHash:    "hash-" + uuid.NewString(),
+		RefreshTokenHash:    conv.ToPGText("hash-" + uuid.NewString()),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: refreshExpiresAt, InfinityModifier: 0, Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: expiresAt, InfinityModifier: 0, Valid: true},
 	})

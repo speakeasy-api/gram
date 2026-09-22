@@ -6,14 +6,15 @@
          enforced in every environment, in which case ClickHouse sees the whole host's RAM.
 
          Sized for N concurrent worktrees, not one: each worktree runs its own ClickHouse, so
-         this budget is multiplied by however many stacks are up. 1 GiB is ample for the
-         local dataset (dev seed plus whatever a test run writes) and keeps six worktrees
-         under 6 GiB of ClickHouse headroom instead of 12 GiB. It is also the floor that
-         boots: 512 MiB fails startup with BAD_ARGUMENTS on the background-pool constraint
-         described below, which the <background_pool_size> setting does not rescue — that
-         override is a no-op here (system.settings reports 20 while 8 is enforced), so the
-         effective pool tracks this cap rather than the value written below. -->
-    <max_server_memory_usage>1073741824</max_server_memory_usage> <!-- 1 GiB -->
+         this budget is multiplied by however many stacks are up. 2 GiB rather than 1 GiB
+         because the seed's per-project cleanup (DELETE FROM telemetry_logs, a mutation over
+         existing parts) exceeded a 1 GiB cap and failed the seed with MEMORY_LIMIT_EXCEEDED.
+         512 MiB is the floor that boots at all: below that startup fails with BAD_ARGUMENTS
+         on the background-pool constraint described below, which the <background_pool_size>
+         setting does not rescue — that override is a no-op here (system.settings reports 20
+         while 8 is enforced), so the effective pool tracks this cap rather than the value
+         written below. -->
+    <max_server_memory_usage>2147483648</max_server_memory_usage> <!-- 2 GiB -->
 
     <!-- Reduce cache sizes relative to available RAM -->
     <cache_size_to_ram_max_ratio>0.20</cache_size_to_ram_max_ratio>

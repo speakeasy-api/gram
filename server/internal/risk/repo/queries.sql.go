@@ -3294,6 +3294,60 @@ func (q *Queries) ListRiskExclusionsByProjectPage(ctx context.Context, arg ListR
 	return items, nil
 }
 
+const listRiskFindingPolicies = `-- name: ListRiskFindingPolicies :many
+SELECT id, organization_id, project_id, enabled, deleted, score
+FROM risk_policies
+WHERE project_id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+ORDER BY created_at DESC, id DESC
+LIMIT $3
+`
+
+type ListRiskFindingPoliciesParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	PageLimit      int32
+}
+
+type ListRiskFindingPoliciesRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Enabled        bool
+	Deleted        bool
+	Score          float64
+}
+
+// Findings need only eligibility and severity metadata, never policy definitions.
+// The caller requests one extra row to detect overflow and fail closed.
+func (q *Queries) ListRiskFindingPolicies(ctx context.Context, arg ListRiskFindingPoliciesParams) ([]ListRiskFindingPoliciesRow, error) {
+	rows, err := q.db.Query(ctx, listRiskFindingPolicies, arg.ProjectID, arg.OrganizationID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRiskFindingPoliciesRow
+	for rows.Next() {
+		var i ListRiskFindingPoliciesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Enabled,
+			&i.Deleted,
+			&i.Score,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskOverviewTimeSeriesFindings = `-- name: ListRiskOverviewTimeSeriesFindings :many
 WITH buckets AS (
   SELECT generate_series(

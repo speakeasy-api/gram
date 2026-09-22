@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	claudeevents "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/claude"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -218,29 +219,16 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	projectSlugHint := conv.PtrValOr(payload.ProjectSlugInput, "")
 	hasPluginAuth := hasOptionalPluginAuth(payload)
 
-	// service.name lives in cached SessionMetadata seeded by the OTEL Logs
-	// endpoint. May be empty for the first hooks of a session (before OTEL
-	// catches up) or for OTEL-disabled clients — non-fatal, log either way.
-	serviceName := ""
-	if sid := conv.PtrValOr(payload.SessionID, ""); sid != "" {
-		if md, err := s.getSessionMetadata(ctx, sid); err == nil {
-			serviceName = md.ServiceName
-		}
-	}
-
 	logger := s.logger.With(
 		attr.SlogHookSource("claude"),
 		attr.SlogHookEvent(payload.HookEventName),
-		attr.SlogServiceName(serviceName),
 		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
-		attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
 		attr.SlogProjectSlug(projectSlugHint),
 		attr.SlogHookHasPluginAuth(hasPluginAuth),
 	)
+	// The actor is unknown until plugin auth, so pre-auth lines carry the raw id.
+	authLogger := logger.With(attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")))
 
-	logger.InfoContext(ctx, "claude hook received",
-		attr.SlogEvent("claude_hook"),
-	)
 	hookEventName := payload.HookEventName
 	if parsedEvent, ok := parseClaudeHookEvent(payload.HookEventName); ok {
 		hookEventName = string(parsedEvent)
@@ -263,9 +251,18 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		// same path a no-headers request takes — recordHook buffers the event
 		// in Redis, and the OTEL Logs endpoint flushes it once the session is
 		// validated. Policies that need auth context degrade gracefully.
-		if authedCtx, err := s.authorizePluginRequest(ctx, conv.PtrValOr(payload.ApikeyToken, ""), projectSlugHint); err != nil {
+		if authedCtx, err := s.authorizePluginRequest(ctx, conv.PtrValOr(payload.ApikeyToken, ""), projectSlugHint); errors.Is(err, errAgentHooksDenied) {
+			// An authenticated agent key that fails its grant never falls back
+			// to the unauthenticated buffer, where OTEL could attribute it to a human.
 			outcome = hookMetricOutcomeUnauthorized
-			logger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
+			authLogger.WarnContext(ctx, "agent key denied on claude hook",
+				attr.SlogEvent("claude_hook_agent_denied"),
+				attr.SlogError(err),
+			)
+			return nil, oops.E(oops.CodeForbidden, err, "agent key is not permitted to send hook events")
+		} else if err != nil {
+			outcome = hookMetricOutcomeUnauthorized
+			authLogger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
 				attr.SlogEvent("claude_hook_auth_failed"),
 				attr.SlogError(err),
 			)
@@ -280,6 +277,30 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
 		orgSlug = authCtx.OrganizationSlug
 	}
+
+	// Scope the session id before anything reads it: the actor is known now.
+	if sessionID, changed := scopedSessionPtr(ctx, payload.SessionID); changed {
+		scoped := *payload
+		scoped.SessionID = sessionID
+		payload = &scoped
+	}
+
+	// service.name lives in cached SessionMetadata seeded by the OTEL Logs
+	// endpoint. May be empty for the first hooks of a session (before OTEL
+	// catches up) or for OTEL-disabled clients — non-fatal, log either way.
+	serviceName := ""
+	if sid := conv.PtrValOr(payload.SessionID, ""); sid != "" {
+		if md, err := s.getSessionMetadata(ctx, sid); err == nil {
+			serviceName = md.ServiceName
+		}
+	}
+	logger = logger.With(
+		attr.SlogServiceName(serviceName),
+		attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+	)
+	logger.InfoContext(ctx, "claude hook received",
+		attr.SlogEvent("claude_hook"),
+	)
 
 	// Claim the per-invocation idempotency token once, before persistence and
 	// the block side-effects in the handlers below. A retry re-sends the same
@@ -439,7 +460,9 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 	if !ok {
 		return
 	}
-	s.cacheMCPListSnapshot(ctx, *payload.SessionID, entries, variant)
+	if !s.cacheMCPListSnapshot(ctx, *payload.SessionID, entries, variant) {
+		return
+	}
 	orgID := ""
 	projectID := ""
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
@@ -514,17 +537,25 @@ func (s *Service) parseMCPInventoryFromPayload(ctx context.Context, payload *gen
 }
 
 // cacheMCPListSnapshot stores the parsed inventory and agent variant under the
-// session's cache keys. Shared by the SessionStart/ConfigChange capture path
-// and the PreToolUse enforcement resolver, so a payload-carried inventory
-// self-heals the cache that the best-effort telemetry path later reads.
-func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, entries []MCPServerEntry, variant string) {
+// session's cache keys and reports whether the caller owns this session's
+// snapshot. Shared by the SessionStart/ConfigChange capture path and the
+// PreToolUse enforcement resolver, so a payload-carried inventory self-heals
+// the cache that the best-effort telemetry path later reads.
+//
+// A cache write failure is logged but still reports ownership: the shadow-MCP
+// inventory row the caller persists next is independent security evidence and
+// must survive a transient Redis error. Only an ownership or authentication
+// mismatch refuses.
+func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, entries []MCPServerEntry, variant string) bool {
+	if !s.claimMCPListSnapshot(ctx, sessionID) {
+		return false
+	}
 	key := sessionMCPListCacheKey(sessionID)
 	if err := s.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
 			attr.SlogEvent("claude_hook_mcp_list_cache_set_failed"),
 			attr.SlogError(err),
 		)
-		return
 	}
 
 	variantKey := sessionAgentVariantCacheKey(sessionID)
@@ -534,6 +565,7 @@ func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, en
 			attr.SlogError(err),
 		)
 	}
+	return true
 }
 
 // payloadInventoryIsFresh reports whether the hook payload's MCP inventory was
@@ -616,6 +648,9 @@ func (s *Service) refreshMCPListTTL(ctx context.Context, sessionID string) {
 			attr.SlogError(err),
 		)
 	}
+	if err := s.cache.Expire(ctx, mcpListOwnerCacheKey(sessionID), sessionMCPListTTL); err != nil {
+		s.logger.DebugContext(ctx, "failed to refresh MCP list owner TTL", attr.SlogError(err))
+	}
 	if err := s.cache.Expire(ctx, sessionAgentVariantCacheKey(sessionID), sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to refresh session agent variant TTL",
 			attr.SlogEvent("claude_hook_agent_variant_ttl_refresh_failed"),
@@ -645,7 +680,14 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	}
 	ctx, err := s.auth.Authorize(ctx, key, keyScheme)
 	if err != nil {
+		// Admission failures still carry the agent actor: reject, don't downgrade.
+		if isAgentActor(ctx) {
+			return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
+		}
 		return ctx, fmt.Errorf("authorize hook api key: %w", err)
+	}
+	if err := s.requireAgentHooksIngest(ctx); err != nil {
+		return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
 	}
 	projectScheme := &security.APIKeyScheme{
 		Name:           constants.ProjectSlugSecuritySchema,
@@ -654,6 +696,9 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	}
 	ctx, err = s.auth.Authorize(ctx, projectSlug, projectScheme)
 	if err != nil {
+		if isAgentActor(ctx) {
+			return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
+		}
 		return ctx, fmt.Errorf("authorize hook project slug: %w", err)
 	}
 	return ctx, nil
@@ -689,6 +734,21 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	// list snapshot TTL so it survives long-running sessions and only
 	// expires after ~12h of true inactivity.
 	s.refreshMCPListTTL(ctx, sessionID)
+
+	// An agent actor persists on its auth identity at once; buffering would
+	// let a later OTEL export re-attribute the event to a human.
+	if isAgentActor(ctx) {
+		metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, "")
+		if err != nil {
+			logger.WarnContext(ctx, "dropping agent claude hook without project scope",
+				attr.SlogEvent("claude_hook_agent_unscoped"),
+				attr.SlogError(err),
+			)
+			return
+		}
+		go s.persistHook(ctx, payload, &metadata)
+		return
+	}
 
 	payloadUserEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
 
@@ -779,6 +839,21 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 }
 
 func (s *Service) resolveClaudeSessionMetadata(ctx context.Context, sessionID, userEmail string) (SessionMetadata, error) {
+	// An agent actor ignores the payload email and adopts only the cached
+	// session's surface fields.
+	if isAgentActor(ctx) {
+		if metadata, ok := s.claudeAuthContextMetadata(ctx, sessionID, ""); ok {
+			if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
+				view := agentSessionView(cached, metadata.GramOrgID, metadata.ProjectID)
+				metadata.ServiceName = view.ServiceName
+				metadata.Hostname = view.Hostname
+				metadata.Cwd = view.Cwd
+			}
+			return metadata, nil
+		}
+		return SessionMetadata{}, errAgentHookUnscoped
+	}
+
 	authMetadata, hasAuthMetadata := s.claudeAuthContextMetadata(ctx, sessionID, strings.TrimSpace(userEmail))
 
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
@@ -799,7 +874,7 @@ func (s *Service) resolveClaudeSessionMetadata(ctx context.Context, sessionID, u
 
 func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) {
 	metadata.UserEmail = strings.TrimSpace(metadata.UserEmail)
-	if metadata.UserEmail == "" {
+	if metadata.UserEmail == "" && !isAgentActor(ctx) {
 		s.logger.WarnContext(ctx, "skipping claude hook persistence without user email",
 			attr.SlogEvent("claude_hook_persist_no_user_email"),
 			attr.SlogHookSource("claude"),
@@ -813,7 +888,7 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, m
 	// personal account's email won't resolve, but mergeClaudeAuthContextMetadata
 	// may have already supplied the owner via the device bridge — don't discard
 	// it by re-resolving from the (non-resolving) personal email.
-	if metadata.UserID == "" {
+	if metadata.UserID == "" && metadata.UserEmail != "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 	}
 
@@ -911,6 +986,9 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			// returns an error for an empty id and the ClickHouse write is
 			// skipped, so read it nil-safe instead of dereferencing.
 			metadata, metaErr := s.getSessionMetadata(ctx, conv.PtrValOr(payload.SessionID, ""))
+			if isAgentActor(ctx) {
+				metadata, metaErr = s.resolveClaudeSessionMetadata(ctx, conv.PtrValOr(payload.SessionID, ""), "")
+			}
 			if metaErr == nil {
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
@@ -921,6 +999,9 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 				userEmail := conv.PtrValOr(payload.UserEmail, "")
 				if metaErr == nil && strings.TrimSpace(metadata.UserEmail) != "" {
 					userEmail = metadata.UserEmail
+				}
+				if isAgentActor(ctx) {
+					userEmail = ""
 				}
 				asyncCtx := context.WithoutCancel(ctx)
 				// Resolve the owning user inside the goroutine so the DB lookup
@@ -1011,7 +1092,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		)
 		return denyUnverifiedMCP(denyCodeNoMetadata)
 	}
-	if strings.TrimSpace(metadata.UserEmail) == "" {
+	if strings.TrimSpace(metadata.UserEmail) == "" && !isAgentActor(ctx) {
 		s.logger.WarnContext(ctx, "claude PreToolUse metadata has no user email; denying MCP tool call",
 			attr.SlogEvent("claude_hook_pretooluse_no_user_email"),
 			attr.SlogHookSource("claude"),

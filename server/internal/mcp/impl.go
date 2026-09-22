@@ -103,6 +103,7 @@ type IdentityResolver interface {
 }
 
 type Service struct {
+	federatedLoginConsumer    FederatedLoginConsumer
 	logger                    *slog.Logger
 	tracer                    trace.Tracer
 	metrics                   *mcpmetrics.Metrics
@@ -167,6 +168,7 @@ type Service struct {
 	platformFeatureChecker platformtools.FeatureChecker
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
+	remoteLoginCache       cache.TypedCacheObject[remotesessions.RemoteLoginState]
 	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
 	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
 	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
@@ -423,6 +425,7 @@ func NewService(
 	)
 
 	service := &Service{
+		federatedLoginConsumer:    nil,
 		consentBindings:           nil,
 		logger:                    logger,
 		tracer:                    tracer,
@@ -482,6 +485,7 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		remoteLoginCache: cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), cacheImpl, cache.SuffixNone),
 		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
 			logger.With(attr.SlogCacheNamespace("user_session_grant")),
 			cacheImpl,
@@ -649,6 +653,9 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 // same handler via the public method instead of reaching into the
 // unexported manager field.
 func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
+	if err := s.validateRemoteLoginBrowser(r); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "invalid remote login browser binding")
+	}
 	result, err := s.remoteChallengeMgr.CompleteRemoteLogin(r)
 	if err != nil {
 		return err //nolint:wrapcheck // the manager's errors already carry the response

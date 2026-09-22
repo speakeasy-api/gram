@@ -125,6 +125,9 @@ type GetPluginsResponseBody struct {
 	// a configuration, allowing an agent with no cached remote layer to keep using
 	// its local configuration.
 	Configuration *DeviceAgentConfigurationResponseBody `form:"configuration,omitempty" json:"configuration,omitempty" xml:"configuration,omitempty"`
+	// The non-human principal the plugin set was resolved for. Present only when
+	// the caller authenticated with an agent API key.
+	Principal *AgentPollingPrincipalResponseBody `form:"principal,omitempty" json:"principal,omitempty" xml:"principal,omitempty"`
 }
 
 // ListSyncedUsersResponseBody is the type of the "agent" service
@@ -2270,6 +2273,15 @@ type DeviceAgentConfigurationResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// AgentPollingPrincipalResponseBody is used to define fields on response body
+// types.
+type AgentPollingPrincipalResponseBody struct {
+	// Principal URN of the agent identity, for example `agent:<uuid>`.
+	Urn string `form:"urn" json:"urn" xml:"urn"`
+	// Human-readable name of the agent identity.
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+}
+
 // SyncedAgentUserResponseBody is used to define fields on response body types.
 type SyncedAgentUserResponseBody struct {
 	// Email the device agent reported on sync. Resolve against org members for
@@ -2440,6 +2452,9 @@ func NewGetPluginsResponseBody(res *agent.GetPluginsResult) *GetPluginsResponseB
 	}
 	if res.Configuration != nil {
 		body.Configuration = marshalAgentDeviceAgentConfigurationToDeviceAgentConfigurationResponseBody(res.Configuration)
+	}
+	if res.Principal != nil {
+		body.Principal = marshalAgentAgentPollingPrincipalToAgentPollingPrincipalResponseBody(res.Principal)
 	}
 	return body
 }

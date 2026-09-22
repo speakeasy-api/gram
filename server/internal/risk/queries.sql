@@ -92,6 +92,17 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY id;
 
+-- name: ListRiskFindingPolicies :many
+-- Findings need only eligibility and severity metadata, never policy definitions.
+-- The caller requests one extra row to detect overflow and fail closed.
+SELECT id, organization_id, project_id, enabled, deleted, score
+FROM risk_policies
+WHERE project_id = @project_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+ORDER BY created_at DESC, id DESC
+LIMIT @page_limit;
+
 -- name: ListRiskPoliciesPage :many
 -- Platform MCP keyset page. The existing unbounded query remains the Goa
 -- compatibility path.
