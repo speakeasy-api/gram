@@ -7,7 +7,6 @@ import { unwrapAsync } from "@gram/client/types/fp.js";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { Page } from "@/components/page-layout";
-import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { InternalAdminBadge } from "@/components/internal-admin-badge";
 import { cn } from "@/lib/utils";
@@ -22,6 +21,7 @@ import {
   surfaces,
   targetCapabilities,
   type CapabilityId,
+  type OutcomeId,
   type PlannerState,
   type SurfaceId,
 } from "./support-matrix-model";
@@ -43,21 +43,9 @@ export default function SupportMatrix(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Page.Section>
-          <Page.Section.Title area="Platform Admin">
-            Support coverage planner
-          </Page.Section.Title>
-          <Page.Section.Description>
-            Assess the current organization, recommend the next integration, and
-            compare projected coverage with evidence received in the last 30
-            days.
-          </Page.Section.Description>
-          <Page.Section.Body>
-            <PlatformAdminGate>
-              <Planner />
-            </PlatformAdminGate>
-          </Page.Section.Body>
-        </Page.Section>
+        <PlatformAdminGate>
+          <Planner />
+        </PlatformAdminGate>
       </Page.Body>
     </Page>
   );
@@ -127,47 +115,31 @@ function OrganizationPlanner(): JSX.Element {
       : [...values, value];
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+    <div className="min-h-[calc(100vh-8rem)]">
+      <div className="border-border flex flex-wrap items-center justify-between gap-3 border-b py-2">
         <div className="flex items-center gap-2">
           <InternalAdminBadge />
           <Badge variant="neutral">
             <Badge.Text>{organization.name}</Badge.Text>
           </Badge>
         </div>
-        <div className="text-muted-foreground text-xs">
-          Session-only plan · actual evidence · {WINDOW_DAYS}-day window
-        </div>
+        <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
+          Onboarding · {state.step} of 4 · Session only · {WINDOW_DAYS} days
+        </span>
       </div>
       <StepRail step={state.step} onStep={(step) => update({ step })} />
 
       {state.step === 1 && (
-        <ChoiceStep
-          eyebrow="Step 01 / 04"
-          title="What does this organization want to achieve?"
-          description="These outcomes rank recommendations; they do not hide possible integrations."
-          items={outcomes.map((item) => ({
-            ...item,
-            selected: state.outcomes.includes(item.id),
-            onClick: () =>
-              update({ outcomes: toggle(state.outcomes, item.id) }),
-          }))}
+        <OutcomeStep
+          selected={state.outcomes}
+          onToggle={(id) => update({ outcomes: toggle(state.outcomes, id) })}
           onNext={() => update({ step: 2 })}
         />
       )}
       {state.step === 2 && (
-        <ChoiceStep
-          eyebrow="Step 02 / 04"
-          title="Which surfaces are in scope?"
-          description="Coverage is evaluated per surface using the organization’s observed activity."
-          items={surfaces.map((item) => ({
-            id: item.id,
-            name: item.name,
-            description: item.detail,
-            selected: state.surfaces.includes(item.id),
-            onClick: () =>
-              update({ surfaces: toggle(state.surfaces, item.id) }),
-          }))}
+        <SurfaceStep
+          selected={state.surfaces}
+          onToggle={(id) => update({ surfaces: toggle(state.surfaces, id) })}
           onBack={() => update({ step: 1 })}
           onNext={() => update({ step: 3 })}
         />
@@ -217,7 +189,7 @@ function StepRail({
   onStep: (step: PlannerState["step"]) => void;
 }) {
   return (
-    <div className="grid grid-cols-4 gap-1">
+    <div className="mx-auto grid max-w-[1120px] grid-cols-4 gap-px pt-3">
       {[1, 2, 3, 4].map((value) => (
         <button
           key={value}
@@ -225,8 +197,8 @@ function StepRail({
           onClick={() => onStep(value as PlannerState["step"])}
           disabled={value > step}
           className={cn(
-            "h-1.5 disabled:cursor-default",
-            value <= step ? "bg-foreground" : "bg-muted",
+            "h-px disabled:cursor-default",
+            value <= step ? "bg-[#2873D7]" : "bg-border",
           )}
           aria-label={`Go to step ${value}`}
           aria-current={value === step ? "step" : undefined}
@@ -236,77 +208,270 @@ function StepRail({
   );
 }
 
-type ChoiceItem = {
-  id: string;
-  name: string;
-  description: string;
-  selected: boolean;
-  onClick: () => void;
-};
-function ChoiceStep({
-  eyebrow,
+function StepHeading({
+  step,
   title,
   description,
-  items,
+}: {
+  step: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div>
+      <p className="text-muted-foreground font-mono text-[11px] tracking-[0.1em] uppercase">
+        Step {step} / 04
+      </p>
+      <h2 className="mt-3 max-w-4xl [font-family:var(--f-display)] text-[clamp(2.75rem,6vw,4rem)] leading-[0.98] font-thin tracking-[-0.045em]">
+        {title}
+      </h2>
+      <div className="mt-4 h-0.5 w-44 bg-gradient-to-r from-[#2873D7] to-[#8BD4FF]" />
+      <p className="text-muted-foreground mt-3 max-w-2xl text-lg leading-relaxed">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function OutcomeStep({
+  selected,
+  onToggle,
+  onNext,
+}: {
+  selected: OutcomeId[];
+  onToggle: (id: OutcomeId) => void;
+  onNext: () => void;
+}) {
+  const [focused, setFocused] = useState<OutcomeId | null>(null);
+  const previewId = focused ?? selected[selected.length - 1] ?? "security";
+  const preview = outcomes.find((outcome) => outcome.id === previewId)!;
+
+  return (
+    <main className="mx-auto max-w-[1120px] py-7 sm:py-9">
+      <StepHeading
+        step="01"
+        title="What do you want to do?"
+        description="Choose the outcomes that matter for this organization. We’ll use them to rank the strongest integration path."
+      />
+      <div className="mt-7 grid gap-7 lg:grid-cols-[380px_minmax(0,1fr)]">
+        <div className="space-y-2">
+          {outcomes.map((item) => {
+            const isSelected = selected.includes(item.id);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onToggle(item.id)}
+                onMouseEnter={() => setFocused(item.id)}
+                onMouseLeave={() => setFocused(null)}
+                onFocus={() => setFocused(item.id)}
+                onBlur={() => setFocused(null)}
+                aria-pressed={isSelected}
+                className={cn(
+                  "group w-full border bg-white p-3.5 text-left transition-colors dark:bg-background",
+                  isSelected
+                    ? "border-[#2873D7]"
+                    : "border-border hover:border-foreground/40",
+                )}
+              >
+                <span className="flex items-start gap-4">
+                  <span
+                    className={cn(
+                      "mt-1 size-4 shrink-0 border",
+                      isSelected
+                        ? "border-[#2873D7] bg-[#2873D7]"
+                        : "border-foreground/35",
+                    )}
+                  />
+                  <span>
+                    <span className="block text-[17px] font-medium">
+                      {item.name}
+                    </span>
+                    <span className="text-muted-foreground mt-0.5 block text-[13px] leading-snug">
+                      {item.description}
+                    </span>
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+          <div className="flex items-center justify-between gap-4 pt-2">
+            <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
+              {selected.length} selected
+            </span>
+            <button
+              type="button"
+              onClick={onNext}
+              disabled={selected.length === 0}
+              className="bg-foreground px-6 py-3 font-mono text-xs tracking-[0.08em] text-background uppercase transition-colors hover:bg-[#2873D7] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Continue →
+            </button>
+          </div>
+        </div>
+        <OutcomePreview
+          id={previewId}
+          name={preview.name}
+          description={preview.description}
+        />
+      </div>
+    </main>
+  );
+}
+
+function OutcomePreview({
+  id,
+  name,
+  description,
+}: {
+  id: OutcomeId;
+  name: string;
+  description: string;
+}) {
+  const figure = { gateway: "01", security: "02", cost: "03", identity: "04" }[
+    id
+  ];
+  const labels =
+    id === "gateway"
+      ? ["Agents", "Gateway", "MCP servers"]
+      : id === "security"
+        ? ["Prompt", "Policy", "Tool call"]
+        : id === "cost"
+          ? ["Sessions", "Usage", "Spend"]
+          : ["Identity", "Role", "Agent activity"];
+  return (
+    <aside className="border-border flex min-h-[380px] flex-col border bg-[#F7F8FA] p-6 dark:bg-muted/20">
+      <p className="text-muted-foreground font-mono text-[10px] tracking-[0.1em] uppercase">
+        Fig. {figure} — {name}
+      </p>
+      <div
+        className="flex flex-1 items-center justify-center py-6"
+        aria-hidden="true"
+      >
+        <div className="flex w-full max-w-xl items-center">
+          {labels.map((label, index) => (
+            <div key={label} className="contents">
+              <div
+                className={cn(
+                  "flex min-h-20 min-w-0 flex-1 items-center justify-center border px-2 text-center font-mono text-[10px] tracking-[0.06em] uppercase",
+                  index === 1
+                    ? "border-[#2873D7] bg-[#2873D7] text-white"
+                    : "border-foreground/20 bg-background",
+                )}
+              >
+                {label}
+              </div>
+              {index < labels.length - 1 && (
+                <div className="bg-foreground/25 relative h-px w-5 shrink-0 sm:w-9">
+                  <span className="absolute -top-[3px] right-0 size-1.5 rotate-45 border-t border-r border-foreground/40" />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="border-border border-t pt-5">
+        <p className="text-lg font-medium">{name}</p>
+        <p className="text-muted-foreground mt-2 max-w-xl leading-relaxed">
+          {description}
+        </p>
+        <p className="text-muted-foreground mt-5 font-mono text-[10px] tracking-[0.08em] uppercase">
+          Recommendation input · no configuration changes
+        </p>
+      </div>
+    </aside>
+  );
+}
+
+function SurfaceStep({
+  selected,
+  onToggle,
   onBack,
   onNext,
 }: {
-  eyebrow: string;
-  title: string;
-  description: string;
-  items: ChoiceItem[];
-  onBack?: () => void;
+  selected: SurfaceId[];
+  onToggle: (id: SurfaceId) => void;
+  onBack: () => void;
   onNext: () => void;
 }) {
   return (
-    <div className="mx-auto max-w-5xl space-y-7 py-6">
-      <div>
-        <p className="text-eyebrow">{eyebrow}</p>
-        <h2 className="mt-2 text-3xl font-semibold tracking-tight">{title}</h2>
-        <p className="text-muted-foreground mt-2 max-w-2xl">{description}</p>
+    <main className="mx-auto max-w-[980px] py-10 sm:py-14">
+      <StepHeading
+        step="02"
+        title="Where do your agents work?"
+        description="Coverage is evaluated per surface. A single product can need different integrations across CLI, desktop, and cloud."
+      />
+      <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {surfaces.map((surface) => {
+          const isSelected = selected.includes(surface.id);
+          return (
+            <button
+              key={surface.id}
+              type="button"
+              onClick={() => onToggle(surface.id)}
+              aria-pressed={isSelected}
+              className={cn(
+                "min-h-32 border bg-white p-5 text-left transition-colors dark:bg-background",
+                isSelected
+                  ? "border-[#2873D7] shadow-[inset_0_0_0_1px_#2873D7]"
+                  : "border-border hover:border-foreground/40",
+              )}
+            >
+              <span className="flex items-start justify-between gap-4">
+                <span className="text-lg font-medium">{surface.name}</span>
+                <span
+                  className={cn(
+                    "size-4 shrink-0 border",
+                    isSelected
+                      ? "border-[#2873D7] bg-[#2873D7]"
+                      : "border-foreground/30",
+                  )}
+                />
+              </span>
+              <span className="text-muted-foreground mt-8 block font-mono text-[10px] tracking-[0.06em] uppercase">
+                {surface.detail}
+              </span>
+            </button>
+          );
+        })}
       </div>
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {items.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={item.onClick}
-            aria-pressed={item.selected}
-            className={cn(
-              "bg-card min-h-28 border p-4 text-left transition-colors",
-              item.selected
-                ? "border-foreground ring-1 ring-foreground"
-                : "border-border hover:border-foreground/50",
-            )}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <span className="font-medium">{item.name}</span>
-              <span
-                className={cn(
-                  "mt-0.5 size-3 border",
-                  item.selected && "bg-foreground",
-                )}
-              />
-            </div>
-            <p className="text-muted-foreground mt-2 text-sm">
-              {item.description}
-            </p>
-          </button>
-        ))}
-      </div>
-      <div className="flex gap-2">
-        {onBack && (
-          <Button variant="secondary" onClick={onBack}>
-            Back
-          </Button>
-        )}
-        <Button
-          onClick={onNext}
-          disabled={!items.some((item) => item.selected)}
-        >
-          Continue
-        </Button>
-      </div>
+      <StepActions
+        onBack={onBack}
+        onNext={onNext}
+        nextDisabled={selected.length === 0}
+      />
+    </main>
+  );
+}
+
+function StepActions({
+  onBack,
+  onNext,
+  nextDisabled = false,
+  nextLabel = "Continue →",
+}: {
+  onBack: () => void;
+  onNext: () => void;
+  nextDisabled?: boolean;
+  nextLabel?: string;
+}) {
+  return (
+    <div className="mt-8 flex items-center gap-5">
+      <button
+        type="button"
+        onClick={onBack}
+        className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase hover:text-foreground"
+      >
+        ← Back
+      </button>
+      <button
+        type="button"
+        onClick={onNext}
+        disabled={nextDisabled}
+        className="bg-foreground px-6 py-3 font-mono text-xs tracking-[0.08em] text-background uppercase transition-colors hover:bg-[#2873D7] disabled:opacity-40"
+      >
+        {nextLabel}
+      </button>
     </div>
   );
 }
@@ -331,61 +496,67 @@ function SetupStep({
     },
   ];
   return (
-    <div className="mx-auto max-w-4xl space-y-7 py-6">
-      <div>
-        <p className="text-eyebrow">Step 03 / 04</p>
-        <h2 className="mt-2 text-3xl font-semibold tracking-tight">
-          A few details about the setup
-        </h2>
-        <p className="text-muted-foreground mt-2">
-          These answers only affect recommendation eligibility and remain in
-          this browser tab.
-        </p>
-      </div>
-      <div className="divide-border border-border bg-card divide-y border">
-        {questions.map((question) => (
+    <main className="mx-auto max-w-[980px] py-10 sm:py-14">
+      <StepHeading
+        step="03"
+        title="A few details about the setup"
+        description="These answers shape eligibility only. They remain in this browser tab and do not change the organization’s configuration."
+      />
+      <div className="divide-border mt-10 divide-y border-y">
+        {questions.map((question, index) => (
           <div
             key={question.id}
-            className="grid gap-4 p-5 md:grid-cols-[1fr_1.4fr] md:items-center"
+            className="grid gap-5 py-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] md:items-center"
           >
-            <p id={`${question.id}-label`} className="font-medium">
-              {question.title}
-            </p>
+            <div>
+              <p className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
+                Question 0{index + 1}
+              </p>
+              <p
+                id={`${question.id}-label`}
+                className="mt-2 text-lg font-medium"
+              >
+                {question.title}
+              </p>
+            </div>
             <div
-              className="flex flex-wrap gap-2"
+              className="flex flex-wrap gap-2 md:justify-end"
               role="group"
               aria-labelledby={`${question.id}-label`}
             >
-              {question.options.map((option) => (
-                <Button
-                  key={option}
-                  size="sm"
-                  variant={
-                    state.answers[question.id] === option
-                      ? "primary"
-                      : "secondary"
-                  }
-                  aria-pressed={state.answers[question.id] === option}
-                  onClick={() =>
-                    update({
-                      answers: { ...state.answers, [question.id]: option },
-                    })
-                  }
-                >
-                  {option}
-                </Button>
-              ))}
+              {question.options.map((option) => {
+                const isSelected = state.answers[question.id] === option;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() =>
+                      update({
+                        answers: { ...state.answers, [question.id]: option },
+                      })
+                    }
+                    className={cn(
+                      "border px-4 py-2.5 font-mono text-[11px] tracking-[0.04em] uppercase transition-colors",
+                      isSelected
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border bg-background hover:border-foreground/50",
+                    )}
+                  >
+                    {option}
+                  </button>
+                );
+              })}
             </div>
           </div>
         ))}
       </div>
-      <div className="flex gap-2">
-        <Button variant="secondary" onClick={() => update({ step: 2 })}>
-          Back
-        </Button>
-        <Button onClick={() => update({ step: 4 })}>Build coverage plan</Button>
-      </div>
-    </div>
+      <StepActions
+        onBack={() => update({ step: 2 })}
+        onNext={() => update({ step: 4 })}
+        nextLabel="Build coverage plan →"
+      />
+    </main>
   );
 }
 
@@ -417,57 +588,76 @@ function Results({
       recommended.capabilities.filter((c) => wanted.includes(c)).length
     : 0;
   return (
-    <div className="space-y-8 py-3">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-eyebrow">
-            Step 04 / 04 · Recommended first integration
+    <main className="mx-auto max-w-[1120px] space-y-14 py-10 sm:py-14">
+      <StepHeading
+        step="04"
+        title="Your first coverage move"
+        description="A focused starting point based on the selected outcomes, surfaces, and environment constraints."
+      />
+      <section className="border-border grid border bg-white dark:bg-background lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="p-6 sm:p-10">
+          <p className="font-mono text-[10px] tracking-[0.1em] text-[#2873D7] uppercase">
+            Recommended first integration
           </p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-tight">
+          <h3 className="mt-5 [font-family:var(--f-display)] text-[clamp(2.5rem,5vw,3.5rem)] leading-none font-thin tracking-[-0.04em]">
             {recommended?.name ?? "No eligible integration"}
-          </h2>
-          <p className="text-muted-foreground mt-2 max-w-2xl">
+          </h3>
+          <p className="text-muted-foreground mt-5 max-w-xl text-lg leading-relaxed">
             {recommended?.description ??
               "Adjust the setup answers or selected surfaces to see a recommendation."}
           </p>
+          {recommended && (
+            <div className="border-border mt-8 grid gap-6 border-y py-6 sm:grid-cols-3">
+              <Metric
+                value={`${recommendationCells}/${targetCells}`}
+                label="target cells"
+              />
+              <Metric value={recommended.setup} label="estimated setup" />
+              <Metric
+                value={
+                  deviceStatus === "loading"
+                    ? "Loading…"
+                    : deviceStatus === "unavailable"
+                      ? "Unavailable"
+                      : String(activeAgents)
+                }
+                label={
+                  activeWindowMinutes
+                    ? `agents active within ${activeWindowMinutes} min`
+                    : "active device agents"
+                }
+              />
+            </div>
+          )}
+          <div className="mt-8 flex gap-5">
+            <button
+              type="button"
+              onClick={onBack}
+              className="text-muted-foreground font-mono text-xs tracking-[0.08em] uppercase hover:text-foreground"
+            >
+              ← Back
+            </button>
+            <button
+              type="button"
+              onClick={onReset}
+              className="font-mono text-xs tracking-[0.08em] uppercase hover:text-[#2873D7]"
+            >
+              Start over
+            </button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={onBack}>
-            Back
-          </Button>
-          <Button variant="secondary" onClick={onReset}>
-            Start over
-          </Button>
-        </div>
-      </div>
-      {recommended && (
-        <div className="border-border bg-card grid gap-4 border p-5 md:grid-cols-3">
-          <Metric
-            value={`${recommendationCells}/${targetCells}`}
-            label="target cells addressed"
-          />
-          <Metric value={recommended.setup} label="estimated setup" />
-          <Metric
-            value={
-              deviceStatus === "loading"
-                ? "Loading…"
-                : deviceStatus === "unavailable"
-                  ? "Unavailable"
-                  : String(activeAgents)
-            }
-            label={
-              activeWindowMinutes
-                ? `device agents active within ${activeWindowMinutes} minutes`
-                : "active device agents now"
-            }
-          />
-        </div>
-      )}
-      <section className="space-y-3">
+        <ProjectedCoverage state={state} recommended={recommended} />
+      </section>
+      <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h3 className="text-xl font-semibold">Observed coverage</h3>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground font-mono text-[10px] tracking-[0.1em] uppercase">
+              Evidence layer
+            </p>
+            <h3 className="mt-2 [font-family:var(--f-display)] text-4xl font-thin tracking-[-0.035em]">
+              Observed coverage
+            </h3>
+            <p className="text-muted-foreground mt-2 text-sm">
               Actual aggregate telemetry for this organization. Empty cells are
               unknown—not proof that a capability is absent.
             </p>
@@ -492,8 +682,15 @@ function Results({
           telemetryStatus={telemetryStatus}
         />
       </section>
-      <section className="space-y-3">
-        <h3 className="text-xl font-semibold">Integration paths</h3>
+      <section className="space-y-4">
+        <div>
+          <p className="text-muted-foreground font-mono text-[10px] tracking-[0.1em] uppercase">
+            Integration footprints
+          </p>
+          <h3 className="mt-2 [font-family:var(--f-display)] text-4xl font-thin tracking-[-0.035em]">
+            Other paths
+          </h3>
+        </div>
         <div className="grid gap-3 md:grid-cols-2">
           {methods
             .filter(
@@ -503,8 +700,9 @@ function Results({
               <div
                 key={method.id}
                 className={cn(
-                  "border-border bg-card border p-4",
-                  method.id === recommended?.id && "border-foreground",
+                  "border-border bg-card border p-5",
+                  method.id === recommended?.id &&
+                    "border-[#2873D7] shadow-[inset_3px_0_0_#2873D7]",
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -525,6 +723,90 @@ function Results({
             ))}
         </div>
       </section>
+    </main>
+  );
+}
+
+function ProjectedCoverage({
+  state,
+  recommended,
+}: {
+  state: PlannerState;
+  recommended: ReturnType<typeof recommendation>;
+}) {
+  const wanted = targetCapabilities(state.outcomes);
+  return (
+    <div className="border-border bg-[#F7F8FA] p-6 sm:p-10 lg:border-l dark:bg-muted/20">
+      <p className="font-mono text-[10px] tracking-[0.1em] uppercase">
+        Projected coverage
+      </p>
+      <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+        Static capability fit for the recommendation—not observed activity.
+      </p>
+      <div className="mt-8 overflow-x-auto">
+        <div
+          className="grid min-w-[420px] gap-px bg-foreground/10"
+          style={{
+            gridTemplateColumns: `120px repeat(${state.surfaces.length}, minmax(56px, 1fr))`,
+          }}
+        >
+          <div className="bg-[#F7F8FA] p-2 dark:bg-muted" />
+          {surfaces
+            .filter((surface) => state.surfaces.includes(surface.id))
+            .map((surface) => (
+              <div
+                key={surface.id}
+                className="bg-[#F7F8FA] p-2 text-center font-mono text-[9px] tracking-wide uppercase dark:bg-muted"
+              >
+                {surface.name}
+              </div>
+            ))}
+          {wanted.map((capabilityId) => {
+            const capability = capabilities.find(
+              (item) => item.id === capabilityId,
+            );
+            return (
+              <div key={capabilityId} className="contents">
+                <div className="bg-[#F7F8FA] p-2 font-mono text-[9px] tracking-wide uppercase dark:bg-muted">
+                  {capability?.name}
+                </div>
+                {surfaces
+                  .filter((surface) => state.surfaces.includes(surface.id))
+                  .map((surface) => {
+                    const covered =
+                      recommended?.surfaces.includes(surface.id) === true &&
+                      recommended.capabilities.includes(capabilityId);
+                    return (
+                      <div
+                        key={surface.id}
+                        className={cn(
+                          "flex min-h-14 items-center justify-center bg-background",
+                          covered && "bg-[#2873D7]",
+                        )}
+                      >
+                        <span className="sr-only">
+                          {covered ? "Projected coverage" : "Not projected"}
+                        </span>
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "size-2 border",
+                            covered
+                              ? "border-white bg-white"
+                              : "border-foreground/20",
+                          )}
+                        />
+                      </div>
+                    );
+                  })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="mt-5 flex items-center gap-2 font-mono text-[9px] tracking-[0.08em] uppercase">
+        <span className="size-2 bg-[#2873D7]" /> Projected by recommendation
+      </div>
     </div>
   );
 }
