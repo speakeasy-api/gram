@@ -99,12 +99,32 @@ export function selectDeviceAgentKeyGrants(
       missingScopes.push(form.scope);
       continue;
     }
+    // A candidate may wildcard a dimension the requirement pins, and the
+    // server reads a wildcard in an issued grant as "every resource" — so a
+    // `*` kind or id would mint a key far broader than the chosen project.
+    // canNarrowResource cannot close this: it is false for a wildcard kind
+    // (no inventory names those resources), so specialize the candidate here
+    // and let expandRequestedGrants clone an already-specific selector.
+    const specialized: AgentPolicyGrantForm = {
+      ...grant,
+      selector: {
+        ...grant.selector,
+        ...(grant.selector.resourceKind === ANY_RESOURCE &&
+        form.selector.resourceKind !== ANY_RESOURCE
+          ? { resourceKind: form.selector.resourceKind }
+          : {}),
+        ...(grant.selector.resourceId === ANY_RESOURCE &&
+        form.selector.resourceId !== ANY_RESOURCE
+          ? { resourceId: form.selector.resourceId }
+          : {}),
+      },
+    };
     const narrowResource =
-      canNarrowResource(grant) &&
+      canNarrowResource(specialized) &&
       form.selector.resourceId !== ANY_RESOURCE &&
-      grant.selector.resourceId !== form.selector.resourceId;
+      specialized.selector.resourceId !== form.selector.resourceId;
     selections.push({
-      grant,
+      grant: specialized,
       narrowing: narrowResource ? { resourceId: form.selector.resourceId } : {},
     });
   }

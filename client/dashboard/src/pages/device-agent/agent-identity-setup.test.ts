@@ -83,6 +83,27 @@ describe("device agent key grants", () => {
     expect(buildRequestedGrants(selections)).toEqual(required);
   });
 
+  it("specializes a candidate that wildcards the resource kind", () => {
+    const delegable: AgentPolicyGrantForm[] = [
+      required[0]!,
+      required[1]!,
+      {
+        effect: "allow",
+        scope: "project:read",
+        selector: { resourceKind: "*", resourceId: "*" },
+      },
+    ];
+    const { selections, missingScopes } = selectDeviceAgentKeyGrants(
+      delegable,
+      required,
+    );
+    expect(missingScopes).toEqual([]);
+    // The server reads a wildcard in an issued grant as "every resource", so
+    // the key must carry the chosen project rather than the candidate's
+    // wildcards — otherwise it reads every project in the organization.
+    expect(buildRequestedGrants(selections)).toEqual(required);
+  });
+
   it("accepts an exact project candidate unchanged", () => {
     const { selections, missingScopes } = selectDeviceAgentKeyGrants(
       required,
