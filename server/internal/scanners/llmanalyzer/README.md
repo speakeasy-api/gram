@@ -66,7 +66,9 @@ PostHog); anything else — off, absent, unrecognized, provider error — is `of
   The ClickHouse writer stores them as `risk_findings.shadow = 1`, and every
   user-facing read path filters `shadow = 0`, so they are **hidden from Risk
   Events, the Dismissed listing, the overview, signals, the Watchdog and
-  reveal by default** and only the comparison query below reads them.
+  reveal by default** and only the comparison query below reads them. The
+  OpenTelemetry finding relay drops them too (`risk_findings_dropped{reason=shadow}`),
+  so they never reach a customer collector.
   Deterministic finding ids include the source, so the model's rows and the
   legacy engines' rows for the same message coexist. A shadow publish
   failure never fails the activity: the legacy engines' inline findings
