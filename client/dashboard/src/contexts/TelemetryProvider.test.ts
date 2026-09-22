@@ -60,10 +60,31 @@ describe("failOpenMissingFlags", () => {
     expect(wrap(true).isFeatureEnabled("gram-risk-watchdog")).toBe(true);
   });
 
+  it("passes variants through without failing open", () => {
+    const variants: Array<string | boolean | undefined> = [
+      "shadow",
+      true,
+      undefined,
+    ];
+    for (const variant of variants) {
+      const wrapped = failOpenMissingFlags({
+        ...nullTelemetry,
+        getFeatureFlag: vi.fn(() => variant),
+      });
+      expect(wrapped.getFeatureFlag("gram-risk-llm-analyzer")).toBe(variant);
+    }
+  });
+
   it("keeps PostHog methods bound to the original instance", () => {
     class Stub {
       label = "source";
       isFeatureEnabled() {
+        return undefined;
+      }
+      getFeatureFlag() {
+        if (this.label !== "source") {
+          throw new Error("getFeatureFlag lost its receiver");
+        }
         return undefined;
       }
       onFeatureFlags() {
@@ -91,5 +112,6 @@ describe("failOpenMissingFlags", () => {
     expect(wrapped.onFeatureFlags).toBeTypeOf("function");
     wrapped.onFeatureFlags(() => {});
     wrapped.identify("user@example.com", {});
+    expect(wrapped.getFeatureFlag("gram-risk-llm-analyzer")).toBeUndefined();
   });
 });

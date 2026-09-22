@@ -49,11 +49,19 @@ export type DetectionRule = {
  *  - `presidio`: the legacy per-entity scanner. Personal data is split into
  *    four categories (financial, pii, government_ids, healthcare), each with a
  *    rule list the user can narrow, plus a confidence threshold.
- *  - `llm`: the fine-tuned risk analyzer is enabled for the organization
- *    (PostHog flag `gram-risk-llm-analyzer`). The model decides which
- *    personal-data category applies per finding, so the editor collapses the
- *    four categories into a single category-level `pii` detector with no rule
- *    list, no sensitivity and no entity-type exclusions. */
+ *  - `llm`: the fine-tuned risk analyzer replaces the legacy engine for the
+ *    organization. The model decides which personal-data category applies per
+ *    finding, so the editor collapses the four categories into a single
+ *    category-level `pii` detector with no rule list, no sensitivity and no
+ *    entity-type exclusions.
+ *
+ *  The mode follows the multivariate PostHog flag `gram-risk-llm-analyzer`
+ *  (see `useDetectorMode`): `off` and `shadow` render `presidio` (under
+ *  `shadow` the analyzer also scans server-side for comparison but never
+ *  enforces, so the editor keeps the legacy controls); only `llm` renders
+ *  `llm`. Until the flag is converted to multivariate in PostHog it has no
+ *  variant, and its boolean-enabled read also renders `llm` (the transition
+ *  rule in `useDetectorMode`). */
 export type DetectorMode = "presidio" | "llm";
 
 export type RuleCategoryMeta = {

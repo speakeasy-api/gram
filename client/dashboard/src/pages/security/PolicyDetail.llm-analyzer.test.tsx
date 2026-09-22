@@ -1,5 +1,5 @@
 import { useSdkClient } from "@/contexts/Sdk";
-import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
+import type { FeatureFlagVariantResult } from "@/hooks/useFeatureFlagVariant";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -16,9 +16,34 @@ const mocks = vi.hoisted(() => ({
   customizeSheetCategories: [] as string[],
 }));
 
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => mocks.flagResult() as FeatureFlagResult,
+vi.mock("@/hooks/useFeatureFlagVariant", () => ({
+  useFeatureFlagVariant: () => mocks.flagResult() as FeatureFlagVariantResult,
 }));
+
+const LLM_VARIANT: FeatureFlagVariantResult = {
+  status: "resolved",
+  variant: "llm",
+  enabled: true,
+};
+const SHADOW_VARIANT: FeatureFlagVariantResult = {
+  status: "resolved",
+  variant: "shadow",
+  enabled: true,
+};
+// PostHog reports a multivariate flag as enabled for every variant, `off`
+// included.
+const OFF_VARIANT: FeatureFlagVariantResult = {
+  status: "resolved",
+  variant: "off",
+  enabled: true,
+};
+// The flag before its in-place conversion to multivariate: no variant, only
+// the boolean read.
+const BOOLEAN_ENABLED: FeatureFlagVariantResult = {
+  status: "resolved",
+  variant: undefined,
+  enabled: true,
+};
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -113,7 +138,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.customizeSheetCategories.length = 0;
-  mocks.flagResult.mockReturnValue({ status: "enabled" });
+  mocks.flagResult.mockReturnValue(LLM_VARIANT);
   vi.mocked(useSdkClient).mockReturnValue({
     access: { listShadowMCPInventory: vi.fn() },
   } as unknown as ReturnType<typeof useSdkClient>);
@@ -326,7 +351,7 @@ describe("StandardPolicyEditor under the LLM analyzer", () => {
         .getAttribute("aria-checked"),
     ).toBe("true");
 
-    mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.flagResult.mockReturnValue(LLM_VARIANT);
     view.rerender();
 
     const pii = screen.getByRole("switch", { name: "PII built-in rule" });
@@ -343,25 +368,58 @@ describe("StandardPolicyEditor under the LLM analyzer", () => {
   });
 });
 
+function expectLegacyEditor() {
+  expect(
+    screen.getByRole("switch", {
+      name: "Personal Identifiable Information built-in rule",
+    }),
+  ).toBeTruthy();
+  for (const name of PRESIDIO_ONLY_CARDS) {
+    expect(screen.getByRole("switch", { name })).toBeTruthy();
+  }
+  expect(screen.getByRole("button", { name: "Customize" })).toBeTruthy();
+  expect(screen.getByText("Detection sensitivity")).toBeTruthy();
+  expect(screen.queryByText(LLM_ANALYZER_NOTICE)).toBeNull();
+}
+
+describe("StandardPolicyEditor across the risk engine flag variants", () => {
+  it("collapses personal data under the boolean flag before its conversion", () => {
+    mocks.flagResult.mockReturnValue(BOOLEAN_ENABLED);
+    renderEditor(null, new Set<RuleCategory>(["pii"]));
+
+    expect(
+      screen.getByRole("switch", { name: "PII built-in rule" }),
+    ).toBeTruthy();
+    for (const name of PRESIDIO_ONLY_CARDS) {
+      expect(screen.queryByRole("switch", { name })).toBeNull();
+    }
+    expect(screen.getByText(LLM_ANALYZER_NOTICE)).toBeTruthy();
+  });
+
+  it("keeps the legacy editor under the shadow variant", () => {
+    mocks.flagResult.mockReturnValue(SHADOW_VARIANT);
+    renderEditor(null, new Set<RuleCategory>(["pii"]));
+
+    expectLegacyEditor();
+  });
+
+  it("keeps the legacy editor under the off variant", () => {
+    mocks.flagResult.mockReturnValue(OFF_VARIANT);
+    renderEditor(null, new Set<RuleCategory>(["pii"]));
+
+    expectLegacyEditor();
+  });
+});
+
 describe("StandardPolicyEditor with the LLM analyzer flag off", () => {
   beforeEach(() => {
-    mocks.flagResult.mockReturnValue({ status: "disabled" });
+    mocks.flagResult.mockReturnValue(OFF_VARIANT);
   });
 
   it("keeps the four presidio cards, customization and sensitivity", () => {
     renderEditor(null, new Set<RuleCategory>(["pii"]));
 
-    expect(
-      screen.getByRole("switch", {
-        name: "Personal Identifiable Information built-in rule",
-      }),
-    ).toBeTruthy();
-    for (const name of PRESIDIO_ONLY_CARDS) {
-      expect(screen.getByRole("switch", { name })).toBeTruthy();
-    }
-    expect(screen.getByRole("button", { name: "Customize" })).toBeTruthy();
-    expect(screen.getByText("Detection sensitivity")).toBeTruthy();
-    expect(screen.queryByText(LLM_ANALYZER_NOTICE)).toBeNull();
+    expectLegacyEditor();
   });
 
   it("still sends the entity list and threshold", () => {

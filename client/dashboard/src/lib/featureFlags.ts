@@ -18,6 +18,10 @@ export const FEATURE_FLAGS = {
   paygSelfServeBilling: "gram-payg-self-serve-billing",
   promptPolicies: "gram-prompt-policies",
   rbac: "gram-rbac",
+  // Multivariate (`off` | `shadow` | `llm`), org-targeted: which risk engine
+  // the organization runs. Read through `useFeatureFlagVariant`; the boolean
+  // read is true for every variant, `off` included. `useDetectorMode` maps it
+  // to the policy editor mode.
   riskLlmAnalyzer: "gram-risk-llm-analyzer",
   riskWatchdog: "gram-risk-watchdog",
   tunneledMcp: "gram-tunneled-mcp",
