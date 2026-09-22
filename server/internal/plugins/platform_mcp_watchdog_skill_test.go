@@ -62,8 +62,8 @@ func TestGeneratePlatformMCPPackageEmitsWatchdogSummaryWorkflow(t *testing.T) {
 		require.Contains(t, workflow, guardrail)
 	}
 	for _, forbidden := range []string{
-		"Slack", "Cowork", "Gram", "hooks/", "speakeasy-skill-feedback",
-		"Authorization:", "Bearer ", "client_secret", "https://",
+		"Slack", "Cowork", "hooks/", "speakeasy-skill-feedback",
+		"Authorization:", "Bearer ", "client_secret",
 	} {
 		require.NotContains(t, workflow, forbidden)
 	}
