@@ -29,9 +29,9 @@ import (
 )
 
 const (
-	// verdictBudget keeps evaluation under Anthropic's default five second
-	// verdict timeout, with headroom for the response to reach the provider.
-	verdictBudget = 4 * time.Second
+	// verdictBudget caps risk evaluation at nine seconds. The HTTP handler's
+	// overall deadline can cancel evaluation earlier.
+	verdictBudget = 9 * time.Second
 	// scanConcurrency bounds how many inputs of one transcript are evaluated
 	// at once.
 	scanConcurrency = 4

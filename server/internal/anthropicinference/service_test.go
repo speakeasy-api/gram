@@ -311,7 +311,7 @@ func TestServiceAcceptsCleanPrefixWhenBudgetExhausted(t *testing.T) {
 		start := time.Now()
 		verdict, err := service.Process(t.Context(), Config{}, frame)
 		require.NoError(t, err)
-		require.Equal(t, verdictBudget, time.Since(start))
+		require.Equal(t, 9*time.Second, time.Since(start))
 		// Every input was attempted; only the stalled one was cut off.
 		require.EqualValues(t, len(frame.Messages), scanner.calls.Load())
 		require.Equal(t, Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}, verdict)
