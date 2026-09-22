@@ -21,12 +21,10 @@ export function useStripeSubscription(
 ): ReturnType<typeof useGetStripeSubscription> {
   return useGetStripeSubscription(undefined, undefined, {
     throwOnError: false,
-    // Keep failed reads (including a confirmed missing subscription) stable
-    // when consumers reconnect. StrictMode replays effects on keyed section
-    // moves; retrying here clears the error, reverses the payment priority,
-    // and moves the sections again. Explicit retry, focus, and banner polling
-    // still refresh the subscription without tying recovery to component mounts.
+    // Section reordering must not restart reads, with or without cached data.
+    // Banners explicitly opt back into mount refreshes.
     retryOnMount: false,
+    refetchOnMount: false,
     ...options,
   });
 }
