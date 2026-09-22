@@ -113,7 +113,7 @@ func newWorkloadGrantFixtureWithLogger(t *testing.T, logger *slog.Logger) worklo
 func (f workloadGrantFixture) assertion(t *testing.T, aud string) string {
 	t.Helper()
 
-	return oauthtest.MintWorkloadAssertion(t, f.issuer, oauthtest.WorkloadClaims(f.issuer, f.subject, aud))
+	return oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", oauthtest.WorkloadClaims(f.issuer, f.subject, aud))
 }
 
 // exchange posts the clientless JWT bearer grant to the MCP host.
@@ -241,7 +241,7 @@ func TestWorkloadAssertionGrant_UnadmittedSubjectRefused(t *testing.T) {
 	f := newWorkloadGrantFixture(t)
 
 	claims := oauthtest.WorkloadClaims(f.issuer, "repo:someone-else/app:ref:refs/heads/main", f.advertisedIssuer)
-	w := f.exchange(t, oauthtest.MintWorkloadAssertion(t, f.issuer, claims), f.resource)
+	w := f.exchange(t, oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", claims), f.resource)
 	requireWorkloadGrantRefused(t, w)
 }
 
@@ -281,7 +281,7 @@ func TestWorkloadAssertionGrant_MultipleAudiencesRefused(t *testing.T) {
 
 	claims := oauthtest.WorkloadClaims(f.issuer, f.subject, f.advertisedIssuer)
 	claims.Audience = jwt.Audience{f.advertisedIssuer, "https://elsewhere.example.com"}
-	w := f.exchange(t, oauthtest.MintWorkloadAssertion(t, f.issuer, claims), f.resource)
+	w := f.exchange(t, oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", claims), f.resource)
 	requireWorkloadGrantRefused(t, w)
 }
 
@@ -414,7 +414,7 @@ func TestWorkloadAssertionGrant_NoTokenBytesInLogs(t *testing.T) {
 	// A replay, a subject never admitted, and an audience naming another URL.
 	requireWorkloadGrantRefused(t, present(secrets[0]))
 	outsider := "repo:someone-else/app:ref:refs/heads/main"
-	requireWorkloadGrantRefused(t, present(oauthtest.MintWorkloadAssertion(t, f.issuer, oauthtest.WorkloadClaims(f.issuer, outsider, f.advertisedIssuer))))
+	requireWorkloadGrantRefused(t, present(oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", oauthtest.WorkloadClaims(f.issuer, outsider, f.advertisedIssuer))))
 	requireWorkloadGrantRefused(t, present(f.assertion(t, f.advertisedIssuer+"/revoke")))
 
 	written := logs.String()
