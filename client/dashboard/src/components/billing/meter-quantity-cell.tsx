@@ -11,7 +11,7 @@ export function MeterQuantityCell({
   quantity: string;
   unit: string;
   showRaw: boolean;
-}) {
+}): JSX.Element {
   let usage: string;
   if (showRaw) {
     usage = formatMeterQuantity(quantity, unit, "standard");
