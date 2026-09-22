@@ -150,7 +150,7 @@ func (s *Service) routeMetaMember(
 ) (memberDial, string, error) {
 	serverRow, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 		ID:        member.serverID,
-		ProjectID: gate.projectID,
+		ProjectID: member.projectID,
 	})
 	if err != nil {
 		return memberDial{}, "", fmt.Errorf("load meta MCP member server: %w", err)
@@ -163,7 +163,7 @@ func (s *Service) routeMetaMember(
 	case member.remoteServerID.Valid:
 		remoteServer, rerr := remotemcp_repo.New(s.db).GetServerByID(ctx, remotemcp_repo.GetServerByIDParams{
 			ID:        member.remoteServerID.UUID,
-			ProjectID: gate.projectID,
+			ProjectID: member.projectID,
 		})
 		if errors.Is(rerr, pgx.ErrNoRows) {
 			// The snapshot query does not join the backend source tables, so a
@@ -200,7 +200,7 @@ func (s *Service) routeMetaMember(
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
 		return memberDial{anonymous: upstreamToken == "", build: func(ctx context.Context) (*proxy.Proxy, error) {
-			p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, gate.projectID, gate.organizationID, &serverRow, upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
+			p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, member.projectID, gate.organizationID, &serverRow, upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
 			if berr != nil {
 				return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 			}
@@ -605,7 +605,10 @@ func (s *Service) executeProxiedMemberTool(
 	// A proxied member's tool-call log is written by the remotemcp interceptor,
 	// which never sees the gate, so carry the caller's identity down to it.
 	clientIdentity, _ := resolveClientIdentity(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct // only the record's identity fields matter here
-		projectID:       gate.projectID,
+		// The member's project, not the gate's: an agent gateway's members can
+		// sit in different projects, and this record belongs with the one the
+		// call actually reached.
+		projectID:       member.projectID,
 		sessionID:       gate.sessionID,
 		clientInfoScope: metaClientInfoScope(gate.metaServerID),
 	}, meta.Sanitize().ClientInfo)

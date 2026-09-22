@@ -608,6 +608,13 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 		}
 		o11y.AttachHandler(mux, route.Method, route.Path, handler.ServeHTTP)
 	}
+
+	for _, route := range netingress.PrivateRoutes(netingress.RouteSurfaceAgentMCP) {
+		if route.ID != netingress.RouteRuntime {
+			panic(fmt.Sprintf("private agent MCP route %s %s has no handler", route.Method, route.Path))
+		}
+		o11y.AttachHandler(mux, route.Method, route.Path, oops.MCPErrHandle(service.logger, service.ServeAgentGateway).ServeHTTP)
+	}
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
@@ -932,7 +939,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if metaServer != nil {
-			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer)
+			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, uuid.Nil)
 		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 	case mcpendpoints.IsAddressMiss(err):

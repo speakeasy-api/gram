@@ -16,6 +16,10 @@ type RouteID string
 const (
 	RouteSurfaceMCP  RouteSurface = "mcp"
 	RouteSurfaceXMCP RouteSurface = "xmcp"
+	// A gateway addressed by agent rather than by slug. Its own prefix, not a
+	// reserved slug under /mcp, so it can never be shadowed by a real server
+	// whose slug happens to be "agent".
+	RouteSurfaceAgentMCP RouteSurface = "agentmcp"
 
 	RouteRuntime              RouteID = "runtime"
 	RouteInstall              RouteID = "install"
@@ -78,6 +82,13 @@ var privateRoutes = []RouteSpec{
 	{Surface: RouteSurfaceXMCP, ID: RouteConnectFirstParty, Method: http.MethodGet, Path: "/x/mcp/{mcpSlug}/connect/first-party"},
 	{Surface: RouteSurfaceXMCP, ID: RouteToken, Method: http.MethodPost, Path: "/x/mcp/{mcpSlug}/token"},
 	{Surface: RouteSurfaceXMCP, ID: RouteRevoke, Method: http.MethodPost, Path: "/x/mcp/{mcpSlug}/revoke"},
+
+	// POST only: an agent gateway has no proxied stream and no upstream
+	// session, so it needs neither the GET stream nor the DELETE teardown the
+	// slug surfaces carry. Its members are derived per request, so there is no
+	// install page, and it authenticates with an agent key rather than OAuth,
+	// so it has no authorization-server routes either.
+	{Surface: RouteSurfaceAgentMCP, ID: RouteRuntime, Method: http.MethodPost, Path: "/agent-mcp/{agentID}"},
 }
 
 var privateRouteMatcher = newPrivateRouteMatcher()
