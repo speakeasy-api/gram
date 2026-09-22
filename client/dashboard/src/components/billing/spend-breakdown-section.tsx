@@ -13,12 +13,13 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BillingCyclePicker } from "./billing-cycle-picker";
+import { MeterQuantityCell } from "./meter-quantity-cell";
+import { RawValuesToggle } from "./raw-values-toggle";
 import {
   adaptSpendChart,
   formatScaledUsd,
   formatScaledUsdAxis,
   formatSpendRate,
-  formatSpendUsage,
   formatSpendUsd,
   type SpendBreakdownData,
   type SpendProduct,
@@ -58,7 +59,7 @@ const PRODUCT_ID_LOOKUP: Record<SpendProductID, true> = {
 
 const NUMERIC_CELL = "block w-full text-right tabular-nums";
 
-const spendColumns: Column<SpendProduct>[] = [
+const getSpendColumns = (showRaw: boolean): Column<SpendProduct>[] => [
   {
     key: "product",
     header: "Product",
@@ -67,15 +68,19 @@ const spendColumns: Column<SpendProduct>[] = [
   },
   {
     key: "usage",
-    header: "Usage",
+    header: <span className={NUMERIC_CELL}>Usage</span>,
     width: "1fr",
     render: (product) => (
-      <span className={NUMERIC_CELL}>{formatSpendUsage(product)}</span>
+      <MeterQuantityCell
+        quantity={product.quantity}
+        unit={product.unit}
+        showRaw={showRaw}
+      />
     ),
   },
   {
     key: "rate",
-    header: "Rate",
+    header: <span className={NUMERIC_CELL}>Rate</span>,
     width: "1fr",
     render: (product) => (
       <span className={NUMERIC_CELL}>{formatSpendRate(product)}</span>
@@ -83,7 +88,7 @@ const spendColumns: Column<SpendProduct>[] = [
   },
   {
     key: "cost",
-    header: "Estimated cost",
+    header: <span className={NUMERIC_CELL}>Estimated cost</span>,
     width: "1fr",
     render: (product) => (
       <span className={NUMERIC_CELL}>{formatSpendUsd(product.costUsd)}</span>
@@ -93,6 +98,8 @@ const spendColumns: Column<SpendProduct>[] = [
 
 export function SpendBreakdownSection(): JSX.Element | null {
   const client = useGramContext();
+  const [showRaw, setShowRaw] = useState(false);
+  const spendColumns = useMemo(() => getSpendColumns(showRaw), [showRaw]);
   const [selectedProductIds, setSelectedProductIds] =
     useState<SpendProductID[]>(ALL_PRODUCT_IDS);
   const [knownCycles, setKnownCycles] = useState<{ from: Date; to: Date }[]>(
@@ -223,6 +230,11 @@ export function SpendBreakdownSection(): JSX.Element | null {
           tooltipMode="index"
           tooltipTotalLabel="Total"
         />
+        <Page.Toolbar>
+          <Page.Toolbar.Actions>
+            <RawValuesToggle checked={showRaw} onCheckedChange={setShowRaw} />
+          </Page.Toolbar.Actions>
+        </Page.Toolbar>
         <Table
           columns={spendColumns}
           data={tableProducts}

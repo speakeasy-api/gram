@@ -32,18 +32,19 @@ import { meterPeriodDisplayRange, useMeterPeriod } from "./use-meter-period";
 const FAMILY_OPTIONS = [
   {
     value: "agent_session_storage",
-    label: "Storage",
-    tooltip: "Stored-message workload",
-  },
-  {
-    value: "mcp_bandwidth",
-    label: "Bandwidth",
-    tooltip: "MCP ingress and egress body bytes",
+    label: METER_FAMILIES.agent_session_storage.label,
+    tooltip:
+      "Volume of agent/chat session data captured by the AI Control Plane",
   },
   {
     value: "risk_content_scans",
-    label: "Risk scans",
-    tooltip: "Content volume processed by risk scanners",
+    label: METER_FAMILIES.risk_content_scans.label,
+    tooltip: "Volume of agent/chat session content processed by risk policies",
+  },
+  {
+    value: "mcp_bandwidth",
+    label: METER_FAMILIES.mcp_bandwidth.label,
+    tooltip: "Volume of traffic sent to and from the MCP gateway",
   },
 ] satisfies { value: MeterFamily; label: string; tooltip: string }[];
 

@@ -176,7 +176,3 @@ export function formatSpendRate(product: SpendProduct): string {
   const rate = formatExactUsd(product.rateUsd) ?? "—";
   return `${rate} per ${formatMeterQuantity(product.rateQuantity, product.unit)}`;
 }
-
-export function formatSpendUsage(product: SpendProduct): string {
-  return formatMeterQuantity(product.quantity, product.unit, "standard");
-}
