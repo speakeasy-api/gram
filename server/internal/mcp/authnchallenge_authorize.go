@@ -207,6 +207,8 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	}
 	agentTarget, _ := agentAuthorizationTarget(endpoint)
 	challengeState := AuthnChallengeState{
+		Browser:                  nil,
+		Federation:               nil,
 		ID:                       challengeID,
 		FlowID:                   flowID,
 		UserSessionIssuerID:      endpoint.UserSessionIssuerID,
@@ -238,6 +240,18 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	logger.InfoContext(ctx, "oauth flow started")
 
 	if forceIDP {
+		federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
+		if err != nil {
+			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+			failureCode, cause := federatedFailure(err)
+			return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
+		}
+		if federatedURL != nil {
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Referrer-Policy", "no-referrer")
+			http.Redirect(w, r, federatedURL.String(), http.StatusFound)
+			return nil
+		}
 		callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)

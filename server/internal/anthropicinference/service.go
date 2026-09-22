@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -14,7 +14,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/sync/errgroup"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -22,8 +24,38 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
+
+const (
+	// verdictBudget keeps evaluation under Anthropic's default five second
+	// verdict timeout, with headroom for the response to reach the provider.
+	verdictBudget = 4 * time.Second
+	// scanConcurrency bounds how many inputs of one transcript are evaluated
+	// at once.
+	scanConcurrency = 4
+	// checkpointBudget bounds the marker write that follows scanning.
+	checkpointBudget = 500 * time.Millisecond
+	// unavailableDenyReason is the fail-closed copy for a request that could
+	// not be evaluated in full.
+	unavailableDenyReason = "Speakeasy could not evaluate this request. Please try again."
+)
+
+var errPolicyDenied = errors.New("inference policy denied")
+
+// inputScan is what one policy input's evaluation produced. An input the
+// budget or an earlier denial cut off stays unevaluated.
+type inputScan struct {
+	evaluated bool
+	complete  bool
+	result    *risk.ScanResult
+}
+
+// The protocol has no acknowledgement flow; warn policies deny the call.
+func denies(result *risk.ScanResult) bool {
+	return result != nil && (result.Action == "block" || result.Action == "warn" || result.Action == "quarantine")
+}
 
 type scanner interface {
 	ScanForInferenceEnforcement(context.Context, risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error)
@@ -40,22 +72,24 @@ type transcriptStore interface {
 
 // Service archives transcripts and runs the existing risk-policy scanner.
 type Service struct {
+	logger  *slog.Logger
 	store   transcriptStore
 	scanner scanner
 }
 
 // NewService uses the shared chat writer so captured messages receive the same
 // storage, metering, and asynchronous analysis as other imported conversations.
-func NewService(db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner) *Service {
-	return &Service{store: &postgresStore{db: db, writer: writer}, scanner: scanner}
+func NewService(logger *slog.Logger, db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner) *Service {
+	return &Service{logger: logger, store: &postgresStore{db: db, writer: writer}, scanner: scanner}
 }
 
 // Process archives attempts independently of enforcement. Only a successfully
 // evaluated checkpoint can exempt historical content from another scan.
 func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verdict, error) {
-	ctx, cancel := context.WithTimeout(ctx, 9*time.Second)
+	ctx = policyflags.WithRequestMemo(ctx)
+	budget, cancel := context.WithTimeout(ctx, verdictBudget)
 	defer cancel()
-	userID, err := s.store.ResolveActor(ctx, config, frame)
+	userID, err := s.store.ResolveActor(budget, config, frame)
 	if err != nil {
 		return Verdict{}, fmt.Errorf("resolve inference hook actor: %w", err)
 	}
@@ -63,20 +97,21 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	if _, err := policyInputs(messages); err != nil {
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
 	}
-	_, err = s.store.Save(ctx, config, frame, userID)
+	_, err = s.store.Save(budget, config, frame, userID)
 	if err != nil {
 		return Verdict{}, fmt.Errorf("store inference transcript: %w", err)
 	}
-	session, err := s.store.Begin(ctx, config, frame, userID)
+	session, err := s.store.Begin(budget, config, frame, userID)
 	if err != nil {
 		return Verdict{}, fmt.Errorf("begin inference checkpoint: %w", err)
 	}
-	accepted, err := session.Load(ctx)
+	accepted, err := session.Load(budget)
 	if err != nil {
 		return Verdict{}, fmt.Errorf("load inference checkpoint: %w", err)
 	}
 	hashes := transcriptHashes(messages)
-	scanStart := min(acceptedPrefix(accepted, hashes), currentTurnStart(messages))
+	matched := acceptedPrefix(accepted, hashes)
+	scanStart := min(matched, currentTurnStart(messages))
 	inputs, err := policyInputs(messages[scanStart:])
 	if err != nil {
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
@@ -85,74 +120,118 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	if err != nil {
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
 	}
-	verdict := Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}
-	complete := true
+	scans := make([]inputScan, len(inputs))
+	group, groupCtx := errgroup.WithContext(budget)
+	group.SetLimit(scanConcurrency)
 	for offset, input := range inputs {
-		index := len(priorInputs) + offset
-		if err := ctx.Err(); err != nil {
-			return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
+		if groupCtx.Err() != nil {
+			break
 		}
-		outcome, err := s.scanner.ScanForInferenceEnforcement(ctx, risk.RealtimeScanRequest{
-			Provenance: metering.RiskProvenance{
-				OrganizationID:         config.OrganizationID,
-				ProjectID:              config.ProjectID,
-				RiskPolicyID:           uuid.Nil,
-				RiskPolicyVersion:      0,
-				PolicyLinkReason:       "",
-				ChatID:                 uuid.Nil,
-				ExternalConversationID: frame.SessionID,
-				ChatMessageID:          uuid.Nil,
-				ContentPartID:          uuid.Nil,
-				MessageLinkReason:      "realtime_message_not_resolved",
-				OperationID:            fmt.Sprintf("anthropic-inference:%s:%d", frame.RequestID, index),
-				ExecutionPath:          "realtime_local",
-				RequestID:              frame.RequestID,
-				MessageType:            input.kind,
-				HookSource:             inferenceSource(frame.Source.Application),
-				UserID:                 userID,
-				ToolCallID:             input.toolCallID,
-				ToolName:               input.tool,
-				Model:                  "",
-				Provider:               "",
-			},
-			Text:        input.text,
-			MessageType: input.kind,
-			ToolName:    input.tool,
+		group.Go(func() error {
+			outcome, err := s.scanner.ScanForInferenceEnforcement(groupCtx, scanRequest(config, frame, userID, len(priorInputs)+offset, input))
+			if err != nil {
+				if groupCtx.Err() != nil {
+					return nil
+				}
+				return fmt.Errorf("scan input %d: %w", len(priorInputs)+offset, err)
+			}
+			scans[offset] = inputScan{evaluated: true, complete: outcome != nil && outcome.Complete, result: nil}
+			if outcome != nil {
+				scans[offset].result = outcome.Result
+			}
+			if denies(scans[offset].result) {
+				return errPolicyDenied
+			}
+			return nil
 		})
-		if err != nil {
-			return Verdict{}, fmt.Errorf("evaluate inference policy: %w", err)
-		}
-		if err := ctx.Err(); err != nil {
-			return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
-		}
-		complete = complete && outcome != nil && outcome.Complete
-		var result *risk.ScanResult
-		if outcome != nil {
-			result = outcome.Result
-		}
-		if result != nil && (result.Action == "block" || result.Action == "warn" || result.Action == "quarantine") {
-			// The protocol has no acknowledgement flow; warn policies deny this call.
-			verdict.Action = "deny"
-			verdict.DenyReason = conv.Default(conv.PtrValOr(result.UserMessage, ""), "This request was blocked by your organization's security policy.")
-			return verdict, nil
-		}
+	}
+	if err := group.Wait(); err != nil && !errors.Is(err, errPolicyDenied) {
+		return Verdict{}, fmt.Errorf("evaluate inference policy: %w", err)
 	}
 	if err := ctx.Err(); err != nil {
 		return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
 	}
-	if complete {
-		if err := session.Accept(ctx, hashes); err != nil {
-			if contextErr := ctx.Err(); contextErr != nil {
-				return Verdict{}, fmt.Errorf("accept inference checkpoint context: %w", contextErr)
-			}
+	for _, scan := range scans {
+		if denies(scan.result) {
+			return Verdict{
+				Action:      "deny",
+				DenyReason:  conv.Default(conv.PtrValOr(scan.result.UserMessage, ""), "This request was blocked by your organization's security policy."),
+				ReferenceID: "",
+			}, nil
+		}
+	}
+	verdict := Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}
+	// Only the leading messages whose inputs all evaluated complete can be
+	// accepted. Accepting them after a cut-off makes the redelivery
+	// incremental instead of repeating the same scans into the same budget.
+	cleanThrough := len(messages)
+	for offset, scan := range scans {
+		if !scan.evaluated || !scan.complete {
+			cleanThrough = scanStart + inputs[offset].message
+			break
+		}
+	}
+	if slices.ContainsFunc(scans, func(scan inputScan) bool { return !scan.evaluated }) {
+		// A failed evaluation must not silently allow inference, including when
+		// Anthropic's administrator selected allow-on-webhook-failure.
+		s.logger.WarnContext(ctx, "inference verdict budget exhausted",
+			attr.SlogOrganizationID(config.OrganizationID), attr.SlogProjectID(config.ProjectID.String()),
+			attr.SlogInferenceInputCount(len(inputs)), attr.SlogInferenceAcceptedMessages(cleanThrough))
+		verdict = Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}
+	}
+	if cleanThrough > matched || cleanThrough == len(messages) {
+		// The scan budget may already be spent; the marker gets its own short
+		// window so a slow write cannot push the verdict past the provider's.
+		acceptCtx, cancelAccept := context.WithTimeout(ctx, checkpointBudget)
+		defer cancelAccept()
+		err := session.Accept(acceptCtx, hashes[:cleanThrough])
+		switch {
+		case err == nil:
+		case ctx.Err() != nil:
+			return Verdict{}, fmt.Errorf("accept inference checkpoint context: %w", ctx.Err())
+		case errors.Is(err, errCheckpointConflict):
 			// Another fully scanned delivery won. Keep its marker, without
 			// turning this optimization into an artificial denial.
-			if !errors.Is(err, errCheckpointConflict) {
-				return Verdict{}, fmt.Errorf("accept inference checkpoint: %w", err)
-			}
+		case verdict.Action == "deny":
+			// The verdict already fails closed; the marker only makes the
+			// redelivery incremental.
+			s.logger.WarnContext(ctx, "accept partial inference checkpoint", attr.SlogError(err))
+		default:
+			return Verdict{}, fmt.Errorf("accept inference checkpoint: %w", err)
 		}
 	}
 	return verdict, nil
+}
+
+func scanRequest(config Config, frame Frame, userID string, index int, input policyInput) risk.RealtimeScanRequest {
+	return risk.RealtimeScanRequest{
+		Provenance: metering.RiskProvenance{
+			OrganizationID:         config.OrganizationID,
+			ProjectID:              config.ProjectID,
+			RiskPolicyID:           uuid.Nil,
+			RiskPolicyVersion:      0,
+			PolicyLinkReason:       "",
+			ChatID:                 uuid.Nil,
+			ExternalConversationID: frame.SessionID,
+			ChatMessageID:          uuid.Nil,
+			ContentPartID:          uuid.Nil,
+			MessageLinkReason:      "realtime_message_not_resolved",
+			OperationID:            fmt.Sprintf("anthropic-inference:%s:%d", frame.RequestID, index),
+			ExecutionPath:          "realtime_local",
+			RequestID:              frame.RequestID,
+			MessageType:            input.kind,
+			HookSource:             inferenceSource(frame.Source.Application),
+			UserID:                 userID,
+			ToolCallID:             input.toolCallID,
+			ToolName:               input.tool,
+			Model:                  "",
+			Provider:               "",
+		},
+		Text:        input.text,
+		MessageType: input.kind,
+		ToolName:    input.tool,
+		ToolCallID:  input.toolCallID,
+	}
 }
 
 type policyInput struct {
@@ -160,13 +239,16 @@ type policyInput struct {
 	tool       string
 	text       string
 	toolCallID string
+	// message is the index, within the messages given to policyInputs, of the
+	// message this input came from.
+	message int
 }
 
 // Preserve each block as an independent policy input so tool arguments stay
 // valid JSON and content-specific policy scope expressions retain their meaning.
 func policyInputs(messages []Message) ([]policyInput, error) {
 	var inputs []policyInput
-	for _, msg := range messages {
+	for index, msg := range messages {
 		if msg.Role != "user" && msg.Role != "assistant" {
 			continue
 		}
@@ -175,7 +257,7 @@ func policyInputs(messages []Message) ([]policyInput, error) {
 			return nil, err
 		}
 		for _, block := range blocks {
-			input := policyInput{kind: "", tool: "", text: "", toolCallID: ""}
+			input := policyInput{kind: "", tool: "", text: "", toolCallID: "", message: index}
 			switch block.Type {
 			case "text":
 				input.kind, input.text = message.User, block.Text
@@ -292,11 +374,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	}
 
 	messages := conversationMessages(frame.Messages)
-	hashes := make([][]byte, len(messages))
-	for index, msg := range messages {
-		hashes[index] = contentHash(msg)
-	}
-	start, prev, err := s.alignFrame(ctx, config, chatID, hashes)
+	start, prev, err := s.alignFrame(ctx, config, chatID, messages)
 	if err != nil {
 		return 0, err
 	}
@@ -306,7 +384,8 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 		msg := messages[index]
 		// The chained identity makes concurrent deliveries and retries share the
 		// same rows, while identical messages at different positions stay apart.
-		prev = chainHash(prev, hashes[index])
+		hash := contentHash(msg)
+		prev = chainHash(prev, hash)
 		id := messageIdentityID(prev)
 		rows, attachments, err := storageBlocks(msg, id)
 		if err != nil {
@@ -372,7 +451,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 					UserAgent:         pgtype.Text{String: "", Valid: false},
 					IpAddress:         pgtype.Text{String: "", Valid: false},
 					Source:            conv.ToPGText(inferenceSource(frame.Source.Application)),
-					ContentHash:       conv.Ternary(rowIndex == len(rows)-1, hashes[index], nil),
+					ContentHash:       conv.Ternary(rowIndex == len(rows)-1, hash, nil),
 					Generation:        0,
 					CreatedAt:         createdAt,
 				},
@@ -397,9 +476,9 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 // stored before content hashing carries ordinals rather than hashes, and a
 // client that rewrote every stored message in place is still sending the same
 // conversation, so its history is not archived a second time.
-func (s *postgresStore) alignFrame(ctx context.Context, config Config, chatID uuid.UUID, hashes [][]byte) (int, []byte, error) {
+func (s *postgresStore) alignFrame(ctx context.Context, config Config, chatID uuid.UUID, messages []Message) (int, []byte, error) {
 	rows, err := chatrepo.New(s.db).ListInferenceMessageIdentities(ctx, chatrepo.ListInferenceMessageIdentitiesParams{
-		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}, RowLimit: int32(min(math.MaxInt32, max(alignmentWindow, len(hashes)+1))),
+		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}, RowLimit: alignmentAnchors,
 	})
 	if err != nil {
 		return 0, nil, fmt.Errorf("list stored inference messages: %w", err)
@@ -414,14 +493,14 @@ func (s *postgresStore) alignFrame(ctx context.Context, config Config, chatID uu
 			stored = append(stored, identity)
 		}
 	}
-	if start, prev, ok := alignTranscript(stored, hashes); ok {
+	if start, prev, ok := alignTranscript(stored, messages); ok {
 		return start, prev, nil
 	}
 	storedCount, err := chatrepo.New(s.db).CountInferenceMessages(ctx, chatrepo.CountInferenceMessagesParams{ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}})
 	if err != nil {
 		return 0, nil, fmt.Errorf("count stored inference messages: %w", err)
 	}
-	return min(int(storedCount), len(hashes)), nil, nil
+	return min(int(storedCount), len(messages)), nil, nil
 }
 
 // Include the actor because Claude Code session ids can be client asserted.

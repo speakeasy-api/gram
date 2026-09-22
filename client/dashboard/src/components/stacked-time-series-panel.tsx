@@ -144,6 +144,7 @@ function bucketRangeLabel(from: number, to: number): string {
 type Stack = {
   key: string;
   label: string;
+  paletteIndex?: number;
   rollup?: boolean;
   unset?: boolean;
   byBucket: Map<number, number>;
@@ -193,6 +194,7 @@ function rolledUpStacks(
         rollup: s.rollup,
         unset: s.unset,
         byBucket,
+        paletteIndex: s.paletteIndex,
         exactByBucket,
       };
     })
@@ -268,6 +270,9 @@ export function StackedTimeSeriesPanel({
   emptyMessage,
   loading,
   onSelectRange,
+  inProgressAtMs,
+  tooltipMode = "nearest",
+  tooltipTotalLabel,
   onSelectSeries,
 }: {
   title: string;
@@ -287,6 +292,11 @@ export function StackedTimeSeriesPanel({
   emptyMessage: string;
   loading: boolean;
   onSelectRange?: (start: Date, end: Date) => void;
+  /** Marks the roll-up bucket containing this instant as still in progress. */
+  inProgressAtMs?: number;
+  tooltipMode?: "nearest" | "index";
+  /** When set, add an exact sum of the visible tooltip series. */
+  tooltipTotalLabel?: string;
   /**
    * Clicking a bar SEGMENT selects that series — the same act as clicking its
    * row in the table beside the chart. When set, it takes the click and
@@ -365,7 +375,12 @@ export function StackedTimeSeriesPanel({
         type: "bar" as const,
         stack: "__series_stack__",
         order: 2,
-        base: stackStyle(s, totalSeries ? i + 1 : i, seriesColors, otherColor),
+        base: stackStyle(
+          s,
+          s.paletteIndex ?? (totalSeries ? i + 1 : i),
+          seriesColors,
+          otherColor,
+        ),
       };
     });
 
@@ -383,8 +398,8 @@ export function StackedTimeSeriesPanel({
       totalDataset = {
         key: rolledTotal.key,
         label: rolledTotal.label,
+        base: stackStyle(rolledTotal, 0, seriesColors, otherColor),
         ...stackValues(rolledTotal, buckets, cumulative),
-        base: { color: seriesColors[0]! },
         type: "line",
         borderColor: seriesColors[0]!,
         backgroundColor: "transparent",
@@ -399,7 +414,14 @@ export function StackedTimeSeriesPanel({
     }
 
     return {
-      labels: buckets.map((bucket) => bucketLabel(bucket, granularity)),
+      labels: buckets.map((bucket) => {
+        const label = bucketLabel(bucket, granularity);
+        const inProgress =
+          inProgressAtMs !== undefined &&
+          bucket <= inProgressAtMs &&
+          inProgressAtMs < bucketEndMs(bucket, granularity);
+        return inProgress ? `${label}*` : label;
+      }),
       datasets: totalDataset ? [...datasets, totalDataset] : datasets,
       buckets,
       starts,
@@ -414,6 +436,7 @@ export function StackedTimeSeriesPanel({
     seriesColors,
     otherColor,
     totalSeries,
+    inProgressAtMs,
   ]);
 
   // Publish the color each stack was painted in, so a sibling table can dot
@@ -609,15 +632,21 @@ export function StackedTimeSeriesPanel({
         legend: { display: false },
         tooltip: {
           ...TOOLTIP,
+          mode: tooltipMode,
+          intersect: tooltipMode !== "index",
           callbacks: {
             title: (items) => {
               const index = items[0]?.dataIndex;
               if (index === undefined) return "";
               const from = rolled.starts[index];
               const to = rolled.ends[index];
-              return from === undefined || to === undefined
-                ? ""
-                : bucketRangeLabel(from, to);
+              if (from === undefined || to === undefined) return "";
+              const range = bucketRangeLabel(from, to);
+              const inProgress =
+                inProgressAtMs !== undefined &&
+                from <= inProgressAtMs &&
+                inProgressAtMs < to;
+              return inProgress ? `${range} (in progress)` : range;
             },
             label: (item) => {
               const dataset = rolled.datasets[item.datasetIndex];
@@ -628,6 +657,19 @@ export function StackedTimeSeriesPanel({
                   : formatValue(Number(item.raw));
               return `${item.dataset.label}: ${value}`;
             },
+            footer:
+              tooltipTotalLabel && formatExactValue
+                ? (items) => {
+                    const total = items.reduce((sum, item) => {
+                      const exact =
+                        rolled.datasets[item.datasetIndex]?.exactData?.[
+                          item.dataIndex
+                        ];
+                      return exact === undefined ? sum : sum + BigInt(exact);
+                    }, 0n);
+                    return `${tooltipTotalLabel}: ${formatExactValue(total.toString())}`;
+                  }
+                : undefined,
           },
         },
       },
@@ -660,6 +702,9 @@ export function StackedTimeSeriesPanel({
     rolled.datasets,
     rolled.starts,
     rolled.ends,
+    inProgressAtMs,
+    tooltipMode,
+    tooltipTotalLabel,
   ]);
 
   return (
@@ -671,7 +716,7 @@ export function StackedTimeSeriesPanel({
             <Info className="text-muted-foreground size-3.5" />
           </SimpleTooltip>
         </div>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-3">
           {headerControls}
           {headerControls && <div className="bg-border h-4 w-px" />}
           <div className="flex items-center gap-1">

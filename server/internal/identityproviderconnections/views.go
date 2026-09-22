@@ -63,7 +63,7 @@ func missingScopes(granted []string) []string {
 	return missing
 }
 
-func buildConnectionView(r connectionRows) *gen.OktaIdentityProviderConnection {
+func buildConnectionView(r connectionRows, agent AgentObservation) *gen.OktaIdentityProviderConnection {
 	var clientID *string
 	if r.clientIDSubmitted() {
 		clientID = conv.PtrEmpty(r.Managed.ClientID)
@@ -87,10 +87,25 @@ func buildConnectionView(r connectionRows) *gen.OktaIdentityProviderConnection {
 		missing = missingScopes(granted)
 	}
 
-	checklist := OktaChecklist(r.Okta.ListingMode, r.jwksURL())
+	checklist := OktaChecklist(r.Okta.ListingMode, r.jwksURL(), ChecklistSignal{
+		Checked:           r.checked() && r.lastError() == nil,
+		ClientIDSubmitted: r.clientIDSubmitted(),
+		DPoPBound:         r.Okta.DpopRequired,
+		MissingScopes:     missing,
+		Reasons:           r.reasons(),
+		AgentRecorded:     r.Okta.AgentID.Valid && r.Okta.AgentID.String != "",
+		Agent:             agent,
+	})
 	items := make([]*gen.IdentityProviderConnectionChecklistItem, 0, len(checklist))
 	for _, item := range checklist {
-		items = append(items, &gen.IdentityProviderConnectionChecklistItem{Key: item.Key, Title: item.Title, Description: item.Description})
+		items = append(items, &gen.IdentityProviderConnectionChecklistItem{
+			Key:         item.Key,
+			Group:       item.Group,
+			Title:       item.Title,
+			Description: item.Description,
+			Details:     item.Details,
+			Completed:   item.Completed,
+		})
 	}
 
 	return &gen.OktaIdentityProviderConnection{
@@ -115,6 +130,7 @@ func buildConnectionView(r connectionRows) *gen.OktaIdentityProviderConnection {
 		AgentAppID:          conv.FromPGText[string](r.Okta.AgentAppID),
 		ActiveKey:           activeKey,
 		Checklist:           items,
+		ApplicationsSync:    buildApplicationsSyncView(r.Okta),
 		CreatedAt:           conv.FromPGTimestamptz(r.Connection.CreatedAt),
 		UpdatedAt:           r.updatedAt().UTC().Format(time.RFC3339),
 	}
@@ -141,5 +157,12 @@ func snapshot(r connectionRows) *audit.IdentityProviderConnectionSnapshot {
 		LastError:     conv.PtrValOr(r.lastError(), ""),
 		AgentID:       r.Okta.AgentID.String,
 		AgentAppID:    r.Okta.AgentAppID.String,
+	}
+}
+
+func buildApplicationsSyncView(o repo.OktaIdentityProviderConnection) *gen.IdentityProviderConnectionApplicationsSync {
+	return &gen.IdentityProviderConnectionApplicationsSync{
+		SyncedAt:    conv.PtrEmpty(conv.FromPGTimestamptz(o.ApplicationsSyncedAt)),
+		RequestedAt: conv.PtrEmpty(conv.FromPGTimestamptz(o.ApplicationsSyncRequestedAt)),
 	}
 }

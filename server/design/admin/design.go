@@ -265,6 +265,17 @@ var AdminMeterUsageResponse = Type("AdminMeterUsageResponse", func() {
 	Required("family", "window", "billing_cycles", "unit", "total", "buckets", "queried_at", "measurement_method")
 })
 
+var AdminSpendBreakdownResponse = Type("AdminSpendBreakdownResponse", func() {
+	Attribute("window", usage.MeterUsageWindow)
+	Attribute("billing_cycles", ArrayOf(usage.MeterUsageWindow), "Trailing twelve billing-cycle date windows")
+	Attribute("currency", String, func() { Enum("USD") })
+	Attribute("pricing_basis", String, func() { Enum("current_payg_list_price") })
+	Attribute("queried_at", String, "Retrieval timestamp used to distinguish current and future buckets", func() { Format(FormatDateTime) })
+	Attribute("total_cost_usd", String, "Exact estimated total at current PAYG list prices")
+	Attribute("products", ArrayOf(usage.SpendProduct), "The three metered products in stable display order")
+	Required("window", "billing_cycles", "currency", "pricing_basis", "queried_at", "total_cost_usd", "products")
+})
+
 var AdminSession = Type("AdminSession", func() {
 	Attribute("email", String)
 	Attribute("name", String)
@@ -785,21 +796,12 @@ var _ = Service("admin", func() {
 
 		Payload(func() {
 			security.AdminAuthPayload()
-			Required("name")
-
-			// A body of one required string is structurally identical to several
-			// others in this design, and Goa's OpenAPI emitter deduplicates
-			// request bodies by shape, reusing whichever name it registered
-			// first. MinLength makes this shape its own, and an explicit
-			// typename stops a future identically-shaped body from taking it.
+			Required("url", "ownership_confirmed")
 			Meta("openapi:typename", "CreateOrganizationRequestBody")
-
-			// The length and character rules live in orgprovision.ValidateName,
-			// which the handler runs and which the signup path runs too. Only
-			// the emptiness floor is repeated here.
-			Attribute("name", String, "Display name for the new organization.", func() {
+			Attribute("url", String, "Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.", func() {
 				MinLength(1)
 			})
+			Attribute("ownership_confirmed", Boolean, "The operator confirms that domain ownership was established outside this form.")
 		})
 
 		Result(AdminOrganization)
@@ -1104,6 +1106,33 @@ var _ = Service("admin", func() {
 			declareUnavailableResponse()
 		})
 		Meta("openapi:operationId", "adminGetMeterUsage")
+	})
+
+	Method("getSpendBreakdown", func() {
+		Description("Returns exact current PAYG list-price estimates for an organization's three metered products over a maximum of three calendar months. Available for every organization regardless of account type or subscription state.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String, "Organization ID or canonical slug.")
+			Attribute("from", String, "Inclusive UTC midnight reporting boundary. Must be paired with to.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.", func() {
+				Format(FormatDateTime)
+			})
+			Required("organization_id")
+		})
+		Result(AdminSpendBreakdownResponse)
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organization.spendBreakdown")
+			Param("organization_id")
+			Param("from")
+			Param("to")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminGetSpendBreakdown")
+		Meta("openapi:extension:x-speakeasy-name-override", "getSpendBreakdown")
 	})
 
 	supportMatrixMethods()

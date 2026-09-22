@@ -7,14 +7,15 @@
 -- caller gets the existing organization back (with its existing id);
 -- otherwise the new row lands with the supplied @id.
 -- name: CreateOrganization :one
-INSERT INTO organizations (id, name, slug, account_type, workos_id, external_id)
+INSERT INTO organizations (id, name, slug, account_type, workos_id, external_id, domains)
 VALUES (
   @id,
   @name,
   @slug,
   COALESCE(sqlc.narg('account_type'), 'enterprise'),
   sqlc.narg('workos_id'),
-  sqlc.narg('external_id')
+  sqlc.narg('external_id'),
+  COALESCE(sqlc.narg('domains'), '[]')
 )
 ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug
 RETURNING *;

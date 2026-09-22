@@ -19,8 +19,10 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestUpdateMcpServer_FullReplace(t *testing.T) {
@@ -75,6 +77,97 @@ func TestUpdateMcpServer_FullReplace(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, record.BeforeSnapshot)
 	require.NotNil(t, record.AfterSnapshot)
+}
+
+func TestUpdateMcpServer_ReplacesIssuerAndRetainsPreviousIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name: "replace issuer", RemoteMcpServerID: &remoteID,
+		Visibility: types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created.UserSessionIssuerID)
+	previousIssuerID := uuid.MustParse(*created.UserSessionIssuerID)
+
+	organizationIssuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true},
+		Slug:                         "shared-workforce",
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: 14 * 24 * 60 * 60 * 1_000_000, Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	organizationIssuerID := organizationIssuer.ID.String()
+
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		ID: created.ID, RemoteMcpServerID: &remoteID,
+		UserSessionIssuerID: &organizationIssuerID,
+		Visibility:          types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, organizationIssuerID, *updated.UserSessionIssuerID)
+
+	_, err = usersessionsrepo.New(ti.conn).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
+		ID:             previousIssuerID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+}
+
+func TestUpdateMcpServer_RejectsForeignOrganizationUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name:              "keep current issuer",
+		RemoteMcpServerID: &remoteID,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	foreignOrganizationID := "org-" + uuid.NewString()
+	require.NoError(t, organizationsrepo.New(ti.conn).CreateOrganizationMetadata(ctx, organizationsrepo.CreateOrganizationMetadataParams{
+		ID:   foreignOrganizationID,
+		Name: "Foreign Organization",
+		Slug: "foreign-" + uuid.NewString(),
+	}))
+	foreignIssuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               pgtype.Text{String: foreignOrganizationID, Valid: true},
+		Slug:                         "foreign-workforce",
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: 14 * 24 * 60 * 60 * 1_000_000, Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	foreignIssuerID := foreignIssuer.ID.String()
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		ID:                    created.ID,
+		RemoteMcpServerID:     &remoteID,
+		UserSessionIssuerID:   &foreignIssuerID,
+		Visibility:            types.McpServerVisibility("disabled"),
+		NetworkAccessMode:     nil,
+		EnvironmentID:         nil,
+		TunneledMcpServerID:   nil,
+		ToolsetID:             nil,
+		UnproxiedMcpServerID:  nil,
+		ToolVariationsGroupID: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	stored, err := ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{ID: &created.ID})
+	require.NoError(t, err)
+	require.Equal(t, created.UserSessionIssuerID, stored.UserSessionIssuerID)
 }
 
 func TestUpdateMcpServer_NonPublicOmissionFailsClosedAndPublicRecoverySucceeds(t *testing.T) {

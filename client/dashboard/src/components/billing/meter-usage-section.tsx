@@ -27,38 +27,26 @@ import {
   type MeterUsageData,
 } from "./meter-usage-adapter";
 import { MeterUsageTable } from "./meter-usage-table";
-import { useMeterPeriod } from "./use-meter-period";
+import { meterPeriodDisplayRange, useMeterPeriod } from "./use-meter-period";
 
 const FAMILY_OPTIONS = [
   {
     value: "agent_session_storage",
-    label: "Storage",
-    tooltip: "Stored-message workload",
-  },
-  {
-    value: "mcp_bandwidth",
-    label: "Bandwidth",
-    tooltip: "MCP ingress and egress body bytes",
+    label: METER_FAMILIES.agent_session_storage.label,
+    tooltip:
+      "Volume of agent/chat session data captured by the AI Control Plane",
   },
   {
     value: "risk_content_scans",
-    label: "Risk scans",
-    tooltip: "Content volume processed by risk scanners",
+    label: METER_FAMILIES.risk_content_scans.label,
+    tooltip: "Volume of agent/chat session content processed by risk policies",
+  },
+  {
+    value: "mcp_bandwidth",
+    label: METER_FAMILIES.mcp_bandwidth.label,
+    tooltip: "Volume of traffic sent to and from the MCP gateway",
   },
 ] satisfies { value: MeterFamily; label: string; tooltip: string }[];
-
-function periodDisplayRange(period: { from: Date; to: Date }): {
-  from: Date;
-  to: Date;
-} {
-  // The picker displays local calendar dates; the reporting window is UTC.
-  const calendarDate = (date: Date): Date =>
-    new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-  return {
-    from: calendarDate(period.from),
-    to: calendarDate(new Date(period.to.getTime() - 1)),
-  };
-}
 
 export function MeterUsageSection(): JSX.Element {
   const [family, setFamily] = useState<MeterFamily>("agent_session_storage");
@@ -248,7 +236,7 @@ export function MeterUsageSection(): JSX.Element {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Meter usage</Page.Section.Title>
+      <Page.Section.Title area="">Usage</Page.Section.Title>
       <Page.Section.Description>
         Explore storage, bandwidth, and risk-scanning volume by UTC day. Today's
         totals update as readings arrive. These usage totals are not invoice
@@ -278,7 +266,7 @@ export function MeterUsageSection(): JSX.Element {
                   />
                   <TimeRangePicker
                     preset={null}
-                    customRange={periodDisplayRange(period)}
+                    customRange={meterPeriodDisplayRange(period)}
                     customRangeLabel={
                       periodState.customRange ? "Custom" : "Cycle"
                     }

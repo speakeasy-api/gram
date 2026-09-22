@@ -424,10 +424,20 @@ BEGIN
   DELETE FROM plugin_servers WHERE plugin_id IN
     (SELECT id FROM plugins
      WHERE organization_id = demo_org);
+  -- Required binding references cascade from their parents. Clear tenant
+  -- bindings explicitly before reseeding the referenced rows.
+  DELETE FROM principal_remote_session_bindings WHERE organization_id = demo_org;
+  -- Clear upstream fixtures before their issuer/client and project cascade.
+  DELETE FROM remote_sessions WHERE user_session_issuer_id IN
+    (SELECT id FROM user_session_issuers WHERE project_id = proj_a OR organization_id = demo_org)
+    OR remote_session_client_id IN
+    (SELECT id FROM remote_session_clients WHERE project_id = proj_a OR organization_id = demo_org);
+  DELETE FROM remote_session_clients WHERE project_id = proj_a OR organization_id = demo_org;
+  DELETE FROM remote_session_issuers WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM mcp_servers WHERE project_id = proj_a;
   DELETE FROM meta_mcp_servers WHERE organization_id = demo_org;
   -- meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.
-  DELETE FROM user_session_issuers WHERE project_id = proj_a;
+  DELETE FROM user_session_issuers WHERE project_id = proj_a OR organization_id = demo_org;
   -- The metadata table is project-scoped rather than organization-scoped, so
   -- constrain cleanup through the demo project's tenant ownership.
   DELETE FROM external_oauth_server_metadata
@@ -525,8 +535,8 @@ BEGIN
 
   -- Managed identities are distinct from OAuth client registrations below.
   -- Existing fictional owners exercise name/initials rendering without adding
-  -- external avatar dependencies. None of these has a direct policy grant;
-  -- the first one reaches servers only through the roles assigned to it below.
+  -- external avatar dependencies. The two active release agents receive only
+  -- project/server-scoped direct grants alongside their inert attachments below.
   INSERT INTO agents
     (id, organization_id, owner_user_id, name, suspended_at, revoked_at)
   VALUES
@@ -535,7 +545,9 @@ BEGIN
     (demo.det_uuid('gram-demo-managed-agent-2'), demo_org, demo_user_ids[2],
      'Support triage', now() - interval '2 days', NULL),
     (demo.det_uuid('gram-demo-managed-agent-3'), demo_org, demo_user_ids[3],
-     'Retired documentation bot', NULL, now() - interval '5 days');
+     'Retired documentation bot', NULL, now() - interval '5 days'),
+    (demo.det_uuid('gram-demo-managed-agent-4'), demo_org, demo_user_ids[1],
+     'Release notes assistant', NULL, NULL);
 
   -- Role assignments (Roles column on the team page). Global roles are synced
   -- from WorkOS in real envs; tolerate their absence locally.
@@ -1161,11 +1173,11 @@ BEGIN
   -- mint rejects Months/Days components (see usersessions/minthandler.go).
   INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
                                     authn_challenge_mode, session_duration) VALUES
+    (demo.det_uuid('gram-demo-issuer-workforce'), NULL, demo_org, 'acme-workforce',
+     'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
     (demo.det_uuid('gram-demo-issuer-linear'), proj_a, demo_org, 'linear',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
     (demo.det_uuid('gram-demo-issuer-slack'), proj_a, demo_org, 'slack',
-     'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
-    (demo.det_uuid('gram-demo-issuer-github'), proj_a, demo_org, 'github',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
     (demo.det_uuid('gram-demo-issuer-gateway'), proj_a, demo_org, 'acme-agent-gateway',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60));
@@ -1185,7 +1197,7 @@ BEGIN
      demo.det_uuid('gram-demo-issuer-slack'), 'private'),
     (demo.det_uuid('gram-demo-mcpserver-github'), proj_a, 'GitHub', 'github',
      NULL, demo.det_uuid('gram-demo-remotemcp-github'),
-     demo.det_uuid('gram-demo-issuer-github'), 'private');
+     demo.det_uuid('gram-demo-issuer-workforce'), 'private');
 
   -- Leave instructions NULL so Settings starts with the editable built-in
   -- instructions, matching the gateway's initialize and server/discover text.
@@ -1294,6 +1306,69 @@ BEGIN
      now() + interval '5 days', now() + interval '1 hour',
      now() - interval '5 hours', now() - interval '12 days');
 
+
+  ------------------------------------------------------------------
+  -- Inert upstream account, owned by the human on Linear session 6. Both
+  -- active release agents share that human owner. The explicit client link
+  -- makes this exact session reachable from the requesting session's issuer.
+  -- Reserved .invalid endpoints, an invalid ciphertext and no refresh token
+  -- prevent this display fixture from becoming a usable upstream credential.
+  INSERT INTO remote_session_issuers
+    (id, project_id, organization_id, slug, issuer, name)
+  VALUES (demo.det_uuid('gram-demo-attachment-issuer'), proj_a, demo_org,
+          'fictional-release-account', 'https://release.example.invalid',
+          'Fictional release account');
+
+  INSERT INTO remote_session_clients
+    (id, project_id, organization_id, remote_session_issuer_id, client_id,
+     token_endpoint_auth_method)
+  VALUES (demo.det_uuid('gram-demo-attachment-client'), proj_a, demo_org,
+          demo.det_uuid('gram-demo-attachment-issuer'),
+          demo.det_uuid('gram-demo-attachment-client')::text, 'none');
+
+  INSERT INTO remote_session_client_user_session_issuers
+    (remote_session_client_id, user_session_issuer_id)
+  VALUES (demo.det_uuid('gram-demo-attachment-client'),
+          demo.det_uuid('gram-demo-issuer-linear'));
+
+  INSERT INTO remote_sessions
+    (id, subject_urn, user_session_issuer_id, remote_session_client_id,
+     access_token_encrypted, access_expires_at, auto_refresh, scopes,
+     upstream_display_name, created_at, last_used_at)
+  VALUES (demo.det_uuid('gram-demo-attachment-session'),
+          'user:' || demo_user_ids[1], demo.det_uuid('gram-demo-issuer-linear'),
+          demo.det_uuid('gram-demo-attachment-client'),
+          'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+          ARRAY['releases:read'], 'Fictional release account',
+          now() - interval '3 days', now() - interval '40 minutes');
+
+  ------------------------------------------------------------------
+  -- Many principals can reference one exact human-owned session. Reconnecting
+  -- must never silently replace these references with a different session.
+  INSERT INTO principal_remote_session_bindings
+    (id, project_id, organization_id, principal_id, user_session_issuer_id,
+     remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
+  SELECT demo.det_uuid('gram-demo-attachment-binding-' || n), proj_a, demo_org,
+         demo.det_uuid('gram-demo-managed-agent-' || n),
+         demo.det_uuid('gram-demo-issuer-linear'),
+         demo.det_uuid('gram-demo-attachment-client'),
+         rs.id, rs.grant_generation, 'user:' || demo_user_ids[1]
+  FROM unnest(ARRAY[1, 4]) AS n
+  CROSS JOIN remote_sessions rs
+  WHERE rs.id = demo.det_uuid('gram-demo-attachment-session');
+
+  -- Display-only policy fixtures for the credential wizard. Exact project and
+  -- remote MCP resource IDs avoid wildcard delegation; owner/caller access is
+  -- still intersected at runtime. No API key or usable upstream secret is seeded.
+  INSERT INTO principal_grants
+    (id, organization_id, principal_urn, scope, selectors)
+  SELECT demo.det_uuid('gram-demo-agent-connect-grant-' || n), demo_org,
+         'agent:' || demo.det_uuid('gram-demo-managed-agent-' || n)::text,
+         'mcp:connect', jsonb_build_object(
+           'resource_kind', 'mcp',
+           'resource_id', demo.det_uuid('gram-demo-mcpserver-linear')::text,
+           'project_id', proj_a::text)
+  FROM unnest(ARRAY[1, 4]) AS n;
 
   ------------------------------------------------------------------
   -- Killswitches. Six stable aggregates exercise every customer status and
@@ -2795,13 +2870,63 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
 
   SELECT count(*) INTO stray FROM principal_grants
   WHERE organization_id = demo_org AND principal_urn LIKE 'agent:%';
-  IF stray > 0 THEN
-    RAISE EXCEPTION 'demo seed postflight: % agent grants survived the reseed', stray;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 scoped agent grants, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM principal_grants
+  WHERE organization_id = demo_org
+    AND principal_urn IN (
+      'agent:' || demo.det_uuid('gram-demo-managed-agent-1')::text,
+      'agent:' || demo.det_uuid('gram-demo-managed-agent-4')::text)
+    AND scope = 'mcp:connect' AND effect IS NULL
+    AND selectors = jsonb_build_object(
+      'resource_kind', 'mcp',
+      'resource_id', demo.det_uuid('gram-demo-mcpserver-linear')::text,
+      'project_id', proj_a::text);
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected exact project/server-scoped agent grants';
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM principal_remote_session_bindings b
+  JOIN agents a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+  JOIN remote_sessions rs ON rs.id = b.remote_session_id
+  JOIN user_sessions us ON us.id = demo.det_uuid('gram-demo-user-session-6')
+  JOIN remote_session_client_user_session_issuers link
+    ON link.remote_session_client_id = rs.remote_session_client_id
+   AND link.user_session_issuer_id = us.user_session_issuer_id
+  WHERE b.organization_id = demo_org AND b.project_id = proj_a
+    AND b.revoked_at IS NULL AND a.suspended_at IS NULL AND a.revoked_at IS NULL
+    AND b.remote_session_id = demo.det_uuid('gram-demo-attachment-session')
+    AND b.remote_session_client_id = rs.remote_session_client_id
+    AND b.grant_generation = rs.grant_generation
+    AND b.user_session_issuer_id = us.user_session_issuer_id
+    AND rs.subject_urn = us.subject_urn
+    AND rs.subject_urn = 'user:' || a.owner_user_id
+    AND b.attached_by_subject_id = 'user:' || a.owner_user_id
+    AND rs.access_token_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT'
+    AND rs.refresh_token_encrypted IS NULL AND rs.auto_refresh IS FALSE;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 inert reachable exact-session attachments, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM principal_remote_session_bindings
+  WHERE organization_id = demo_org;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 principal session bindings, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_sessions
+  WHERE user_session_issuer_id IN
+    (SELECT id FROM user_session_issuers WHERE project_id = proj_a);
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 user-owned upstream session, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM agents WHERE organization_id = demo_org;
-  IF stray <> 3 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 3 managed agents, found %', stray;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 managed agents, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_sessions
@@ -2822,12 +2947,19 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- credential kind, plus the pre-column row. A rerun that dropped or
   -- duplicated any of them would leave the badges telling a different story
   -- than the one they were seeded to tell.
-  -- One issuer per Connections credential story (acme-partner-gateway) plus
-  -- the four MCP server issuers (linear, slack, github, acme-agent-gateway).
+  -- One issuer per Connections credential story (acme-partner-gateway), three
+  -- project MCP issuers, and the organization-wide workforce issuer used by
+  -- GitHub.
   SELECT count(*) INTO stray FROM user_session_issuers
   WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 5 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 5 user session issuers, found %', stray;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 project user session issuers, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM user_session_issuers
+  WHERE organization_id = demo_org AND project_id IS NULL AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 organization user session issuer, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_session_clients

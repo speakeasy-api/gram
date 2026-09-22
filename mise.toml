@@ -120,6 +120,7 @@ PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
 
 ## Fine-tuned risk LLM analyzer (OpenAI-compatible chat endpoint, URL includes
 ## /v1). An empty URL disables it; real values belong in mise.local.toml.
+## Runbook: server/internal/scanners/llmanalyzer/README.md (Local development).
 GRAM_RISK_LLM_URL = ""
 GRAM_RISK_LLM_MODEL = "risk-judge-4b"
 GRAM_RISK_LLM_API_KEY = ""
@@ -322,11 +323,15 @@ GRAM_RISK_FINGERPRINT_PEPPER_KEYRING = '{"current": "v1", "keys": {"v1": "bmvSy6
 ## Stripe configuration ##
 ##########################
 ## PAYG self-serve billing. Run `mise run stripe:setup` to provision and
-## validate the sandbox TUM meter, product, and metered price. The task writes
-## the catalog values into mise.local.toml. Requires a Stripe sandbox API key.
+## validate the sandbox TUM meter, product, and metered price, and resolve
+## existing monthly metered prices by lookup keys payg-mcp-egress and
+## payg-risk-scans. The task writes catalog values into mise.local.toml.
+## Requires a Stripe sandbox API key.
 STRIPE_API_KEY = { default = "unset" }
 STRIPE_WEBHOOK_SECRET = { default = "unset" }
 STRIPE_PRICE_ID_TUM = { default = "" }
+STRIPE_PRICE_ID_MCP_EGRESS = { default = "" }
+STRIPE_PRICE_ID_RISK_SCANS = { default = "" }
 STRIPE_METER_ID_TUM = { default = "" }
 STRIPE_METER_EVENT_NAME = { default = "tum" }
 STRIPE_PORTAL_CONFIGURATION_ID = { default = "" }

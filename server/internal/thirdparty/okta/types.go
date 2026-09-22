@@ -110,6 +110,10 @@ type ListAppsRequest struct {
 
 	// Limit is the page size; zero uses the Okta default.
 	Limit int
+
+	// MaxPages caps the pages followed for this call; zero uses the client cap.
+	// The pages fetched before the cap are returned with ErrTooManyPages.
+	MaxPages int
 }
 
 // ListAppUsersRequest lists user assignments for one application.
@@ -119,6 +123,10 @@ type ListAppUsersRequest struct {
 
 	// Limit is the page size; zero uses the Okta default.
 	Limit int
+
+	// MaxPages caps the pages followed for this call; zero uses the client cap.
+	// The pages fetched before the cap are returned with ErrTooManyPages.
+	MaxPages int
 }
 
 // ListAppGroupsRequest lists group assignments for one application.
@@ -128,6 +136,10 @@ type ListAppGroupsRequest struct {
 
 	// Limit is the page size; zero uses the Okta default.
 	Limit int
+
+	// MaxPages caps the pages followed for this call; zero uses the client cap.
+	// The pages fetched before the cap are returned with ErrTooManyPages.
+	MaxPages int
 }
 
 // ListGroupsRequest filters a group listing.

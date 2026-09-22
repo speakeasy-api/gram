@@ -1725,7 +1725,22 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- inserted_at, so an at-least-once redelivery of the original scanner row
     -- can never clobber a later dismissal. Declared last for the same
     -- append-only migration reason as the columns above.
-    event_kind LowCardinality(String) DEFAULT '' COMMENT 'Kind of this copy of the finding: finding (scanner output, dead-letter sentinels included), suppression or unsuppression (appended state-change copies from manual dismiss/undo and the retroactive exclusion reconcile). Empty on rows written before the column existed - such rows rank as finding copies.'
+    event_kind LowCardinality(String) DEFAULT '' COMMENT 'Kind of this copy of the finding: finding (scanner output, dead-letter sentinels included), suppression or unsuppression (appended state-change copies from manual dismiss/undo and the retroactive exclusion reconcile). Empty on rows written before this column existed - such rows rank as finding copies.',
+
+    -- Mediated execution metadata. No arguments, results, credentials, or
+    -- stream contents are persisted here. Declared last for append-only
+    -- migration parity with the columns above.
+    execution_id String DEFAULT '' COMMENT 'Correlation ID of one mediated execution. Empty for legacy and chat-only findings.' CODEC(ZSTD),
+    mcp_server_id String DEFAULT '' COMMENT 'Canonical concrete MCP server ID. Empty when unavailable.' CODEC(ZSTD),
+    meta_mcp_server_id String DEFAULT '' COMMENT 'Outer meta MCP gateway ID, separate from the concrete member server.' CODEC(ZSTD),
+    toolset_id String DEFAULT '' COMMENT 'Persisted toolset ID, empty for runtime-only or unavailable toolsets.' CODEC(ZSTD),
+    tool_name String DEFAULT '' COMMENT 'Resolved concrete tool name, empty when unavailable.' CODEC(ZSTD),
+    phase LowCardinality(String) DEFAULT '' COMMENT 'Inspection phase: request or response. Empty for legacy findings.',
+    mediation_surface LowCardinality(String) DEFAULT '' COMMENT 'Concrete mediation seam producing the finding.',
+    mcp_method LowCardinality(String) DEFAULT '' COMMENT 'MCP method or equivalent mediated operation, such as tools/call.',
+    principal_kind LowCardinality(String) DEFAULT '' COMMENT 'Credential class established exclusively by mcpidentity. Empty when unstamped.',
+    identity_stamped Bool DEFAULT false COMMENT 'Whether validated principal provenance was present, including validated anonymous sessions.',
+    enforcement_outcome Enum8('' = 0, 'logged' = 1, 'denied' = 2, 'withheld' = 3, 'warned_pending' = 4, 'warned_acknowledged' = 5, 'warned_abandoned' = 6, 'quarantined' = 7) DEFAULT '' COMMENT 'Enforcement action taken, independent of detection. Empty when unspecified or legacy.'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(created_at)
 ORDER BY (organization_id, project_id, created_at, id)
@@ -1741,6 +1756,7 @@ CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_id ON risk_findings (chat_id) 
 CREATE INDEX IF NOT EXISTS idx_risk_findings_risk_policy_id ON risk_findings (risk_policy_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_rule_id ON risk_findings (rule_id) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_assistant_id ON risk_findings (assistant_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_risk_findings_mcp_server_id ON risk_findings (mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS skill_efficacy_scores (
     id UUID COMMENT 'Producer-supplied score identifier.',

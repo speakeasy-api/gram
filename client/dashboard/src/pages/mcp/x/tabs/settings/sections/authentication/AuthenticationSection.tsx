@@ -25,6 +25,8 @@ import { CimdAdmissionModeField } from "./CimdAdmissionModeField";
 import { CimdCustomClientsField } from "./CimdCustomClientsField";
 import { UserSessionDurationField } from "./UserSessionDurationField";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
+import { useEffectiveUserSessionIssuers } from "@/hooks/useEffectiveUserSessionIssuers";
+import { UserSessionIssuerField } from "./UserSessionIssuerField";
 import {
   type ProtectedResourceProbeStatus,
   useProtectedResourceMetadata,
@@ -98,6 +100,9 @@ export function AuthenticationSectionBody({
 }): JSX.Element {
   const userSessionIssuerId = target.userSessionIssuerId ?? undefined;
   const issuerConfigured = !!userSessionIssuerId;
+  const effectiveIssuersQuery = useEffectiveUserSessionIssuers({
+    mcpResourceId: target.permissionResourceId,
+  });
 
   const {
     data: userSessionIssuer,
@@ -106,6 +111,26 @@ export function AuthenticationSectionBody({
   } = useUserSessionIssuer({ id: userSessionIssuerId }, undefined, {
     enabled: issuerConfigured,
   });
+  const effectiveUserSessionIssuers = useMemo(() => {
+    const supportedIssuers = target.supportsOrganizationIssuers
+      ? effectiveIssuersQuery.issuers
+      : effectiveIssuersQuery.issuers.filter(
+          (issuer) => issuer.projectId !== "",
+        );
+    if (
+      !userSessionIssuer ||
+      (!target.supportsOrganizationIssuers &&
+        userSessionIssuer.projectId === "") ||
+      supportedIssuers.some((issuer) => issuer.id === userSessionIssuer.id)
+    ) {
+      return supportedIssuers;
+    }
+    return [userSessionIssuer, ...supportedIssuers];
+  }, [
+    effectiveIssuersQuery.issuers,
+    target.supportsOrganizationIssuers,
+    userSessionIssuer,
+  ]);
 
   // listRemoteSessionIssuers returns this project's own issuers, inherited
   // organization-level ones (same org), and inherited platform issuers from the
@@ -242,15 +267,20 @@ export function AuthenticationSectionBody({
       cimdDraftMode ?? userSessionIssuer.clientIdMetadataAdmissionMode;
     const admitsCustomUrls =
       shownMode === "presets" || shownMode === "reporting";
+    const organizationOwned = userSessionIssuer.projectId === "";
 
     authenticationFields = (
       <>
-        <UserSessionDurationField userSessionIssuer={userSessionIssuer} />
+        <UserSessionDurationField
+          userSessionIssuer={userSessionIssuer}
+          readOnly={organizationOwned}
+        />
         <CimdAdmissionModeField
           userSessionIssuer={userSessionIssuer}
           onDraftModeChange={setCimdDraftMode}
+          readOnly={organizationOwned}
         >
-          {admitsCustomUrls && (
+          {admitsCustomUrls && !organizationOwned && (
             <CimdCustomClientsField userSessionIssuer={userSessionIssuer} />
           )}
         </CimdAdmissionModeField>
@@ -264,6 +294,7 @@ export function AuthenticationSectionBody({
           onAdd={() => openSheet(authorizationServer, protectedResourceScopes)}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          readOnly={organizationOwned}
         />
       </>
     );
@@ -274,7 +305,15 @@ export function AuthenticationSectionBody({
       {/* No footer hint: the section description above already says these
           changes take effect on new connections. */}
       <SettingsSection.Panel>
-        <div className="divide-y">{authenticationFields}</div>
+        <div className="divide-y">
+          <UserSessionIssuerField
+            target={target}
+            issuers={effectiveUserSessionIssuers}
+            isLoading={effectiveIssuersQuery.isLoading}
+            isError={effectiveIssuersQuery.isError}
+          />
+          {authenticationFields}
+        </div>
       </SettingsSection.Panel>
 
       <AttachRemoteIdentityProviderSheet

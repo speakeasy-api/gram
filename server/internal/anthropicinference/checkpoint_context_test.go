@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/require"
@@ -84,7 +85,7 @@ func TestCheckpointReusesAcceptedPromptPolicyHistory(t *testing.T) {
 	_, err := riskrepo.New(db).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{ID: uuid.New(), ProjectID: config.ProjectID, OrganizationID: config.OrganizationID, Name: "Prompt Example", PolicyType: "prompt_based", Sources: []string{}, Enabled: true, Action: "block", AudienceType: "everyone", Prompt: conv.ToPGText("Find EXAMPLE content")})
 	require.NoError(t, err)
 	scanner := &recordingScanner{}
-	service := NewService(db, store.writer, scanner)
+	service := NewService(testenv.NewLogger(t), db, store.writer, scanner)
 	verdict, err := service.Process(t.Context(), config, frame)
 	require.NoError(t, err)
 	require.Equal(t, "allow", verdict.Action)
@@ -96,7 +97,7 @@ func TestCheckpointReusesAcceptedPromptPolicyHistory(t *testing.T) {
 	require.Equal(t, transcriptHashes(frame.Messages), accepted)
 	// A prompt policy's presence must not defeat delta scanning. The current
 	// turn is still evaluated on every delivery, even when already accepted.
-	scanner.inputs = nil
+	scanner.reset()
 	verdict, err = service.Process(t.Context(), config, frame)
 	require.NoError(t, err)
 	require.Equal(t, "allow", verdict.Action)

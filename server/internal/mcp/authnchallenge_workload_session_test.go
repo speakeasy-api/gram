@@ -267,7 +267,7 @@ func TestApplyIssuerGate_WorkloadSessionHiddenWhenAgentRolloutDisabled(t *testin
 	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
 	require.NoError(t, err, "the workload must be admitted while the rollout is on, or the refusal below proves nothing")
 
-	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, false)
+	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, fx.orgID, false)
 
 	w = httptest.NewRecorder()
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)

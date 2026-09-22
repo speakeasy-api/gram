@@ -19,8 +19,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -200,7 +202,43 @@ func (s *Service) ListUserSessionIssuers(ctx context.Context, payload *gen.ListU
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	mcpResourceID := *authCtx.ProjectID
+	if payload.McpResourceID != nil {
+		requestedResourceID, err := uuid.Parse(*payload.McpResourceID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_resource_id").LogError(ctx, s.logger)
+		}
+
+		if requestedResourceID != *authCtx.ProjectID {
+			_, toolsetErr := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{
+				ID:        requestedResourceID,
+				ProjectID: *authCtx.ProjectID,
+			})
+			if toolsetErr != nil && !errors.Is(toolsetErr, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeUnexpected, toolsetErr, "validate MCP resource project").LogError(ctx, s.logger)
+			}
+
+			if errors.Is(toolsetErr, pgx.ErrNoRows) {
+				_, serverErr := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+					ID:        requestedResourceID,
+					ProjectID: *authCtx.ProjectID,
+				})
+				if errors.Is(serverErr, pgx.ErrNoRows) {
+					return nil, oops.C(oops.CodeForbidden)
+				}
+				if serverErr != nil {
+					return nil, oops.E(oops.CodeUnexpected, serverErr, "validate MCP resource project").LogError(ctx, s.logger)
+				}
+			}
+		}
+
+		mcpResourceID = requestedResourceID
+	}
+
+	if err := s.authz.RequireAny(ctx,
+		authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil},
+		authz.MCPCheck(authz.ScopeMCPWrite, mcpResourceID.String(), authCtx.ProjectID.String()),
+	); err != nil {
 		return nil, err
 	}
 

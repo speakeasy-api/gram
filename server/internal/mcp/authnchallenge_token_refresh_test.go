@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -176,11 +177,16 @@ func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
 	actor, ok := contextvalues.AuthenticatedActor(admittedCtx)
 	require.True(t, ok)
 	require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(), actor.String())
+	identity, ok := mcpidentity.FromContext(admittedCtx)
+	require.True(t, ok)
+	require.Equal(t, mcpidentity.KindAgent, identity.Kind())
+	require.Equal(t, agent.ID.String(), identity.AgentID())
+	require.Empty(t, identity.UserID())
 	credential, ok := contextvalues.PrincipalCredentialAuthorization(admittedCtx)
 	require.True(t, ok)
 	require.Equal(t, fx.userID, credential.AuthorizerUserID)
 
-	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, false)
+	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, fx.orgID, false)
 	w = httptest.NewRecorder()
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, accessToken, ti.serverURL.String(), endpoint)
 	require.Error(t, err)
@@ -195,7 +201,7 @@ func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
 	oopsErr = nil
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
-	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, true)
+	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, fx.orgID, true)
 
 	_, err = agents_repo.New(ti.conn).SuspendAgent(ctx, agents_repo.SuspendAgentParams{OrganizationID: fx.orgID, ID: agent.ID})
 	require.NoError(t, err)
@@ -212,7 +218,7 @@ func TestHandleToken_AgentRefreshHidesDisabledRollout(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	fx, _, refreshToken, _ := seedAgentRefreshSession(t, ctx, ti)
-	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, false)
+	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, fx.orgID, false)
 
 	result := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
 	require.Error(t, result.err)
@@ -230,7 +236,7 @@ func TestHandleToken_AgentRefreshReplayHidesDisabledRollout(t *testing.T) {
 	require.NoError(t, winner.err)
 	require.Equal(t, http.StatusOK, winner.code, winner.body)
 
-	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, false)
+	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, fx.orgID, false)
 	replay := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
 	require.Error(t, replay.err)
 	var oopsErr *oops.ShareableError

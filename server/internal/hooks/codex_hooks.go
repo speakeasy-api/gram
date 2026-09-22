@@ -38,6 +38,13 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, codexHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
+	// APIKeyAuth already put the actor on ctx: scope the session id first.
+	if sessionID, changed := scopedSessionPtr(ctx, payload.SessionID); changed {
+		scoped := *payload
+		scoped.SessionID = sessionID
+		payload = &scoped
+	}
+
 	logger := s.logger.With(
 		attr.SlogHookSource("codex"),
 		attr.SlogHookEvent(hookEventName),
@@ -61,7 +68,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	orgSlug = authCtx.OrganizationSlug
 	projectID := authCtx.ProjectID.String()
 	metadata := s.codexSessionMetadata(ctx, payload, orgID, projectID)
-	if metadata.UserEmail == "" {
+	if metadata.UserEmail == "" && !isAgentActor(ctx) {
 		return nil, oops.E(oops.CodeInvalid, nil, "codex hook payload missing user_email")
 	}
 	logger = logger.With(
@@ -115,10 +122,10 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			// Acknowledged warn is excluded from the enforcement block so it
 			// falls through to the shadow-MCP guard below: an ack clears the
 			// risk challenge but must never bypass unapproved-toolset validation.
-			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil && (!scanResult.IsWarnChallenge() || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
 				// Unacknowledged warn → warning + ack link (challenge, not a
 				// durable block page). No ack link buildable → fall through to block.
-				if scanResult.Action == "warn" {
+				if scanResult.IsWarnChallenge() {
 					// Codex surfaces a single reason (the CLI user reads it), so use
 					// the human-facing framing that carries the ack link.
 					if _, warnUserReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
@@ -129,7 +136,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 					}
 				}
 				blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
+				userReason = renderUserBlockReason(scanResult, blockReason)
 				isToolCallBlock = true
 				blockToolName = ev.ToolName
 				blockPolicyID = scanResult.PolicyID
@@ -227,8 +234,8 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			// unacknowledged warn is challenged (deny + ack link), not
 			// hard-blocked with the raw user_message — consistent with tool calls.
 			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
-				(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
-				if scanResult.Action == "warn" {
+				(!scanResult.IsWarnChallenge() || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+				if scanResult.IsWarnChallenge() {
 					if _, warnUserReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 						blockReason = fmt.Sprintf("Speakeasy challenged this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 						userReason = warnUserReason
@@ -237,7 +244,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 					}
 				}
 				blockReason = fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
+				userReason = renderUserBlockReason(scanResult, blockReason)
 			}
 		case *hookevents.UserPromptSubmit:
 			// Spend gate runs before any risk-policy evaluation: an over-budget
@@ -249,9 +256,9 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			}
 			// warn never hard-blocks at prompt submit (no confirmation primitive
 			// here); it defers to the follow-on tool call. Matches Claude/Cursor.
-			if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
+			if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && !scanResult.IsWarnChallenge() {
 				blockReason = fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
+				userReason = renderUserBlockReason(scanResult, blockReason)
 			}
 		default:
 			// Non-blocking events: telemetry only.
@@ -310,7 +317,7 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 		// Hostname counts as cacheable identity alongside the email: an
 		// identity-less session carries nothing else, and later events may
 		// omit the hostname the fallback attribution needs.
-		if metadata.SessionID != "" && (metadata.UserEmail != "" || metadata.Hostname != "") {
+		if metadata.SessionID != "" && !isAgentActor(ctx) && (metadata.UserEmail != "" || metadata.Hostname != "") {
 			if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
 				s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
 					attr.SlogError(err),
@@ -360,6 +367,9 @@ func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.
 	}
 
 	entries := ParseCodexMCPList(raw)
+	if !s.claimMCPListSnapshot(ctx, *payload.SessionID) {
+		return
+	}
 	if err := s.cache.Set(ctx, sessionMCPListCacheKey(*payload.SessionID), entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache Codex MCP list snapshot",
 			attr.SlogEvent("codex_hook_mcp_list_cache_set_failed"),
@@ -372,10 +382,15 @@ func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.
 }
 
 func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) *SessionMetadata {
+	agent := isAgentActor(ctx)
+	userEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
+	if agent {
+		userEmail = ""
+	}
 	metadata := &SessionMetadata{
 		SessionID:   conv.PtrValOr(payload.SessionID, ""),
 		ServiceName: "Codex",
-		UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
+		UserEmail:   userEmail,
 		UserID:      "",
 		Provider:    providerOpenAI,
 		// The Codex payload carries no account-scope identity (no account
@@ -403,7 +418,7 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		c, err := s.getSessionMetadata(ctx, metadata.SessionID)
 		if err == nil && c.ServiceName == "Codex" && c.GramOrgID == orgID && c.ProjectID == projectID {
 			cached, cachedOK = c, true
-			if metadata.UserEmail == "" {
+			if metadata.UserEmail == "" && !agent {
 				metadata.UserEmail = cached.UserEmail
 			}
 			if metadata.Hostname == "" {
@@ -419,6 +434,10 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 	// ChatGPT account), so it doubles as the observed email consumers keep
 	// separate from actor identity.
 	metadata.ObservedUserEmail = metadata.UserEmail
+	// Account attribution links sessions to employees; an agent actor has none.
+	if agent {
+		return metadata
+	}
 
 	// Attribute the account. Codex identity is the email alone, so when the
 	// cached classification was computed from the same email this event brings
@@ -496,7 +515,7 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
 			UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
-			Attributes: attrs,
+			Attributes: withAgentActor(ctx, attrs),
 		})
 
 		s.logger.DebugContext(ctx, "wrote Codex hook to ClickHouse",

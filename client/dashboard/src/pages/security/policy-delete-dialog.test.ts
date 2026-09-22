@@ -84,6 +84,21 @@ describe("getPolicyRuleGroupNamesForDeleteDialog", () => {
     ).toEqual(["Financial Information", "Personal Identifiable Information"]);
   });
 
+  it("returns a single PII group for any Presidio policy under the LLM analyzer", () => {
+    expect(
+      getPolicyRuleGroupNamesForDeleteDialog(
+        policy({ sources: ["gitleaks", "presidio"] }),
+        "llm",
+      ),
+    ).toEqual(["Secrets", "PII"]);
+    expect(
+      getPolicyRuleGroupNamesForDeleteDialog(
+        policy({ sources: ["presidio"], presidioEntities: ["CREDIT_CARD"] }),
+        "llm",
+      ),
+    ).toEqual(["PII"]);
+  });
+
   it("returns all Presidio-backed categories when Presidio has no entity filter", () => {
     expect(
       getPolicyRuleGroupNamesForDeleteDialog(

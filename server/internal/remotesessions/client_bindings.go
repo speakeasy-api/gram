@@ -72,7 +72,8 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 // listRemoteSessionClientRowsForUserSessionIssuer is the runtime counterpart to
 // listRemoteSessionClientsByProjectID: it resolves the clients linked to a user
 // session issuer solely through the join table, including organization-level
-// clients (project_id NULL) belonging to organizationID. Used by consent
+// clients (project_id NULL) belonging to organizationID and global catalog
+// clients. Every tier requires an explicit issuer link. Used by consent
 // rendering and token resolution.
 func (m *ChallengeManager) listRemoteSessionClientRowsForUserSessionIssuer(
 	ctx context.Context,

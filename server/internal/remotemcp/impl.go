@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
@@ -30,11 +31,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -104,10 +108,13 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
+	if payload.UserSessionIssuerID != nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "user_session_issuer_id is only supported when creating a linked MCP server").LogError(ctx, s.logger)
+	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	if _, err := s.policy.ValidateHTTPURL(ctx, payload.URL); err != nil {
+	if _, err := proxy.ValidateRemoteMCPURL(ctx, s.policy, payload.URL); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 	}
 
@@ -147,15 +154,28 @@ func (s *Service) CreateServerAndMcpServer(ctx context.Context, payload *gen.Cre
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 	result, err := s.provisioning.ProvisionDashboardRemoteMCP(ctx, authCtx, DashboardRemoteMCPProvisioningInput{
-		Name:          payload.Name,
-		URL:           payload.URL,
-		TransportType: payload.TransportType,
+		Name:                payload.Name,
+		URL:                 payload.URL,
+		TransportType:       payload.TransportType,
+		UserSessionIssuerID: payload.UserSessionIssuerID,
 	})
 	if err != nil {
 		if shareableErr, ok := errors.AsType[*oops.ShareableError](err); ok {
 			return nil, shareableErr.LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "provision remote MCP server").LogError(ctx, logger)
+	}
+	if payload.UserSessionIssuerID != nil && result.MCPServer.UserSessionIssuerID.Valid {
+		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{result.MCPServer.UserSessionIssuerID.UUID})
+		refreshed, refreshErr := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+			ID:        result.MCPServer.ID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		if refreshErr != nil {
+			logger.ErrorContext(ctx, "reload MCP server after issuer sync", attr.SlogError(refreshErr))
+		} else {
+			result.MCPServer = refreshed
+		}
 	}
 	return &gen.CreateServerAndMcpServerResult{
 		RemoteMcpServer: mv.BuildRemoteMcpServerView(result.RemoteMCPServer),
@@ -253,7 +273,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	}
 
 	if payload.URL != nil {
-		if _, err := s.policy.ValidateHTTPURL(ctx, *payload.URL); err != nil {
+		if _, err := proxy.ValidateRemoteMCPURL(ctx, s.policy, *payload.URL); err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 		}
 	}
@@ -356,6 +376,43 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	return afterView, nil
 }
 
+func (s *Service) ProbeURL(ctx context.Context, payload *gen.ProbeURLPayload) (*gen.ProbeURLResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+	probeCtx, cancel := context.WithTimeout(ctx, probeURLTimeout)
+	defer cancel()
+
+	if _, err := proxy.ValidateRemoteMCPURL(probeCtx, s.policy, payload.URL); err != nil {
+		if errors.Is(err, guardian.ErrBlockedIP) || errors.Is(err, guardian.ErrBadHost) || errors.Is(err, context.DeadlineExceeded) {
+			result := classifyTransportError(probeCtx, err)
+			return buildProbeURLResult(result), nil
+		}
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
+	}
+
+	return buildProbeURLResult(probeRemoteMcpURL(probeCtx, s.policy, payload.URL).result), nil
+}
+
+func buildProbeURLResult(result ProbeResult) *gen.ProbeURLResult {
+	return &gen.ProbeURLResult{
+		Outcome:                      result.Outcome,
+		ProtectedResourceMetadataURL: result.ProtectedResourceMetadataURL,
+		HTTPStatus:                   result.HTTPStatus,
+		Reason:                       result.Reason,
+	}
+}
+
+// VerifyURL preserves the shipped verification contract for existing clients.
+//
+// Deprecated: use ProbeURL instead.
 func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) (*gen.VerifyURLResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -368,20 +425,46 @@ func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) 
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	if _, err := s.policy.ValidateHTTPURL(ctx, payload.URL); err != nil {
+	if _, err := proxy.ValidateRemoteMCPURL(ctx, s.policy, payload.URL); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 	}
 
-	probeCtx, cancel := context.WithTimeout(ctx, verifyURLTimeout)
+	probeCtx, cancel := context.WithTimeout(ctx, probeURLTimeout)
 	defer cancel()
 
-	verified, status, message := VerifyRemoteMcpURL(probeCtx, s.policy, payload.URL)
-
-	return &gen.VerifyURLResult{
-		Verified:   verified,
-		HTTPStatus: status,
-		Message:    message,
-	}, nil
+	observation := probeRemoteMcpURL(probeCtx, s.policy, payload.URL)
+	switch observation.result.Outcome {
+	case ProbeOutcomeMCPAvailable:
+		return &gen.VerifyURLResult{Verified: true, HTTPStatus: observation.httpStatus, Message: "Success"}, nil
+	case ProbeOutcomeAuthenticationRequired:
+		return &gen.VerifyURLResult{Verified: true, HTTPStatus: observation.httpStatus, Message: "Reachable: received authorization required response"}, nil
+	case ProbeOutcomeInvalidMCPResponse:
+		verified := observation.httpStatus != nil && *observation.httpStatus >= 200 && *observation.httpStatus < 300
+		message := "Unexpected response from server"
+		if verified {
+			message = "Reachable: although received unexpected MCP response"
+		} else if observation.httpStatus != nil && *observation.httpStatus == http.StatusNotFound {
+			message = "MCP response not found"
+		}
+		return &gen.VerifyURLResult{Verified: verified, HTTPStatus: observation.httpStatus, Message: message}, nil
+	case ProbeOutcomeUnreachable:
+		message := "Could not connect to host"
+		if observation.httpStatus != nil {
+			message = "Unexpected response from server"
+		} else if observation.result.Reason != nil {
+			switch *observation.result.Reason {
+			case ProbeReasonGuardianRejected:
+				message = "Host is not allowed"
+			case ProbeReasonTimeout:
+				message = "Request timed out"
+			case ProbeReasonTLSError:
+				message = "TLS certificate verification failed"
+			}
+		}
+		return &gen.VerifyURLResult{Verified: false, HTTPStatus: observation.httpStatus, Message: message}, nil
+	default:
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("unknown remote mcp probe outcome %q", observation.result.Outcome), "probe remote mcp server").LogError(ctx, logger)
+	}
 }
 
 func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPayload) error {

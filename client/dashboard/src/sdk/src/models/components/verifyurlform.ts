@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
- * Form for probing a remote MCP server URL
+ * Legacy form for probing a remote MCP server URL
  */
 export type VerifyURLForm = {
   /**

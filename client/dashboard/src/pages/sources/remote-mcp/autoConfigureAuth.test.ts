@@ -50,6 +50,31 @@ describe("autoConfigureRemoteMcpAuth", () => {
     });
   });
 
+  it("does not mutate an organization-owned user session issuer", async () => {
+    const client = mockClient();
+
+    const result = await autoConfigureRemoteMcpAuth({
+      client: client as unknown as Gram,
+      authedFetch: vi.fn(),
+      remoteMcpServer: remoteMcpServer(),
+      mcpServer: mcpServer(),
+      organizationOwnedUserSessionIssuer: true,
+    });
+
+    expect(result).toEqual({
+      status: "skipped",
+      message:
+        "Organization user session issuers are configured by organization administrators.",
+      warn: false,
+    });
+    expect(
+      client.remoteMcp.discoverProtectedResourceMetadata,
+    ).not.toHaveBeenCalled();
+    expect(client.remoteSessionIssuers.create).not.toHaveBeenCalled();
+    expect(client.remoteSessionClients.create).not.toHaveBeenCalled();
+    expect(client.mcpServers.update).not.toHaveBeenCalled();
+  });
+
   it("creates an issuer from the discovered draft when none exists and attaches a client under the server's own USI", async () => {
     const client = mockClient();
 

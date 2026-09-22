@@ -116,7 +116,11 @@ export function useListAgentDelegableGrantsSuspense(
 export function setListAgentDelegableGrantsData(
   client: QueryClient,
   queryKeyBase: [
-    parameters: { agentId: string; gramSession?: string | undefined },
+    parameters: {
+      agentId: string;
+      toolsetId?: string | undefined;
+      gramSession?: string | undefined;
+    },
   ],
   data: ListAgentDelegableGrantsQueryData,
 ): ListAgentDelegableGrantsQueryData | undefined {
@@ -128,7 +132,11 @@ export function setListAgentDelegableGrantsData(
 export function invalidateListAgentDelegableGrants(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { agentId: string; gramSession?: string | undefined }]
+    [parameters: {
+      agentId: string;
+      toolsetId?: string | undefined;
+      gramSession?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

@@ -16,12 +16,14 @@ import (
 
 // Endpoints wraps the "identityProviderConnections" service endpoints.
 type Endpoints struct {
-	Create         goa.Endpoint
-	SubmitClientID goa.Endpoint
-	Verify         goa.Endpoint
-	Get            goa.Endpoint
-	RecordAgent    goa.Endpoint
-	Revoke         goa.Endpoint
+	Create           goa.Endpoint
+	SubmitClientID   goa.Endpoint
+	Verify           goa.Endpoint
+	Get              goa.Endpoint
+	RecordAgent      goa.Endpoint
+	Revoke           goa.Endpoint
+	SyncApplications goa.Endpoint
+	ListApplications goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "identityProviderConnections" service
@@ -30,12 +32,14 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Create:         NewCreateEndpoint(s, a.APIKeyAuth),
-		SubmitClientID: NewSubmitClientIDEndpoint(s, a.APIKeyAuth),
-		Verify:         NewVerifyEndpoint(s, a.APIKeyAuth),
-		Get:            NewGetEndpoint(s, a.APIKeyAuth),
-		RecordAgent:    NewRecordAgentEndpoint(s, a.APIKeyAuth),
-		Revoke:         NewRevokeEndpoint(s, a.APIKeyAuth),
+		Create:           NewCreateEndpoint(s, a.APIKeyAuth),
+		SubmitClientID:   NewSubmitClientIDEndpoint(s, a.APIKeyAuth),
+		Verify:           NewVerifyEndpoint(s, a.APIKeyAuth),
+		Get:              NewGetEndpoint(s, a.APIKeyAuth),
+		RecordAgent:      NewRecordAgentEndpoint(s, a.APIKeyAuth),
+		Revoke:           NewRevokeEndpoint(s, a.APIKeyAuth),
+		SyncApplications: NewSyncApplicationsEndpoint(s, a.APIKeyAuth),
+		ListApplications: NewListApplicationsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -48,6 +52,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Get = m(e.Get)
 	e.RecordAgent = m(e.RecordAgent)
 	e.Revoke = m(e.Revoke)
+	e.SyncApplications = m(e.SyncApplications)
+	e.ListApplications = m(e.ListApplications)
 }
 
 // NewCreateEndpoint returns an endpoint function that calls the method
@@ -185,5 +191,51 @@ func NewRevokeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			return nil, err
 		}
 		return s.Revoke(ctx, p)
+	}
+}
+
+// NewSyncApplicationsEndpoint returns an endpoint function that calls the
+// method "syncApplications" of service "identityProviderConnections".
+func NewSyncApplicationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SyncApplicationsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SyncApplications(ctx, p)
+	}
+}
+
+// NewListApplicationsEndpoint returns an endpoint function that calls the
+// method "listApplications" of service "identityProviderConnections".
+func NewListApplicationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListApplicationsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListApplications(ctx, p)
 	}
 }

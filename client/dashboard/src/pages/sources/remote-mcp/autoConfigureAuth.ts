@@ -30,6 +30,7 @@ type AutoConfigureAuthInput = {
   mcpServer: McpServer;
   isPlatformAdmin: boolean;
   projectSlug: string;
+  organizationOwnedUserSessionIssuer?: boolean;
   /**
    * Per-request SDK options (e.g. a gram-project header for cross-project
    * installs) applied to every management API call made during auto-config.
@@ -60,8 +61,16 @@ export async function autoConfigureRemoteMcpAuth({
   mcpServer,
   isPlatformAdmin,
   projectSlug,
+  organizationOwnedUserSessionIssuer = false,
   options,
 }: AutoConfigureAuthInput): Promise<AutoConfigureAuthResult> {
+  if (organizationOwnedUserSessionIssuer) {
+    return skipped(
+      "Organization user session issuers are configured by organization administrators.",
+      false,
+    );
+  }
+
   // Every remote-backed server gets its USI at setup; auto-config only attaches
   // a client under it, never creates one. No USI means nothing to anchor a
   // client to, so skip silently (setup already surfaced the link failure).

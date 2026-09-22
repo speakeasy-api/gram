@@ -138,6 +138,7 @@ type Organization struct {
 	AccountType string
 	WorkosID    sql.NullString
 	ExternalID  sql.NullString
+	Domains     string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

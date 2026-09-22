@@ -12,15 +12,28 @@ import (
 // DelegableGrants returns safe representable allow-only candidates, not a full
 // resource inventory. An overlapping exclusion removes the entire candidate:
 // subtracting a tool from a wildcard cannot be encoded by an allow selector.
-func DelegableGrants(agent, owner, caller []authz.Grant) ([]authz.Grant, error) {
+// Optional resource constraints narrow candidates before containment, so an
+// unrelated exclusion does not hide a safe concrete candidate.
+func DelegableGrants(agent, owner, caller []authz.Grant, constraints ...authz.Selector) ([]authz.Grant, error) {
 	candidates := make(map[string]authz.Grant)
 	for _, grant := range agent {
+		selector := grant.Selector
+		compatible := true
+		for _, constraint := range constraints {
+			selector, compatible = intersectSelectors(selector, constraint)
+			if !compatible {
+				break
+			}
+		}
+		if !compatible {
+			continue
+		}
 		for _, scope := range authz.ScopeImplicationClosure(grant.Scope) {
 			if !IsRuntimeScopeSafe(CurrentRuntimeScopeRegistryVersion, scope) {
 				continue
 			}
 			for _, ownerGrant := range owner {
-				selector, ok := intersectSelectors(grant.Selector, ownerGrant.Selector)
+				selector, ok := intersectSelectors(selector, ownerGrant.Selector)
 				if !ok || !authz.GrantsContainSelector([]authz.Grant{ownerGrant}, scope, selector) {
 					continue
 				}
@@ -30,7 +43,7 @@ func DelegableGrants(agent, owner, caller []authz.Grant) ([]authz.Grant, error) 
 						continue
 					}
 					candidate := authz.Grant{PrincipalUrn: "", Scope: scope, Selector: narrowed}
-					policy, err := NewDelegatedPolicyV1([]authz.Grant{candidate})
+					policy, err := NewDelegatedPolicy(CurrentDelegatedPolicyVersion, []authz.Grant{candidate})
 					if err != nil {
 						continue
 					}

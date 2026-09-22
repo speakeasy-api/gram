@@ -2603,6 +2603,11 @@ CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
   -- exchange-side client id comes exclusively from remote_session_clients.client_id.
   agent_id TEXT,
   agent_app_id TEXT,
+  -- Watermark of the last run (its start time) and the last manual request;
+  -- a request newer than the watermark keeps the connection due even when a
+  -- run was in flight when it arrived.
+  applications_synced_at timestamptz,
+  applications_sync_requested_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2630,6 +2635,101 @@ ON okta_identity_provider_connections (organization_id, remote_session_issuer_id
 
 CREATE INDEX IF NOT EXISTS okta_identity_provider_connections_remote_session_client_idx
 ON okta_identity_provider_connections (organization_id, remote_session_client_id);
+
+-- Composite FK target so snapshot rows pin to the Okta subtype and its org.
+CREATE UNIQUE INDEX IF NOT EXISTS okta_identity_provider_connections_org_connection_key
+ON okta_identity_provider_connections (organization_id, identity_provider_connection_id);
+
+-- Serves the applications sync coordinator's due-connection scan.
+CREATE INDEX IF NOT EXISTS okta_identity_provider_connections_applications_synced_at_idx
+ON okta_identity_provider_connections (applications_synced_at)
+WHERE deleted IS FALSE;
+
+-- Snapshot of the Okta applications visible to a connection, keyed by the
+-- Okta application id, never by label. Rows are soft-removed (removed_at) when
+-- an app disappears from a run and revived when it reappears; connection
+-- revocation deletes them. Tenant-wide directory data: org:admin reads only,
+-- never joined into telemetry.
+CREATE TABLE IF NOT EXISTS okta_applications (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  identity_provider_connection_id uuid NOT NULL,
+  okta_app_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  name TEXT NOT NULL,
+  sign_on_mode TEXT NOT NULL,
+  status TEXT NOT NULL,
+  features TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  okta_created_at timestamptz,
+  okta_last_updated_at timestamptz,
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  removed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT okta_applications_pkey PRIMARY KEY (id),
+  CONSTRAINT okta_applications_okta_app_id_check CHECK (okta_app_id <> ''),
+  CONSTRAINT okta_applications_organization_id_connection_id_okta_app_id_key UNIQUE (organization_id, identity_provider_connection_id, okta_app_id),
+  CONSTRAINT okta_applications_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT okta_applications_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES okta_identity_provider_connections (organization_id, identity_provider_connection_id) ON DELETE CASCADE
+);
+
+-- User and group assignments observed on each snapshotted application.
+-- principal_kind is user or group; okta_principal_id is the Okta user or
+-- group id. Same soft-remove and revocation rules as okta_applications.
+CREATE TABLE IF NOT EXISTS okta_application_assignments (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  identity_provider_connection_id uuid NOT NULL,
+  okta_app_id TEXT NOT NULL,
+  principal_kind TEXT NOT NULL,
+  okta_principal_id TEXT NOT NULL,
+  -- USER for a direct user assignment, GROUP for a group-derived one; empty
+  -- for group assignments.
+  assignment_scope TEXT NOT NULL DEFAULT '',
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  removed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT okta_application_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT okta_application_assignments_principal_kind_check CHECK (principal_kind IN ('user', 'group')),
+  CONSTRAINT okta_application_assignments_okta_principal_id_check CHECK (okta_principal_id <> ''),
+  CONSTRAINT okta_application_assignments_principal_key UNIQUE (organization_id, identity_provider_connection_id, okta_app_id, principal_kind, okta_principal_id),
+  CONSTRAINT okta_application_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT okta_application_assignments_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES okta_identity_provider_connections (organization_id, identity_provider_connection_id) ON DELETE CASCADE,
+  CONSTRAINT okta_application_assignments_application_fkey FOREIGN KEY (organization_id, identity_provider_connection_id, okta_app_id) REFERENCES okta_applications (organization_id, identity_provider_connection_id, okta_app_id) ON DELETE CASCADE
+);
+
+-- One row per reconcile run, including empty runs. Counts are the deltas the
+-- run applied; skipped_app_ids lists Okta-internal apps left out of the
+-- snapshot; truncated marks a run that hit the page or app cap.
+CREATE TABLE IF NOT EXISTS okta_application_reconcile_runs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  identity_provider_connection_id uuid NOT NULL,
+  status TEXT NOT NULL DEFAULT 'running',
+  started_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  finished_at timestamptz,
+  applications_seen integer NOT NULL DEFAULT 0,
+  applications_added integer NOT NULL DEFAULT 0,
+  applications_removed integer NOT NULL DEFAULT 0,
+  assignments_added integer NOT NULL DEFAULT 0,
+  assignments_removed integer NOT NULL DEFAULT 0,
+  skipped_app_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  truncated boolean NOT NULL DEFAULT FALSE,
+  -- Typed reason, never a raw provider body.
+  error TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT okta_application_reconcile_runs_pkey PRIMARY KEY (id),
+  CONSTRAINT okta_application_reconcile_runs_status_check CHECK (status IN ('running', 'succeeded', 'failed')),
+  CONSTRAINT okta_application_reconcile_runs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT okta_application_reconcile_runs_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES okta_identity_provider_connections (organization_id, identity_provider_connection_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS okta_application_reconcile_runs_connection_started_at_idx
+ON okta_application_reconcile_runs (organization_id, identity_provider_connection_id, started_at DESC);
 
 -- User Session Issuers house configuration for when Gram acts as an Authorization Server for MCP Clients
 -- See: https://datatracker.ietf.org/doc/html/rfc8414
@@ -4652,6 +4752,14 @@ CREATE TABLE IF NOT EXISTS agents (
   organization_id TEXT NOT NULL,
   owner_user_id TEXT NOT NULL,
 
+  -- Project the agent belongs to. Agents predate project scoping, so this is
+  -- the expand phase: existing rows carry NULL until they are assigned a
+  -- project, and application code must treat NULL as "not yet scoped" rather
+  -- than assume a project. The composite foreign key pins the project to the
+  -- agent's own organization, so an agent can never name another tenant's
+  -- project.
+  project_id uuid,
+
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 120),
 
   suspended_at timestamptz,
@@ -4671,6 +4779,7 @@ CREATE TABLE IF NOT EXISTS agents (
   CONSTRAINT agents_pkey PRIMARY KEY (id),
   CONSTRAINT agents_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT agents_owner_tenant_fkey FOREIGN KEY (organization_id, owner_user_id) REFERENCES organization_user_relationships (organization_id, user_id) ON DELETE RESTRICT,
+  CONSTRAINT agents_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT agents_lifecycle_state_check CHECK (revoked_at IS NULL OR suspended_at IS NULL),
   CONSTRAINT agents_owner_reassignment_state_check CHECK ((owner_reassignment_required_at IS NULL) = (owner_reassignment_reason IS NULL))
 );
@@ -4692,6 +4801,12 @@ WHERE deleted IS FALSE;
 -- Supports foreign-key checks for every agent, including deleted agents.
 CREATE INDEX IF NOT EXISTS agents_organization_owner_all_idx
 ON agents (organization_id, owner_user_id);
+
+-- Supports project-scoped agent listing, and the project-side foreign-key
+-- check. Unfiltered so a project delete does not sequential-scan agents to
+-- find soft-deleted rows.
+CREATE INDEX IF NOT EXISTS agents_project_id_idx
+ON agents (project_id);
 
 -- Supports owner-loss latching across every organization, including deleted agents.
 CREATE INDEX IF NOT EXISTS agents_owner_all_idx
@@ -8894,6 +9009,51 @@ CREATE INDEX IF NOT EXISTS killswitch_operations_expires_at_idx ON killswitch_op
 -- Application transactions retain tombstone generations and reject stale completion.
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_id_issuer_key ON remote_session_clients (id, remote_session_issuer_id);
 
+-- One Okta agent-to-resource connection per identity provider connection x
+-- upstream resource (the resource indicator at a remote authorization
+-- server). A row exists exactly when the organization administrator confirmed
+-- in the Okta console that the AI agent is connected to that resource; reset
+-- deletes it. Who
+-- confirmed and when lives in the audit log. The audience is the resource
+-- app's XAA issuer URL as typed into the identity provider, which the token
+-- exchange needs and no metadata exposes; the identity provider app id is the
+-- instance the administrator picked, kept for display and drift detection.
+-- The observed columns are the latest exchange outcome, written by the
+-- exchange path: a read model, not a history. Readiness is derived at read
+-- time and nothing here is consulted by the exchange path. Several MCP
+-- servers that share an upstream share one row.
+CREATE TABLE IF NOT EXISTS okta_resource_connections (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  identity_provider_connection_id uuid NOT NULL,
+  remote_session_issuer_id uuid NOT NULL,
+  -- The resource indicator entered on the connection: the upstream's RFC 9728
+  -- identifier when known, otherwise its URL.
+  resource TEXT NOT NULL,
+  audience TEXT NOT NULL,
+  okta_application_id TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT okta_resource_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT okta_resource_connections_resource_check CHECK (btrim(resource) <> ''),
+  CONSTRAINT okta_resource_connections_audience_check CHECK (btrim(audience) <> ''),
+  CONSTRAINT okta_resource_connections_okta_application_id_check CHECK (okta_application_id IS NULL OR btrim(okta_application_id) <> ''),
+  CONSTRAINT okta_resource_connections_resource_key UNIQUE (organization_id, identity_provider_connection_id, remote_session_issuer_id, resource),
+  CONSTRAINT okta_resource_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT okta_resource_connections_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES okta_identity_provider_connections (organization_id, identity_provider_connection_id) ON DELETE CASCADE,
+  CONSTRAINT okta_resource_connections_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE,
+  -- The app instance must be one the snapshot holds for this connection.
+  -- Snapshot rows are only hard-deleted when the connection is revoked, which
+  -- deletes these rows too; Atlas cannot express a single-column SET NULL on
+  -- a composite key and the plain form would null the tenant columns.
+  CONSTRAINT okta_resource_connections_okta_application_fkey FOREIGN KEY (organization_id, identity_provider_connection_id, okta_application_id) REFERENCES okta_applications (organization_id, identity_provider_connection_id, okta_app_id) ON DELETE CASCADE
+);
+
+-- Serves the cascade from remote_session_issuers; the connection cascade is
+-- served by the unique key.
+CREATE INDEX IF NOT EXISTS okta_resource_connections_remote_session_issuer_idx
+ON okta_resource_connections (remote_session_issuer_id);
+
 CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -9051,3 +9211,30 @@ COMMENT ON COLUMN support_matrix_method_platforms.operating_systems IS 'NULL mea
 COMMENT ON COLUMN support_matrix_method_platforms.plan_types IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.';
 COMMENT ON COLUMN support_matrix_coverage.operating_systems IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible operating systems. Coverage restrictions supplement mapping restrictions.';
 COMMENT ON COLUMN support_matrix_coverage.plan_types IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.';
+-- Queries are Explore's one server-side object: a named, saved question
+-- against a catalog dataset, kept with the builder state it was built with.
+-- Columns are what the server reasons about (scope, listing, impact checks);
+-- everything only the client interprets lives in spec. dataset is hoisted out
+-- of spec so a catalog change can be impact-checked without deserialising
+-- every row.
+CREATE TABLE IF NOT EXISTS queries (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  created_by_user_id TEXT,
+
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 200),
+  dataset TEXT NOT NULL CHECK (dataset <> ''),
+  spec jsonb NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT queries_pkey PRIMARY KEY (id),
+  CONSTRAINT queries_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS queries_project_id_updated_at_idx
+ON queries (project_id, updated_at DESC) WHERE deleted IS FALSE;

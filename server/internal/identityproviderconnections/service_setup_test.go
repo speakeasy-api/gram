@@ -46,6 +46,7 @@ type serviceInstance struct {
 	// flags is nil when the service was built over a caller-supplied provider.
 	flags        *feature.InMemory
 	oktaFakes    *okta.FakeFactory
+	syncTrigger  *fakeSyncTrigger
 	discovery    *fakeDiscovery
 	provisioner  *identityproviderconnections.Provisioner
 	authCtx      *contextvalues.AuthContext
@@ -108,6 +109,26 @@ func (d *fakeDiscovery) discover(_ context.Context, orgURL string) (remotesessio
 		UnreadableURL:     "",
 		UnreadableMessage: "",
 	}, nil
+}
+
+// fakeSyncTrigger counts coordinator triggers.
+type fakeSyncTrigger struct {
+	mu    sync.Mutex
+	calls int
+	err   error
+}
+
+func (f *fakeSyncTrigger) TriggerApplicationSync(context.Context) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	return f.err
+}
+
+func (f *fakeSyncTrigger) Calls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
 }
 
 // errFlags is a feature provider whose evaluation always fails.
@@ -195,6 +216,7 @@ func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxCon
 	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID)
 	discovery := newFakeDiscovery()
 	fakes := okta.NewFakeFactory(oktaFixtures())
+	syncTrigger := &fakeSyncTrigger{}
 
 	authzEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	build := func(provisioner *identityproviderconnections.Provisioner) *identityproviderconnections.Service {
@@ -211,6 +233,7 @@ func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxCon
 			fakes,
 			discovery.discover,
 			ratelimit.NewRedisStore(redisClient),
+			syncTrigger,
 		)
 	}
 
@@ -222,6 +245,7 @@ func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxCon
 		orgID:        ti.orgID,
 		flags:        flags,
 		oktaFakes:    fakes,
+		syncTrigger:  syncTrigger,
 		discovery:    discovery,
 		provisioner:  provisioner,
 		authCtx:      authCtx,
@@ -305,4 +329,12 @@ func checklistKeys(items []*gen.IdentityProviderConnectionChecklistItem) []strin
 		keys = append(keys, item.Key)
 	}
 	return keys
+}
+
+func checklistCompletion(items []*gen.IdentityProviderConnectionChecklistItem) map[string]*bool {
+	done := make(map[string]*bool, len(items))
+	for _, item := range items {
+		done[item.Key] = item.Completed
+	}
+	return done
 }

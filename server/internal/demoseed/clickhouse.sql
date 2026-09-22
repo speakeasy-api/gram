@@ -83,6 +83,7 @@ DELETE FROM skill_session_versions WHERE organization_id = 'org_gram_demo_worksp
 DELETE FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM billing_meter_daily_summaries WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM billing_meter_readings_by_time WHERE organization_id = 'org_gram_demo_workspace';
+DELETE FROM agent_events WHERE organization_id = 'org_gram_demo_workspace';
 
 -- Inserts must never race rows from the previous seed generation. The Go
 -- runner polls this same condition before advancing past the delete phase, and
@@ -96,6 +97,11 @@ SELECT throwIf(
   + (SELECT count() FROM billing_meter_daily_summaries
      WHERE organization_id = 'org_gram_demo_workspace') != 0,
   'demo seed preflight: source or summary rows remain after scoped deletes');
+
+SELECT throwIf(
+  (SELECT count() FROM agent_events
+   WHERE organization_id = 'org_gram_demo_workspace') != 0,
+  'demo seed preflight: agent_events rows remain after the scoped delete');
 
 -- Tool-execution rows: 3-12 per chat (hash-picked, so busy chats and quick
 -- ones both exist). gram.toolset.slug makes the Insights CTE's direct branch
@@ -115,6 +121,8 @@ SELECT
   concat(
     '{"gram.tool.urn":"tools:http:acme:', tool_name, '"',
     ',"gram.tool.name":"', tool_name, '"',
+    -- Managed-agent calls retain the approving human email too: the actor must win.
+    if(i % 4 = 0, concat(',"gram.event.source":"tool_call","gram.authorization.actor.type":"agent","gram.authorization.actor.id":"', managed_agent_id, '"'), ''),
     ',"gram.toolset.slug":"', if(i % 5 = 0, 'acme-ops', 'acme-support-tools'), '"',
     ',"http.response.status_code":', toString(if(failed, 500, 200)),
     ',"http.server.request.duration":', toString(round(0.05 + (cityHash64(i, k) % 200) / 100, 3)),
@@ -167,6 +175,9 @@ FROM (
     arrayElement([3, 3, 3, 3, 3, 1, 1, 1, 1, 4, 4, 4, 2, 2, 5, 6],
                  1 + reinterpretAsUInt8(unhex(substring(h, 13, 2))) % 16) AS uidx,
     lower(hex(MD5(concat('gram-demo-chat-', toString(number + 1))))) AS h,
+    lower(hex(MD5(concat('gram-demo-managed-agent-', toString(1 + i % 3))))) AS agent_h,
+    concat(substring(agent_h, 1, 8), '-', substring(agent_h, 9, 4), '-5', substring(agent_h, 14, 3), '-8',
+           substring(agent_h, 18, 3), '-', substring(agent_h, 21, 12)) AS managed_agent_id,
     concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
            substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
     toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
@@ -1847,6 +1858,8 @@ FROM (
 
 -- Meter usage is independent of telemetry-derived invoice estimates. Every
 -- meter has 96 immutable facts across 12 days, with enough facets for a remainder.
+-- Product-specific volumes keep all three estimated-spend series visible at
+-- PAYG list prices without changing the number or identity of the readings.
 INSERT INTO billing_meter_readings_by_time
   (id, organization_id, project_id, meter_id, operation_id, unit,
    measurement_method, value, occurred_at, produced_at, corrects_reading_id, attributes)
@@ -1860,7 +1873,7 @@ SELECT
   if(meter_index IN (2, 3), 'bytes', 'stokens'),
   if(meter_index IN (2, 3), 'http_body_bytes', 'tiktoken_o200k_base'),
   toInt64((1000 + cityHash64('meter-volume', number) % 9000)
-    * if(meter_index IN (2, 3), 64, 1)),
+    * multiIf(meter_index IN (2, 3), 2048, meter_index = 1, 100, 10)),
   least(toDateTime64(toStartOfDay(now('UTC')), 9, 'UTC') - toIntervalDay(intDiv(sample, 8))
     + toIntervalHour(8 + sample % 8), now64(9, 'UTC') - toIntervalMinute(30)),
   now64(9, 'UTC'),
@@ -2083,6 +2096,25 @@ SELECT throwIf(
      AND (chat_source = '' OR team = '' OR user_email = '')) > 0,
   'demo seed postflight: risk_findings missing chat_source/team/user_email attribution');
 
+-- Platform MCP summarizes rule-level impact, not individual finding rows.
+-- Keep at least one live cluster with multiple attributed users and clients
+-- plus a stored display sample so that its privacy-safe evidence path is exercised.
+SELECT throwIf(
+  (SELECT count() FROM (
+    SELECT rule_id
+    FROM risk_findings
+    WHERE organization_id = 'org_gram_demo_workspace'
+      AND project_id = 'dec0de00-0000-4000-a000-000000000001'
+      AND excluded_at IS NULL AND false_positive_at IS NULL
+      AND dead_letter_reason = ''
+    GROUP BY rule_id
+    HAVING uniqExactIf(if(external_user_id != '', external_user_id, user_id),
+                      external_user_id != '' OR user_id != '') > 1
+       AND uniqExactIf(chat_source, chat_source != '') > 1
+       AND countIf(match_redacted != '') > 0
+  )) = 0,
+  'demo seed postflight: watchdog needs multi-user multi-client evidence');
+
 -- Fewer than four distinct rule clusters means the weighted type draw
 -- collapsed and the Watchdog list is a flat rotation again.
 SELECT throwIf(
@@ -2131,3 +2163,237 @@ SELECT throwIf(
   (SELECT uniqExact(category) FROM ai_detections
    WHERE organization_id = 'org_gram_demo_workspace') <> 3,
   'demo seed postflight: demo AI detections must cover harness, assistant and local_model');
+
+-- Agent events: what Explore (the semantic catalog over agent_events) reads.
+-- 144 sessions over the trailing 12 days, two per user per day, dealt across
+-- the two harnesses the dialects know: users 1, 3 and 5 on Claude Code
+-- (anthropic, usage and cost stated on api_request rows), users 2, 4 and 6 on
+-- Codex (openai, tokens stated but no cost, which is what the provider
+-- emits). Each session has 2-5 turns, each turn a prompt, an api_request
+-- and an api_response (an api_error now and then), and 0-3 tool calls. A
+-- Claude tool call is a tool_decision followed by a tool_call_result unless
+-- the decision rejected it, so a blocked call is a decision alone; a Codex
+-- call is its result. Every row family has its own gram-demo-agent- prefix
+-- and occurred_at is now()-relative, so a reseed lands inside the window.
+--
+-- Turn rows: a prompt, its API request and the response, per turn.
+INSERT INTO agent_events
+  (organization_id, project_id, occurred_at_unix_nano, observed_at_unix_nano,
+   record_id, session_id, turn_id, event_id, event_type, raw_event_name,
+   source, provider, surface, user_id, user_email, external_user_id,
+   account_type, billing_mode, external_org_id, device_id,
+   department_name, division_name, job_title, employee_type, cost_center_name,
+   roles, groups, model, query_source, skill_name, agent_name,
+   mcp_server_name, mcp_tool_name, tool_name, text, outcome, outcome_message,
+   duration_nano, input_content, output_content,
+   input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd,
+   attributes, resource_attributes, scope_attributes)
+SELECT
+  'org_gram_demo_workspace',
+  'dec0de00-0000-4000-a000-000000000001',
+  occurred,
+  occurred + 800000000,
+  concat('gram-demo-agent-', kind, '-', toString(i), '-', toString(t)),
+  session_v,
+  concat('prompt_demo_', toString(i), '_', toString(t)),
+  if(kind = 'prompt', concat('gram-demo-agent-prompt-', toString(i), '-', toString(t)),
+     concat('req_demo_', toString(i), '_', toString(t))),
+  multiIf(kind = 'prompt', 'prompt', kind = 'request', 'api_request', failed, 'api_error', 'api_response'),
+  concat(if(on_claude, 'claude_code.', 'codex.'),
+         multiIf(kind = 'prompt', 'user_prompt', kind = 'request', 'api_request', failed, 'api_error', 'api_response')),
+  arrayElement(['claude-code', 'codex'], 1 + toUInt32(NOT on_claude)), provider_v, surface_v, user_id_v, email_v, '',
+  '', '', '', device_v,
+  department_v, division_v, title_v, emp_type_v, cost_center_v,
+  roles_v, groups_v,
+  model_v, '', '', '',
+  '', '', '',
+  if(kind = 'prompt',
+     arrayElement(['Why is the refund job retrying every five minutes',
+                   'List the open incidents for the billing service and summarise each one',
+                   'Find every place the invoice total is rounded and check the currency',
+                   'Draft a runbook step for rotating the payments webhook secret',
+                   'Which customers hit the rate limit on the export endpoint this week',
+                   'Explain what the support-refunds skill does before I run it',
+                   'Check whether the nightly reconciliation finished and how long it took',
+                   'Summarise the last three deploys of the gateway and any rollbacks'],
+                  1 + toUInt32((i + t) % 8)),
+     ''),
+  multiIf(kind != 'response', '', failed, 'error', 'ok'),
+  if(kind = 'response' AND failed, 'overloaded_error: the model is busy, retry later', ''),
+  if(kind = 'response', response_nano, 0),
+  '', '',
+  if(kind = 'request', in_tokens, 0),
+  if(kind = 'request', out_tokens, 0),
+  if(kind = 'request' AND on_claude, cache_read, 0),
+  if(kind = 'request' AND on_claude, cache_write, 0),
+  if(kind = 'request' AND on_claude,
+     if(model_v = 'claude-sonnet-5',
+        (in_tokens * 3 + out_tokens * 15 + cache_read * 0.3 + cache_write * 3.75) / 1000000,
+        (in_tokens * 0.8 + out_tokens * 4 + cache_read * 0.08 + cache_write * 1) / 1000000),
+     0),
+  '{}', '{}', '{}'
+FROM (
+  SELECT
+    intDiv(number, 15) AS i,
+    intDiv(number % 15, 3) AS t,
+    arrayElement(['prompt', 'request', 'response'], 1 + toUInt32(number % 3)) AS kind,
+
+    toUInt32(i % 6) + 1 AS uidx,
+    intDiv(i, 12) AS day_back,
+    intDiv(i % 12, 6) AS slot,
+    toUnixTimestamp64Nano(now64(9))
+      - toInt64(day_back) * 86400000000000
+      - toInt64(slot * 5 + 2 + (i * 7) % 3) * 3600000000000
+      - toInt64((i * 13) % 50) * 60000000000 AS session_start,
+    2 + toUInt32(i % 4) AS turns,
+    uidx IN (1, 3, 5) AS on_claude,
+    if(on_claude, 'claude-code', 'codex') AS surface_v,
+    if(on_claude, 'anthropic', 'openai') AS provider_v,
+    multiIf(NOT on_claude, 'gpt-5-codex', i % 3 = 0, 'claude-haiku-4-5-20251001', 'claude-sonnet-5') AS model_v,
+    lower(hex(MD5(concat('gram-demo-agent-session-', toString(i))))) AS hs,
+    concat(substring(hs, 1, 8), '-', substring(hs, 9, 4), '-5', substring(hs, 14, 3), '-8',
+           substring(hs, 18, 3), '-', substring(hs, 21, 12)) AS session_v,
+    arrayElement(['user_demo_amara', 'user_demo_jonas', 'user_demo_priya',
+                  'user_demo_mateo', 'user_demo_hana', 'user_demo_lucas'], uidx) AS user_id_v,
+    arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                  'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'], uidx) AS email_v,
+    arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local',
+                  'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS device_v,
+    -- Directory attributes mirror demo_* arrays in postgres.sql so dimensions agree across stores.
+    arrayElement(['Support Engineering', 'Support Engineering', 'Platform Engineering',
+                  'Platform Engineering', 'Billing Operations', 'Engineering Leadership'], uidx) AS department_v,
+    arrayElement(['Customer Experience', 'Customer Experience', 'R&D',
+                  'R&D', 'Customer Experience', 'R&D'], uidx) AS division_v,
+    arrayElement(['Support Engineer', 'Senior Support Engineer', 'Platform Engineer',
+                  'Site Reliability Engineer', 'Billing Analyst', 'Engineering Manager'], uidx) AS title_v,
+    arrayElement(['full-time', 'full-time', 'full-time', 'contractor', 'part-time', 'full-time'], uidx) AS emp_type_v,
+    arrayElement(['CC-SUP-4100', 'CC-SUP-4100', 'CC-ENG-2200', 'CC-ENG-2200', 'CC-OPS-3300', 'CC-ENG-2200'], uidx) AS cost_center_v,
+    [arrayElement(['support', 'support', 'engineering', 'engineering', 'billing', 'engineering'], uidx)] AS roles_v,
+    [arrayElement(['Frontline Support', 'Frontline Support', 'Infra', 'Reliability', 'Billing Ops', 'Leadership'], uidx)] AS groups_v,
+    session_start + toInt64(t) * 95000000000 AS turn_start,
+    (i * t) % 23 = 5 AS failed,
+    toInt64(1200 + (i * 31 + t * 17) % 2600) AS in_tokens,
+    toInt64(150 + (i * 7 + t * 29) % 900) AS out_tokens,
+    toInt64(800 + (i * 5) % 3000) AS cache_read,
+    toInt64(if(t = 0, 1500, 0)) AS cache_write,
+    toInt64(1500 + (i * 11 + t * 3) % 9000) * 1000000 AS response_nano,
+    multiIf(kind = 'prompt', turn_start,
+            kind = 'request', turn_start + 2000000000,
+            turn_start + 2000000000 + response_nano) AS occurred
+  FROM numbers(144 * 5 * 3)
+)
+WHERE t < turns;
+
+-- Tool rows: 0-3 calls per turn. A Claude call is a decision then a result
+-- (or the rejecting decision alone); a Codex call is its result.
+INSERT INTO agent_events
+  (organization_id, project_id, occurred_at_unix_nano, observed_at_unix_nano,
+   record_id, session_id, turn_id, event_id, event_type, raw_event_name,
+   source, provider, surface, user_id, user_email, external_user_id,
+   account_type, billing_mode, external_org_id, device_id,
+   department_name, division_name, job_title, employee_type, cost_center_name,
+   roles, groups, model, query_source, skill_name, agent_name,
+   mcp_server_name, mcp_tool_name, tool_name, text, outcome, outcome_message,
+   duration_nano, input_content, output_content,
+   input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd,
+   attributes, resource_attributes, scope_attributes)
+SELECT
+  'org_gram_demo_workspace',
+  'dec0de00-0000-4000-a000-000000000001',
+  occurred,
+  occurred + 800000000,
+  concat('gram-demo-agent-', kind, '-', toString(i), '-', toString(t), '-', toString(k)),
+  session_v,
+  concat('prompt_demo_', toString(i), '_', toString(t)),
+  concat('call_demo_agent_', toString(i), '_', toString(t), '_', toString(k)),
+  if(kind = 'decision', 'tool_decision', 'tool_call_result'),
+  concat(if(on_claude, 'claude_code.', 'codex.'), if(kind = 'decision', 'tool_decision', 'tool_result')),
+  arrayElement(['claude-code', 'codex'], 1 + toUInt32(NOT on_claude)), provider_v, surface_v, user_id_v, email_v, '',
+  '', '', '', device_v,
+  department_v, division_v, title_v, emp_type_v, cost_center_v,
+  roles_v, groups_v,
+  model_v, '', '', '',
+  if(tool_v = 'mcp_tool', 'acme-crm', ''),
+  if(tool_v = 'mcp_tool', arrayElement(['lookup_customer', 'process_refund', 'list_invoices'], 1 + toUInt32((i + k) % 3)), ''),
+  tool_v,
+  '',
+  multiIf(kind = 'decision', if(rejected, 'rejected', 'ok'), errored, 'error', 'ok'),
+  multiIf(kind = 'decision' AND rejected, 'blocked by policy: write outside the checkout',
+          kind = 'result' AND errored, 'exit status 1', ''),
+  if(kind = 'result', tool_nano, 0),
+  '', '',
+  0, 0, 0, 0, 0,
+  '{}', '{}', '{}'
+FROM (
+  SELECT
+    intDiv(number, 30) AS i,
+    intDiv(number % 30, 6) AS t,
+    intDiv(number % 6, 2) AS k,
+    arrayElement(['decision', 'result'], 1 + toUInt32(number % 2)) AS kind,
+
+    toUInt32(i % 6) + 1 AS uidx,
+    intDiv(i, 12) AS day_back,
+    intDiv(i % 12, 6) AS slot,
+    toUnixTimestamp64Nano(now64(9))
+      - toInt64(day_back) * 86400000000000
+      - toInt64(slot * 5 + 2 + (i * 7) % 3) * 3600000000000
+      - toInt64((i * 13) % 50) * 60000000000 AS session_start,
+    2 + toUInt32(i % 4) AS turns,
+    uidx IN (1, 3, 5) AS on_claude,
+    if(on_claude, 'claude-code', 'codex') AS surface_v,
+    if(on_claude, 'anthropic', 'openai') AS provider_v,
+    multiIf(NOT on_claude, 'gpt-5-codex', i % 3 = 0, 'claude-haiku-4-5-20251001', 'claude-sonnet-5') AS model_v,
+    lower(hex(MD5(concat('gram-demo-agent-session-', toString(i))))) AS hs,
+    concat(substring(hs, 1, 8), '-', substring(hs, 9, 4), '-5', substring(hs, 14, 3), '-8',
+           substring(hs, 18, 3), '-', substring(hs, 21, 12)) AS session_v,
+    arrayElement(['user_demo_amara', 'user_demo_jonas', 'user_demo_priya',
+                  'user_demo_mateo', 'user_demo_hana', 'user_demo_lucas'], uidx) AS user_id_v,
+    arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                  'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'], uidx) AS email_v,
+    arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local',
+                  'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS device_v,
+    -- Directory attributes mirror demo_* arrays in postgres.sql so dimensions agree across stores.
+    arrayElement(['Support Engineering', 'Support Engineering', 'Platform Engineering',
+                  'Platform Engineering', 'Billing Operations', 'Engineering Leadership'], uidx) AS department_v,
+    arrayElement(['Customer Experience', 'Customer Experience', 'R&D',
+                  'R&D', 'Customer Experience', 'R&D'], uidx) AS division_v,
+    arrayElement(['Support Engineer', 'Senior Support Engineer', 'Platform Engineer',
+                  'Site Reliability Engineer', 'Billing Analyst', 'Engineering Manager'], uidx) AS title_v,
+    arrayElement(['full-time', 'full-time', 'full-time', 'contractor', 'part-time', 'full-time'], uidx) AS emp_type_v,
+    arrayElement(['CC-SUP-4100', 'CC-SUP-4100', 'CC-ENG-2200', 'CC-ENG-2200', 'CC-OPS-3300', 'CC-ENG-2200'], uidx) AS cost_center_v,
+    [arrayElement(['support', 'support', 'engineering', 'engineering', 'billing', 'engineering'], uidx)] AS roles_v,
+    [arrayElement(['Frontline Support', 'Frontline Support', 'Infra', 'Reliability', 'Billing Ops', 'Leadership'], uidx)] AS groups_v,
+    session_start + toInt64(t) * 95000000000 AS turn_start,
+    (i + t) % 4 AS tools,
+    arrayElement(['Bash', 'Read', 'Grep', 'Glob', 'Edit', 'mcp_tool'], 1 + toUInt32((i * 3 + t * 5 + k * 7) % 6)) AS tool_v,
+    (i * 5 + t + k) % 25 = 0 AS rejected,
+    (i * 3 + t * 7 + k) % 17 = 0 AS errored,
+    toInt64(200 + (i * 37 + t * 11 + k * 5) % 5800) * 1000000 AS tool_nano,
+    turn_start + 15000000000 + toInt64(k) * 20000000000 + if(kind = 'result', tool_nano, 0) AS occurred
+  FROM numbers(144 * 5 * 3 * 2)
+)
+WHERE t < turns
+  AND k < tools
+  -- Codex has no decision events, and a rejected Claude call has no result.
+  AND NOT (kind = 'decision' AND NOT on_claude)
+  AND NOT (kind = 'result' AND on_claude AND rejected);
+
+-- Postflight: the Explore datasets have sessions and tool calls to collapse,
+-- every demo user and both harnesses are represented, and cost is only ever
+-- stated where the provider states it.
+SELECT throwIf(
+  (SELECT count() FROM agent_events
+   WHERE organization_id = 'org_gram_demo_workspace') < 2000,
+  'demo seed postflight: expected >= 2000 demo agent_events rows');
+
+SELECT throwIf(
+  (SELECT uniqExact(user_email) FROM agent_events
+   WHERE organization_id = 'org_gram_demo_workspace') != 6
+  OR (SELECT uniqExact(surface) FROM agent_events
+      WHERE organization_id = 'org_gram_demo_workspace') != 2,
+  'demo seed postflight: demo agent events must cover all six users and both harnesses');
+
+SELECT throwIf(
+  (SELECT countIf(cost_usd > 0) FROM agent_events
+   WHERE organization_id = 'org_gram_demo_workspace' AND surface = 'codex') != 0,
+  'demo seed postflight: Codex states no cost, so no Codex demo row may carry one');

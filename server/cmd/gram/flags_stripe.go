@@ -26,6 +26,18 @@ func stripeFlags() []cli.Flag {
 			EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-price-id-mcp-egress",
+			Aliases: []string{"stripe.price_id_mcp_egress"},
+			Usage:   "The Stripe metered MCP egress price ID",
+			EnvVars: []string{"STRIPE_PRICE_ID_MCP_EGRESS"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-price-id-risk-scans",
+			Aliases: []string{"stripe.price_id_risk_scans"},
+			Usage:   "The Stripe metered risk scans price ID",
+			EnvVars: []string{"STRIPE_PRICE_ID_RISK_SCANS"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "stripe-meter-event-name",
 			Aliases: []string{"stripe.meter_event_name"},
 			Usage:   "The Stripe TUM meter event name",

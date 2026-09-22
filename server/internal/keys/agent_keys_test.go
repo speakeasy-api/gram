@@ -192,9 +192,15 @@ func TestKeysService_AgentKeyRequiresLiveAuthorizerResourceGrant(t *testing.T) {
 			var keyID string
 			if rotate {
 				// Rotation must recheck resource authority even for an existing key.
-				empty := agentKeyPayload(agent.ID, *authCtx.ProjectID)
-				empty.RequestedGrants = []*gen.AgentPolicyGrantForm{}
-				created, err := ti.service.CreateKey(ctx, empty)
+				// Start with unrelated, explicit permissions rather than an empty credential.
+				for _, principal := range []urn.Principal{
+					urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()),
+					urn.NewPrincipal(urn.PrincipalTypeUser, ownerID),
+					urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+				} {
+					upsertGrant(t, ctx, ti, principal, authz.ScopeProjectRead, authCtx.ProjectID.String())
+				}
+				created, err := ti.service.CreateKey(ctx, agentKeyPayload(agent.ID, *authCtx.ProjectID))
 				require.NoError(t, err)
 				keyID = created.ID
 			}
@@ -277,9 +283,15 @@ func TestKeysService_AgentKeyRejectsOverlappingAuthorizerExclusion(t *testing.T)
 				var keyID string
 				if rotate {
 					// Rotation must recheck resource authority even for an existing key.
-					empty := agentKeyPayload(agent.ID, *authCtx.ProjectID)
-					empty.RequestedGrants = []*gen.AgentPolicyGrantForm{}
-					created, err := ti.service.CreateKey(ctx, empty)
+					// Start with unrelated, explicit permissions rather than an empty credential.
+					for _, principal := range []urn.Principal{
+						urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()),
+						urn.NewPrincipal(urn.PrincipalTypeUser, ownerID),
+						urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+					} {
+						upsertGrant(t, ctx, ti, principal, authz.ScopeProjectRead, authCtx.ProjectID.String())
+					}
+					created, err := ti.service.CreateKey(ctx, agentKeyPayload(agent.ID, *authCtx.ProjectID))
 					require.NoError(t, err)
 					keyID = created.ID
 				}
@@ -432,7 +444,7 @@ func TestKeysService_AgentKeyValidation(t *testing.T) {
 		code   oops.Code
 	}{
 		{name: "project binding", mutate: func(p *gen.CreateKeyPayload) { p.ProjectID = new(projectID.String()) }, code: oops.CodeBadRequest},
-		{name: "unsupported policy version", mutate: func(p *gen.CreateKeyPayload) { p.DelegatedGrantsVersion = new(2) }, code: oops.CodeBadRequest},
+		{name: "unsupported policy version", mutate: func(p *gen.CreateKeyPayload) { p.DelegatedGrantsVersion = new(3) }, code: oops.CodeBadRequest},
 		{name: "deny effect", mutate: func(p *gen.CreateKeyPayload) { p.RequestedGrants[0].Effect = "deny" }, code: oops.CodeBadRequest},
 		{name: "duplicate grant", mutate: func(p *gen.CreateKeyPayload) {
 			p.RequestedGrants = append(p.RequestedGrants, cloneGrant(p.RequestedGrants[0]))

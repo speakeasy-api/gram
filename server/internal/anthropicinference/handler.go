@@ -55,7 +55,7 @@ type handler struct {
 // ErrIntegrationUnavailable identifies a missing or explicitly disabled binding.
 var ErrIntegrationUnavailable = errors.New("inference integration unavailable")
 
-const fallbackVerdictJSON = `{"action":"deny","deny_reason":"Speakeasy could not evaluate this request. Please try again."}`
+const fallbackVerdictJSON = `{"action":"deny","deny_reason":"` + unavailableDenyReason + `"}`
 
 // verdictTimeoutWriter translates TimeoutHandler's fallback into the protocol's
 // HTTP-200 denial. TimeoutHandler buffers writes and cancels work safely, even
@@ -147,11 +147,11 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.logger.ErrorContext(r.Context(), "process Anthropic inference hook", attr.SlogError(err))
 			// A failed evaluation must not silently allow inference, including when
 			// Anthropic's administrator selected allow-on-webhook-failure.
-			verdict = Verdict{Action: "deny", DenyReason: "Speakeasy could not evaluate this request. Please try again.", ReferenceID: ""}
+			verdict = Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}
 		}
 	}
 	if verdict.Action != "allow" && verdict.Action != "deny" {
-		verdict = Verdict{Action: "deny", DenyReason: "Speakeasy could not evaluate this request. Please try again.", ReferenceID: ""}
+		verdict = Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}
 	}
 	verdict.DenyReason = string([]rune(verdict.DenyReason)[:min(len([]rune(verdict.DenyReason)), 500)])
 	w.Header().Set("Content-Type", "application/json")

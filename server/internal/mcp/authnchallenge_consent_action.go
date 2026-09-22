@@ -61,6 +61,9 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
+	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "invalid consent browser binding")
+	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
 		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
@@ -75,6 +78,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
 	}
 	subject := *challengeState.Subject
+
+	switch r.PostForm.Get("action") {
+	case "agent_connections", "agent_attach", "agent_detach":
+		return s.serveConsentAgentConnections(w, r, endpoint, challengeState)
+	}
 
 	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {

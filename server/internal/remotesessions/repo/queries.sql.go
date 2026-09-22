@@ -13,6 +13,76 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const attachPrincipalRemoteSessionBinding = `-- name: AttachPrincipalRemoteSessionBinding :one
+INSERT INTO principal_remote_session_bindings
+(project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
+SELECT p.id, p.organization_id, $1, usi.id, c.id, s.id, s.grant_generation, $2
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id
+JOIN projects AS p ON p.id = $3 AND p.organization_id = $4 AND p.deleted IS FALSE
+WHERE link.user_session_issuer_id = $5
+  AND s.user_session_issuer_id = link.user_session_issuer_id
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
+  AND (source.project_id = p.id OR (source.project_id IS NULL AND source.organization_id = p.organization_id))
+  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id = p.organization_id OR i.organization_id IS NULL)))
+  AND c.deleted IS FALSE AND i.deleted IS FALSE AND usi.deleted IS FALSE AND source.deleted IS FALSE
+  AND s.deleted IS FALSE AND s.subject_urn = $2
+  AND s.id = $6
+  AND EXISTS (SELECT 1 FROM agents AS a WHERE a.id = $1 AND a.organization_id = p.organization_id AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL AND a.owner_reassignment_required_at IS NULL)
+ON CONFLICT (project_id, principal_id, user_session_issuer_id, remote_session_client_id) WHERE revoked_at IS NULL
+DO UPDATE SET updated_at = principal_remote_session_bindings.updated_at
+WHERE principal_remote_session_bindings.grant_generation = EXCLUDED.grant_generation
+  AND principal_remote_session_bindings.remote_session_id = EXCLUDED.remote_session_id
+  AND principal_remote_session_bindings.project_id = EXCLUDED.project_id
+  AND principal_remote_session_bindings.organization_id = EXCLUDED.organization_id
+  AND principal_remote_session_bindings.attached_by_subject_id = EXCLUDED.attached_by_subject_id
+RETURNING id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation
+`
+
+type AttachPrincipalRemoteSessionBindingParams struct {
+	PrincipalID         uuid.UUID
+	SubjectUrn          string
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+	RemoteSessionID     uuid.UUID
+}
+
+type AttachPrincipalRemoteSessionBindingRow struct {
+	ID                    uuid.UUID
+	PrincipalID           uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	RemoteSessionID       uuid.UUID
+	GrantGeneration       int64
+}
+
+func (q *Queries) AttachPrincipalRemoteSessionBinding(ctx context.Context, arg AttachPrincipalRemoteSessionBindingParams) (AttachPrincipalRemoteSessionBindingRow, error) {
+	row := q.db.QueryRow(ctx, attachPrincipalRemoteSessionBinding,
+		arg.PrincipalID,
+		arg.SubjectUrn,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionID,
+	)
+	var i AttachPrincipalRemoteSessionBindingRow
+	err := row.Scan(
+		&i.ID,
+		&i.PrincipalID,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.RemoteSessionID,
+		&i.GrantGeneration,
+	)
+	return i, err
+}
+
 const attachRemoteSessionClientToUserSessionIssuer = `-- name: AttachRemoteSessionClientToUserSessionIssuer :exec
 INSERT INTO remote_session_client_user_session_issuers (
     remote_session_client_id,
@@ -179,7 +249,7 @@ WITH due AS (
   -- The credential is shared by every user_session_issuer bound to its
   -- client; its own user_session_issuer_id is provenance only. Keepalive
   -- stays eligible while ANY bound issuer is live, the subject holds a live
-  -- Gram session under it, and that issuer's organization policy authorizes
+  -- Gram session or exact agent attachment, and its organization policy authorizes
   -- the refresh — detaching or deleting the surface that happened to mint
   -- the credential must not stop refresh for its siblings. The LATERAL picks
   -- the first such issuer's organization, which becomes the batch the
@@ -210,15 +280,38 @@ WITH due AS (
         c.project_id = usi.project_id
         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
       )
-      AND EXISTS (
-        SELECT 1 FROM user_sessions AS gs
-        -- Keyed on the issuer alone. The issuer id already fixes the
-        -- session's tenancy, and comparing gs.project_id to usi.project_id
-        -- matches nothing when an organization-tier issuer makes both NULL.
-        WHERE gs.user_session_issuer_id = usi.id
-          AND gs.subject_urn = s.subject_urn
-          AND gs.deleted IS FALSE
-          AND gs.refresh_expires_at > $1::timestamptz
+      AND (
+        EXISTS (
+          SELECT 1 FROM user_sessions AS gs
+          WHERE gs.user_session_issuer_id = usi.id
+            AND gs.subject_urn = s.subject_urn
+            AND gs.deleted IS FALSE
+            AND gs.refresh_expires_at > $1::timestamptz
+        )
+        OR EXISTS (
+          -- First-party connect need not create an inbound human session.
+          -- Only a live attachment to this exact grant can keep it alive.
+          SELECT 1
+          FROM principal_remote_session_bindings AS b
+          JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
+          JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+          JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
+          JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
+            AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
+          JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id AND source.deleted IS FALSE
+          WHERE b.remote_session_id = s.id AND b.grant_generation = s.grant_generation
+            AND b.remote_session_client_id = c.id AND b.user_session_issuer_id = usi.id
+            AND b.organization_id = COALESCE(p.organization_id, usi.organization_id)
+            AND b.revoked_at IS NULL
+            AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
+            AND a.owner_reassignment_required_at IS NULL
+            AND s.subject_urn = 'user:' || a.owner_user_id
+            AND b.attached_by_subject_id = s.subject_urn
+            AND (usi.project_id = bp.id OR (usi.project_id IS NULL AND usi.organization_id = bp.organization_id))
+            AND (source.project_id = bp.id OR (source.project_id IS NULL AND source.organization_id = bp.organization_id))
+            AND (c.project_id = bp.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = bp.organization_id)))
+            AND (i.project_id = bp.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = bp.organization_id)))
+        )
       )
       AND (
         EXISTS (
@@ -1690,6 +1783,45 @@ func (q *Queries) DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx c
 	return err
 }
 
+const detachPrincipalRemoteSessionBinding = `-- name: DetachPrincipalRemoteSessionBinding :one
+UPDATE principal_remote_session_bindings AS b
+SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE b.project_id = $1 AND b.organization_id = $2
+  AND b.principal_id = $3 AND b.user_session_issuer_id = $4
+  AND b.id = $5 AND b.attached_by_subject_id = $6 AND b.revoked_at IS NULL
+  AND EXISTS (SELECT 1 FROM remote_sessions AS s WHERE s.id = b.remote_session_id AND s.subject_urn = $6)
+RETURNING b.remote_session_id, b.remote_session_client_id, b.grant_generation
+`
+
+type DetachPrincipalRemoteSessionBindingParams struct {
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	PrincipalID         uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	ID                  uuid.UUID
+	SubjectUrn          string
+}
+
+type DetachPrincipalRemoteSessionBindingRow struct {
+	RemoteSessionID       uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	GrantGeneration       int64
+}
+
+func (q *Queries) DetachPrincipalRemoteSessionBinding(ctx context.Context, arg DetachPrincipalRemoteSessionBindingParams) (DetachPrincipalRemoteSessionBindingRow, error) {
+	row := q.db.QueryRow(ctx, detachPrincipalRemoteSessionBinding,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.PrincipalID,
+		arg.UserSessionIssuerID,
+		arg.ID,
+		arg.SubjectUrn,
+	)
+	var i DetachPrincipalRemoteSessionBindingRow
+	err := row.Scan(&i.RemoteSessionID, &i.RemoteSessionClientID, &i.GrantGeneration)
+	return i, err
+}
+
 const detachRemoteSessionClientFromUserSessionIssuer = `-- name: DetachRemoteSessionClientFromUserSessionIssuer :execrows
 DELETE FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = $1
@@ -2015,7 +2147,7 @@ WHERE s.id = $1
   AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > $2::timestamptz)
   AND s.updated_at <= $3::timestamptz
   -- Some bound issuer in the organization the session was claimed under must
-  -- still be live, with a live Gram session for the subject, and that
+  -- still be live, with a live Gram session or exact agent attachment, and that
   -- organization's automatic-refresh policy (applied to the session's own
   -- preference) must still authorize the refresh. This predicate is spelled
   -- out again in ClaimDueRemoteSessionRefreshCandidates' LATERAL; the two
@@ -2035,15 +2167,38 @@ WHERE s.id = $1
         c.project_id = usi.project_id
         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
       )
-      AND EXISTS (
-        SELECT 1 FROM user_sessions AS gs
-        -- Keyed on the issuer alone. The issuer id already fixes the
-        -- session's tenancy, and comparing gs.project_id to usi.project_id
-        -- matches nothing when an organization-tier issuer makes both NULL.
-        WHERE gs.user_session_issuer_id = usi.id
-          AND gs.subject_urn = s.subject_urn
-          AND gs.deleted IS FALSE
-          AND gs.refresh_expires_at > $2::timestamptz
+      AND (
+        EXISTS (
+          SELECT 1 FROM user_sessions AS gs
+          WHERE gs.user_session_issuer_id = usi.id
+            AND gs.subject_urn = s.subject_urn
+            AND gs.deleted IS FALSE
+            AND gs.refresh_expires_at > $2::timestamptz
+        )
+        OR EXISTS (
+          -- First-party connect need not create an inbound human session.
+          -- Only a live attachment to this exact grant can keep it alive.
+          SELECT 1
+          FROM principal_remote_session_bindings AS b
+          JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
+          JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+          JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
+          JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
+            AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
+          JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id AND source.deleted IS FALSE
+          WHERE b.remote_session_id = s.id AND b.grant_generation = s.grant_generation
+            AND b.remote_session_client_id = c.id AND b.user_session_issuer_id = usi.id
+            AND b.organization_id = COALESCE(p.organization_id, usi.organization_id)
+            AND b.revoked_at IS NULL
+            AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
+            AND a.owner_reassignment_required_at IS NULL
+            AND s.subject_urn = 'user:' || a.owner_user_id
+            AND b.attached_by_subject_id = s.subject_urn
+            AND (usi.project_id = bp.id OR (usi.project_id IS NULL AND usi.organization_id = bp.organization_id))
+            AND (source.project_id = bp.id OR (source.project_id IS NULL AND source.organization_id = bp.organization_id))
+            AND (c.project_id = bp.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = bp.organization_id)))
+            AND (i.project_id = bp.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = bp.organization_id)))
+        )
       )
       AND (
         EXISTS (
@@ -2761,6 +2916,93 @@ func (q *Queries) GetOrganizationRemoteSessionIssuerByIDForUpdate(ctx context.Co
 		&i.MetadataLastError,
 		&i.MetadataLastErrorAt,
 		&i.MetadataLastErrorUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getPrincipalRemoteSessionBinding = `-- name: GetPrincipalRemoteSessionBinding :one
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
+FROM principal_remote_session_bindings AS b
+JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+  AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
+  AND a.owner_reassignment_required_at IS NULL
+JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
+JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
+  AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
+JOIN remote_sessions AS s ON s.id = b.remote_session_id
+  AND s.subject_urn = 'user:' || a.owner_user_id
+  AND b.attached_by_subject_id = s.subject_urn
+  AND s.grant_generation = b.grant_generation
+  AND s.remote_session_client_id = b.remote_session_client_id
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = b.user_session_issuer_id
+JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id
+JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
+JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
+WHERE b.project_id = $1::uuid
+  AND b.organization_id = $2::text
+  AND b.principal_id = $3::uuid
+  AND b.user_session_issuer_id = $4::uuid
+  AND b.remote_session_client_id = $5::uuid
+  AND b.revoked_at IS NULL
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE
+  AND provenance.deleted IS FALSE
+  AND issuer.deleted IS FALSE
+  AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
+  AND (provenance.project_id = $1::uuid OR (provenance.project_id IS NULL AND provenance.organization_id = $2::text))
+  AND (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
+  AND (c.project_id = $1::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $2::text)))
+`
+
+type GetPrincipalRemoteSessionBindingParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	PrincipalID           uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// Pin the exact attached row, never the owner's replacement after reconnect.
+func (q *Queries) GetPrincipalRemoteSessionBinding(ctx context.Context, arg GetPrincipalRemoteSessionBindingParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, getPrincipalRemoteSessionBinding,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.PrincipalID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+	)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.GrantGeneration,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
+		&i.LastUsedAt,
+		&i.UpstreamSubject,
+		&i.UpstreamEmail,
+		&i.UpstreamDisplayName,
+		&i.IdentitySource,
+		&i.Enrichment,
+		&i.LastValidatedAt,
+		&i.ValidationStatus,
+		&i.ValidationReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -5413,6 +5655,171 @@ func (q *Queries) ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuer
 	return items, nil
 }
 
+const listPrincipalRemoteSessionBindings = `-- name: ListPrincipalRemoteSessionBindings :many
+SELECT b.id, b.principal_id, b.user_session_issuer_id, b.remote_session_client_id, b.remote_session_id, b.grant_generation
+FROM principal_remote_session_bindings AS b
+JOIN remote_sessions AS s ON s.id = b.remote_session_id AND s.remote_session_client_id = b.remote_session_client_id
+JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+  AND 'user:' || a.owner_user_id = b.attached_by_subject_id
+WHERE b.project_id = $1 AND b.organization_id = $2
+  AND b.principal_id = $3 AND b.user_session_issuer_id = $4
+  AND b.attached_by_subject_id = $5 AND s.subject_urn = $5
+  AND b.revoked_at IS NULL
+ORDER BY b.id
+`
+
+type ListPrincipalRemoteSessionBindingsParams struct {
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	PrincipalID         uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	SubjectUrn          string
+}
+
+type ListPrincipalRemoteSessionBindingsRow struct {
+	ID                    uuid.UUID
+	PrincipalID           uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	RemoteSessionID       uuid.UUID
+	GrantGeneration       int64
+}
+
+// Keep unavailable bindings discoverable for explicit detach, but return no
+// source identity. The handler adds a canonical view only for an eligible
+// candidate whose grant generation still matches this exact attachment.
+func (q *Queries) ListPrincipalRemoteSessionBindings(ctx context.Context, arg ListPrincipalRemoteSessionBindingsParams) ([]ListPrincipalRemoteSessionBindingsRow, error) {
+	rows, err := q.db.Query(ctx, listPrincipalRemoteSessionBindings,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.PrincipalID,
+		arg.UserSessionIssuerID,
+		arg.SubjectUrn,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPrincipalRemoteSessionBindingsRow
+	for rows.Next() {
+		var i ListPrincipalRemoteSessionBindingsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PrincipalID,
+			&i.UserSessionIssuerID,
+			&i.RemoteSessionClientID,
+			&i.RemoteSessionID,
+			&i.GrantGeneration,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPrincipalRemoteSessionCandidates = `-- name: ListPrincipalRemoteSessionCandidates :many
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted, u.display_name AS subject_display_name, u.email AS subject_email
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id
+JOIN projects AS p ON p.id = $1 AND p.organization_id = $2 AND p.deleted IS FALSE
+LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
+WHERE link.user_session_issuer_id = $3
+  AND s.user_session_issuer_id = link.user_session_issuer_id
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
+  AND (source.project_id = p.id OR (source.project_id IS NULL AND source.organization_id = p.organization_id))
+  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id = p.organization_id OR i.organization_id IS NULL)))
+  AND c.deleted IS FALSE AND i.deleted IS FALSE AND usi.deleted IS FALSE AND source.deleted IS FALSE
+  AND s.deleted IS FALSE AND s.subject_urn = $4
+  AND ($5::uuid IS NULL OR s.id < $5::uuid)
+  AND ($6::uuid IS NULL OR s.remote_session_client_id = $6::uuid)
+ORDER BY s.id DESC
+LIMIT $7::int
+`
+
+type ListPrincipalRemoteSessionCandidatesParams struct {
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+	SubjectUrn          urn.SessionSubject
+	Cursor              uuid.NullUUID
+	ClientFilter        uuid.NullUUID
+	LimitValue          pgtype.Int4
+}
+
+type ListPrincipalRemoteSessionCandidatesRow struct {
+	RemoteSession      RemoteSession
+	SubjectDisplayName pgtype.Text
+	SubjectEmail       pgtype.Text
+}
+
+func (q *Queries) ListPrincipalRemoteSessionCandidates(ctx context.Context, arg ListPrincipalRemoteSessionCandidatesParams) ([]ListPrincipalRemoteSessionCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listPrincipalRemoteSessionCandidates,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.SubjectUrn,
+		arg.Cursor,
+		arg.ClientFilter,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPrincipalRemoteSessionCandidatesRow
+	for rows.Next() {
+		var i ListPrincipalRemoteSessionCandidatesRow
+		if err := rows.Scan(
+			&i.RemoteSession.ID,
+			&i.RemoteSession.GrantGeneration,
+			&i.RemoteSession.SubjectUrn,
+			&i.RemoteSession.UserSessionIssuerID,
+			&i.RemoteSession.RemoteSessionClientID,
+			&i.RemoteSession.AccessTokenEncrypted,
+			&i.RemoteSession.AccessExpiresAt,
+			&i.RemoteSession.RefreshTokenEncrypted,
+			&i.RemoteSession.AuthorizationExpiresAt,
+			&i.RemoteSession.RefreshExpiresAt,
+			&i.RemoteSession.Scopes,
+			&i.RemoteSession.Resource,
+			&i.RemoteSession.AutoRefresh,
+			&i.RemoteSession.LastRefreshAttemptAt,
+			&i.RemoteSession.LastUsedAt,
+			&i.RemoteSession.UpstreamSubject,
+			&i.RemoteSession.UpstreamEmail,
+			&i.RemoteSession.UpstreamDisplayName,
+			&i.RemoteSession.IdentitySource,
+			&i.RemoteSession.Enrichment,
+			&i.RemoteSession.LastValidatedAt,
+			&i.RemoteSession.ValidationStatus,
+			&i.RemoteSession.ValidationReason,
+			&i.RemoteSession.CreatedAt,
+			&i.RemoteSession.UpdatedAt,
+			&i.RemoteSession.DeletedAt,
+			&i.RemoteSession.Deleted,
+			&i.SubjectDisplayName,
+			&i.SubjectEmail,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSessionClientsByProjectID = `-- name: ListRemoteSessionClientsByProjectID :many
 SELECT
     c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.created_at, c.updated_at, c.deleted_at, c.deleted,
@@ -5657,8 +6064,9 @@ JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = $1
-  AND (c.project_id = $2 OR (c.project_id IS NULL AND c.organization_id = $3))
+  AND (c.project_id = $2 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3)))
   AND (usi.project_id = $2 OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
+  AND (i.project_id = $2 OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = $3)))
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
   AND usi.deleted IS FALSE
@@ -5717,9 +6125,9 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 // Joined client + issuer view used by the consent renderer and the
 // ChallengeManager. Returns one row per remote_session_client linked to
 // the given user_session_issuer through the join table. Resolves both the
-// project's own clients and organization-level clients (project_id NULL)
-// belonging to the project's org, so an org-level client attached to this
-// project's user_session_issuer is honored at runtime.
+// project's own clients, organization-level clients belonging to its org,
+// and global catalog clients. Every tier still requires an explicit link to
+// the reachable user_session_issuer and a reachable upstream issuer.
 func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientsForUserSessionIssuerParams) ([]ListRemoteSessionClientsForUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionClientsForUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
@@ -6707,6 +7115,50 @@ func (q *Queries) LockOrganizationRemoteSessionClientForAuthMethodWrite(ctx cont
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const lockPrincipalRemoteSessionBindings = `-- name: LockPrincipalRemoteSessionBindings :many
+SELECT id
+FROM principal_remote_session_bindings
+WHERE project_id = $1 AND organization_id = $2
+  AND principal_id = $3 AND user_session_issuer_id = $4
+  AND revoked_at IS NULL
+ORDER BY id
+FOR UPDATE
+`
+
+type LockPrincipalRemoteSessionBindingsParams struct {
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	PrincipalID         uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// Serialize attachment revocation with agent-session admission. The caller
+// keeps these locks through session insertion; token checks stay authoritative.
+func (q *Queries) LockPrincipalRemoteSessionBindings(ctx context.Context, arg LockPrincipalRemoteSessionBindingsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockPrincipalRemoteSessionBindings,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.PrincipalID,
+		arg.UserSessionIssuerID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockRemoteSessionClientForAuthMethodWrite = `-- name: LockRemoteSessionClientForAuthMethodWrite :one
@@ -7816,6 +8268,31 @@ func (q *Queries) RotateLocalFixtureOrganizationRemoteSessionClient(ctx context.
 	return i, err
 }
 
+const setOrganizationRemoteSessionClientCredentialsFixture = `-- name: SetOrganizationRemoteSessionClientCredentialsFixture :exec
+UPDATE remote_session_clients
+SET client_id = coalesce($1::text, client_id),
+    client_secret_encrypted = coalesce($2::text, client_secret_encrypted)
+WHERE id = $3 AND organization_id = $4 AND project_id IS NULL
+`
+
+type SetOrganizationRemoteSessionClientCredentialsFixtureParams struct {
+	ClientID              pgtype.Text
+	ClientSecretEncrypted pgtype.Text
+	ID                    uuid.UUID
+	OrganizationID        pgtype.Text
+}
+
+// Test fixture: change an organization-level login client during a browser flow.
+func (q *Queries) SetOrganizationRemoteSessionClientCredentialsFixture(ctx context.Context, arg SetOrganizationRemoteSessionClientCredentialsFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationRemoteSessionClientCredentialsFixture,
+		arg.ClientID,
+		arg.ClientSecretEncrypted,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	return err
+}
+
 const setOrganizationRemoteSessionClientJsonWebKeySet = `-- name: SetOrganizationRemoteSessionClientJsonWebKeySet :one
 UPDATE remote_session_clients AS c
 SET
@@ -8302,6 +8779,21 @@ func (q *Queries) SetRemoteSessionValidationTrackingFixture(ctx context.Context,
 	return err
 }
 
+const softDeleteOrganizationRemoteSessionClientFixture = `-- name: SoftDeleteOrganizationRemoteSessionClientFixture :exec
+UPDATE remote_session_clients SET deleted_at = clock_timestamp()
+WHERE id = $1 AND organization_id = $2 AND project_id IS NULL
+`
+
+type SoftDeleteOrganizationRemoteSessionClientFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+func (q *Queries) SoftDeleteOrganizationRemoteSessionClientFixture(ctx context.Context, arg SoftDeleteOrganizationRemoteSessionClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteOrganizationRemoteSessionClientFixture, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const softDeleteRemoteSessionBySubjectAndClient = `-- name: SoftDeleteRemoteSessionBySubjectAndClient :many
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp(),
@@ -8610,14 +9102,16 @@ func (q *Queries) SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx cont
 const touchRemoteSessionLastUsed = `-- name: TouchRemoteSessionLastUsed :exec
 UPDATE remote_sessions
 SET last_used_at = $1::timestamptz
-WHERE subject_urn = $2
-  AND remote_session_client_id = $3
+WHERE id = $2
+  AND subject_urn = $3
+  AND remote_session_client_id = $4
   AND deleted IS FALSE
-  AND (last_used_at IS NULL OR last_used_at <= $4::timestamptz)
+  AND (last_used_at IS NULL OR last_used_at <= $5::timestamptz)
 `
 
 type TouchRemoteSessionLastUsedParams struct {
 	NowTs                 pgtype.Timestamptz
+	ID                    uuid.UUID
 	SubjectUrn            urn.SessionSubject
 	RemoteSessionClientID uuid.UUID
 	UsedCutoff            pgtype.Timestamptz
@@ -8628,12 +9122,13 @@ type TouchRemoteSessionLastUsedParams struct {
 // Coalesced by the cutoff for the same reason as the user_sessions stamp: this
 // runs whenever a brokered call resolves a token, so most executions must match
 // no rows.
-// Scoped by the (subject_urn, remote_session_client_id) binding rather than a
+// Scoped by the exact row and (subject_urn, remote_session_client_id), rather than a
 // project_id, which this table does not carry; that pair is the table's
 // uniqueness key and the client is itself tenant-owned.
 func (q *Queries) TouchRemoteSessionLastUsed(ctx context.Context, arg TouchRemoteSessionLastUsedParams) error {
 	_, err := q.db.Exec(ctx, touchRemoteSessionLastUsed,
 		arg.NowTs,
+		arg.ID,
 		arg.SubjectUrn,
 		arg.RemoteSessionClientID,
 		arg.UsedCutoff,
@@ -10276,6 +10771,7 @@ VALUES (
 )
 ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
 DO UPDATE SET
+    grant_generation = remote_sessions.grant_generation + 1,
     access_token_encrypted = EXCLUDED.access_token_encrypted,
     access_expires_at = EXCLUDED.access_expires_at,
     refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
@@ -10315,10 +10811,12 @@ type UpsertRemoteSessionParams struct {
 	Enrichment             []byte
 }
 
-// Used by /mcp/remote_login_callback to materialise (or refresh) the
+// Used by /mcp/remote_login_callback to materialise a fresh authorization for the
 // remote_session for a (subject, client) pair. Conflict target matches the
 // partial unique index on (subject_urn, remote_session_client_id) WHERE
-// deleted IS FALSE; on conflict we overwrite every token field. A
+// deleted IS FALSE; on conflict advance the grant generation and overwrite tokens.
+// Attachments remain pinned to the previous grant. Token refresh uses
+// UpdateRemoteSessionTokensIfUnchanged and never advances this generation. A
 // soft-deleted row falls outside the partial index, so a re-auth after
 // revocation inserts a fresh active row alongside the tombstone.
 func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessionParams) (RemoteSession, error) {

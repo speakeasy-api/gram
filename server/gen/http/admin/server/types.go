@@ -86,8 +86,12 @@ type ExtendTrialRequestBody struct {
 // CreateOrganizationRequestBody is the type of the "admin" service
 // "createOrganization" endpoint HTTP request body.
 type CreateOrganizationRequestBody struct {
-	// Display name for the new organization.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes
+	// the name and verified email domain.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// The operator confirms that domain ownership was established outside this
+	// form.
+	OwnershipConfirmed *bool `form:"ownership_confirmed,omitempty" json:"ownership_confirmed,omitempty" xml:"ownership_confirmed,omitempty"`
 }
 
 // RearmTrialRequestBody is the type of the "admin" service "rearmTrial"
@@ -1491,6 +1495,22 @@ type GetMeterUsageResponseBody struct {
 	// Retrieval timestamp, not an ingestion watermark
 	QueriedAt         string `form:"queried_at" json:"queried_at" xml:"queried_at"`
 	MeasurementMethod string `form:"measurement_method" json:"measurement_method" xml:"measurement_method"`
+}
+
+// GetSpendBreakdownResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body.
+type GetSpendBreakdownResponseBody struct {
+	Window *MeterUsageWindowResponseBody `form:"window" json:"window" xml:"window"`
+	// Trailing twelve billing-cycle date windows
+	BillingCycles []*MeterUsageWindowResponseBody `form:"billing_cycles" json:"billing_cycles" xml:"billing_cycles"`
+	Currency      string                          `form:"currency" json:"currency" xml:"currency"`
+	PricingBasis  string                          `form:"pricing_basis" json:"pricing_basis" xml:"pricing_basis"`
+	// Retrieval timestamp used to distinguish current and future buckets
+	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
+	// Exact estimated total at current PAYG list prices
+	TotalCostUsd string `form:"total_cost_usd" json:"total_cost_usd" xml:"total_cost_usd"`
+	// The three metered products in stable display order
+	Products []*SpendProductResponseBody `form:"products" json:"products" xml:"products"`
 }
 
 // GetSupportMatrixResponseBody is the type of the "admin" service
@@ -11170,6 +11190,207 @@ type GetMeterUsageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetSpendBreakdownUnavailableResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "unavailable" error.
+type GetSpendBreakdownUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownUnauthorizedResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "unauthorized" error.
+type GetSpendBreakdownUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownForbiddenResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "forbidden" error.
+type GetSpendBreakdownForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownBadRequestResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "bad_request" error.
+type GetSpendBreakdownBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownNotFoundResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "not_found" error.
+type GetSpendBreakdownNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownConflictResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "conflict" error.
+type GetSpendBreakdownConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownUnsupportedMediaResponseBody is the type of the "admin"
+// service "getSpendBreakdown" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetSpendBreakdownUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownInvalidResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "invalid" error.
+type GetSpendBreakdownInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownInvariantViolationResponseBody is the type of the "admin"
+// service "getSpendBreakdown" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetSpendBreakdownInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownUnexpectedResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "unexpected" error.
+type GetSpendBreakdownUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSpendBreakdownGatewayErrorResponseBody is the type of the "admin" service
+// "getSpendBreakdown" endpoint HTTP response body for the "gateway_error"
+// error.
+type GetSpendBreakdownGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetSupportMatrixUnauthorizedResponseBody is the type of the "admin" service
 // "getSupportMatrix" endpoint HTTP response body for the "unauthorized" error.
 type GetSupportMatrixUnauthorizedResponseBody struct {
@@ -11877,6 +12098,35 @@ type AdminMeterUsageBucketResponseBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Exact integer ordinary usage quantity as a decimal string
 	Total string `form:"total" json:"total" xml:"total"`
+}
+
+// SpendProductResponseBody is used to define fields on response body types.
+type SpendProductResponseBody struct {
+	ID    string `form:"id" json:"id" xml:"id"`
+	Label string `form:"label" json:"label" xml:"label"`
+	Unit  string `form:"unit" json:"unit" xml:"unit"`
+	// Exact integer ordinary usage quantity as a decimal string
+	Quantity string `form:"quantity" json:"quantity" xml:"quantity"`
+	// Exact integer quantity to which rate_usd applies
+	RateQuantity string `form:"rate_quantity" json:"rate_quantity" xml:"rate_quantity"`
+	// Exact current PAYG USD list price
+	RateUsd string `form:"rate_usd" json:"rate_usd" xml:"rate_usd"`
+	// Exact estimated product cost at current PAYG list prices
+	CostUsd string `form:"cost_usd" json:"cost_usd" xml:"cost_usd"`
+	// Dense UTC daily product buckets, including in-progress and future days
+	Buckets []*SpendBucketResponseBody `form:"buckets" json:"buckets" xml:"buckets"`
+}
+
+// SpendBucketResponseBody is used to define fields on response body types.
+type SpendBucketResponseBody struct {
+	// Inclusive bucket boundary
+	From string `form:"from" json:"from" xml:"from"`
+	// Exclusive bucket boundary
+	To string `form:"to" json:"to" xml:"to"`
+	// Exact integer ordinary usage quantity as a decimal string
+	Quantity string `form:"quantity" json:"quantity" xml:"quantity"`
+	// Exact estimated cost at current PAYG list prices
+	CostUsd string `form:"cost_usd" json:"cost_usd" xml:"cost_usd"`
 }
 
 // SupportMethodResponseBody is used to define fields on response body types.
@@ -13050,6 +13300,45 @@ func NewGetMeterUsageResponseBody(res *admin.AdminMeterUsageResponse) *GetMeterU
 		}
 	} else {
 		body.Buckets = []*AdminMeterUsageBucketResponseBody{}
+	}
+	return body
+}
+
+// NewGetSpendBreakdownResponseBody builds the HTTP response body from the
+// result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownResponseBody(res *admin.AdminSpendBreakdownResponse) *GetSpendBreakdownResponseBody {
+	body := &GetSpendBreakdownResponseBody{
+		Currency:     res.Currency,
+		PricingBasis: res.PricingBasis,
+		QueriedAt:    res.QueriedAt,
+		TotalCostUsd: res.TotalCostUsd,
+	}
+	if res.Window != nil {
+		body.Window = marshalAdminMeterUsageWindowToMeterUsageWindowResponseBody(res.Window)
+	}
+	if res.BillingCycles != nil {
+		body.BillingCycles = make([]*MeterUsageWindowResponseBody, len(res.BillingCycles))
+		for i, val := range res.BillingCycles {
+			if val == nil {
+				body.BillingCycles[i] = nil
+				continue
+			}
+			body.BillingCycles[i] = marshalAdminMeterUsageWindowToMeterUsageWindowResponseBody(val)
+		}
+	} else {
+		body.BillingCycles = []*MeterUsageWindowResponseBody{}
+	}
+	if res.Products != nil {
+		body.Products = make([]*SpendProductResponseBody, len(res.Products))
+		for i, val := range res.Products {
+			if val == nil {
+				body.Products[i] = nil
+				continue
+			}
+			body.Products[i] = marshalAdminSpendProductToSpendProductResponseBody(val)
+		}
+	} else {
+		body.Products = []*SpendProductResponseBody{}
 	}
 	return body
 }
@@ -20710,6 +20999,162 @@ func NewGetMeterUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetMeterUs
 	return body
 }
 
+// NewGetSpendBreakdownUnavailableResponseBody builds the HTTP response body
+// from the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownUnavailableResponseBody(res *goa.ServiceError) *GetSpendBreakdownUnavailableResponseBody {
+	body := &GetSpendBreakdownUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownUnauthorizedResponseBody(res *goa.ServiceError) *GetSpendBreakdownUnauthorizedResponseBody {
+	body := &GetSpendBreakdownUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownForbiddenResponseBody builds the HTTP response body from
+// the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownForbiddenResponseBody(res *goa.ServiceError) *GetSpendBreakdownForbiddenResponseBody {
+	body := &GetSpendBreakdownForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownBadRequestResponseBody builds the HTTP response body
+// from the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownBadRequestResponseBody(res *goa.ServiceError) *GetSpendBreakdownBadRequestResponseBody {
+	body := &GetSpendBreakdownBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownNotFoundResponseBody builds the HTTP response body from
+// the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownNotFoundResponseBody(res *goa.ServiceError) *GetSpendBreakdownNotFoundResponseBody {
+	body := &GetSpendBreakdownNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownConflictResponseBody builds the HTTP response body from
+// the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownConflictResponseBody(res *goa.ServiceError) *GetSpendBreakdownConflictResponseBody {
+	body := &GetSpendBreakdownConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getSpendBreakdown" endpoint of the "admin"
+// service.
+func NewGetSpendBreakdownUnsupportedMediaResponseBody(res *goa.ServiceError) *GetSpendBreakdownUnsupportedMediaResponseBody {
+	body := &GetSpendBreakdownUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownInvalidResponseBody builds the HTTP response body from
+// the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownInvalidResponseBody(res *goa.ServiceError) *GetSpendBreakdownInvalidResponseBody {
+	body := &GetSpendBreakdownInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getSpendBreakdown" endpoint of the "admin"
+// service.
+func NewGetSpendBreakdownInvariantViolationResponseBody(res *goa.ServiceError) *GetSpendBreakdownInvariantViolationResponseBody {
+	body := &GetSpendBreakdownInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownUnexpectedResponseBody(res *goa.ServiceError) *GetSpendBreakdownUnexpectedResponseBody {
+	body := &GetSpendBreakdownUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSpendBreakdownGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getSpendBreakdown" endpoint of the "admin" service.
+func NewGetSpendBreakdownGatewayErrorResponseBody(res *goa.ServiceError) *GetSpendBreakdownGatewayErrorResponseBody {
+	body := &GetSpendBreakdownGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetSupportMatrixUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "getSupportMatrix" endpoint of the "admin" service.
 func NewGetSupportMatrixUnauthorizedResponseBody(res *goa.ServiceError) *GetSupportMatrixUnauthorizedResponseBody {
@@ -21238,7 +21683,8 @@ func NewExtendTrialPayload(body *ExtendTrialRequestBody, adminSessionToken *stri
 // endpoint payload.
 func NewCreateOrganizationPayload(body *CreateOrganizationRequestBody, adminSessionToken *string) *admin.CreateOrganizationPayload {
 	v := &admin.CreateOrganizationPayload{
-		Name: *body.Name,
+		URL:                *body.URL,
+		OwnershipConfirmed: *body.OwnershipConfirmed,
 	}
 	v.AdminSessionToken = adminSessionToken
 
@@ -21699,6 +22145,18 @@ func NewGetMeterUsagePayload(organizationID string, family string, from *string,
 	return v
 }
 
+// NewGetSpendBreakdownPayload builds a admin service getSpendBreakdown
+// endpoint payload.
+func NewGetSpendBreakdownPayload(organizationID string, from *string, to *string, adminSessionToken *string) *admin.GetSpendBreakdownPayload {
+	v := &admin.GetSpendBreakdownPayload{}
+	v.OrganizationID = organizationID
+	v.From = from
+	v.To = to
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewGetSupportMatrixPayload builds a admin service getSupportMatrix endpoint
 // payload.
 func NewGetSupportMatrixPayload(adminSessionToken *string) *admin.GetSupportMatrixPayload {
@@ -21887,12 +22345,15 @@ func ValidateExtendTrialRequestBody(body *ExtendTrialRequestBody) (err error) {
 // ValidateCreateOrganizationRequestBody runs the validations defined on
 // CreateOrganizationRequestBody
 func ValidateCreateOrganizationRequestBody(body *CreateOrganizationRequestBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
 	}
-	if body.Name != nil {
-		if utf8.RuneCountInString(*body.Name) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+	if body.OwnershipConfirmed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ownership_confirmed", "body"))
+	}
+	if body.URL != nil {
+		if utf8.RuneCountInString(*body.URL) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.url", *body.URL, utf8.RuneCountInString(*body.URL), 1, true))
 		}
 	}
 	return

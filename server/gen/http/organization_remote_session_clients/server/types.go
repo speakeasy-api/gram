@@ -154,7 +154,7 @@ type GetClientResponseBody struct {
 	// hosts its OAuth client metadata document at this URL and uses it as the
 	// client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
-	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	// When the issuer's token endpoint last answered invalid_client for this
@@ -228,7 +228,7 @@ type CreateClientResponseBody struct {
 	// hosts its OAuth client metadata document at this URL and uses it as the
 	// client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
-	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	// When the issuer's token endpoint last answered invalid_client for this
@@ -278,7 +278,7 @@ type CreateCimdClientResponseBody struct {
 	// hosts its OAuth client metadata document at this URL and uses it as the
 	// client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
-	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	// When the issuer's token endpoint last answered invalid_client for this
@@ -328,7 +328,7 @@ type UpdateClientResponseBody struct {
 	// hosts its OAuth client metadata document at this URL and uses it as the
 	// client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
-	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	// When the issuer's token endpoint last answered invalid_client for this
@@ -378,7 +378,7 @@ type AttachClientKeySetResponseBody struct {
 	// hosts its OAuth client metadata document at this URL and uses it as the
 	// client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
-	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	// When the issuer's token endpoint last answered invalid_client for this
@@ -428,7 +428,7 @@ type DetachClientKeySetResponseBody struct {
 	// hosts its OAuth client metadata document at this URL and uses it as the
 	// client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
-	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	// When the issuer's token endpoint last answered invalid_client for this
@@ -478,7 +478,7 @@ type RotateClientResponseBody struct {
 	// hosts its OAuth client metadata document at this URL and uses it as the
 	// client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
-	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	// When the issuer's token endpoint last answered invalid_client for this
@@ -2857,7 +2857,7 @@ type RemoteSessionClientResponseBody struct {
 	// hosts its OAuth client metadata document at this URL and uses it as the
 	// client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
-	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	// When the issuer's token endpoint last answered invalid_client for this

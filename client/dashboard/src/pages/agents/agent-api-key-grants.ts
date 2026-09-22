@@ -25,10 +25,12 @@ export interface GrantNarrowing {
   resourceId?: string;
   /** Legacy editor state: ignored; candidate project restrictions are preserved. */
   projectId?: string;
-  tools?: string[];
   dispositions?: AgentPolicySelectorDisposition[];
   disposition?: AgentPolicySelectorDisposition;
+  /** Legacy single-tool selections remain valid. */
   tool?: string;
+  /** Undefined means any allowed tool; an empty list must not broaden access. */
+  tools?: string[];
 }
 
 export interface GrantSelection {
@@ -133,7 +135,7 @@ function expandRequestedGrants(
   if (
     tools?.length === 0 ||
     dispositions?.length === 0 ||
-    tools?.some((tool) => !tool)
+    tools?.some((tool) => !tool || tool === ANY_RESOURCE)
   ) {
     throw new Error(
       "Select at least one tool or disposition, or reset the permission.",

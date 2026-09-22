@@ -2376,6 +2376,21 @@ func marshalAgentDeviceAgentConfigurationToDeviceAgentConfigurationResponseBody(
 	return res
 }
 
+// marshalAgentAgentPollingPrincipalToAgentPollingPrincipalResponseBody builds
+// a value of type *AgentPollingPrincipalResponseBody from a value of type
+// *agent.AgentPollingPrincipal.
+func marshalAgentAgentPollingPrincipalToAgentPollingPrincipalResponseBody(v *agent.AgentPollingPrincipal) *AgentPollingPrincipalResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AgentPollingPrincipalResponseBody{
+		Urn:         v.Urn,
+		DisplayName: v.DisplayName,
+	}
+
+	return res
+}
+
 // marshalAgentSyncedAgentUserToSyncedAgentUserResponseBody builds a value of
 // type *SyncedAgentUserResponseBody from a value of type
 // *agent.SyncedAgentUser.

@@ -94,7 +94,7 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 		form.Set("client_id", auth.ClientID)
 	case TokenEndpointAuthMethodPrivateKeyJWT:
 		if auth.AssertionSigner == nil {
-			return nil, fmt.Errorf("private_key_jwt signing is unavailable")
+			return nil, &tokenEndpointSigningError{err: errTokenEndpointSigningUnavailable}
 		}
 		assertion, err := auth.AssertionSigner.SignClientAssertion(ctx, ClientAssertionRequest{
 			RemoteSessionClientID: auth.RemoteSessionClientID,
@@ -104,7 +104,7 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 			Audience:              auth.AssertionAudience,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("sign private_key_jwt client assertion: %w", err)
+			return nil, &tokenEndpointSigningError{err: fmt.Errorf("sign private_key_jwt client assertion: %w", err)}
 		}
 		form.Del("client_secret")
 		form.Set("client_id", auth.ClientID)
@@ -192,8 +192,15 @@ func (m *ChallengeManager) resolveUpstreamToken(
 	clientID uuid.UUID,
 	subject urn.SessionSubject,
 	resource string,
-) (UpstreamToken, error) {
-	var zero UpstreamToken
+) (resolvedUpstreamToken, error) {
+	var zero resolvedUpstreamToken
+
+	if _, attached, err := remoteSessionCallerPrincipal(ctx, subject); err != nil {
+		return zero, err
+	} else if attached {
+		// A client-only lookup cannot establish the requesting configuration.
+		return zero, nil
+	}
 
 	sess, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            subject,
@@ -206,6 +213,19 @@ func (m *ChallengeManager) resolveUpstreamToken(
 		return zero, fmt.Errorf("get active remote_session: %w", err)
 	}
 
+	resolved, err := m.resolveCredentialToken(ctx, sess, resource)
+	if err == nil && resolved.Token != "" {
+		m.touchResolvedCredential(ctx, sess)
+	}
+	return resolved, err
+}
+
+// resolveCredentialToken operates only on the selected credential source.
+// The authenticated caller in ctx is deliberately not rewritten to its owner.
+func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remotesessions_repo.RemoteSession, resource string) (resolvedUpstreamToken, error) {
+	var zero resolvedUpstreamToken
+	selectedID := sess.ID
+	clientID := sess.RemoteSessionClientID
 	// Rebinds sess to the row the token came from, so a refresh that backfilled
 	// a legacy NULL resource routes on this same request. resolvedFromUpdatedAt
 	// remains the original snapshot only when this resolution won the refresh.
@@ -229,20 +249,9 @@ func (m *ChallengeManager) resolveUpstreamToken(
 		return zero, nil
 	}
 
-	// Stamped only on the success path: a resolved token is one that is about
-	// to be spent on a proxied call, which is precisely what "used" means here.
-	// Best-effort — bookkeeping must not fail a call that has a valid token.
-	now := time.Now()
-	if err := remotesessions_repo.New(m.db).TouchRemoteSessionLastUsed(ctx, remotesessions_repo.TouchRemoteSessionLastUsedParams{
-		NowTs:                 pgtype.Timestamptz{Time: now, Valid: true, InfinityModifier: pgtype.Finite},
-		SubjectUrn:            subject,
-		RemoteSessionClientID: clientID,
-		UsedCutoff:            pgtype.Timestamptz{Time: now.Add(-remoteSessionLastUsedCutoff), Valid: true, InfinityModifier: pgtype.Finite},
-	}); err != nil {
-		m.logger.WarnContext(ctx, "failed to stamp remote session last_used_at",
-			attr.SlogRemoteSessionClientID(clientID.String()),
-			attr.SlogError(err),
-		)
+	if tok == "" || sess.ID != selectedID {
+		// A refresh race may observe a reconnect. Never adopt its new grant.
+		return zero, nil
 	}
 
 	return UpstreamToken{
@@ -257,7 +266,8 @@ func (m *ChallengeManager) resolveUpstreamToken(
 
 // ResolveAuthorization resolves exactly one remote-session issuer binding for a
 // project user-session issuer. It selects the client through the tenant-scoped
-// attachment, then reuses ResolveAccessToken's refresh and revocation behavior.
+// attachment, then selects the direct user credential or the agent's explicit
+// user-owned credential attachment, preserving shared refresh behavior.
 //
 // ErrNoRemoteSessionClientBinding means the reviewed issuer is not configured
 // for this user-session issuer. ErrNoValidToken means the binding exists but the
@@ -296,29 +306,18 @@ func (m *ChallengeManager) ResolveAuthorization(
 		return ResolvedAuthorization{}, ErrNoRemoteSessionClientBinding
 	}
 
-	token, err := m.ResolveAccessToken(ctx, clientID, subject, resource)
+	resolved, err := m.resolveCallerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, clientID, subject, resource)
 	if err != nil {
 		return ResolvedAuthorization{}, fmt.Errorf("resolve remote-session access token: %w", err)
 	}
-	if token == "" {
+	if resolved.Token == "" {
 		return ResolvedAuthorization{}, ErrNoValidToken
-	}
-
-	session, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
-		SubjectUrn:            subject,
-		RemoteSessionClientID: clientID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ResolvedAuthorization{}, ErrNoValidToken
-	}
-	if err != nil {
-		return ResolvedAuthorization{}, fmt.Errorf("load resolved remote_session: %w", err)
 	}
 
 	return ResolvedAuthorization{
-		AccessToken:            token,
-		RemoteSessionID:        session.ID,
-		RemoteSessionUpdatedAt: session.UpdatedAt.Time,
+		AccessToken:            resolved.Token,
+		RemoteSessionID:        resolved.RemoteSessionID,
+		RemoteSessionUpdatedAt: resolved.RemoteSessionUpdatedAt,
 		RemoteSessionClientID:  clientID,
 		RemoteSessionIssuerID:  remoteSessionIssuerID,
 	}, nil
@@ -391,6 +390,15 @@ func (m *ChallengeManager) ResolveAccessTokens(
 	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, subject, false)
 }
 
+type availabilityCheckKey struct{}
+
+// CheckAccessTokens validates connection availability without recording use.
+// Refresh remains allowed, but consent is not a proxied upstream tool call.
+func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, projectID uuid.UUID, organizationID string, issuerID uuid.UUID, subject urn.SessionSubject) error {
+	_, err := m.ResolveAccessTokens(context.WithValue(ctx, availabilityCheckKey{}, true), projectID, organizationID, issuerID, subject)
+	return err
+}
+
 // ResolveAvailableAccessTokens is the partial-resolution variant the meta MCP
 // serving path calls. Per-client resolution is identical to
 // ResolveAccessTokens, but a bound client without a usable token is skipped
@@ -448,7 +456,7 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 		// resource.
 		// No endpoint-level fallback: a refresh of a legacy NULL-resource row
 		// derives the client's own resource in RefreshNow.
-		resolved, err := m.resolveUpstreamToken(ctx, c.ClientID, subject, "")
+		resolved, err := m.resolveCallerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, c.ClientID, subject, "")
 		if err != nil {
 			return nil, fmt.Errorf("resolve access token: %w", err)
 		}
@@ -894,4 +902,30 @@ func (s *RefreshService) postRefreshGrant(
 		return zero, newTokenRefreshError("the identity provider returned no access token", nil)
 	}
 	return tok, nil
+}
+
+// resolvedUpstreamToken carries the same grant snapshot through caller resolution.
+type resolvedUpstreamToken = UpstreamToken
+
+func (m *ChallengeManager) touchResolvedCredential(ctx context.Context, sess remotesessions_repo.RemoteSession) {
+	if ctx.Value(availabilityCheckKey{}) == true {
+		return
+	}
+	clientID := sess.RemoteSessionClientID
+	// Stamped only on the success path: a resolved token is one that is about
+	// to be spent on a proxied call, which is precisely what "used" means here.
+	// Best-effort — bookkeeping must not fail a call that has a valid token.
+	now := time.Now()
+	if err := remotesessions_repo.New(m.db).TouchRemoteSessionLastUsed(ctx, remotesessions_repo.TouchRemoteSessionLastUsedParams{
+		ID:                    sess.ID,
+		NowTs:                 pgtype.Timestamptz{Time: now, Valid: true, InfinityModifier: pgtype.Finite},
+		SubjectUrn:            sess.SubjectUrn,
+		RemoteSessionClientID: clientID,
+		UsedCutoff:            pgtype.Timestamptz{Time: now.Add(-remoteSessionLastUsedCutoff), Valid: true, InfinityModifier: pgtype.Finite},
+	}); err != nil {
+		m.logger.WarnContext(ctx, "failed to stamp remote session last_used_at",
+			attr.SlogRemoteSessionClientID(clientID.String()),
+			attr.SlogError(err),
+		)
+	}
 }

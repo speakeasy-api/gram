@@ -29,9 +29,10 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssue
 		organizationID = row.OrganizationID.String
 	}
 
-	var issuedAt string
+	var issuedAt *string
 	if row.ClientIDIssuedAt.Valid {
-		issuedAt = row.ClientIDIssuedAt.Time.Format(time.RFC3339)
+		v := row.ClientIDIssuedAt.Time.Format(time.RFC3339)
+		issuedAt = &v
 	}
 	var expiresAt *string
 	if row.ClientSecretExpiresAt.Valid {
@@ -84,9 +85,10 @@ func BuildGlobalRemoteSessionClientView(row repo.RemoteSessionClient) *types.Rem
 		organizationID = row.OrganizationID.String
 	}
 
-	var issuedAt string
+	var issuedAt *string
 	if row.ClientIDIssuedAt.Valid {
-		issuedAt = row.ClientIDIssuedAt.Time.Format(time.RFC3339)
+		v := row.ClientIDIssuedAt.Time.Format(time.RFC3339)
+		issuedAt = &v
 	}
 	var expiresAt *string
 	if row.ClientSecretExpiresAt.Valid {

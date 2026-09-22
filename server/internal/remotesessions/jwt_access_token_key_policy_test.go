@@ -56,14 +56,14 @@ func mintRSAAccessToken(t *testing.T, key *rsa.PrivateKey, alg jose.SignatureAlg
 	return raw
 }
 
-func TestAccessTokenKeyPolicyDoesNotChangeIDTokenVerification(t *testing.T) {
+func TestWeakRSARejectedForIDAndAccessTokens(t *testing.T) {
 	t.Parallel()
 	key, keys, policy := newRSAKeyPolicyFixture(t, 1024)
 	_, err := NewIDTokenVerifier(keys).Verify(t.Context(), mintRSAAccessToken(t, key, jose.RS256, "JWT"), IDTokenExpectation{
 		issuer: rsaKeyPolicyIssuer, clientID: rsaKeyPolicyClientID, jwksURI: rsaKeyPolicyJWKSURI, fetchScope: "example-issuer",
 		signingAlgs: []string{"RS256"}, nonce: "", subject: "",
 	})
-	require.NoError(t, err, "the access-token key policy must not change established ID-token verification")
+	require.ErrorContains(t, err, "rsa verification key is smaller than 2048 bits")
 
 	enricher := NewSessionEnricher(testenv.NewLogger(t), nil, policy, keys, nil, nil, nil)
 	result := enricher.jwtAccessToken(t.Context(), enrichmentTarget{
