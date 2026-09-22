@@ -744,7 +744,7 @@ export function MatrixExplorer({
                   <TableCell
                     data-vendor={headerIdentity(axes.rows, row).vendor}
                     data-family={headerIdentity(axes.rows, row).family}
-                    className={`sticky left-0 z-10 border-r p-0 whitespace-normal ${axes.rows === "platforms" ? "support-platform-header" : "bg-muted"}`}
+                    className={`sticky left-0 z-10 border-r p-0 whitespace-normal ${axes.rows === "platforms" ? "support-platform-header" : "bg-inherit"}`}
                   >
                     <button
                       type="button"
