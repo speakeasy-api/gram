@@ -2,9 +2,11 @@ package enforcereply
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +25,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/redisinbox"
 	"github.com/speakeasy-api/gram/server/internal/requestreply"
 )
@@ -36,9 +39,17 @@ const (
 	// below the LLMEnforcer subscription's 30 s ack deadline.
 	DefaultLLMAnalyzerWaitTimeout = 20 * time.Second
 
-	// MaxContentBytes bounds enforcement scan cost below Pub/Sub's transport
-	// limit. It applies independently to Content and to the LLM lane's Body.
+	// DefaultMaxContentBytes is the enforcement dispatch limit when callers do
+	// not provide one.
+	DefaultMaxContentBytes = 50 * 1024
+
+	// MaxContentBytes is the hard ceiling below Pub/Sub's transport limit.
+	// It applies independently to Content and to the LLM lane's Body.
 	MaxContentBytes = 1 * 1024 * 1024
+
+	// contentLimitDistinctID keys the global content limit flag; the flag
+	// carries no targeting so any stable id resolves the same payload.
+	contentLimitDistinctID = "gram-server"
 )
 
 // EnforcementLane is the non-generic request seam used by enforcement fan-out.
@@ -71,6 +82,10 @@ type DispatcherConfig struct {
 	// LaneWaitTimeout overrides WaitTimeout per scanner. Scanners without an
 	// entry, or with a non-positive entry, use WaitTimeout.
 	LaneWaitTimeout map[riskv1.EnforcementScanner]time.Duration
+
+	// Flags resolves the global content limit override. Nil applies
+	// DefaultMaxContentBytes.
+	Flags feature.Provider
 }
 
 // ToolCall is one tool invocation carried to the LLM analyzer lane.
@@ -136,6 +151,7 @@ type Dispatcher struct {
 	llm         EnforcementLane
 	close       func(context.Context) error
 	waitTimeout time.Duration
+	flags       feature.Provider
 	// laneWaitTimeout overrides waitTimeout for the scanners it names.
 	laneWaitTimeout map[riskv1.EnforcementScanner]time.Duration
 	logger          *slog.Logger
@@ -175,6 +191,7 @@ func NewDispatcher(ctx context.Context, logger *slog.Logger, meterProvider metri
 	presidioReq := redisinbox.NewRequestBroker(inbox, presidioPub)
 	llmReq := redisinbox.NewRequestBroker(inbox, llmPub)
 	return &Dispatcher{
+		flags:    cfg.Flags,
 		gitleaks: &typedEnforcementLane[*riskv1.GitleaksEnforcement]{broker: gitleaksReq},
 		presidio: &typedEnforcementLane[*riskv1.PresidioEnforcement]{broker: presidioReq},
 		llm:      &typedEnforcementLane[*riskv1.LLMEnforcement]{broker: llmReq},
@@ -220,13 +237,33 @@ func NewDispatcher(ctx context.Context, logger *slog.Logger, meterProvider metri
 func newTruncationCounter(meterProvider metric.MeterProvider) metric.Int64Counter {
 	truncations, _ := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/risk/enforcereply").Int64Counter(
 		"risk.enforcement.truncations",
-		metric.WithDescription("Number of enforcement requests truncated to the 1 MiB limit before publication"),
+		metric.WithDescription("Number of enforcement requests truncated to the configured byte limit before publication"),
 		metric.WithUnit("{message}"),
 	)
 	return truncations
 }
 
 // Dispatch fans content out to distinct lanes and folds replies by lane.
+// contentLimit reads the global truncation limit from the flag payload,
+// falling back to DefaultMaxContentBytes when the flag carries none.
+func (d *Dispatcher) contentLimit(ctx context.Context) int {
+	if d.flags == nil {
+		return DefaultMaxContentBytes
+	}
+	payload, err := d.flags.FlagPayload(ctx, feature.FlagRiskEnforcementMaxContentBytes, contentLimitDistinctID, nil)
+	if err != nil {
+		d.logger.WarnContext(ctx, "resolve enforcement content limit", attr.SlogError(err))
+		return DefaultMaxContentBytes
+	}
+	var config struct {
+		MaxContentBytes int `json:"max_content_bytes"`
+	}
+	if payload == nil || json.Unmarshal(payload, &config) != nil || config.MaxContentBytes <= 0 {
+		return DefaultMaxContentBytes
+	}
+	return min(config.MaxContentBytes, MaxContentBytes)
+}
+
 func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Outcome, error) {
 	if request.OrganizationID == "" {
 		return Outcome{}, errors.New("enforcement organization id is required")
@@ -237,16 +274,22 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	if len(request.Lanes) == 0 {
 		return Outcome{ByLane: map[Lane]*riskv1.EnforcementReply{}, Failed: map[Lane]error{}, Complete: true, Deadline: false, Truncated: false}, nil
 	}
+	limit := d.contentLimit(ctx)
 	truncated := false
-	if originalSize := len(request.Content); originalSize > MaxContentBytes {
-		request.Content = truncateAtRuneBoundary(request.Content, MaxContentBytes)
+	truncate := func(field string, value string) string {
+		if len(value) <= limit {
+			return value
+		}
 		truncated = true
-		d.logger.WarnContext(ctx, "truncating oversized enforcement content", attr.SlogRiskScanTextSize(originalSize))
+		d.logger.WarnContext(ctx, "truncating oversized enforcement "+field, attr.SlogRiskScanTextSize(len(value)), attr.SlogRiskScanLimitBytes(limit))
+		return truncateAtRuneBoundary(value, limit)
 	}
-	if originalSize := len(request.Body); originalSize > MaxContentBytes {
-		request.Body = truncateAtRuneBoundary(request.Body, MaxContentBytes)
-		truncated = true
-		d.logger.WarnContext(ctx, "truncating oversized enforcement body", attr.SlogRiskScanTextSize(originalSize))
+	request.Content = truncate("content", request.Content)
+	request.Body = truncate("body", request.Body)
+	// Copy before truncating so the caller's tool calls stay intact.
+	request.ToolCalls = slices.Clone(request.ToolCalls)
+	for i := range request.ToolCalls {
+		request.ToolCalls[i].Arguments = truncate("tool call arguments", request.ToolCalls[i].Arguments)
 	}
 	if truncated && d.truncations != nil {
 		d.truncations.Add(ctx, 1)

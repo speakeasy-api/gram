@@ -561,6 +561,7 @@ const (
 	RiskScanMaxAttemptsKey         = attribute.Key("gram.risk.scan.max_attempts")
 	RiskScanBatchIndexKey          = attribute.Key("gram.risk.scan.batch_index")
 	RiskScanTextSizeKey            = attribute.Key("gram.risk.scan.text_size_bytes")
+	RiskScanLimitBytesKey          = attribute.Key("gram.risk.scan.limit_bytes")
 	RiskScanRequestIDKey           = attribute.Key("gram.risk.scan.request_id")
 	RiskScanEngineKey              = attribute.Key("gram.risk.scan.engine")
 	RiskScanGateReasonKey          = attribute.Key("gram.risk.scan.gate_reason")
@@ -2376,6 +2377,10 @@ func SlogRiskScanBatchIndex(v int) slog.Attr      { return slog.Int(string(RiskS
 
 func RiskScanTextSize(v int) attribute.KeyValue { return RiskScanTextSizeKey.Int(v) }
 func SlogRiskScanTextSize(v int) slog.Attr      { return slog.Int(string(RiskScanTextSizeKey), v) }
+
+func SlogRiskScanLimitBytes(v int) slog.Attr {
+	return slog.Int(string(RiskScanLimitBytesKey), v)
+}
 
 func RiskEnforcementTruncated(v bool) attribute.KeyValue {
 	return RiskEnforcementTruncatedKey.Bool(v)

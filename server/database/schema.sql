@@ -3256,6 +3256,27 @@ CREATE TABLE IF NOT EXISTS trusted_issuer_sessions (
   offline_access_refused_at timestamptz,
   -- Non-secret configuration fingerprint used to invalidate refusal suppression.
   offline_access_request_config_hash TEXT,
+  -- Compare-and-swap version for credential updates.
+  -- Nullable during expansion; readers treat legacy NULL as generation 1.
+  credential_generation bigint DEFAULT 1,
+  -- Refresh attempt ownership, not a lease.
+  -- Claims never expire: an ambiguous rotating POST cannot be replayed.
+  refresh_claim_id uuid,
+  -- Verified upstream OIDC sub, distinct from the canonical Gram subject.
+  upstream_subject_encrypted TEXT,
+  -- Original login nonce for the retained refresh family; refreshed ID token nonce, if present, must match (OIDC Core §12.2).
+  nonce_encrypted TEXT,
+  -- Credential binding fingerprint, including relevant registration/signing changes; distinct from the refusal hash.
+  credential_config_hash TEXT,
+  -- Last per-human delegation observation and its timestamp, not live provider health.
+  observation_status TEXT,
+  observed_at timestamptz,
+  -- Refresh credential acquisition at login, not subsequent renewal.
+  credential_obtained_at timestamptz,
+  -- Last successful refresh, even without a replacement ID token.
+  last_refresh_succeeded_at timestamptz,
+  -- Local retry backoff deadline, not token or claim expiry.
+  retry_after timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3275,6 +3296,18 @@ CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_organization_id_idx
 ON trusted_issuer_sessions (organization_id);
 CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_project_id_idx
 ON trusted_issuer_sessions (project_id);
+
+-- Independent bounded cleanup scans avoid an expiration/lifecycle OR over all rows.
+CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_assertion_cleanup_idx
+ON trusted_issuer_sessions (identity_assertion_expires_at NULLS FIRST, id)
+WHERE identity_assertion_encrypted IS NOT NULL;
+CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_refresh_cleanup_idx
+ON trusted_issuer_sessions (refresh_expires_at, id)
+WHERE refresh_token_encrypted IS NOT NULL;
+CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_metadata_cleanup_idx
+ON trusted_issuer_sessions (id)
+WHERE identity_assertion_encrypted IS NULL AND refresh_token_encrypted IS NULL
+  AND (upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL);
 
 -- One live credential per client and human, independent of downstream resources.
 CREATE UNIQUE INDEX IF NOT EXISTS trusted_issuer_sessions_client_subject_key
