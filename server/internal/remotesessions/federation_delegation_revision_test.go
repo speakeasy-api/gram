@@ -29,7 +29,7 @@ func TestDelegationLoginExplicitExpiredRefreshIsNotDurable(t *testing.T) {
 	s, store, p, b, _ := newDelegationUnitFixture(t)
 	identity := delegationLogin(p, s.now(), "valid-id", "expired-refresh", time.Hour)
 	expiry := s.now()
-	identity.credentials.refreshExpiresAt = &expiry
+	identity.credentials.value.refreshExpiresAt = &expiry
 	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, identity, true))
 	credential, err := store.load(t.Context(), b)
 	require.NoError(t, err)

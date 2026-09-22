@@ -34,7 +34,7 @@ func TestDelegationRefreshNormalizesProviderLifetime(t *testing.T) {
 					login := delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second)
 					if known {
 						original = s.now().Add(2 * time.Hour)
-						login.credentials.refreshExpiresAt = &original
+						login.credentials.value.refreshExpiresAt = &original
 					}
 					require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, login, true))
 					want := original

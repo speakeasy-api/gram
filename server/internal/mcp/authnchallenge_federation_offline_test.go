@@ -107,13 +107,8 @@ func TestFederatedOptionalOfflineConsent(t *testing.T) {
 				t.Fatal("credentials cached in state")
 				return nil
 			}))
-			var secondCookie *http.Cookie
-			for _, c := range first.Result().Cookies() {
-				if c.MaxAge >= 0 {
-					secondCookie = c
-				}
-			}
-			require.NotNil(t, secondCookie)
+			// Optional consent preserves the existing browser proof.
+			secondCookie := cookie
 			q := url.Values{"state": {state.ID}, "iss": {f.provider.URL}}
 			switch scenario {
 			case "cancel":

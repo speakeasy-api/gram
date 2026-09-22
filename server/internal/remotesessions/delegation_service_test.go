@@ -159,7 +159,7 @@ func newDelegationUnitFixture(t *testing.T) (*DelegationService, *delegationMemo
 	return service, store, p, b, allow
 }
 func delegationLogin(p *FederatedProvider, now time.Time, id, refresh string, ttl time.Duration) *FederatedIdentity {
-	return &FederatedIdentity{Issuer: p.issuer.Issuer, Subject: "secret-subject", Nonce: "secret-nonce", ExpiresAt: now.Add(ttl), credentials: &EphemeralFederatedCredentials{idToken: id, refreshToken: refresh, receivedAt: now}}
+	return &FederatedIdentity{Issuer: p.issuer.Issuer, Subject: "secret-subject", Nonce: "secret-nonce", ExpiresAt: now.Add(ttl), credentials: &federatedCredentialState{value: EphemeralFederatedCredentials{idToken: id, refreshToken: refresh, receivedAt: now}}}
 }
 func delegationRenewal(p *FederatedProvider, now time.Time, id, refresh string) *FederatedRefreshResult {
 	r := &FederatedRefreshResult{Credentials: FederatedRefreshCredentials{EphemeralFederatedCredentials: EphemeralFederatedCredentials{idToken: id, refreshToken: refresh, receivedAt: now}}}
@@ -453,7 +453,8 @@ func TestDelegationServiceEncryptedRetentionAndRedaction(t *testing.T) {
 	s, store, p, b, allow := newDelegationUnitFixture(t)
 	identity := delegationLogin(p, s.now(), "secret-id", "secret-refresh", time.Hour)
 	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, identity, true))
-	require.Nil(t, identity.credentials)
+	require.NotNil(t, identity.credentials)
+	require.Equal(t, EphemeralFederatedCredentials{}, identity.credentials.value)
 	c, err := store.load(t.Context(), b)
 	require.NoError(t, err)
 	for _, pair := range []struct{ encrypted, plain string }{{c.assertion, "secret-id"}, {c.refresh, "secret-refresh"}, {c.subject, "secret-subject"}, {c.nonce, "secret-nonce"}} {

@@ -97,6 +97,7 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 			action := func() (*httptest.ResponseRecorder, error) {
 				req := httptest.NewRequest(http.MethodPost, "/mcp/"+f.toolsetSlug+"/connect/remote-session", strings.NewReader(form.Encode())).WithContext(ctx)
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				req.AddCookie(cookie)
 				response := httptest.NewRecorder()
 				err := f.ti.service.ServeConsentAction(response, req, endpoint)
 				if err != nil {
@@ -123,6 +124,9 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 			_, err = action()
 			require.Error(t, err, "retry POST consumes old consent state")
 			bootstrap := httptest.NewRequest(http.MethodGet, actionResponse.Header().Get("Location"), nil).WithContext(ctx)
+			retryCookies := actionResponse.Result().Cookies()
+			require.Len(t, retryCookies, 1)
+			bootstrap.AddCookie(retryCookies[0])
 			begin := httptest.NewRecorder()
 			require.NoError(t, f.ti.service.HandleIDPCallback(begin, bootstrap))
 			target, err := url.Parse(begin.Header().Get("Location"))
@@ -147,7 +151,7 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 				require.NoError(t, q.SetOrganizationUserEmailFixture(ctx, usersrepo.SetOrganizationUserEmailFixtureParams{Email: "original-human-renamed@example.test", UserID: mockidp.MockUserID, OrganizationID: f.organizationID}))
 			}
 			f.provider.issueCode(t, "renewed", federationToken{nonce: target.Query().Get("nonce"), challenge: target.Query().Get("code_challenge"), email: mockidp.MockUserEmail, issuer: f.provider.URL, secret: "selected-secret", verified: true})
-			renewedResponse, err := callback(url.Values{"state": {renewed.ID}, "code": {"renewed"}, "iss": {f.provider.URL}}, begin.Result().Cookies()[0])
+			renewedResponse, err := callback(url.Values{"state": {renewed.ID}, "code": {"renewed"}, "iss": {f.provider.URL}}, retryCookies[0])
 			if scenario == "account_switch" {
 				require.Len(t, handoffs, 1, "different provisioned human must be rejected before retention")
 				require.Len(t, lookups, 1, "different human cannot reset refusal")
@@ -164,13 +168,8 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 			require.NoError(t, err)
 			require.Contains(t, optional.Query().Get("scope"), "offline_access")
 			require.Equal(t, "consent", optional.Query().Get("prompt"))
-			var optionalCookie *http.Cookie
-			for _, c := range renewedResponse.Result().Cookies() {
-				if c.MaxAge >= 0 {
-					optionalCookie = c
-				}
-			}
-			require.NotNil(t, optionalCookie)
+			// Optional consent preserves the existing browser proof.
+			optionalCookie := retryCookies[0]
 			q := url.Values{"state": {optional.Query().Get("state")}, "iss": {f.provider.URL}}
 			if scenario == "cancel" {
 				q.Set("error", "access_denied")
@@ -191,6 +190,7 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 			require.Nil(t, completed.Federation)
 			require.True(t, completed.DelegationRetryUsed)
 			require.Equal(t, state.FederatedBinding, completed.FederatedBinding)
+			cookie = retryCookies[0]
 			form.Set("state", completed.ID)
 			form.Set("csrf_token", completed.CSRFToken)
 			_, err = action()

@@ -67,7 +67,7 @@ func TestDelegationRefreshLifetimeWithoutRotation(t *testing.T) {
 			s, store, p, b, allow := newDelegationUnitFixture(t)
 			original := s.now().Add(2 * time.Hour)
 			login := delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second)
-			login.credentials.refreshExpiresAt = &original
+			login.credentials.value.refreshExpiresAt = &original
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, login, true))
 			s.refreshIdentity = func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error) {
 				rotation := ""
