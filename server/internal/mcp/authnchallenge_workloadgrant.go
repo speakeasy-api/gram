@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -146,17 +147,18 @@ func workloadIdentityStoreLookup(db workloadidentity_repo.DBTX) workloadIdentity
 	}
 }
 
-// workloadGrantOutcome is how a refused grant answers on the wire.
-type workloadGrantOutcome int
+// workloadGrantOutcome is how a refused grant answers on the wire. A string
+// so it can be logged, or carried as a metric dimension, by value.
+type workloadGrantOutcome string
 
 const (
 	// workloadGrantRefused answers invalid_grant, identically for every
 	// issuer and reason.
-	workloadGrantRefused workloadGrantOutcome = iota
+	workloadGrantRefused workloadGrantOutcome = "refused"
 	// workloadGrantUnavailable answers 503: a stage reached no decision.
-	workloadGrantUnavailable
+	workloadGrantUnavailable workloadGrantOutcome = "unavailable"
 	// workloadGrantRateLimited answers 429 with the limiter's Retry-After.
-	workloadGrantRateLimited
+	workloadGrantRateLimited workloadGrantOutcome = "rate_limited"
 )
 
 // workloadGrantError is a stage's refusal of the grant. The reason is a
@@ -283,18 +285,21 @@ func admitWorkloadAssertion(
 }
 
 // workloadAssertionGrantAdvertised reports whether the endpoint's metadata
-// lists the grant, which it does only where the grant would be accepted. A
-// rollout state that cannot be read counts as off: the metadata is advisory,
-// and the token endpoint makes its own decision on every request.
-func (s *Service) workloadAssertionGrantAdvertised(ctx context.Context, endpoint *ResolvedMcpEndpoint) bool {
+// lists the grant: the deployment serves it, and the endpoint can carry the
+// agent session policy a workload session is minted with.
+//
+// Deliberately decided from the resolved endpoint alone. This runs on
+// `/.well-known` metadata, which every MCP client hits during discovery
+// without authenticating, so it reads no rollout state and makes no lookup of
+// its own. The organization's rollout is evaluated at the token endpoint,
+// which is where a grant is accepted or refused; metadata is advisory, and
+// clients cache it for their whole process lifetime anyway.
+func (s *Service) workloadAssertionGrantAdvertised(endpoint *ResolvedMcpEndpoint) bool {
 	if s.workloadGrant == nil {
 		return false
 	}
-	if _, ok := agentAuthorizationTarget(endpoint); !ok {
-		return false
-	}
-	rolloutEnabled, _, err := s.agentAuthorizationRollout(ctx, s.logger, endpoint)
-	return err == nil && rolloutEnabled
+	_, ok := agentAuthorizationTarget(endpoint)
+	return ok
 }
 
 // handleWorkloadAssertionGrant exchanges a workload's platform-issued
@@ -339,9 +344,9 @@ func (s *Service) handleWorkloadAssertionGrant(
 	resources := r.PostForm["resource"]
 	switch {
 	case assertion == "":
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "assertion is required")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "assertion is required")
 	case len(resources) == 0:
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "resource is required")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "resource is required")
 	}
 	canonicalResource, err := endpoint.RootURL(baseURL)
 	if err != nil {
@@ -459,13 +464,13 @@ func (s *Service) writeWorkloadGrantRefusal(ctx context.Context, w http.Response
 
 	switch refusal.outcome {
 	case workloadGrantRefused:
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "assertion is invalid")
 	case workloadGrantRateLimited:
 		w.Header().Set("Retry-After", retryAfterSeconds(refusal.retryAfter))
-		return writeTokenError(ctx, w, logger, http.StatusTooManyRequests, "temporarily_unavailable", "too many requests; retry later")
+		return writeTokenError(ctx, w, logger, http.StatusTooManyRequests, oautherr.CodeTemporarilyUnavailable, "too many requests; retry later")
 	case workloadGrantUnavailable:
 		w.Header().Set("Retry-After", retryAfterSeconds(refusal.retryAfter))
-		return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "the token endpoint is temporarily unavailable")
+		return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable, "the token endpoint is temporarily unavailable")
 	default:
 		return oops.E(oops.CodeUnexpected, err, "unknown workload grant outcome").LogError(ctx, logger)
 	}

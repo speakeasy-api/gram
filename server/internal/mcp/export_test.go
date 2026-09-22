@@ -14,10 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 )
 
-// WorkloadAssertionMaxLifetime is the lifetime ceiling AdmitWorkloadAssertion
-// applies, which a test's replay guard must cover.
-const WorkloadAssertionMaxLifetime = workloadAssertionMaxLifetime
-
 // ErrWorkloadIssuerUntrusted and ErrWorkloadNotAdmitted expose the workload
 // admission sentinels, so a test can tell which stage refused an assertion.
 var (

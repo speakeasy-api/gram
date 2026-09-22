@@ -489,7 +489,7 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
 		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
 	}
-	if !slices.Contains(grantTypes, oauthwire.GrantTypeJWTBearer) && s.workloadAssertionGrantAdvertised(ctx, endpoint) {
+	if !slices.Contains(grantTypes, oauthwire.GrantTypeJWTBearer) && s.workloadAssertionGrantAdvertised(endpoint) {
 		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
 	}
 	return writeJSONMetadata(ctx, w, r, s.logger, oauthAuthorizationServerMetadata{

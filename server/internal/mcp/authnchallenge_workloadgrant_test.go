@@ -433,9 +433,11 @@ func TestWorkloadAssertionGrant_ColdExchangeFitsTheClientTimeout(t *testing.T) {
 	require.Less(t, elapsed, 5*time.Second, "a cold exchange must leave headroom under a 10 s client timeout")
 }
 
-// The grant is advertised in the authorization server metadata only where it
-// would be accepted.
-func TestWorkloadAssertionGrant_AdvertisedOnlyWhenAccepted(t *testing.T) {
+// An endpoint whose deployment serves the grant advertises it. Metadata is
+// decided from the endpoint alone: it is discovery, hit unauthenticated by
+// every MCP client, so it reads no rollout state. The rollout is enforced at
+// the token endpoint, which is what decides whether an exchange succeeds.
+func TestWorkloadAssertionGrant_AdvertisedFromTheEndpointAlone(t *testing.T) {
 	t.Parallel()
 
 	f := newWorkloadGrantFixture(t)
@@ -450,8 +452,9 @@ func TestWorkloadAssertionGrant_AdvertisedOnlyWhenAccepted(t *testing.T) {
 	require.ElementsMatch(t, []any{"authorization_code", "refresh_token", workloadGrantJWTBearer}, advertised())
 
 	f.ti.features.SetFlag(feature.FlagAgentIdentityCredentials, f.fx.orgID, false)
-	require.ElementsMatch(t, []any{"authorization_code", "refresh_token"}, advertised(), "not advertised while the agent rollout is off")
+	require.ElementsMatch(t, []any{"authorization_code", "refresh_token", workloadGrantJWTBearer}, advertised(), "metadata does not read the rollout")
 
-	f.ti.features.SetFlag(feature.FlagAgentIdentityCredentials, f.fx.orgID, true)
-	require.ElementsMatch(t, []any{"authorization_code", "refresh_token", workloadGrantJWTBearer}, advertised(), "advertised again once the rollout is back on")
+	w := f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource)
+	requireWorkloadGrantRefused(t, w)
+	require.Empty(t, f.workloadSessions(t), "the token endpoint is what refuses while the rollout is off")
 }

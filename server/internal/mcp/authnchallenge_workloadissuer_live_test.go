@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
@@ -79,7 +80,9 @@ func newLiveWorkloadFixture(t *testing.T) liveWorkloadFixture {
 	)
 	require.NoError(t, err)
 
-	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "workload-live-replay")), assertioncore.ReplayHoldFor(mcp.WorkloadAssertionMaxLifetime))
+	// Any hold covering the grant's own lifetime ceiling satisfies the
+	// verifier; a day is well past it.
+	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "workload-live-replay")), assertioncore.ReplayHoldFor(24*time.Hour))
 	require.NoError(t, err)
 
 	verifier, err := workload.NewVerifier(keys, guard)
