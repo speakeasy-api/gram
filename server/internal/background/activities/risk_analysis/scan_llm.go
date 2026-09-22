@@ -82,8 +82,10 @@ func llmMessageSources(masks CategoryScopeMasks, i int, coveredSources []string)
 // llm_shadow_stream) the lane only compares, so the caller counts the
 // messages that were not acknowledged (failed) as shadow_publish_error and
 // keeps the legacy engines' results rather than hold enforcement behind the
-// LLM transport. The acknowledged messages are counted as published /
-// shadow_published either way, so a partial publish is not undercounted.
+// LLM transport, and the acknowledged messages are counted as
+// shadow_published so a partial publish is not undercounted. In the llm mode
+// published is only recorded once every message was acknowledged, since the
+// activity retry republishes the whole batch otherwise.
 func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, orgSlug string, coveredSources []string, masks CategoryScopeMasks, shadow bool) (failed int, err error) {
 	executionPath := llmAnalyzerStreamExecutionPath
 	outcome := llmPolicyEvaluationPublished
@@ -139,7 +141,11 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 		}.Build()))
 	}
 	acked, err := countPublishAcks(ctx, "publish llm analysis requests", publishResults)
-	if acked > 0 {
+	// The shadow lane keeps a partial batch, so its acknowledged messages are
+	// counted now. The enforcing lane fails the activity on any unacknowledged
+	// message and the retry republishes the whole batch, so counting a partial
+	// publish would count the acknowledged messages again on the retry.
+	if acked > 0 && (shadow || err == nil) {
 		a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), outcome, acked)
 	}
 	return len(publishResults) - acked, err

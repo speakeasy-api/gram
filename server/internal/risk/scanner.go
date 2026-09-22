@@ -1432,12 +1432,12 @@ func (s *Scanner) dispatchEnforcementLanes(ctx context.Context, request Realtime
 			incomplete.Store(true)
 		}
 		if llmRequested && plan.llmFailMode == failModeClosed {
-			// The enforcing LLM lane judged only the dispatcher's prefix. Its
-			// verdict on that prefix still applies (a hit still denies), but
+			// The enforcing LLM lane judged at most the dispatcher's prefix;
 			// the omitted tail was never scanned, so the scan is incomplete
-			// and the lane counts as degraded, failing open for the tail.
+			// whatever the lane replies. The degradation is counted below,
+			// once the lane's outcome is known, so a truncated request that
+			// also failed is counted once, under its failure.
 			incomplete.Store(true)
-			s.recordPubsubDegraded(ctx, llmLane, "truncated", nil, failModeOpen)
 		}
 		trace.SpanFromContext(ctx).SetAttributes(attr.RiskEnforcementTruncated(true))
 	}
@@ -1461,9 +1461,16 @@ func (s *Scanner) dispatchEnforcementLanes(ctx context.Context, request Realtime
 	}
 	if llmRequested {
 		converted, reason, laneErr := laneFindings(text, llmanalyzer.Source, llmLane, outcome)
-		if reason != "" {
+		switch {
+		case reason != "":
 			failLLM(reason, laneErr)
-		} else {
+		case outcome.Truncated && plan.llmFailMode == failModeClosed:
+			// The enforcing lane answered for the prefix only. Its verdict
+			// on that prefix still applies (a hit still denies), but the
+			// lane counts as degraded, failing open for the tail.
+			s.recordPubsubDegraded(ctx, llmLane, "truncated", nil, failModeOpen)
+			llm = converted
+		default:
 			llm = converted
 		}
 	}

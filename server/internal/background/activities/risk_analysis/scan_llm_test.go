@@ -541,3 +541,28 @@ func TestAnalyzeBatch_LLMAnalyzer_ShadowPartialPublishCountsBothOutcomes(t *test
 	assert.Equal(t, int64(1), llmPolicyEvaluations(t, reader, "shadow_published"), "the acknowledged message is counted")
 	assert.Equal(t, int64(1), llmPolicyEvaluations(t, reader, "shadow_publish_error"), "only the unacknowledged message is counted as an error")
 }
+
+// TestAnalyzeBatch_LLMAnalyzer_PartialPublishFailsActivityWithoutCounting
+// pins the enforcing lane's side of the partial-publish accounting: the
+// activity fails so the retry republishes the whole batch, and nothing is
+// counted as published, or the acknowledged messages would be counted twice.
+func TestAnalyzeBatch_LLMAnalyzer_PartialPublishFailsActivityWithoutCounting(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	first := insertUserMessage(t, conn, td, "hello one")
+	second := insertUserMessage(t, conn, td, "hello two")
+
+	flags := &feature.InMemory{}
+	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, td.orgID, feature.VariantRiskLLMLLM)
+	partial := gcp.NewMockPublisher[*riskv1.LLMAnalysis]()
+	partial.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewErrPublishResult(errors.New("topic unavailable"))).Once()
+	partial.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+
+	meterProvider, reader := newManualMeter(t)
+	_, _, err := runLLMLaneBatchWithMeter(t, conn, td, flags, true, meterProvider, &countingPIIScanner{}, partial, []uuid.UUID{first, second}, []string{risk_analysis.SourceGitleaks})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "llm analyzer scan dispatch")
+	assert.Equal(t, int64(0), llmPolicyEvaluations(t, reader, "published"), "a partial enforcing publish counts nothing before the retry")
+	assert.Equal(t, int64(0), llmPolicyEvaluations(t, reader, "shadow_publish_error"))
+}

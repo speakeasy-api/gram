@@ -492,10 +492,22 @@ func TestScanner_LLMModeTruncatedDispatchIsIncomplete(t *testing.T) {
 	hit := perLaneDispatcherTruncated(nil, true, func(lane enforcereply.Lane) *riskv1.EnforcementReply {
 		return okReply(lane, llmReplyFinding(llmanalyzer.RuleSecret, "secrets", "An AWS access key id appears in the message."))
 	})
-	scanner, _ = newMeteredScanner(t, ti, &instrumentedPIIScanner{}, &recordingPIEngine{}, flags, hit)
+	scanner, reader = newMeteredScanner(t, ti, &instrumentedPIIScanner{}, &recordingPIEngine{}, flags, hit)
 	outcome, err = scanner.ScanForInferenceEnforcement(ctx, request)
 	require.NoError(t, err)
 	require.NotNil(t, outcome.Result)
 	require.Equal(t, llmanalyzer.Source, outcome.Result.Source)
 	require.False(t, outcome.Complete)
+	require.Equal(t, map[string]int64{"ENFORCEMENT_SCANNER_LLM_ANALYZER/open": 1}, degradedFailModes(t, reader))
+
+	// A truncated request whose lane also timed out is one degradation,
+	// under the deadline, and the sentinel still denies.
+	deadline := perLaneDispatcherTruncated(nil, true, func(enforcereply.Lane) *riskv1.EnforcementReply { return nil })
+	scanner, reader = newMeteredScanner(t, ti, &instrumentedPIIScanner{}, &recordingPIEngine{}, flags, deadline)
+	outcome, err = scanner.ScanForInferenceEnforcement(ctx, request)
+	require.NoError(t, err)
+	require.NotNil(t, outcome.Result)
+	require.True(t, outcome.Result.AnalysisUnavailable())
+	require.False(t, outcome.Complete)
+	require.Equal(t, map[string]int64{"ENFORCEMENT_SCANNER_LLM_ANALYZER/closed": 1}, degradedFailModes(t, reader), "the deadline is the only degradation counted")
 }
