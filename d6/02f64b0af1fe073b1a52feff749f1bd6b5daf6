@@ -1,0 +1,37 @@
+.changeset/risk-enforcement-content-limit.md
+  s_35c5aab50a9d92::t_b6a7973382484a 5
+server/cmd/gram/start.go
+  s_35c5aab50a9d92::t_03d7b05e3c88eb 933
+server/cmd/tools/enforceload/main.go
+  s_35c5aab50a9d92::t_ddff9e60b5c6e9 618
+server/cmd/tools/enforceproto/main.go
+  s_35c5aab50a9d92::t_aebbe0faf062e9 121
+server/internal/feature/flags.go
+  s_35c5aab50a9d92::t_68182705f4ebd7 24-27
+server/internal/risk/enforcereply/dispatch.go
+  s_35c5aab50a9d92::t_c171ed97dce43c 5,28,49-52,85-88,154,194,247-266,277
+server/internal/risk/enforcereply/dispatch_test.go
+  s_35c5aab50a9d92::t_2d73f44be4eb5e 6-7,93-105,112,128,210-214,263-267,288-292,319-323,430-434,450-454,502,563,633,664,702,725,733,740-741,771-775
+server/internal/risk/policyflags/policyflags.go
+  s_35c5aab50a9d92::t_17f59cb0feca9d 24-25,28-31,33
+server/internal/risk/policyflags/policyflags_test.go
+  s_35c5aab50a9d92::t_dd3babfe288d52 41,55-64,66,68,72,77-78,81-82,91,100-101
+server/internal/risk/scanner_llm_test.go
+  s_35c5aab50a9d92::t_b50a654b642c03 138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d602f64b0af1fe073b1a52feff749f1bd6b5daf6",
+  "prompts": {},
+  "sessions": {
+    "s_35c5aab50a9d92": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f8ac481c-58f2-4c89-aa2e-52fe39f12b86",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
