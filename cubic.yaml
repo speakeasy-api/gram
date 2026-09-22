@@ -58,6 +58,10 @@ reviews:
       description: |-
         Scan for security flaws: hardcoded secrets, SQL injection, XSS, weak auth, exposed data, poor crypto, unsafe deserialization, insecure HTTP calls in production, and more. Ensure all network requests use HTTPS/TLS. Identify attack vectors and security violations to maintain robust defenses.
         Insecure Direct Object Reference (IDOR) vulnerabilities are mitigated by explicitly scoping all queries to organization or project ids. Ensure this is the case whenever SQLc queries are added or updated.
+    - name: Keep Platform MCP In Sync
+      description: |-
+        Treat server/internal/platformmcp as a first-party product surface. For changes to backend APIs, dashboard workflows, permissions, or user-facing features, check whether an existing Platform MCP tool or shipped workflow is now stale, or whether the new repeatable administrator/member outcome needs a new outcome-oriented tool. Flag silent omissions when the diff or product contract provides enough evidence that agents should support the outcome; do not demand a tool for internal-only, unsafe, redundant, or low-level implementation operations.
+        When Platform MCP changes, verify tool names, descriptions, schemas, annotations, authorization, discovery scopes, external versus managed-assistant audiences, unavailable behavior, sensitive-data boundaries, mutation confirmation/idempotency/audit/verification, server instructions, focused tests, and relevant skills under server/internal/plugins/platform_mcp_skills. Follow REVIEW.md and .agents/skills/maintaining-platform-mcp/SKILL.md for the detailed checklist.
 pr_descriptions:
   generate: true
   cubic_review_link: true
