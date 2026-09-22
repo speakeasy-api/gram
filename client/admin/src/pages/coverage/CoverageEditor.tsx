@@ -1,4 +1,14 @@
-import { accountFact, type AccountFilter } from "./accounts";
+import {
+  accountFact,
+  accountTypes,
+  accountLabels,
+  accountEligibility,
+  updateAccountEligibility,
+  withoutAccountConditions,
+  updateAccountNotes,
+  type AccountEligibility,
+  type AccountFilter,
+} from "./accounts";
 import { useId, useState, type JSX } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -175,7 +185,9 @@ export function MethodEditor({
     >
       <div>
         {!embedded && <h3 className="font-medium">{method.name}</h3>}
-        <p className="text-muted-foreground mt-1 text-xs">{method.plans}</p>
+        {!product && (
+          <p className="text-muted-foreground mt-1 text-xs">{method.plans}</p>
+        )}
       </div>
       {product && (
         <>
@@ -194,13 +206,57 @@ export function MethodEditor({
               })
             }
           />
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Account eligibility</legend>
+            <p className="text-muted-foreground text-xs">
+              Which accounts can use {method.name} on {product.name}. Applies
+              across this method’s capabilities on this platform.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {accountTypes.map((type) => (
+                <div key={type} className="space-y-1">
+                  <span className="text-xs font-medium">
+                    {accountLabels[type]}
+                  </span>
+                  <Choice
+                    label={`${accountLabels[type]} account eligibility`}
+                    value={accountEligibility(method, mapping.conditions, type)}
+                    options={[
+                      { value: "supported", label: "Eligible" },
+                      { value: "unsupported", label: "Ineligible" },
+                      { value: "unknown", label: "Unknown" },
+                    ]}
+                    onChange={(value) =>
+                      updateMapping({
+                        ...mapping,
+                        conditions: updateAccountEligibility(
+                          method,
+                          mapping.conditions,
+                          type,
+                          value as AccountEligibility,
+                        ),
+                      })
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </fieldset>
           <Textarea
             aria-label="OS and plan conditions"
             rows={3}
             placeholder="OS / plan conditions, e.g. macOS, Enterprise only"
-            value={withoutSourceAnnotation(mapping.conditions)}
+            value={withoutSourceAnnotation(
+              withoutAccountConditions(mapping.conditions),
+            )}
             onChange={(event) =>
-              updateMapping({ ...mapping, conditions: event.target.value })
+              updateMapping({
+                ...mapping,
+                conditions: updateAccountNotes(
+                  mapping.conditions,
+                  event.target.value,
+                ),
+              })
             }
           />
         </>

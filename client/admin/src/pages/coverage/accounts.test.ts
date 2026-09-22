@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import seed from "../../../../../server/internal/admin/supportmatrix/catalog.json";
-import { accountFact, accountTypes } from "./accounts";
+import {
+  accountFact,
+  accountTypes,
+  accountEligibility,
+  updateAccountEligibility,
+  withoutAccountConditions,
+  updateAccountNotes,
+} from "./accounts";
 import { catalogSchema, emptyMapping, type Draft, type Fact } from "./model";
 import { resolveMatrixCell } from "./matrixCell";
 import { integrationRequirements } from "./requirements";
@@ -199,5 +206,70 @@ describe("CSV account coverage", () => {
         expected[index] === "supported" ? [["device"]] : [],
       );
     }
+  });
+});
+
+describe("editing account eligibility", () => {
+  const method = catalog.methods[0]!;
+  it("changes one account without changing the other accounts or platform restrictions", () => {
+    const original = "OS: macOS; Team plans: ✅; Personal accounts: ✅; VERIFY";
+    const conditions = updateAccountEligibility(
+      method,
+      original,
+      "team",
+      "unsupported",
+    );
+    expect(
+      accountTypes.map((type) => accountEligibility(method, conditions, type)),
+    ).toEqual(["supported", "unsupported", "supported"]);
+    expect(withoutAccountConditions(conditions)).toBe("OS: macOS; VERIFY");
+    const changed: Draft = {
+      ...draft,
+      mappings: {
+        "device/claude-code-cli": {
+          ...draft.mappings["device/claude-code-cli"]!,
+          conditions,
+        },
+      },
+    };
+    const cell = resolveMatrixCell(
+      changed,
+      { ...catalog, methods: [method] },
+      { platforms: "claude-code-cli", capabilities: "session" },
+      "team",
+    );
+    expect(cell.fact.status).toBe("impossible");
+    expect(cell.contributions[0]?.fact.status).toBe("impossible");
+  });
+  it("retains explicit unknown and avoids duplicate labels after repeated edits", () => {
+    const first = updateAccountEligibility(
+      method,
+      "OS: Linux",
+      "personal",
+      "unknown",
+    );
+    const second = updateAccountEligibility(
+      method,
+      first,
+      "enterprise",
+      "unsupported",
+    );
+    expect(
+      accountTypes.map((type) => accountEligibility(method, second, type)),
+    ).toEqual(["unknown", "supported", "unsupported"]);
+    expect(second.match(/Personal accounts:/g)).toHaveLength(1);
+  });
+  it("preserves account settings when multiline notes change", () => {
+    const conditions = updateAccountEligibility(
+      method,
+      "old notes",
+      "personal",
+      "unsupported",
+    );
+    const edited = updateAccountNotes(conditions, "macOS only\nRequires setup");
+    expect(withoutAccountConditions(edited)).toBe("macOS only\nRequires setup");
+    expect(
+      accountTypes.map((type) => accountEligibility(method, edited, type)),
+    ).toEqual(["unsupported", "supported", "supported"]);
   });
 });
