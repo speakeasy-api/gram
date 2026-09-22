@@ -1,3 +1,4 @@
+import { type AccountFilter } from "./accounts";
 import { useCatalog } from "./catalogContext";
 import { useMemo, type JSX } from "react";
 import { ChevronRight } from "lucide-react";
@@ -10,12 +11,14 @@ export function IntegrationRequirements({
   capabilityIds,
   methodIds,
   scoped,
+  account = "all",
 }: {
   draft: Draft;
   platformIds: string[];
   capabilityIds: string[];
   methodIds: string[];
   scoped: boolean;
+  account?: AccountFilter;
 }): JSX.Element {
   const { methods, products, capabilities } = useCatalog();
   const result = useMemo(
@@ -26,8 +29,9 @@ export function IntegrationRequirements({
           capabilityIds.map((capabilityId) => ({ platformId, capabilityId })),
         ),
         methods.filter((method) => methodIds.includes(method.id)),
+        account,
       ),
-    [draft, platformIds, capabilityIds, methodIds, methods],
+    [draft, platformIds, capabilityIds, methodIds, methods, account],
   );
   const allSelected =
     products.every((product) => platformIds.includes(product.id)) &&
@@ -44,7 +48,7 @@ export function IntegrationRequirements({
   return (
     <section
       aria-label="Integration requirements"
-      className="bg-muted/40 space-y-3 rounded-lg border p-4"
+      className="bg-muted/40 space-y-3 rounded-lg border px-3 py-2"
     >
       <details
         key={allSelected ? "all" : "filtered"}
@@ -52,7 +56,7 @@ export function IntegrationRequirements({
         className="group space-y-3"
       >
         <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
-          <h2 className="flex items-center gap-2 font-semibold">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
             <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
             Integrations required
           </h2>
