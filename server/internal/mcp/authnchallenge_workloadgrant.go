@@ -424,9 +424,12 @@ func (s *Service) handleWorkloadAssertionGrant(
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
 	}
 
+	// A database that cannot start or commit the transaction is an outage,
+	// not a verdict on the assertion: the caller is told to retry rather than
+	// handed a permanent failure.
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin workload session transaction").LogError(ctx, logger)
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("session_persist_unavailable", err))
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -448,7 +451,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 		return err
 	}
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit workload session").LogError(ctx, logger)
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("session_persist_unavailable", err))
 	}
 
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {

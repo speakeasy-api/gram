@@ -53,6 +53,13 @@ func (c presentedClientCredentials) presented() bool {
 // request can carry. HTTP Basic still wins for the client_id and secret when
 // both it and form parameters are present, so existing clients keep their
 // behavior; the "multiple" label surfaces the misconfiguration in logs.
+//
+// "multiple" is decided on values, not on which keys the form carried. A
+// parameter sent empty alongside a real credential is not a second
+// authentication method under RFC 6749 section 2.3, and refusing it would
+// turn a client that pads its form into a failed exchange. Dispatch still
+// reads key presence, through presented, because a caller that names any
+// client is one that has to authenticate.
 func extractClientCredentials(r *http.Request) presentedClientCredentials {
 	formID := r.PostForm.Get(oauthwire.ParamClientID)
 	formSecret := r.PostForm.Get(oauthwire.ParamClientSecret)

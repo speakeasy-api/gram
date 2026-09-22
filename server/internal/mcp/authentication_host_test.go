@@ -189,6 +189,16 @@ func TestAuthenticationHost_IssuerNotOptedInIsNotServed(t *testing.T) {
 	w = harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/revoke", url.Values{"token": {"x"}, "client_id": {client.ClientID}})
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
+	// The clientless workload grant is refused by the host guard too: an
+	// issuer that has not opted in is not served here at all, so the grant
+	// never runs and cannot answer invalid_grant.
+	w = harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", url.Values{
+		"grant_type": {workloadGrantJWTBearer},
+		"assertion":  {"not.a.token"},
+		"resource":   {strings.TrimSuffix(ti.serverURL.String(), "/") + "/mcp/" + slug},
+	})
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+
 	authorize := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {client.ClientID},
