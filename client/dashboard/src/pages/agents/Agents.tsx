@@ -251,15 +251,16 @@ type AgentScope = "organization" | "project";
  */
 function AgentScopeLabel({ agent }: { agent: ManagedAgent }) {
   const organization = useOrganization();
-  const project = useProject();
   if (!agent.projectId) {
     return <Text>{organization.name} (all projects)</Text>;
   }
-  return (
-    <Text>
-      {agent.projectId === project.id ? project.name : "Another project"}
-    </Text>
+  // Named from the organization's own project list rather than the active
+  // project, so an agent reached by id from elsewhere still says where it
+  // belongs. A project the caller cannot see falls back to its id.
+  const bound = organization.projects?.find(
+    (candidate) => candidate.id === agent.projectId,
   );
+  return <Text>{bound?.name ?? agent.projectId}</Text>;
 }
 
 function CreateAgent({
