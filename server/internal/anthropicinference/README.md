@@ -59,9 +59,11 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   Client-asserted session identifiers cannot join another actor's conversation.
   Missing session identifiers or actor identities fall back to the request identifier.
 - Archival deduplication is separate from acceptance. Storage uses message hashes
-  to align a delivery with recent archived history, loading at least a full
-  incoming frame so repeated messages beyond 512 entries remain idempotent.
-  Compaction summaries before an archival anchor are not archived again. The
+  to align a delivery with the eight newest archived message identities. It tries
+  the newest anchor first and scans incoming messages backward, stopping at the
+  first matching hash without comparing earlier history. A newly appended message
+  identical to the anchor is therefore treated as already archived. Compaction
+  summaries before an archival anchor are not archived again. The
   legacy count fallback remains for history without a matching hash; archived
   rows are immutable and in-place edits are not reconciled. None of these
   archival decisions exempts content from enforcement.
