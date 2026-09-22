@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -78,20 +79,21 @@ func newWorkloadGrantFixtureWithLogger(t *testing.T, logger *slog.Logger) worklo
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
 
 	subject := "repo:acme/payments-api:ref:refs/heads/main"
-	var issuerID uuid.UUID
-	err := ti.conn.QueryRow( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `
-		INSERT INTO workload_issuers (organization_id, name, issuer, jwks_uri)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id
-	`, fx.orgID, "grant-issuer", issuer.OAuth21URL, jwksURI).Scan(&issuerID)
+	fixtures := testrepo.New(ti.conn)
+	issuerID, err := fixtures.CreateWorkloadIssuerFixture(ctx, testrepo.CreateWorkloadIssuerFixtureParams{
+		OrganizationID: fx.orgID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "grant-issuer",
+		Issuer:         issuer.OAuth21URL,
+		JwksUri:        jwksURI,
+	})
 	require.NoError(t, err)
-	_, err = ti.conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `
-		INSERT INTO workload_identity_admissions (organization_id, workload_issuer_id, subject)
-		VALUES ($1, $2, $3)
-	`, fx.orgID, issuerID, subject)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.CreateWorkloadIdentityAdmissionFixture(ctx, testrepo.CreateWorkloadIdentityAdmissionFixtureParams{
+		OrganizationID:   fx.orgID,
+		ProjectID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		WorkloadIssuerID: issuerID,
+		Subject:          subject,
+	}))
 	assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, subject, agent.ID)
 
 	slug := fx.toolset.McpSlug.String
