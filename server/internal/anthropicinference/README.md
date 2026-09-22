@@ -131,8 +131,11 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   generic HTTP-200 deny verdict. Suppressed per-policy analyzer failures retain
   their existing disposition, including fail-open, without advancing acceptance.
   Configuration lookup, body reading, storage, and policy evaluation share a
-  nine-second deadline. The endpoint returns a generic HTTP-200 deny when it
-  expires and cancels remaining work. Operational configuration lookup failures
+  9.75-second deadline, leaving 250ms before the configured upstream timeout.
+  Evaluation is capped at nine seconds and shortened when necessary to reserve
+  500ms for checkpointing and 250ms for the response. These margins do not
+  guarantee network delivery before the upstream timeout. The endpoint returns a
+  generic HTTP-200 deny when it expires and cancels remaining work. Operational configuration lookup failures
   also deny; missing and disabled integrations return 404. Anthropic's configured
   failure posture still governs network failures/timeouts.
 - Identical retries do not duplicate stored messages. Their uncertain content
