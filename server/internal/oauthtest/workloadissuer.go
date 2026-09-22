@@ -46,17 +46,10 @@ func DiscoverWorkloadJWKSURI(t *testing.T, issuer *devidptest.Instance) string {
 }
 
 // MintWorkloadAssertion signs claims with the dev-idp's current key, naming
-// its current kid. After RotateKey it signs with the new key, and anything
-// minted before names a kid the published set no longer contains.
-func MintWorkloadAssertion(t *testing.T, issuer *devidptest.Instance, claims jwt.Claims) string {
-	t.Helper()
-
-	return MintTypedWorkloadAssertion(t, issuer, "JWT", claims)
-}
-
-// MintTypedWorkloadAssertion is MintWorkloadAssertion with typ as the JOSE
-// typ header.
-func MintTypedWorkloadAssertion(t *testing.T, issuer *devidptest.Instance, typ string, claims jwt.Claims) string {
+// its current kid, with typ as the JOSE typ header. After RotateKey it signs
+// with the new key, and anything minted before names a kid the published set
+// no longer contains.
+func MintWorkloadAssertion(t *testing.T, issuer *devidptest.Instance, typ string, claims jwt.Claims) string {
 	t.Helper()
 
 	signer, err := jose.NewSigner(

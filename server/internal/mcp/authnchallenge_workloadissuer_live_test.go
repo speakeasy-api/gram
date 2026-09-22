@@ -170,7 +170,7 @@ func (f liveWorkloadFixture) endpoint(organizationID string, projectID uuid.UUID
 func (f liveWorkloadFixture) present(t *testing.T, endpoint *mcp.ResolvedMcpEndpoint) error {
 	t.Helper()
 
-	raw := oauthtest.MintWorkloadAssertion(t, f.issuer, oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience))
+	raw := oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience))
 
 	err := mcp.AdmitWorkloadAssertion(t.Context(), f.conn, f.verifier, endpoint, []string{
 		liveWorkloadAudience,
