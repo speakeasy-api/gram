@@ -390,3 +390,17 @@ WHERE du.organization_id = @organization_id
   AND attribute.value IS NOT NULL
 GROUP BY attribute.key, attribute.value
 ORDER BY attribute.key, attribute.value;
+
+-- name: ClearOrganizationDirectoryUserLinksFixture :exec
+-- Test fixture: exercise email fallback without a direct Gram user link.
+UPDATE directory_users SET user_id = NULL WHERE organization_id = @organization_id;
+
+-- name: SetOrganizationDirectoryUserDeletionFixture :exec
+-- Test fixture: independently exercise local and upstream deletion markers.
+UPDATE directory_users
+SET deleted_at = CASE WHEN @local_deleted::boolean THEN clock_timestamp() ELSE deleted_at END,
+    workos_deleted_at = CASE WHEN @workos_deleted::boolean THEN clock_timestamp() ELSE workos_deleted_at END
+WHERE organization_id = @organization_id;
+
+-- name: DeleteOrganizationDirectoryUsersFixture :exec
+DELETE FROM directory_users WHERE organization_id = @organization_id;

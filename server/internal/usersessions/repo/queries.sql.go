@@ -13,6 +13,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const advanceOrganizationUserSessionIssuerVersionFixture = `-- name: AdvanceOrganizationUserSessionIssuerVersionFixture :exec
+UPDATE user_session_issuers SET updated_at = updated_at + interval '1 second'
+WHERE id = $1 AND organization_id = $2 AND project_id IS NULL
+`
+
+type AdvanceOrganizationUserSessionIssuerVersionFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// Test fixture: invalidate in-flight login configuration without changing its identity.
+func (q *Queries) AdvanceOrganizationUserSessionIssuerVersionFixture(ctx context.Context, arg AdvanceOrganizationUserSessionIssuerVersionFixtureParams) error {
+	_, err := q.db.Exec(ctx, advanceOrganizationUserSessionIssuerVersionFixture, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const clearUserSessionClientAuthMethod = `-- name: ClearUserSessionClientAuthMethod :one
 UPDATE user_session_clients
 SET token_endpoint_auth_method = NULL

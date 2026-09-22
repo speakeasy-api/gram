@@ -94,7 +94,7 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 		form.Set("client_id", auth.ClientID)
 	case TokenEndpointAuthMethodPrivateKeyJWT:
 		if auth.AssertionSigner == nil {
-			return nil, fmt.Errorf("private_key_jwt signing is unavailable")
+			return nil, &tokenEndpointSigningError{err: errTokenEndpointSigningUnavailable}
 		}
 		assertion, err := auth.AssertionSigner.SignClientAssertion(ctx, ClientAssertionRequest{
 			RemoteSessionClientID: auth.RemoteSessionClientID,
@@ -104,7 +104,7 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 			Audience:              auth.AssertionAudience,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("sign private_key_jwt client assertion: %w", err)
+			return nil, &tokenEndpointSigningError{err: fmt.Errorf("sign private_key_jwt client assertion: %w", err)}
 		}
 		form.Del("client_secret")
 		form.Set("client_id", auth.ClientID)
