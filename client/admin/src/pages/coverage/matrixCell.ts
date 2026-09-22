@@ -1,3 +1,4 @@
+import { accountFact, type AccountFilter } from "./accounts";
 import {
   emptyMapping,
   getFact,
@@ -18,6 +19,7 @@ export function resolveMatrixCell(
   draft: Draft,
   catalog: Catalog,
   ids: { methods?: string; platforms?: string; capabilities?: string },
+  account: AccountFilter = "all",
 ): {
   method?: Method;
   product?: Product;
@@ -45,13 +47,18 @@ export function resolveMatrixCell(
     else if (product)
       fact = summarize(
         methods.map((item) =>
-          getFact(
-            draft.mappings[mappingKey(item.id, product.id)] ?? emptyMapping,
-            capability.id,
-            methodReference(draft, item, capability.id),
+          accountFact(
+            item,
+            getFact(
+              draft.mappings[mappingKey(item.id, product.id)] ?? emptyMapping,
+              capability.id,
+              methodReference(draft, item, capability.id),
+            ),
+            account,
           ),
         ),
       );
   }
+  if (method) fact = accountFact(method, fact, account);
   return { method, product, capability, mapping, fact };
 }

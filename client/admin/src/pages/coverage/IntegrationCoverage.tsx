@@ -113,22 +113,22 @@ function SupportMatrixPage({ snapshot }: { snapshot: Snapshot }): JSX.Element {
     (mapping) => mapping.applicability !== "unknown",
   ).length;
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="mb-2 flex items-center gap-2">
+          <div className="mb-1 flex items-center gap-2">
             <Grid2X2 className="size-5" />
             <Badge variant="outline">Shared catalog</Badge>
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">
             Support matrix
           </h1>
-          <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
+          <p className="text-muted-foreground mt-1 max-w-2xl text-sm">
             Explore what each integration enables, and where. Select any
             capability to inspect or edit its coverage.
           </p>
         </div>
-        <div className="text-muted-foreground text-right text-xs leading-6">
+        <div className="text-muted-foreground text-right text-xs leading-5">
           <p>
             {methods.length} methods · {products.length} products ·{" "}
             {capabilities.length} capabilities

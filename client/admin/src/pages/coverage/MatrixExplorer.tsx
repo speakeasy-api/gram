@@ -1,6 +1,18 @@
+import {
+  accountTypes,
+  accountLabels,
+  type AccountFilter,
+  type AccountType,
+} from "./accounts";
 import { useCatalog } from "./catalogContext";
 import { useState, type JSX } from "react";
-import { ArrowLeftRight, Download } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Download,
+  UserRound,
+  UsersRound,
+  Building2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -34,6 +46,7 @@ import {
 } from "./model";
 
 import "./platform-headers.css";
+import "./support-status.css";
 
 type Axis = "methods" | "platforms" | "capabilities";
 type Item = { id: string; name: string; group: string; platform?: Product };
@@ -103,7 +116,9 @@ function HeaderLabel({
         {identity.title}
       </span>
       {identity.detail && (
-        <span className="mt-1 block text-xs">{identity.detail}</span>
+        <span className="mt-0.5 block text-[11px] font-normal">
+          {identity.detail}
+        </span>
       )}
     </>
   );
@@ -147,10 +162,10 @@ function AxisPicker({
     `${item.group} ${item.name}`.toLowerCase().includes(search.toLowerCase()),
   );
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1">
       <span className="text-muted-foreground text-xs font-medium">{label}</span>
       <div className="flex gap-2">
-        <div className="w-48">
+        <div className="w-44">
           <Choice
             label={label}
             value={axis}
@@ -229,12 +244,50 @@ function AxisPicker({
   );
 }
 
+const accountIcons = {
+  personal: UserRound,
+  team: UsersRound,
+  enterprise: Building2,
+};
+
+function AccountIcons({
+  facts,
+}: {
+  facts: Record<AccountType, Fact>;
+}): JSX.Element {
+  return (
+    <span className="flex items-center justify-center gap-3">
+      {accountTypes.map((account) => {
+        const Icon = accountIcons[account];
+        const fact = facts[account];
+        const label = `${accountLabels[account]}: ${statusLabels[fact.status]}${fact.verify ? ", needs verification" : ""}`;
+        return (
+          <span
+            key={account}
+            title={label}
+            aria-label={label}
+            className={
+              fact.status === "supported"
+                ? "text-foreground"
+                : "text-muted-foreground/35"
+            }
+          >
+            <Icon className="size-4" aria-hidden="true" />
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 function FactCell({
   fact,
+  accounts,
   label,
   onClick,
 }: {
   fact: Fact;
+  accounts?: Record<AccountType, Fact>;
   label: string;
   onClick: () => void;
 }): JSX.Element {
@@ -242,7 +295,7 @@ function FactCell({
     <button
       type="button"
       onClick={onClick}
-      aria-label={`${label}: ${statusLabels[fact.status]}`}
+      aria-label={`${label}: ${accounts ? accountTypes.map((account) => `${accountLabels[account]}: ${statusLabels[accounts[account].status]}`).join(", ") : statusLabels[fact.status]}${fact.verify ? ", needs verification" : ""}`}
       title={[
         statusLabels[fact.status],
         fact.note,
@@ -250,15 +303,20 @@ function FactCell({
       ]
         .filter(Boolean)
         .join(" · ")}
-      className="hover:bg-accent focus-visible:ring-ring flex min-h-16 w-full flex-col items-center justify-center gap-1 rounded-md p-2 focus-visible:ring-2"
+      data-support-status={accounts ? "accounts" : fact.status}
+      className="support-status focus-visible:ring-ring flex min-h-10 w-full items-center justify-center gap-1.5 rounded-sm px-1.5 py-1 text-xs focus-visible:ring-2 focus-visible:ring-inset"
     >
-      <span className="text-lg">
-        {symbols[fact.status]}
-        {fact.verify && <sup>*</sup>}
-      </span>
-      <span className="text-muted-foreground max-w-36 truncate text-xs">
-        {fact.note || statusLabels[fact.status]}
-      </span>
+      {accounts ? (
+        <AccountIcons facts={accounts} />
+      ) : (
+        <>
+          <span className="shrink-0 text-base">
+            {symbols[fact.status]}
+            {fact.verify && <sup>*</sup>}
+          </span>
+          <span className="min-w-0 truncate">{statusLabels[fact.status]}</span>
+        </>
+      )}
     </button>
   );
 }
@@ -274,6 +332,7 @@ export function MatrixExplorer({
 }): JSX.Element {
   const catalog = useCatalog();
   const { methods } = catalog;
+  const [account, setAccount] = useState<AccountFilter>("all");
   const items = catalogItems(catalog);
   const [axes, setAxes] = useState<{ rows: Axis; columns: Axis }>({
     rows: "platforms",
@@ -359,17 +418,22 @@ export function MatrixExplorer({
       sliceId === "all"
         ? sliceLabels[third]
         : items[third].find((item) => item.id === sliceId)!.name;
-    const heading = `${axisOptions.find((option) => option.value === axes.rows)!.label} (${context})`;
+    const heading = `${axisOptions.find((option) => option.value === axes.rows)!.label} (${context}; ${account === "all" ? "All account types" : accountLabels[account]})`;
     const contents = [
       [heading, ...exportColumns.map((column) => column.name)],
       ...exportRows.map((row) => [
         row.name,
         ...exportColumns.map((column) => {
-          const cell = resolveMatrixCell(draft, catalog, {
-            [axes.rows]: row.id,
-            [axes.columns]: column.id,
-            [third]: sliceId,
-          });
+          const cell = resolveMatrixCell(
+            draft,
+            catalog,
+            {
+              [axes.rows]: row.id,
+              [axes.columns]: column.id,
+              [third]: sliceId,
+            },
+            account,
+          );
           if (!cell.capability) {
             const labels = {
               unknown: "Unknown",
@@ -381,7 +445,14 @@ export function MatrixExplorer({
               .join("; ");
           }
           return [
-            statusLabels[cell.fact.status],
+            account === "all"
+              ? accountTypes
+                  .map(
+                    (type) =>
+                      `${accountLabels[type]}: ${statusLabels[resolveMatrixCell(draft, catalog, { [axes.rows]: row.id, [axes.columns]: column.id, [third]: sliceId }, type).fact.status]}`,
+                  )
+                  .join("; ")
+              : statusLabels[cell.fact.status],
             cell.fact.note,
             cell.fact.verify ? "Needs verification" : "",
             cell.mapping.conditions,
@@ -406,6 +477,7 @@ export function MatrixExplorer({
       draft,
       catalog,
       ids,
+      account,
     );
     const label = `${row.name} × ${column.name}`;
     if (!capability && method && product) {
@@ -434,6 +506,16 @@ export function MatrixExplorer({
     return (
       <FactCell
         fact={fact}
+        accounts={
+          account === "all"
+            ? (Object.fromEntries(
+                accountTypes.map((type) => [
+                  type,
+                  resolveMatrixCell(draft, catalog, ids, type).fact,
+                ]),
+              ) as Record<AccountType, Fact>)
+            : undefined
+        }
         label={label}
         onClick={() => onSelect({ method, product, capability })}
       />
@@ -441,7 +523,7 @@ export function MatrixExplorer({
   }
   return (
     <>
-      <div className="flex flex-wrap items-end gap-4 border-y py-4">
+      <div className="flex flex-wrap items-end gap-3 border-y py-2">
         <AxisPicker
           label="Rows"
           axis={axes.rows}
@@ -464,7 +546,7 @@ export function MatrixExplorer({
           onAxis={(axis) => changeAxis("columns", axis)}
           onSelect={(ids) => setSelected({ ...selected, [axes.columns]: ids })}
         />
-        <div className="flex min-w-60 flex-col gap-2">
+        <div className="flex min-w-52 flex-col gap-1">
           <span className="text-muted-foreground text-xs font-medium">
             {axisOptions.find((option) => option.value === third)!.label}
           </span>
@@ -481,9 +563,27 @@ export function MatrixExplorer({
             onChange={(value) => setSlices({ ...slices, [third]: value })}
           />
         </div>
+        <div className="flex min-w-44 flex-col gap-1">
+          <span className="text-muted-foreground text-xs font-medium">
+            Account type
+          </span>
+          <Choice
+            label="Account type"
+            value={account}
+            options={[
+              { value: "all", label: "All account types" },
+              ...accountTypes.map((type) => ({
+                value: type,
+                label: accountLabels[type],
+              })),
+            ]}
+            onChange={(value) => setAccount(value as AccountFilter)}
+          />
+        </div>
       </div>
       <IntegrationRequirements
         draft={draft}
+        account={account}
         platformIds={scope.platforms}
         capabilityIds={scope.capabilities}
         methodIds={scope.methods}
@@ -528,11 +628,53 @@ export function MatrixExplorer({
           </Button>
         )}
       </div>
-      <div className="min-h-0 overflow-auto rounded-lg border">
-        <Table>
+      <div
+        aria-label="Support level legend"
+        className="flex flex-wrap items-center gap-1.5 text-xs"
+      >
+        {account === "all" && (
+          <span className="text-muted-foreground flex items-center gap-3">
+            {accountTypes.map((type) => {
+              const Icon = accountIcons[type];
+              return (
+                <span key={type} className="inline-flex items-center gap-1">
+                  <Icon className="size-4" />
+                  {accountLabels[type]}
+                </span>
+              );
+            })}{" "}
+            · Dark: supported · Grey: no confirmed full support
+          </span>
+        )}
+        {account !== "all" &&
+          Object.entries(statusLabels).map(([status, label]) => (
+            <span
+              key={status}
+              data-support-status={status}
+              className="support-status inline-flex items-center gap-1 rounded-sm px-2 py-1"
+            >
+              <span aria-hidden="true">
+                {symbols[status as Fact["status"]]}
+              </span>
+              {label}
+            </span>
+          ))}
+        <span className="text-muted-foreground">* Needs verification</span>
+      </div>
+      <div className="min-h-0 rounded-lg border [&>[data-slot=table-container]]:max-h-[65vh] [&>[data-slot=table-container]]:overflow-auto">
+        <Table
+          className="table-fixed text-xs"
+          style={{ minWidth: 176 + columns.length * 120 }}
+        >
+          <colgroup>
+            <col style={{ width: 176 }} />
+            {columns.map((column) => (
+              <col key={column.id} />
+            ))}
+          </colgroup>
           <TableHeader>
             <TableRow>
-              <TableHead className="bg-primary text-primary-foreground sticky left-0 z-20 min-w-60 border-r px-4">
+              <TableHead className="bg-primary text-primary-foreground sticky top-0 left-0 z-30 border-r px-2">
                 {
                   axisOptions.find((option) => option.value === axes.rows)!
                     .label
@@ -543,14 +685,14 @@ export function MatrixExplorer({
                   key={column.id}
                   data-vendor={headerIdentity(axes.columns, column).vendor}
                   data-family={headerIdentity(axes.columns, column).family}
-                  className={`min-w-44 border-r p-0 text-center ${axes.columns === "platforms" ? "support-platform-header" : "bg-primary text-primary-foreground"}`}
+                  className={`sticky top-0 z-20 border-r p-0 text-center whitespace-normal ${axes.columns === "platforms" ? "support-platform-header" : "bg-primary text-primary-foreground"}`}
                 >
                   <button
                     type="button"
                     aria-label={`Highlight column ${column.name}`}
                     aria-pressed={columnHighlights.includes(column.id)}
                     onClick={() => toggleHighlight(axes.columns, column.id)}
-                    className={`focus-visible:ring-ring w-full px-3 py-3 focus-visible:ring-2 ${isFocused(axes.columns, column.id) ? "opacity-100" : "opacity-35"}`}
+                    className={`focus-visible:ring-ring w-full px-2 py-2 focus-visible:ring-2 ${isFocused(axes.columns, column.id) ? "opacity-100" : "opacity-35"}`}
                   >
                     <HeaderLabel
                       axis={axes.columns}
@@ -572,14 +714,14 @@ export function MatrixExplorer({
                   <TableCell
                     data-vendor={headerIdentity(axes.rows, row).vendor}
                     data-family={headerIdentity(axes.rows, row).family}
-                    className={`sticky left-0 z-10 border-r p-0 ${axes.rows === "platforms" ? "support-platform-header" : "bg-muted"}`}
+                    className={`sticky left-0 z-10 border-r p-0 whitespace-normal ${axes.rows === "platforms" ? "support-platform-header" : "bg-muted"}`}
                   >
                     <button
                       type="button"
                       aria-label={`Highlight row ${row.name}`}
                       aria-pressed={rowHighlights.includes(row.id)}
                       onClick={() => toggleHighlight(axes.rows, row.id)}
-                      className={`focus-visible:ring-ring w-full px-4 py-3 text-left focus-visible:ring-2 ${isFocused(axes.rows, row.id) ? "opacity-100" : "opacity-35"}`}
+                      className={`focus-visible:ring-ring w-full px-2 py-1.5 text-left focus-visible:ring-2 ${isFocused(axes.rows, row.id) ? "opacity-100" : "opacity-35"}`}
                     >
                       <HeaderLabel
                         axis={axes.rows}
@@ -589,7 +731,7 @@ export function MatrixExplorer({
                     </button>
                   </TableCell>
                   {columns.map((column) => (
-                    <TableCell key={column.id} className="border-r p-3">
+                    <TableCell key={column.id} className="border-r p-0.5">
                       <div
                         data-dimmed={
                           !isFocused(axes.rows, row.id) ||

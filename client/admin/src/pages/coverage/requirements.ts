@@ -1,3 +1,4 @@
+import { accountFact, type AccountFilter } from "./accounts";
 import {
   emptyMapping,
   getFact,
@@ -23,6 +24,7 @@ export function integrationRequirements(
   draft: Draft,
   targets: CoverageTarget[],
   candidates: Method[],
+  account: AccountFilter = "all",
 ): Requirements {
   const providers = targets.map((target) =>
     candidates.map((method) => {
@@ -31,10 +33,14 @@ export function integrationRequirements(
         emptyMapping;
       return {
         method,
-        fact: getFact(
-          mapping,
-          target.capabilityId,
-          methodReference(draft, method, target.capabilityId),
+        fact: accountFact(
+          method,
+          getFact(
+            mapping,
+            target.capabilityId,
+            methodReference(draft, method, target.capabilityId),
+          ),
+          account,
         ),
       };
     }),

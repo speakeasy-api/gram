@@ -1,0 +1,64 @@
+/* Semantic support colors are shared by cells and their legend. */
+.support-status {
+  --support-background: var(--muted);
+  --support-foreground: var(--muted-foreground);
+  background: var(--support-background);
+  color: var(--support-foreground);
+}
+
+.support-status[data-support-status="supported"] {
+  --support-background: light-dark(
+    var(--color-emerald-100),
+    var(--color-emerald-950)
+  );
+  --support-foreground: light-dark(
+    var(--color-emerald-900),
+    var(--color-emerald-200)
+  );
+}
+
+.support-status[data-support-status="partial"] {
+  --support-background: light-dark(
+    var(--color-amber-100),
+    var(--color-amber-950)
+  );
+  --support-foreground: light-dark(
+    var(--color-amber-900),
+    var(--color-amber-200)
+  );
+}
+
+.support-status[data-support-status="unimplemented"] {
+  --support-background: light-dark(
+    var(--color-orange-100),
+    var(--color-orange-950)
+  );
+  --support-foreground: light-dark(
+    var(--color-orange-900),
+    var(--color-orange-200)
+  );
+}
+
+.support-status[data-support-status="impossible"] {
+  --support-background: light-dark(
+    var(--color-rose-100),
+    var(--color-rose-950)
+  );
+  --support-foreground: light-dark(
+    var(--color-rose-900),
+    var(--color-rose-200)
+  );
+}
+
+.support-status[data-support-status="unknown"] {
+  --support-background: var(--background);
+  --support-foreground: var(--muted-foreground);
+}
+
+button.support-status:hover {
+  background: color-mix(
+    in srgb,
+    var(--support-background),
+    var(--support-foreground) 10%
+  );
+}
