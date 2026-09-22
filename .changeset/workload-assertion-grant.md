@@ -1,0 +1,5 @@
+---
+"server": minor
+---
+
+Accept the workload assertion grant at the MCP token endpoint, behind the agent authorization rollout. A JWT bearer request that presents no client authentication exchanges a workload's platform-issued identity token for a session scoped to the named MCP server. The grant resolves the token's issuer to a trusted workload issuer, verifies it against that issuer's published keys, requires exactly one audience naming the endpoint, refuses a replayed token, admits the subject through the tenant's workload admissions, and requires a live assigned agent. The session has no client and no refresh token, lasts 15 minutes, and carries the endpoint's issuer, including the authentication host for issuers that opt in. Where the grant is accepted, the authorization server metadata lists `jwt-bearer` in `grant_types_supported`. Every verification or admission failure answers the same `invalid_grant`; outages answer 503 and rate limits 429, both with `Retry-After`.

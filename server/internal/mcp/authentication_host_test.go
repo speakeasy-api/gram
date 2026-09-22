@@ -189,6 +189,16 @@ func TestAuthenticationHost_IssuerNotOptedInIsNotServed(t *testing.T) {
 	w = harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/revoke", url.Values{"token": {"x"}, "client_id": {client.ClientID}})
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
+	// The clientless workload grant is refused by the host guard too: an
+	// issuer that has not opted in is not served here at all, so the grant
+	// never runs and cannot answer invalid_grant.
+	w = harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", url.Values{
+		"grant_type": {workloadGrantJWTBearer},
+		"assertion":  {"not.a.token"},
+		"resource":   {strings.TrimSuffix(ti.serverURL.String(), "/") + "/mcp/" + slug},
+	})
+	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+
 	authorize := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {client.ClientID},
@@ -276,9 +286,9 @@ func TestAuthenticationHost_IDJAGExchangeRefused(t *testing.T) {
 	require.Contains(t, w.Body.String(), "unsupported_grant_type")
 }
 
-// A JWT bearer request presenting no client reaches the clientless branch on
-// the authentication host and gets that branch's answer, not
-// unsupported_grant_type.
+// A JWT bearer request presenting no client reaches the workload grant on the
+// authentication host and is refused on the assertion, not turned away as
+// unsupported_grant_type by the host.
 func TestAuthenticationHost_ClientlessAssertionGrantReachesClientlessBranch(t *testing.T) {
 	t.Parallel()
 
@@ -293,8 +303,8 @@ func TestAuthenticationHost_ClientlessAssertionGrantReachesClientlessBranch(t *t
 	form.Set("assertion", "header.payload.signature")
 	form.Set("resource", "http://0.0.0.0/mcp/"+slug)
 	w := harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", form)
-	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
-	require.Contains(t, w.Body.String(), "invalid_client")
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), "invalid_grant")
 	require.NotContains(t, w.Body.String(), "unsupported_grant_type")
 }
 

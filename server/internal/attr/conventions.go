@@ -534,6 +534,17 @@ const (
 	UserSessionIssuerIDKey            = attribute.Key("gram.user_session_issuer.id")
 	UserSessionClientIDKey            = attribute.Key("gram.user_session_client.id")
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
+	UserSessionIDKey                  = attribute.Key("gram.user_session.id")
+
+	// WorkloadIssuerIDKey is the workload_issuers row that vouches for a
+	// workload, never its issuer URL.
+	WorkloadIssuerIDKey = attribute.Key("gram.workload_issuer.id")
+	// WorkloadAssertionIssuerKey is the iss claim a workload assertion
+	// presented, recorded as presented whether or not it resolved.
+	WorkloadAssertionIssuerKey = attribute.Key("gram.workload.assertion_issuer")
+	// WorkloadSubjectKey is the sub claim a workload assertion presented: the
+	// external identity an operator admits.
+	WorkloadSubjectKey = attribute.Key("gram.workload.subject")
 
 	RemoteSessionIssuerIDKey            = attribute.Key("gram.remote_session_issuer.id")
 	RemoteSessionIDKey                  = attribute.Key("gram.remote_session.id")
@@ -2212,6 +2223,22 @@ func SlogAuditSubject(v string) slog.Attr      { return slog.String(string(Audit
 
 func AuditSubjectID(v string) attribute.KeyValue { return AuditSubjectIDKey.String(v) }
 func SlogAuditSubjectID(v string) slog.Attr      { return slog.String(string(AuditSubjectIDKey), v) }
+
+func UserSessionID(v string) attribute.KeyValue { return UserSessionIDKey.String(v) }
+func SlogUserSessionID(v string) slog.Attr      { return slog.String(string(UserSessionIDKey), v) }
+
+func WorkloadIssuerID(v string) attribute.KeyValue { return WorkloadIssuerIDKey.String(v) }
+func SlogWorkloadIssuerID(v string) slog.Attr      { return slog.String(string(WorkloadIssuerIDKey), v) }
+
+func WorkloadAssertionIssuer(v string) attribute.KeyValue {
+	return WorkloadAssertionIssuerKey.String(v)
+}
+func SlogWorkloadAssertionIssuer(v string) slog.Attr {
+	return slog.String(string(WorkloadAssertionIssuerKey), v)
+}
+
+func WorkloadSubject(v string) attribute.KeyValue { return WorkloadSubjectKey.String(v) }
+func SlogWorkloadSubject(v string) slog.Attr      { return slog.String(string(WorkloadSubjectKey), v) }
 
 func UserSessionIssuerID(v string) attribute.KeyValue { return UserSessionIssuerIDKey.String(v) }
 func SlogUserSessionIssuerID(v string) slog.Attr {

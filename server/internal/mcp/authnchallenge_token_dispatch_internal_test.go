@@ -149,7 +149,7 @@ func TestServeTokenGrantFailsClosedWithoutDeclaredClientAuthentication(t *testin
 		called = append(called, "authenticated")
 		return nil
 	}
-	clientless := func(context.Context, http.ResponseWriter, *http.Request, presentedClientCredentials, *slog.Logger) error {
+	clientless := func(context.Context, http.ResponseWriter, *http.Request, *ResolvedMcpEndpoint, presentedClientCredentials, string, *slog.Logger) error {
 		called = append(called, "clientless")
 		return nil
 	}
@@ -180,7 +180,7 @@ func TestServeTokenGrantClientlessSkipsClientResolution(t *testing.T) {
 	service, endpoint, _ := newTokenDispatchTestService(t)
 	grant := tokenGrant{
 		clientAuth: tokenClientAuthNone,
-		clientless: func(_ context.Context, w http.ResponseWriter, _ *http.Request, _ presentedClientCredentials, _ *slog.Logger) error {
+		clientless: func(_ context.Context, w http.ResponseWriter, _ *http.Request, _ *ResolvedMcpEndpoint, _ presentedClientCredentials, _ string, _ *slog.Logger) error {
 			w.WriteHeader(http.StatusNoContent)
 			return nil
 		},

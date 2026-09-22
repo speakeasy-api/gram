@@ -1115,6 +1115,7 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id;
 
+
 -- Shared attachment fixtures exercise authorization boundaries in remote-session,
 -- issuer-gate, and user-session projection tests.
 

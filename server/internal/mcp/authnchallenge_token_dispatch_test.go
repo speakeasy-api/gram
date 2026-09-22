@@ -41,8 +41,9 @@ func TestHandleToken_ClientBoundGrantsWithoutClientAreInvalidClient(t *testing.T
 }
 
 // A JWT bearer request carrying no client authentication reaches the
-// clientless branch, which refuses it with the response a missing client_id
-// produces.
+// clientless workload grant rather than the ID-JAG exchange. This endpoint's
+// organization is outside the agent authorization rollout, so the grant
+// refuses it.
 func TestHandleToken_JWTBearerWithoutClientIsRefused(t *testing.T) {
 	t.Parallel()
 
@@ -53,8 +54,8 @@ func TestHandleToken_JWTBearerWithoutClientIsRefused(t *testing.T) {
 		"grant_type": {oauthwire.GrantTypeJWTBearer},
 		"assertion":  {"header.payload.signature"},
 	})
-	require.Equal(t, http.StatusUnauthorized, w.Code)
-	require.JSONEq(t, missingClientIDResponse, w.Body.String())
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), "invalid_grant")
 }
 
 // A JWT bearer request that presents a client_id is an ID-JAG exchange and
