@@ -8,6 +8,7 @@ import React from "react";
 import { useLocation, useMatch, useParams } from "react-router";
 import { PaygCapReachedBanners } from "./billing/billing-banners.tsx";
 import { HatchRule } from "./hatch-rule.tsx";
+import { useShowsImpersonationBanner } from "./impersonation-banner-state";
 import { InsightsDockShortcutHint } from "./insights-dock-shortcut-hint.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "@/components/ui/Heading";
@@ -18,8 +19,13 @@ import { SidebarTrigger } from "@/components/ui/Sidebar";
 // Publishes where the sticky header ends as --page-sticky-top on <html>, so
 // in-page sticky elements sit below it and scrollIntoView targets (via
 // scroll-padding-top in App.css) don't land underneath it.
-function useStickyTopVar(): React.RefCallback<HTMLDivElement> {
-  return React.useCallback((el: HTMLDivElement | null) => {
+function useStickyTopVar(): React.RefObject<HTMLDivElement | null> {
+  const ref = React.useRef<HTMLDivElement>(null);
+  // The banner shifts the header's `top` without resizing it, which the
+  // ResizeObserver can't see, so re-measure whenever it toggles.
+  const bannerShown = useShowsImpersonationBanner();
+  React.useLayoutEffect(() => {
+    const el = ref.current;
     if (!el) return;
     const root = document.documentElement;
     const observer = new ResizeObserver(() => {
@@ -34,7 +40,8 @@ function useStickyTopVar(): React.RefCallback<HTMLDivElement> {
       observer.disconnect();
       root.style.removeProperty("--page-sticky-top");
     };
-  }, []);
+  }, [bannerShown]);
+  return ref;
 }
 
 function PageHeaderComponent({
