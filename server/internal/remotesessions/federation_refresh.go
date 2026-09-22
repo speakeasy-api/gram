@@ -139,12 +139,10 @@ func classifyFederatedRefreshResponse(status int, body []byte) error {
 	_ = json.Unmarshal(body, &response)
 	kind := FederatedRefreshConfiguration
 	switch {
-	// An intermediary can return a timeout/5xx after the issuer rotated.
+	// An intermediary can return a timeout, rate limit or 5xx after the issuer rotated.
 	// The HTTP error is not evidence that the submitted refresh token is unspent.
-	case status == http.StatusRequestTimeout || status >= 500:
+	case status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status >= 500:
 		kind = FederatedRefreshAmbiguous
-	case status == http.StatusTooManyRequests:
-		kind = FederatedRefreshRetryable
 	case response.Error == "invalid_grant":
 		kind = FederatedRefreshInvalidGrant
 	case response.Error == "invalid_client" || response.Error == "unauthorized_client":

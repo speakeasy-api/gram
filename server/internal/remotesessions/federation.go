@@ -45,9 +45,16 @@ type FederatedProvider struct {
 
 func (p *FederatedProvider) MarshalJSON() ([]byte, error) { return []byte("{}"), nil }
 
-func (p *FederatedProvider) String() string      { return "[federated provider]" }
-func (p *FederatedProvider) GoString() string    { return p.String() }
-func (p *FederatedProvider) Fingerprint() string { return p.fingerprint }
+func (p *FederatedProvider) String() string   { return "[federated provider]" }
+func (p *FederatedProvider) GoString() string { return p.String() }
+
+// Fingerprint binds callback state to both discovery/registration policy and
+// the active signing key. Key rotation under the same set ID must invalidate an
+// in-flight callback rather than retain credentials against a stale revision.
+func (p *FederatedProvider) Fingerprint() string {
+	digest := sha256.Sum256([]byte(p.fingerprint + ":" + p.signingKeyRevision))
+	return hex.EncodeToString(digest[:])
+}
 
 // ValidateResponseIssuer implements RFC 9207 before the code leaves Gram.
 // The response issuer is never used to select a provider. The shared callback

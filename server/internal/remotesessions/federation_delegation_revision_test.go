@@ -16,9 +16,11 @@ func TestFederatedDelegationSameSetKeyRotationChangesRevision(t *testing.T) {
 	p := federatedFixture(t)
 	p.signingKeyRevision = "active-key-version-one"
 	registration, offline := p.DelegationConfigurationHash(), p.OfflineConfigurationHash()
+	fingerprint := p.Fingerprint()
 	require.NotEmpty(t, registration)
 	require.NotEmpty(t, offline)
 	p.signingKeyRevision = "active-key-version-two"
+	require.NotEqual(t, fingerprint, p.Fingerprint(), "same-set rotation must invalidate pending callbacks")
 	require.NotEqual(t, registration, p.DelegationConfigurationHash())
 	require.NotEqual(t, offline, p.OfflineConfigurationHash())
 	rotated := p.DelegationConfigurationHash()

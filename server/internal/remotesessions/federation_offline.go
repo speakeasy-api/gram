@@ -4,33 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"slices"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
-
-// Preserve an explicitly null capability list as an empty advertisement, not
-// as permission to apply an override. omitzero on ScopesSupported preserves
-// this distinction when metadata is serialized through the discovery cache.
-func (d *rfc8414Document) UnmarshalJSON(data []byte) error {
-	type document rfc8414Document
-	var decoded document
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		return fmt.Errorf("decode federation discovery metadata: %w", err)
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return fmt.Errorf("decode federation discovery metadata: %w", err)
-	}
-	if _, present := fields["scopes_supported"]; present && decoded.ScopesSupported == nil {
-		decoded.ScopesSupported = []string{}
-	}
-	*d = rfc8414Document(decoded)
-	return nil
-}
 
 // FederatedOfflinePolicy describes only the upstream registration's allowlist.
 // Its hash deliberately excludes discovery/cache timestamps and raw secrets.

@@ -153,12 +153,18 @@ func TestFederatedOfflinePolicyDiscoveryPresence(t *testing.T) {
 			p.client.Scope = []string{"openid", "email", "offline_access"}
 			p.metadata.ScopesSupported = nil
 			require.NoError(t, json.Unmarshal([]byte(tc.document), &p.metadata))
+			p.metadata.raw = []byte(tc.document)
+			normalizeFederatedScopePresence(&p.metadata)
 			policy, err := p.OfflinePolicy()
 			require.NoError(t, err)
 			require.Equal(t, tc.enabled, policy.Enabled)
-			cached, err := json.Marshal(p.metadata)
+			entry := federatedMetadataCacheEntry{Document: p.metadata, ExpiresAt: time.Now().Add(time.Minute), ScopesOmitted: p.metadata.ScopesSupported == nil}
+			cached, err := json.Marshal(entry)
 			require.NoError(t, err)
-			require.NoError(t, json.Unmarshal(cached, &p.metadata))
+			var decoded federatedMetadataCacheEntry
+			require.NoError(t, json.Unmarshal(cached, &decoded))
+			decoded.restoreScopePresence()
+			p.metadata = decoded.Document
 			fromCache, err := p.OfflinePolicy()
 			require.NoError(t, err)
 			require.Equal(t, policy, fromCache)
