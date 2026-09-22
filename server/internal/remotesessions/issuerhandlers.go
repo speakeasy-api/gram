@@ -48,6 +48,8 @@ const discoveryHTTPTimeout = 10 * time.Second
 // members, the OpenID Connect Discovery members it enriches sessions with,
 // and the served (or merged) document verbatim, from which every typed field
 // is derived.
+// ScopesSupported preserves omission across the discovery cache: only an omitted
+// list permits a client offline_access override; null/empty lists deny it.
 type rfc8414Document struct {
 	Issuer                            string   `json:"issuer"`
 	AuthorizationEndpoint             string   `json:"authorization_endpoint"`

@@ -34,12 +34,7 @@ func federatedSigningKeyRevision(ctx context.Context, db *pgxpool.Pool, organiza
 	if err != nil {
 		return "", federatedSigningRevisionError(err)
 	}
-	encoded, err := json.Marshal(struct {
-		ID            string `json:"ID"`
-		ExternalKeyID string `json:"ExternalKeyID"`
-		Version       string `json:"Version"`
-		KeyID         string `json:"KeyID"`
-	}{ID: key.ID.String(), ExternalKeyID: key.ExternalKeyID.String(), Version: key.ExternalKeyVersion.String, KeyID: key.Kid})
+	encoded, err := json.Marshal(federatedSigningKeyRevisionInput{ID: key.ID.String(), ExternalKeyID: key.ExternalKeyID.String(), Version: key.ExternalKeyVersion.String, KeyID: key.Kid})
 	if err != nil {
 		return "", ErrFederatedConfiguration
 	}
@@ -81,4 +76,14 @@ func (m *ChallengeManager) LoadFederatedDelegationProvider(ctx context.Context, 
 		return nil, ErrFederatedConfiguration
 	}
 	return p, nil
+}
+
+// federatedSigningKeyRevisionInput identifies the active public signing key.
+// Its JSON field names and order are stable hash inputs, not an external protocol.
+// Changing the encoding invalidates stored delegation configuration revisions.
+type federatedSigningKeyRevisionInput struct {
+	ID            string `json:"ID"`
+	ExternalKeyID string `json:"ExternalKeyID"`
+	Version       string `json:"Version"`
+	KeyID         string `json:"KeyID"`
 }

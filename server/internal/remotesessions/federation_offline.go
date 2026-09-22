@@ -53,14 +53,7 @@ func (p *FederatedProvider) OfflinePolicy() (FederatedOfflinePolicy, error) {
 	// The encrypted credential digest identifies rotation without retaining secrets.
 	// Do not use the provider fingerprint: discovery order and unrelated metadata
 	// must not reset a human's refusal suppression.
-	encoded, err := json.Marshal(struct {
-		Registration      string   `json:"Registration"`
-		Authorization     string   `json:"Authorization"`
-		Token             string   `json:"Token"`
-		JWKS              string   `json:"JWKS"`
-		OfflineCapability string   `json:"OfflineCapability"`
-		AuthMethods       []string `json:"AuthMethods"`
-	}{
+	encoded, err := json.Marshal(federatedOfflinePolicyRevision{
 		Registration:  p.DelegationConfigurationHash(),
 		Authorization: p.metadata.AuthorizationEndpoint, Token: p.metadata.TokenEndpoint, JWKS: p.metadata.JwksURI,
 		AuthMethods:       normalizedFederatedScopes(p.metadata.TokenEndpointAuthMethodsSupported),
@@ -149,24 +142,7 @@ func FederatedDelegationConfigurationHash(organizationID string, issuer repo.Rem
 		return ""
 	}
 	secretRevision := sha256.Sum256([]byte(client.ClientSecretEncrypted.String))
-	encoded, err := json.Marshal(struct {
-		Organization       string   `json:"Organization"`
-		IssuerID           string   `json:"IssuerID"`
-		Issuer             string   `json:"Issuer"`
-		ClientID           string   `json:"ClientID"`
-		Client             string   `json:"Client"`
-		Method             string   `json:"Method"`
-		Audience           string   `json:"Audience"`
-		Key                string   `json:"Key"`
-		CredentialRevision string   `json:"CredentialRevision"`
-		Authorization      string   `json:"Authorization"`
-		Token              string   `json:"Token"`
-		JWKS               string   `json:"JWKS"`
-		Tunnel             string   `json:"Tunnel"`
-		SecretExpiry       string   `json:"SecretExpiry"`
-		SigningRevision    string   `json:"SigningRevision"`
-		Scopes             []string `json:"Scopes"`
-	}{
+	encoded, err := json.Marshal(federatedDelegationRegistrationRevision{
 		Organization: organizationID, IssuerID: issuer.ID.String(), Issuer: issuer.Issuer,
 		ClientID: client.ID.String(), Client: client.ClientID,
 		Method: client.TokenEndpointAuthMethod.String, Audience: client.TokenEndpointAuthAudienceFormat.String,
@@ -180,4 +156,38 @@ func FederatedDelegationConfigurationHash(organizationID string, issuer repo.Rem
 	}
 	digest := sha256.Sum256(encoded)
 	return hex.EncodeToString(digest[:])
+}
+
+// federatedOfflinePolicyRevision is the persisted refusal-suppression hash input.
+// Field names, order and JSON encoding are part of the revision format: changing
+// them invalidates existing suppression even if the provider policy is unchanged.
+type federatedOfflinePolicyRevision struct {
+	Registration      string   `json:"Registration"`
+	Authorization     string   `json:"Authorization"`
+	Token             string   `json:"Token"`
+	JWKS              string   `json:"JWKS"`
+	OfflineCapability string   `json:"OfflineCapability"`
+	AuthMethods       []string `json:"AuthMethods"`
+}
+
+// federatedDelegationRegistrationRevision binds retained credentials to the
+// registration. Preserve field names, order and encoding to avoid invalidating
+// stored credentials on a cosmetic refactor. This is internal, not an OIDC format.
+type federatedDelegationRegistrationRevision struct {
+	Organization       string   `json:"Organization"`
+	IssuerID           string   `json:"IssuerID"`
+	Issuer             string   `json:"Issuer"`
+	ClientID           string   `json:"ClientID"`
+	Client             string   `json:"Client"`
+	Method             string   `json:"Method"`
+	Audience           string   `json:"Audience"`
+	Key                string   `json:"Key"`
+	CredentialRevision string   `json:"CredentialRevision"`
+	Authorization      string   `json:"Authorization"`
+	Token              string   `json:"Token"`
+	JWKS               string   `json:"JWKS"`
+	Tunnel             string   `json:"Tunnel"`
+	SecretExpiry       string   `json:"SecretExpiry"`
+	SigningRevision    string   `json:"SigningRevision"`
+	Scopes             []string `json:"Scopes"`
 }

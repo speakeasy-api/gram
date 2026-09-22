@@ -125,7 +125,7 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 	if doc.ResponseTypesSupported != nil && !slices.Contains(doc.ResponseTypesSupported, "code") {
 		return nil, ErrFederatedConfiguration
 	}
-	effectiveScopes := federatedScopes(issuer, client)
+	effectiveScopes := client.Scope
 	if !slices.Contains(effectiveScopes, "openid") || !slices.Contains(effectiveScopes, "email") {
 		return nil, ErrFederatedConfiguration
 	}
@@ -187,7 +187,7 @@ func (p *FederatedProvider) BuildAuthorizationURL(callbackURL, state, nonce, ver
 	if err != nil {
 		return nil, ErrFederatedConfiguration
 	}
-	effectiveScopes := federatedScopes(p.issuer, p.client)
+	effectiveScopes := p.client.Scope
 	scope := make([]string, 0, len(effectiveScopes))
 	for _, item := range effectiveScopes {
 		if item != "offline_access" {
@@ -442,12 +442,6 @@ func validFederatedTokenHash(claim, value, algorithm string) bool {
 }
 
 var _ fmt.GoStringer = (*FederatedProvider)(nil)
-
-func federatedScopes(_ repo.RemoteSessionIssuer, client repo.RemoteSessionClient) []string {
-	// Federation uses only the selected upstream registration's allowlist.
-	// Resource-provider scope overrides must not expand or invalidate OIDC login.
-	return client.Scope
-}
 
 // Preflight only known local availability; never sign or contact KMS at authorize.
 func (m *ChallengeManager) preflightFederatedSigner(p *FederatedProvider) error {

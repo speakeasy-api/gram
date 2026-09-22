@@ -105,6 +105,11 @@ func classifyFederatedRefreshVerificationError(err error) error {
 	return &FederatedRefreshError{Kind: FederatedRefreshInvalidIdentity}
 }
 
+// maxFederatedRefreshResponseBytes bounds untrusted token endpoint responses.
+// 64 KiB accommodates JWTs and provider metadata without allowing an upstream
+// response to cause unbounded allocation; one extra byte detects truncation.
+const maxFederatedRefreshResponseBytes = 64 << 10
+
 func postFederatedRefresh(doer httpDoer, req *http.Request) (tokenResponse, time.Time, error) {
 	var zero tokenResponse
 	resp, err := doer.Do(req)
@@ -113,8 +118,8 @@ func postFederatedRefresh(doer httpDoer, req *http.Request) (tokenResponse, time
 	}
 	defer func() { _ = resp.Body.Close() }()
 	receivedAt := time.Now()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, (64<<10)+1))
-	if err != nil || len(body) > 64<<10 {
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxFederatedRefreshResponseBytes+1))
+	if err != nil || len(body) > maxFederatedRefreshResponseBytes {
 		return zero, time.Time{}, &FederatedRefreshError{Kind: FederatedRefreshAmbiguous}
 	}
 	if resp.StatusCode/100 != 2 {

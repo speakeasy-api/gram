@@ -21,7 +21,9 @@ func TestFederatedDelegationSameSetKeyRotationChangesRevision(t *testing.T) {
 	p.signingKeyRevision = "active-key-version-two"
 	require.NotEqual(t, registration, p.DelegationConfigurationHash())
 	require.NotEqual(t, offline, p.OfflineConfigurationHash())
-	require.Equal(t, p.DelegationConfigurationHash(), FederatedDelegationConfigurationHash(p.organizationID, p.issuer, p.client, p.signingKeyRevision))
+	rotated := p.DelegationConfigurationHash()
+	p.organizationID = "another-organization"
+	require.NotEqual(t, rotated, p.DelegationConfigurationHash(), "retained credentials must remain tenant-bound")
 }
 
 func TestDelegationLoginExplicitExpiredRefreshIsNotDurable(t *testing.T) {
