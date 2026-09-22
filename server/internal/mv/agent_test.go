@@ -224,17 +224,19 @@ func TestAttachAgentPrincipal_ETagTracksPrincipal(t *testing.T) {
 	human := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
 	humanEtag := human.Etag
 
-	attach := func(name string) string {
+	const agentURN = "agent:11111111-1111-1111-1111-111111111111"
+	attach := func(urn, name string) string {
 		result := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
-		mv.AttachAgentPrincipal(result, &gen.AgentPollingPrincipal{Urn: "agent:11111111-1111-1111-1111-111111111111", DisplayName: name})
+		mv.AttachAgentPrincipal(result, &gen.AgentPollingPrincipal{Urn: urn, DisplayName: name})
 		return result.Etag
 	}
-	original := attach("CI agent")
+	original := attach(agentURN, "CI agent")
 
 	require.Equal(t, humanEtag, mv.BuildAgentPluginsView(rows, testMarketplaceURL).Etag, "human ETag is unaffected")
 	require.NotEqual(t, humanEtag, original, "agent ETag covers the principal")
-	require.Equal(t, original, attach("CI agent"), "stable for the same principal")
-	require.NotEqual(t, original, attach("Renamed agent"), "a rename changes the ETag")
+	require.Equal(t, original, attach(agentURN, "CI agent"), "stable for the same principal")
+	require.NotEqual(t, original, attach(agentURN, "Renamed agent"), "a rename changes the ETag")
+	require.NotEqual(t, original, attach("agent:22222222-2222-2222-2222-222222222222", "CI agent"), "the URN is covered, not just the display name")
 }
 
 func TestBuildAgentPluginsView_ETagIgnoresRowsThatDoNotRender(t *testing.T) {

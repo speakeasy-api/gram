@@ -61,6 +61,9 @@ export function missingPolicyGrants(
     (form) =>
       !stored.some(
         (grant) =>
+          // A deny grant covers nothing: minting requires an allow candidate,
+          // so counting one here would report access the next step refuses.
+          grant.effect === "allow" &&
           grant.scope === form.scope &&
           requestNarrowsPolicy(grant.selector, form.selector),
       ),

@@ -51,13 +51,15 @@ func TestDelegableGrants(t *testing.T) {
 	})
 	t.Run("current registry scopes are discoverable", func(t *testing.T) {
 		t.Parallel()
-		sync := authz.NewGrant(authz.ScopeOrgDeviceAgentSync, "example-org")
-		grants, err := DelegableGrants([]authz.Grant{sync}, []authz.Grant{sync}, []authz.Grant{sync})
-		require.NoError(t, err)
-		require.Len(t, grants, 1)
-		require.Equal(t, authz.ScopeOrgDeviceAgentSync, grants[0].Scope)
-		_, err = NewDelegatedPolicy(CurrentDelegatedPolicyVersion, grants)
-		require.NoError(t, err)
+		for _, scope := range []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest} {
+			grant := authz.NewGrant(scope, "example-org")
+			grants, err := DelegableGrants([]authz.Grant{grant}, []authz.Grant{grant}, []authz.Grant{grant})
+			require.NoError(t, err, scope)
+			require.Len(t, grants, 1, scope)
+			require.Equal(t, scope, grants[0].Scope)
+			_, err = NewDelegatedPolicy(CurrentDelegatedPolicyVersion, grants)
+			require.NoError(t, err, scope)
+		}
 	})
 	t.Run("runtime unsafe scopes never become candidates", func(t *testing.T) {
 		t.Parallel()

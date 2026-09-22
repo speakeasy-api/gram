@@ -49,6 +49,13 @@ describe("device agent policy grants", () => {
     ).toEqual(["org:hooks_ingest"]);
   });
 
+  it("does not treat a deny grant as covering a requirement", () => {
+    const deny = stored({ ...required[0]!, effect: "deny" }, "g1");
+    expect(missingPolicyGrants([deny], required).map((g) => g.scope)).toEqual(
+      required.map((g) => g.scope),
+    );
+  });
+
   it("does not treat another project as covering the chosen one", () => {
     const other = stored(
       {
@@ -254,6 +261,7 @@ describe("control plane URL", () => {
   it("rejects plain HTTP even on loopback", () => {
     expect(controlPlaneURLError("http://localhost:8080")).toMatch(/HTTPS/);
     expect(controlPlaneURLError("http://127.0.0.1:8080")).toMatch(/HTTPS/);
+    expect(controlPlaneURLError("http://[::1]:8080")).toMatch(/HTTPS/);
   });
 
   it("rejects plaintext remote hosts and invalid URLs", () => {

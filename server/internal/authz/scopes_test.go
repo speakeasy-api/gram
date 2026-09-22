@@ -78,12 +78,17 @@ func TestDeviceAgentScopesAreSatisfiedByOrgAdminOnly(t *testing.T) {
 
 	for _, scope := range []Scope{ScopeOrgDeviceAgentSync, ScopeOrgHooksIngest} {
 		check := Check{Scope: scope, ResourceID: "org_123"}
-		require.True(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgAdmin, "org_123")}, check), scope)
-		require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgRead, "org_123")}, check), scope)
+		// Only root, org:admin, and the scope itself may satisfy the check.
+		for other := range scopeExpansions {
+			expected := other == ScopeRoot || other == ScopeOrgAdmin || other == scope
+			require.Equal(t, expected, GrantsSatisfy([]Grant{NewGrant(other, "org_123")}, check),
+				"grant %q checking %q", other, scope)
+		}
 		require.Equal(t, []Scope{scope}, ScopeImplicationClosure(scope))
 		require.False(t, GrantsSatisfy([]Grant{NewGrant(scope, "org_123")}, Check{Scope: ScopeOrgRead, ResourceID: "org_123"}))
 	}
 	require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgDeviceAgentSync, "org_123")}, Check{Scope: ScopeOrgHooksIngest, ResourceID: "org_123"}))
+	require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgHooksIngest, "org_123")}, Check{Scope: ScopeOrgDeviceAgentSync, ResourceID: "org_123"}))
 }
 
 func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
