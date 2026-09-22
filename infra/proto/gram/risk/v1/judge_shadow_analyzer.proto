@@ -1,0 +1,20 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+message JudgeShadowAnalyzer {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.risk.v1.JudgeShadowAnalysis"
+    ack_deadline: {seconds: 30}
+    retention: {seconds: 86400}
+    retry_policy: {
+      minimum_backoff: {seconds: 10}
+      maximum_backoff: {seconds: 60}
+    }
+    dead_letter: {max_delivery_attempts: 5}
+  };
+}

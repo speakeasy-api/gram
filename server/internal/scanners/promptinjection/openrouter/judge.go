@@ -305,7 +305,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 		contextState.recentTruncated,
 	)
 
-	prepared, countContent := prepareJudgePayload(msg, trajectory)
+	prepared, countContent := PrepareJudgePayload(msg, trajectory)
 	decisionCtx, cancel := context.WithTimeout(ctx, JudgeTimeout)
 	defer cancel()
 
@@ -477,7 +477,8 @@ func SystemMessage() or.ChatMessages {
 	})
 }
 
-func prepareJudgePayload(msg judgemessage.Message, trajectory judgemessage.Trajectory) ([]byte, []string) {
+// PrepareJudgePayload renders the exact evidence shared by the live judge and shadow evaluators.
+func PrepareJudgePayload(msg judgemessage.Message, trajectory judgemessage.Trajectory) ([]byte, []string) {
 	rendered := judgemessage.RenderPayload(msg)
 	countContent := judgemessage.STokenContent(rendered)
 	var trajectoryPayload *judgemessage.TrajectoryPayload

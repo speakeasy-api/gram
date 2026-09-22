@@ -282,6 +282,8 @@ type options struct {
 	extraCorpus      string
 	repeats          int
 	samples          int
+	jev              bool
+	skipJudge        bool
 }
 
 const (
@@ -328,6 +330,8 @@ func parseFlags() options {
 	flag.StringVar(&opts.extraCorpus, "extra-corpus", "", "absolute path to an additional local JSONL corpus; never loaded by default")
 	flag.IntVar(&opts.repeats, "repeats", 1, "number of complete repeated trials")
 	flag.IntVar(&opts.samples, "samples", piopenrouter.SamplesPerEvent, "physical judge calls per event; production defaults to one")
+	flag.BoolVar(&opts.jev, "jev", false, "also evaluate Jev (TypeSafe) as a shadow candidate for the L1 judge (needs TYPESAFE_API_KEY)")
+	flag.BoolVar(&opts.skipJudge, "skip-judge", false, "skip the OpenRouter L1 judge entirely (no OPENROUTER_DEV_KEY needed); pair with -jev to evaluate Jev standalone")
 	flag.Parse()
 	return opts
 }
@@ -393,9 +397,15 @@ func run(ctx context.Context, opts options) error {
 	if opts.samples < 1 {
 		return fmt.Errorf("--samples must be at least 1")
 	}
+	if opts.skipJudge && !opts.jev {
+		return fmt.Errorf("--skip-judge with no --jev evaluates nothing")
+	}
 	modes := make([]modeSummary, 0, opts.repeats*2)
 	allFindings := make([][][]scanners.Finding, 0, opts.repeats)
-	for repeat := 1; repeat <= opts.repeats; repeat++ {
+	if opts.skipJudge {
+		modes = append(modes, modeSummary{Name: "judge", Skipped: true, SkipReason: "--skip-judge", Total: len(corpus)})
+	}
+	for repeat := 1; !opts.skipJudge && repeat <= opts.repeats; repeat++ {
 		fmt.Fprintf(os.Stderr, "trial %d/%d\n", repeat, opts.repeats)
 		judgeMode, judgeFindings, err := scanJudgeMode(ctx, opts, corpus)
 		if err != nil {
@@ -414,6 +424,14 @@ func run(ctx context.Context, opts options) error {
 		recallGateRuns[i] = summarizeRecallGate(corpus, findings)
 	}
 	worstRecallGate := worstRecallGate(recallGateRuns)
+
+	if opts.jev {
+		jevMode, _, err := scanJevMode(ctx, opts, corpus)
+		if err != nil {
+			return err
+		}
+		modes = append(modes, jevMode)
+	}
 
 	summary := accuracySummary{
 		Total:          judgeMode.Total,

@@ -65,6 +65,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/judgeshadow"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
@@ -256,6 +257,7 @@ func newStreamsCommand() *cli.Command {
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskIngestFlags()...)
 	flags = append(flags, riskLLMFlags()...)
+	flags = append(flags, jevFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 
 	return &cli.Command{
@@ -456,10 +458,20 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
 			}
-			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)
+			shadowPub, err := newJudgeShadowTopic(ctx, psbroker)
+			if err != nil {
+				return err
+			}
+			shutdownFuncs = append(shutdownFuncs, shadowPub.Stop)
+			judgeShadow := judgeshadow.NewPublisher(logger, featureFlags, shadowPub, judgeshadow.DefaultSampleRate)
+			shadowHandler, err := newJudgeShadowHandler(c, logger, featureFlags, guardianPolicy, meterProvider)
+			if err != nil {
+				return err
+			}
+			promptInjectionScanner := promptinjection.NewScanner(logger, judgeShadow.WrapInjection(piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify))
 			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
-			promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Evaluate)
+			promptPolicyScanner := promptpolicy.NewScanner(logger, judgeShadow.WrapPolicy(ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Evaluate))
 			promptPolicyStubScanner := promptpolicy.NewScanner(logger, promptpolicy.NoopEvaluator)
 			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
 
@@ -642,6 +654,10 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &riskv1.LLMEnforcement{}, &riskv1.LLMEnforcer{}, llmanalyzer.NewEnforceHandler(logger, tracerProvider, meterProvider, llmAnalyzer, replyWriter, llmanalyzer.WithRiskRecorder(riskRecorder)))
 				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
+				shadowSettings := pubsub.DefaultReceiveSettings
+				shadowSettings.MaxOutstandingMessages = 8
+				shadowSettings.MaxOutstandingBytes = 4 * 1024 * 1024
+				mustReceive(rg, &riskv1.JudgeShadowAnalysis{}, &riskv1.JudgeShadowAnalyzer{}, shadowHandler, gcp.WithPubSubReceiveSettings(&shadowSettings))
 				mustReceive(rg, &riskv1.LLMAnalysis{}, &riskv1.LLMAnalyzer{}, llmAnalyzerHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
 

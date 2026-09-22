@@ -3149,3 +3149,6 @@ func SlogInferenceInputCount(v int) slog.Attr {
 func SlogInferenceAcceptedMessages(v int) slog.Attr {
 	return slog.Int(string(InferenceAcceptedMessagesKey), v)
 }
+
+// SlogRiskJudgeShadow contains a payload-free paired judge assessment.
+func SlogRiskJudgeShadow(v any) slog.Attr { return slog.Any("risk.judge_shadow", v) }

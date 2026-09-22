@@ -46,6 +46,8 @@ flowchart LR
   t_gram_risk_v1_gitleaks_analysis(["gram-risk-v1-gitleaks-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_gitleaks_enforcement(["gram-risk-v1-gitleaks-enforcement<br/>(topic)"]):::topic
   t_gram_risk_v1_gitleaks_enforcer_dlq(["gram-risk-v1-gitleaks-enforcer-dlq<br/>(dlq)"]):::dlq
+  t_gram_risk_v1_judge_shadow_analysis(["gram-risk-v1-judge-shadow-analysis<br/>(topic)"]):::topic
+  t_gram_risk_v1_judge_shadow_analyzer_dlq(["gram-risk-v1-judge-shadow-analyzer-dlq<br/>(dlq)"]):::dlq
   t_gram_risk_v1_llm_analysis(["gram-risk-v1-llm-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_llm_enforcement(["gram-risk-v1-llm-enforcement<br/>(topic)"]):::topic
   t_gram_risk_v1_llm_enforcer_dlq(["gram-risk-v1-llm-enforcer-dlq<br/>(dlq)"]):::dlq
@@ -79,6 +81,7 @@ flowchart LR
   s_gram_risk_v1_finding_otel_relay["gram-risk-v1-finding-otel-relay<br/>(sub)"]:::sub
   s_gram_risk_v1_gitleaks_analyzer["gram-risk-v1-gitleaks-analyzer<br/>(sub)"]:::sub
   s_gram_risk_v1_gitleaks_enforcer["gram-risk-v1-gitleaks-enforcer<br/>(sub)"]:::sub
+  s_gram_risk_v1_judge_shadow_analyzer["gram-risk-v1-judge-shadow-analyzer<br/>(sub)"]:::sub
   s_gram_risk_v1_llm_analyzer["gram-risk-v1-llm-analyzer<br/>(sub)"]:::sub
   s_gram_risk_v1_llm_enforcer["gram-risk-v1-llm-enforcer<br/>(sub)"]:::sub
   s_gram_risk_v1_presidio_analyzer["gram-risk-v1-presidio-analyzer<br/>(sub)"]:::sub
@@ -111,22 +114,24 @@ flowchart LR
   p9 --> t_gram_risk_v1_gitleaks_analysis
   p10[/"📤<br/>server/internal/risk/enforcereply/dispatch.go"/]:::go
   p10 --> t_gram_risk_v1_gitleaks_enforcement
-  p11[/"📤<br/>server/internal/background/activities/risk_analysis/scan_llm.go"/]:::go
-  p11 --> t_gram_risk_v1_llm_analysis
-  p12[/"📤<br/>server/internal/risk/enforcereply/dispatch.go"/]:::go
-  p12 --> t_gram_risk_v1_llm_enforcement
-  p13[/"📤<br/>server/internal/background/activities/risk_analysis/scan_presidio.go"/]:::go
-  p13 --> t_gram_risk_v1_presidio_analysis
-  p14[/"📤<br/>server/internal/risk/enforcereply/dispatch.go"/]:::go
-  p14 --> t_gram_risk_v1_presidio_enforcement
-  p15[/"📤<br/>server/internal/background/activities/risk_analysis/scan_prompt_injection.go"/]:::go
-  p15 --> t_gram_risk_v1_prompt_injection_analysis
-  p16[/"📤<br/>server/internal/background/activities/risk_analysis/prompt_judge_batch.go"/]:::go
-  p16 --> t_gram_risk_v1_prompt_policy_analysis
-  p17[/"📤<br/>server/internal/telemetry/log_publisher.go"/]:::go
-  p17 --> t_gram_telemetry_v1_log_record
-  p18[/"📤<br/>server/internal/outbox/webhooks.go"/]:::go
-  p18 --> t_gram_webhooks_v1_event
+  p11[/"📤<br/>server/internal/scanners/judgeshadow/publisher.go"/]:::go
+  p11 --> t_gram_risk_v1_judge_shadow_analysis
+  p12[/"📤<br/>server/internal/background/activities/risk_analysis/scan_llm.go"/]:::go
+  p12 --> t_gram_risk_v1_llm_analysis
+  p13[/"📤<br/>server/internal/risk/enforcereply/dispatch.go"/]:::go
+  p13 --> t_gram_risk_v1_llm_enforcement
+  p14[/"📤<br/>server/internal/background/activities/risk_analysis/scan_presidio.go"/]:::go
+  p14 --> t_gram_risk_v1_presidio_analysis
+  p15[/"📤<br/>server/internal/risk/enforcereply/dispatch.go"/]:::go
+  p15 --> t_gram_risk_v1_presidio_enforcement
+  p16[/"📤<br/>server/internal/background/activities/risk_analysis/scan_prompt_injection.go"/]:::go
+  p16 --> t_gram_risk_v1_prompt_injection_analysis
+  p17[/"📤<br/>server/internal/background/activities/risk_analysis/prompt_judge_batch.go"/]:::go
+  p17 --> t_gram_risk_v1_prompt_policy_analysis
+  p18[/"📤<br/>server/internal/telemetry/log_publisher.go"/]:::go
+  p18 --> t_gram_telemetry_v1_log_record
+  p19[/"📤<br/>server/internal/outbox/webhooks.go"/]:::go
+  p19 --> t_gram_webhooks_v1_event
   t_gram_authz_v1_challenge --> s_gram_authz_v1_challenge_ch_writer
   s_gram_authz_v1_challenge_ch_writer -. dead-letter .-> t_gram_authz_v1_challenge_ch_writer_dlq
   t_gram_metering_v1_meter_reading --> s_gram_metering_v1_meter_reading_ch_writer
@@ -165,6 +170,8 @@ flowchart LR
   t_gram_risk_v1_gitleaks_analysis --> s_gram_risk_v1_gitleaks_analyzer
   t_gram_risk_v1_gitleaks_enforcement --> s_gram_risk_v1_gitleaks_enforcer
   s_gram_risk_v1_gitleaks_enforcer -. dead-letter .-> t_gram_risk_v1_gitleaks_enforcer_dlq
+  t_gram_risk_v1_judge_shadow_analysis --> s_gram_risk_v1_judge_shadow_analyzer
+  s_gram_risk_v1_judge_shadow_analyzer -. dead-letter .-> t_gram_risk_v1_judge_shadow_analyzer_dlq
   t_gram_risk_v1_llm_analysis --> s_gram_risk_v1_llm_analyzer
   t_gram_risk_v1_llm_enforcement --> s_gram_risk_v1_llm_enforcer
   s_gram_risk_v1_llm_enforcer -. dead-letter .-> t_gram_risk_v1_llm_enforcer_dlq
@@ -178,66 +185,68 @@ flowchart LR
   s_gram_telemetry_v1_tool_call_log_relay -. dead-letter .-> t_gram_telemetry_v1_tool_call_log_relay_dlq
   t_gram_webhooks_v1_event --> s_gram_webhooks_v1_svix_relay
   s_gram_webhooks_v1_svix_relay -. dead-letter .-> t_gram_webhooks_v1_svix_relay_dlq
-  c19[\"📥<br/>server/cmd/gram/streams.go<br/>authz.NewChallengeCHWriter<br/>(batch)"\]:::go
-  s_gram_authz_v1_challenge_ch_writer --> c19
-  c20[\"📥<br/>server/cmd/gram/streams.go<br/>metering.NewMeterReadingCHWriter<br/>(batch)"\]:::go
-  s_gram_metering_v1_meter_reading_ch_writer --> c20
-  c21[\"📥<br/>server/cmd/gram/streams.go<br/>metering.NewMeterReadingStripeExporter"\]:::go
-  s_gram_metering_v1_meter_reading_stripe_exporter --> c21
-  c22[\"📥<br/>server/cmd/gram/streams.go<br/>networkingress.NewReconcileHandler<br/>(batch)"\]:::go
-  s_gram_networkingress_v1_reconciler --> c22
-  c23[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewAgentEventLogCHWriter<br/>(batch)"\]:::go
-  s_gram_otel_v1_agent_event_log_ch_writer --> c23
-  c24[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewAgentEventSpanCHWriter<br/>(batch)"\]:::go
-  s_gram_otel_v1_agent_event_span_ch_writer --> c24
-  c25[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewLogTransformHandler"\]:::go
-  s_gram_otel_v1_inbound_log_record_transformer --> c25
-  c26[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewMetricTransformHandler"\]:::go
-  s_gram_otel_v1_inbound_metric_transformer --> c26
-  c27[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewSpanTransformHandler"\]:::go
-  s_gram_otel_v1_inbound_span_transformer --> c27
-  c28[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewLogEventCHWriter<br/>(batch)"\]:::go
-  s_gram_otel_v1_log_event_ch_writer --> c28
-  c29[\"📥<br/>server/cmd/gram/streams.go<br/>logRelayHandler<br/>(batch)"\]:::go
-  s_gram_otel_v1_log_relay --> c29
-  c30[\"📥<br/>server/cmd/gram/streams.go<br/>metricRelayHandler<br/>(batch)"\]:::go
-  s_gram_otel_v1_metric_relay --> c30
-  c31[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewSpanEventCHWriter<br/>(batch)"\]:::go
-  s_gram_otel_v1_span_event_ch_writer --> c31
-  c32[\"📥<br/>server/cmd/gram/streams.go<br/>spanRelayHandler<br/>(batch)"\]:::go
-  s_gram_otel_v1_span_relay --> c32
-  c33[\"📥<br/>server/cmd/gram/streams.go<br/>ping.NewHandler"\]:::go
-  s_gram_ping_v2_processor --> c33
-  c34[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>PingHandler.handle"\]:::python
-  s_gram_ping_v2_py_processor --> c34
-  c35[\"📥<br/>server/cmd/gram/streams.go<br/>customRulesHandler"\]:::go
-  s_gram_risk_v1_custom_rules_analyzer --> c35
-  c36[\"📥<br/>server/cmd/gram/streams.go<br/>risk.NewFindingCHWriter<br/>(batch)"\]:::go
-  s_gram_risk_v1_finding_ch_writer --> c36
-  c37[\"📥<br/>server/cmd/gram/streams.go<br/>riskFindingRelayHandler<br/>(batch)"\]:::go
-  s_gram_risk_v1_finding_otel_relay --> c37
-  c38[\"📥<br/>server/cmd/gram/streams.go<br/>gitleaksHandler"\]:::go
-  s_gram_risk_v1_gitleaks_analyzer --> c38
-  c39[\"📥<br/>server/cmd/gram/streams.go<br/>gitleaksEnforceHandler"\]:::go
-  s_gram_risk_v1_gitleaks_enforcer --> c39
-  c40[\"📥<br/>server/cmd/gram/streams.go<br/>llmAnalyzerHandler"\]:::go
-  s_gram_risk_v1_llm_analyzer --> c40
-  c41[\"📥<br/>server/cmd/gram/streams.go<br/>llmanalyzer.NewEnforceHandler"\]:::go
-  s_gram_risk_v1_llm_enforcer --> c41
-  c42[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>presidio_handler.handle"\]:::python
-  s_gram_risk_v1_presidio_analyzer --> c42
-  c43[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>enforce_handler.handle"\]:::python
-  s_gram_risk_v1_presidio_enforcer --> c43
-  c44[\"📥<br/>server/cmd/gram/streams.go<br/>promptInjectionHandler"\]:::go
-  s_gram_risk_v1_prompt_injection_analyzer --> c44
-  c45[\"📥<br/>server/cmd/gram/streams.go<br/>promptPolicyHandler"\]:::go
-  s_gram_risk_v1_prompt_policy_analyzer --> c45
-  c46[\"📥<br/>server/cmd/gram/streams.go<br/>new"\]:::go
-  s_gram_telemetry_v1_noop --> c46
-  c47[\"📥<br/>server/cmd/gram/streams.go<br/>toolCallLogRelayHandler<br/>(batch)"\]:::go
-  s_gram_telemetry_v1_tool_call_log_relay --> c47
-  c48[\"📥<br/>server/cmd/gram/streams.go<br/>webhookEventHandler"\]:::go
-  s_gram_webhooks_v1_svix_relay --> c48
+  c20[\"📥<br/>server/cmd/gram/streams.go<br/>authz.NewChallengeCHWriter<br/>(batch)"\]:::go
+  s_gram_authz_v1_challenge_ch_writer --> c20
+  c21[\"📥<br/>server/cmd/gram/streams.go<br/>metering.NewMeterReadingCHWriter<br/>(batch)"\]:::go
+  s_gram_metering_v1_meter_reading_ch_writer --> c21
+  c22[\"📥<br/>server/cmd/gram/streams.go<br/>metering.NewMeterReadingStripeExporter"\]:::go
+  s_gram_metering_v1_meter_reading_stripe_exporter --> c22
+  c23[\"📥<br/>server/cmd/gram/streams.go<br/>networkingress.NewReconcileHandler<br/>(batch)"\]:::go
+  s_gram_networkingress_v1_reconciler --> c23
+  c24[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewAgentEventLogCHWriter<br/>(batch)"\]:::go
+  s_gram_otel_v1_agent_event_log_ch_writer --> c24
+  c25[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewAgentEventSpanCHWriter<br/>(batch)"\]:::go
+  s_gram_otel_v1_agent_event_span_ch_writer --> c25
+  c26[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewLogTransformHandler"\]:::go
+  s_gram_otel_v1_inbound_log_record_transformer --> c26
+  c27[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewMetricTransformHandler"\]:::go
+  s_gram_otel_v1_inbound_metric_transformer --> c27
+  c28[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewSpanTransformHandler"\]:::go
+  s_gram_otel_v1_inbound_span_transformer --> c28
+  c29[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewLogEventCHWriter<br/>(batch)"\]:::go
+  s_gram_otel_v1_log_event_ch_writer --> c29
+  c30[\"📥<br/>server/cmd/gram/streams.go<br/>logRelayHandler<br/>(batch)"\]:::go
+  s_gram_otel_v1_log_relay --> c30
+  c31[\"📥<br/>server/cmd/gram/streams.go<br/>metricRelayHandler<br/>(batch)"\]:::go
+  s_gram_otel_v1_metric_relay --> c31
+  c32[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewSpanEventCHWriter<br/>(batch)"\]:::go
+  s_gram_otel_v1_span_event_ch_writer --> c32
+  c33[\"📥<br/>server/cmd/gram/streams.go<br/>spanRelayHandler<br/>(batch)"\]:::go
+  s_gram_otel_v1_span_relay --> c33
+  c34[\"📥<br/>server/cmd/gram/streams.go<br/>ping.NewHandler"\]:::go
+  s_gram_ping_v2_processor --> c34
+  c35[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>PingHandler.handle"\]:::python
+  s_gram_ping_v2_py_processor --> c35
+  c36[\"📥<br/>server/cmd/gram/streams.go<br/>customRulesHandler"\]:::go
+  s_gram_risk_v1_custom_rules_analyzer --> c36
+  c37[\"📥<br/>server/cmd/gram/streams.go<br/>risk.NewFindingCHWriter<br/>(batch)"\]:::go
+  s_gram_risk_v1_finding_ch_writer --> c37
+  c38[\"📥<br/>server/cmd/gram/streams.go<br/>riskFindingRelayHandler<br/>(batch)"\]:::go
+  s_gram_risk_v1_finding_otel_relay --> c38
+  c39[\"📥<br/>server/cmd/gram/streams.go<br/>gitleaksHandler"\]:::go
+  s_gram_risk_v1_gitleaks_analyzer --> c39
+  c40[\"📥<br/>server/cmd/gram/streams.go<br/>gitleaksEnforceHandler"\]:::go
+  s_gram_risk_v1_gitleaks_enforcer --> c40
+  c41[\"📥<br/>server/cmd/gram/streams.go<br/>shadowHandler"\]:::go
+  s_gram_risk_v1_judge_shadow_analyzer --> c41
+  c42[\"📥<br/>server/cmd/gram/streams.go<br/>llmAnalyzerHandler"\]:::go
+  s_gram_risk_v1_llm_analyzer --> c42
+  c43[\"📥<br/>server/cmd/gram/streams.go<br/>llmanalyzer.NewEnforceHandler"\]:::go
+  s_gram_risk_v1_llm_enforcer --> c43
+  c44[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>presidio_handler.handle"\]:::python
+  s_gram_risk_v1_presidio_analyzer --> c44
+  c45[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>enforce_handler.handle"\]:::python
+  s_gram_risk_v1_presidio_enforcer --> c45
+  c46[\"📥<br/>server/cmd/gram/streams.go<br/>promptInjectionHandler"\]:::go
+  s_gram_risk_v1_prompt_injection_analyzer --> c46
+  c47[\"📥<br/>server/cmd/gram/streams.go<br/>promptPolicyHandler"\]:::go
+  s_gram_risk_v1_prompt_policy_analyzer --> c47
+  c48[\"📥<br/>server/cmd/gram/streams.go<br/>new"\]:::go
+  s_gram_telemetry_v1_noop --> c48
+  c49[\"📥<br/>server/cmd/gram/streams.go<br/>toolCallLogRelayHandler<br/>(batch)"\]:::go
+  s_gram_telemetry_v1_tool_call_log_relay --> c49
+  c50[\"📥<br/>server/cmd/gram/streams.go<br/>webhookEventHandler"\]:::go
+  s_gram_webhooks_v1_svix_relay --> c50
 ```
 
 ## Topics
@@ -275,6 +284,8 @@ flowchart LR
 | [`gram-risk-v1-gitleaks-analysis`](../infra/proto/gram/risk/v1/gitleaks_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_gitleaks.go`](../server/internal/background/activities/risk_analysis/scan_gitleaks.go) |
 | [`gram-risk-v1-gitleaks-enforcement`](../infra/proto/gram/risk/v1/gitleaks_enforcement.proto) | topic | 10m | [`server/internal/risk/enforcereply/dispatch.go`](../server/internal/risk/enforcereply/dispatch.go) |
 | [`gram-risk-v1-gitleaks-enforcer-dlq`](../infra/proto/gram/risk/v1/gitleaks_enforcer.proto) | DLQ | 10m | — |
+| [`gram-risk-v1-judge-shadow-analysis`](../infra/proto/gram/risk/v1/judge_shadow_analysis.proto) | topic | 1d | [`server/internal/scanners/judgeshadow/publisher.go`](../server/internal/scanners/judgeshadow/publisher.go) |
+| [`gram-risk-v1-judge-shadow-analyzer-dlq`](../infra/proto/gram/risk/v1/judge_shadow_analyzer.proto) | DLQ | 1d | — |
 | [`gram-risk-v1-llm-analysis`](../infra/proto/gram/risk/v1/llm_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_llm.go`](../server/internal/background/activities/risk_analysis/scan_llm.go) |
 | [`gram-risk-v1-llm-enforcement`](../infra/proto/gram/risk/v1/llm_enforcement.proto) | topic | 10m | [`server/internal/risk/enforcereply/dispatch.go`](../server/internal/risk/enforcereply/dispatch.go) |
 | [`gram-risk-v1-llm-enforcer-dlq`](../infra/proto/gram/risk/v1/llm_enforcer.proto) | DLQ | 10m | — |
@@ -313,6 +324,7 @@ flowchart LR
 | [`gram-risk-v1-finding-otel-relay`](../infra/proto/gram/risk/v1/finding_otel_relay.proto) | `gram-risk-v1-finding` | 1m | `gram-risk-v1-finding-otel-relay-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-gitleaks-analyzer`](../infra/proto/gram/risk/v1/gitleaks_analyzer.proto) | `gram-risk-v1-gitleaks-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-gitleaks-enforcer`](../infra/proto/gram/risk/v1/gitleaks_enforcer.proto) | `gram-risk-v1-gitleaks-enforcement` | 10s | `gram-risk-v1-gitleaks-enforcer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-risk-v1-judge-shadow-analyzer`](../infra/proto/gram/risk/v1/judge_shadow_analyzer.proto) | `gram-risk-v1-judge-shadow-analysis` | 30s | `gram-risk-v1-judge-shadow-analyzer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-llm-analyzer`](../infra/proto/gram/risk/v1/llm_analyzer.proto) | `gram-risk-v1-llm-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-llm-enforcer`](../infra/proto/gram/risk/v1/llm_enforcer.proto) | `gram-risk-v1-llm-enforcement` | 30s | `gram-risk-v1-llm-enforcer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-presidio-analyzer`](../infra/proto/gram/risk/v1/presidio_analyzer.proto) | `gram-risk-v1-presidio-analysis` | 1m | — | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |

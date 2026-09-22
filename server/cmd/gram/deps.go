@@ -1452,6 +1452,12 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "outbox", pub: outboxPublisher})
 
+	judgeShadow, err := newJudgeShadowTopic(ctx, psbroker)
+	if err != nil {
+		return nil, noopShutdown, err
+	}
+	pubs = append(pubs, labelledStop{label: "judgeShadow", pub: judgeShadow})
+
 	shutdown := func(ctx context.Context) error {
 		var err error
 		for _, pub := range pubs {
@@ -1463,6 +1469,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 
 	return &background.Publishers{
+		JudgeShadowAnalysis:     judgeShadow,
 		Outbox:                  outboxPublisher,
 		PresidioAnalysis:        presidioAnalysis,
 		GitleaksAnalysis:        gitleaksAnalysis,
