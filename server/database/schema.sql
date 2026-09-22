@@ -3256,17 +3256,26 @@ CREATE TABLE IF NOT EXISTS trusted_issuer_sessions (
   offline_access_refused_at timestamptz,
   -- Non-secret configuration fingerprint used to invalidate refusal suppression.
   offline_access_request_config_hash TEXT,
-  -- Claims never expire: an ambiguous rotating POST cannot be replayed.
+  -- Compare-and-swap version for credential updates.
   -- Nullable during expansion; readers treat legacy NULL as generation 1.
   credential_generation bigint DEFAULT 1,
+  -- Refresh attempt ownership, not a lease.
+  -- Claims never expire: an ambiguous rotating POST cannot be replayed.
   refresh_claim_id uuid,
+  -- Verified upstream OIDC sub, distinct from the canonical Gram subject.
   upstream_subject_encrypted TEXT,
+  -- Original login nonce for the retained refresh family; refreshed ID token nonce, if present, must match (OIDC Core §12.2).
   nonce_encrypted TEXT,
+  -- Credential binding fingerprint, including relevant registration/signing changes; distinct from the refusal hash.
   credential_config_hash TEXT,
+  -- Last per-human delegation observation and its timestamp, not live provider health.
   observation_status TEXT,
   observed_at timestamptz,
+  -- Refresh credential acquisition at login, not subsequent renewal.
   credential_obtained_at timestamptz,
+  -- Last successful refresh, even without a replacement ID token.
   last_refresh_succeeded_at timestamptz,
+  -- Local retry backoff deadline, not token or claim expiry.
   retry_after timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
