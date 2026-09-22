@@ -313,6 +313,8 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
 		{scope: authz.ScopeAgentAuthorize, description: "Authorize and manage agent credentials.", resourceType: "agent"},
 		{scope: authz.ScopeAgentTransfer, description: "Transfer agent ownership.", resourceType: "agent"},
+		{scope: authz.ScopeOrgDeviceAgentSync, description: "Let an agent's device agent sync the plugins assigned to it.", resourceType: "org"},
+		{scope: authz.ScopeOrgHooksIngest, description: "Let an agent send AI-tool hook events and telemetry.", resourceType: "org"},
 	}
 	result := make([]*gen.ScopeDefinition, 0, len(scopes))
 	for _, scope := range scopes {
@@ -689,6 +691,8 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
 		{Scope: string(authz.ScopeAgentTransfer), Selectors: nil},
+		{Scope: string(authz.ScopeOrgDeviceAgentSync), Selectors: nil},
+		{Scope: string(authz.ScopeOrgHooksIngest), Selectors: nil},
 	}
 }
 

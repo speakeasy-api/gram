@@ -217,6 +217,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	// device_id) onto every hook event row so per-tool-call telemetry can be
 	// split by personal vs team account, not just the OTEL log stream.
 	stampAccountAttribution(attrs, *metadata)
+	withAgentActor(ctx, attrs)
 	applyHookHostnameAttr(attrs, payload.HookHostname)
 
 	if payload.Error != nil {
@@ -347,7 +348,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 	emailToUserID := make(map[string]string)
 	for _, m := range metrics {
 		email := conv.NormalizeEmail(m.UserEmail)
-		if email == "" {
+		if email == "" || isAgentActor(ctx) {
 			continue
 		}
 		if _, seen := emailToUserID[email]; seen {
@@ -395,12 +396,16 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		// metadata that the same org+project seeded — a colliding or spoofed
 		// session id must not stamp another tenant's attribution or user identity
 		// onto this org's rows.
+		m.SessionID = agentSessionID(ctx, m.SessionID)
 		var sessionMeta SessionMetadata
 		if m.SessionID != "" {
 			if meta, err := s.getSessionMetadata(ctx, m.SessionID); err == nil &&
 				meta.GramOrgID == orgID && meta.ProjectID == projectID {
 				sessionMeta = meta
 			}
+		}
+		if isAgentActor(ctx) {
+			sessionMeta = agentSessionView(sessionMeta, orgID, projectID)
 		}
 		stampAccountAttribution(attrs, sessionMeta)
 		// Cost/token metric rows carry the session's resolved surface (OTEL
@@ -462,12 +467,15 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		if sessionMeta.UserID != "" {
 			userInfo = telemetry.UserInfoByIDAndEmail(sessionMeta.UserID, conv.Default(sessionMeta.UserEmail, m.UserEmail))
 		}
+		if isAgentActor(ctx) {
+			userInfo = telemetry.UserInfoByEmail("")
+		}
 
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Unix(0, m.TimestampNano),
 			ToolInfo:   toolInfo,
 			UserInfo:   userInfo,
-			Attributes: attrs,
+			Attributes: withAgentActor(ctx, attrs),
 		})
 	}
 

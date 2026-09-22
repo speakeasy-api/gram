@@ -15,6 +15,7 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -108,7 +109,7 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	// behavior is exercised explicitly via withPerUserKeyAuth.
 	authCtx.APIKeyScopes = []string{"agent", "agent_user"}
 
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
 
 	features := &stubProductFeatures{sessionPortability: true}
 	blobs := assetstest.NewTestBlobStore(t)

@@ -294,7 +294,15 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
+	ctx, err := s.auth.Authorize(ctx, key, schema)
+	if err != nil {
+		return ctx, err
+	}
+	// Bypass requests bind to a human requester; agent-principal keys never qualify.
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+	return ctx, nil
 }
 
 // OnMessagesStored implements chat.MessageObserver. The caller
