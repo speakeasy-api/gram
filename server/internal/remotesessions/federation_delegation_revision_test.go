@@ -37,9 +37,9 @@ func TestDelegationLoginExplicitExpiredRefreshIsNotDurable(t *testing.T) {
 	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, identity, true))
 	credential, err := store.load(t.Context(), b)
 	require.NoError(t, err)
-	require.Empty(t, credential.refresh)
-	require.Equal(t, "refused", credential.status)
-	require.NotEmpty(t, credential.assertion)
+	require.Empty(t, credential.RefreshTokenEncrypted.String)
+	require.Equal(t, "refused", credential.ObservationStatus.String)
+	require.NotEmpty(t, credential.IdentityAssertionEncrypted.String)
 }
 
 func TestFederatedSigningRevisionDependencyErrors(t *testing.T) {

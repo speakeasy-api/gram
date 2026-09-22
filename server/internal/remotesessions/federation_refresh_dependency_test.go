@@ -119,10 +119,10 @@ func TestFederatedRefreshVerificationDependencies(t *testing.T) {
 			require.NoError(t, loadErr)
 			if tc.want == FederatedRefreshAmbiguous {
 				require.ErrorIs(t, err, ErrDelegationTemporary)
-				require.Equal(t, before.refresh, after.refresh)
-				require.Equal(t, before.subject, after.subject)
-				require.Equal(t, before.nonce, after.nonce)
-				require.NotEqual(t, uuid.Nil, after.claim)
+				require.Equal(t, before.RefreshTokenEncrypted.String, after.RefreshTokenEncrypted.String)
+				require.Equal(t, before.UpstreamSubjectEncrypted.String, after.UpstreamSubjectEncrypted.String)
+				require.Equal(t, before.NonceEncrypted.String, after.NonceEncrypted.String)
+				require.NotEqual(t, uuid.Nil, after.RefreshClaimID.UUID)
 				// Even well after retryAfter, never resubmit the potentially spent token.
 				later := s.now().Add(24 * time.Hour)
 				s.now = func() time.Time { return later }
@@ -130,9 +130,9 @@ func TestFederatedRefreshVerificationDependencies(t *testing.T) {
 				require.ErrorIs(t, err, ErrDelegationTemporary)
 			} else {
 				require.ErrorIs(t, err, ErrDelegationConfiguration)
-				require.Empty(t, after.refresh)
-				require.Empty(t, after.assertion)
-				require.Empty(t, after.subject)
+				require.Empty(t, after.RefreshTokenEncrypted.String)
+				require.Empty(t, after.IdentityAssertionEncrypted.String)
+				require.Empty(t, after.UpstreamSubjectEncrypted.String)
 				_, err = s.Resolve(t.Context(), b, allow)
 				require.ErrorIs(t, err, ErrDelegationConfiguration)
 			}

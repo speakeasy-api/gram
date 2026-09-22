@@ -29,7 +29,7 @@ func (c *offlineLoginConsumer) ConsumeFederatedLogin(ctx context.Context, r mcp.
 
 func TestFederatedOptionalOfflineConsent(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"no_refresh", "cancel", "provider_error", "account_switch", "suppressed", "policy_unavailable", "membership_denied"} {
+	for _, scenario := range []string{"no_refresh", "cancel", "provider_error", "account_switch", "suppressed", "policy_unavailable", "policy_error_with_prompt", "membership_denied"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			ctx, f := newFederationLoginFixture(t, scenario != "membership_denied", true)
@@ -44,8 +44,9 @@ func TestFederatedOptionalOfflineConsent(t *testing.T) {
 					require.Equal(t, []string{mockidp.MockUserID}, f.resolver.memberChecks, "membership must precede per-human policy lookup")
 					require.NotEmpty(t, request.ConfigurationHash)
 					require.Equal(t, request.Provider.OfflineConfigurationHash(), request.ConfigurationHash)
-					if scenario == "policy_unavailable" {
-						return true, errors.New("temporary policy store failure")
+					if scenario == "policy_unavailable" || scenario == "policy_error_with_prompt" {
+						// Also reject an inconsistent producer that requests consent alongside an error.
+						return scenario == "policy_error_with_prompt", errors.New("temporary policy store failure")
 					}
 					return scenario != "suppressed", nil
 				},
@@ -89,7 +90,7 @@ func TestFederatedOptionalOfflineConsent(t *testing.T) {
 			require.Len(t, logins, 1)
 			require.False(t, logins[0].OfflineRequested)
 			require.False(t, logins[0].OptionalRefused)
-			if scenario == "suppressed" || scenario == "policy_unavailable" {
+			if scenario == "suppressed" || scenario == "policy_unavailable" || scenario == "policy_error_with_prompt" {
 				require.Equal(t, http.StatusFound, first.Code)
 				consent, err := url.Parse(first.Header().Get("Location"))
 				require.NoError(t, err)

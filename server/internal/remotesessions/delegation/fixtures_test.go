@@ -15,15 +15,16 @@ import (
 // The core's fixtures implement policy facts only. OIDC parsing and credential
 // consumption are covered separately through the production adapter tests.
 type fixtureProvider struct {
-	metadata       struct{ TokenEndpoint string }
-	organizationID string
-	issuer         repo.RemoteSessionIssuer
-	client         repo.RemoteSessionClient
+	offlineSupported bool
+	metadata         struct{ TokenEndpoint string }
+	organizationID   string
+	issuer           repo.RemoteSessionIssuer
+	client           repo.RemoteSessionClient
 }
 
 func federatedFixture(t *testing.T) *fixtureProvider {
 	t.Helper()
-	return &fixtureProvider{organizationID: "org-test", issuer: repo.RemoteSessionIssuer{ID: uuid.New(), Issuer: "https://idp.example.test/tenant"}, client: repo.RemoteSessionClient{ID: uuid.New(), ClientID: "upstream-client", Scope: []string{"openid", "email", "offline_access"}}}
+	return &fixtureProvider{offlineSupported: true, organizationID: "org-test", issuer: repo.RemoteSessionIssuer{ID: uuid.New(), Issuer: "https://idp.example.test/tenant"}, client: repo.RemoteSessionClient{ID: uuid.New(), ClientID: "upstream-client", Scope: []string{"openid", "email", "offline_access"}}}
 }
 func (p *fixtureProvider) Binding(human string) Binding {
 	return Binding{OrganizationID: p.organizationID, IssuerID: p.issuer.ID, ClientID: p.client.ID, HumanID: human}
@@ -41,19 +42,20 @@ func (p *fixtureProvider) OfflineConfigurationHash() string {
 func (p *fixtureProvider) OfflineRequested() bool {
 	return slices.Contains(p.client.Scope, "offline_access")
 }
-func (p *fixtureProvider) OfflineSupported() bool { return p.OfflineRequested() }
+func (p *fixtureProvider) OfflineSupported() bool { return p.offlineSupported }
 
 type EphemeralFederatedCredentials struct {
 	idToken, refreshToken string
 	receivedAt            time.Time
 	refreshExpiresAt      *time.Time
+	refreshExpiresIn      int64
 }
 
 func (c EphemeralFederatedCredentials) IDToken() string              { return c.idToken }
 func (c EphemeralFederatedCredentials) RefreshToken() string         { return c.refreshToken }
 func (c EphemeralFederatedCredentials) ReceivedAt() time.Time        { return c.receivedAt }
 func (c EphemeralFederatedCredentials) RefreshExpiresAt() *time.Time { return c.refreshExpiresAt }
-func (c EphemeralFederatedCredentials) RefreshExpiresIn() int64      { return 0 }
+func (c EphemeralFederatedCredentials) RefreshExpiresIn() int64      { return c.refreshExpiresIn }
 
 type FederatedRefreshCredentials struct{ EphemeralFederatedCredentials }
 type federatedCredentialState struct {

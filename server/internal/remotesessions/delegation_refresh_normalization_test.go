@@ -96,14 +96,14 @@ func TestDelegationRefreshNormalizesProviderLifetime(t *testing.T) {
 					credential, err := store.load(t.Context(), b)
 					require.NoError(t, err)
 					if want.IsZero() {
-						require.True(t, credential.refreshExpiry.IsZero())
+						require.True(t, credential.RefreshExpiresAt.Time.IsZero())
 					} else {
-						require.WithinDuration(t, want, credential.refreshExpiry, time.Microsecond)
+						require.WithinDuration(t, want, credential.RefreshExpiresAt.Time, time.Microsecond)
 					}
 					if wantToken == "" {
-						require.Empty(t, credential.refresh)
+						require.Empty(t, credential.RefreshTokenEncrypted.String)
 					} else {
-						require.Equal(t, wantToken, delegationPlain(t, s, credential.refresh))
+						require.Equal(t, wantToken, delegationPlain(t, s, credential.RefreshTokenEncrypted.String))
 					}
 				})
 			}

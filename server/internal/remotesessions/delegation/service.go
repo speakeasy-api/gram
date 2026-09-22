@@ -196,12 +196,16 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 			return err
 		}
 		expiry := time.Time{}
+		expiryKnown := false
 		if reported := tokens.RefreshExpiresAt(); reported != nil {
 			expiry = *reported
+			expiryKnown = true
 		} else if tokens.RefreshExpiresIn() > 0 && tokens.RefreshExpiresIn() <= int64((1<<63-1)/time.Second) {
 			expiry = tokens.ReceivedAt().Add(time.Duration(tokens.RefreshExpiresIn()) * time.Second)
+			expiryKnown = true
 		}
-		if !expiry.IsZero() && !expiry.After(now) {
+		refreshExpired := expiryKnown && !expiry.After(now)
+		if refreshExpired {
 			refresh = ""
 			expiry = time.Time{}
 		}
@@ -247,7 +251,7 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 				next.refresh = refresh
 				next.refreshExpiry = expiry
 				next.obtainedAt = now
-			} else if !sameIdentity || current.claim != uuid.Nil {
+			} else if refreshExpired || !sameIdentity || current.claim != uuid.Nil {
 				next.refresh = ""
 				next.refreshExpiry = time.Time{}
 			}
@@ -473,6 +477,10 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	// expires the retained token; omission cannot remove a previously known bound.
 	if expiry := result.Credentials.RefreshExpiresAt(); expiry != nil {
 		next.refreshExpiry = *expiry
+		// A present zero is an expired bound, not the omitted/unknown sentinel.
+		if !expiry.After(s.now()) {
+			next.refresh = ""
+		}
 	}
 	if !next.refreshExpiry.IsZero() && !next.refreshExpiry.After(s.now()) {
 		next.refresh = ""
@@ -609,8 +617,14 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 // Revoke explicitly erases secrets. The caller must authorize administrative
 // revocation or current same-human ownership before invoking this internal API.
 func (s *Service) Revoke(ctx context.Context, b Binding, authority Authorizer) error {
-	if authority == nil || !validDelegationBinding(b) || authority.AuthorizeDelegation(ctx, b) != nil {
+	if authority == nil || !validDelegationBinding(b) {
 		return ErrConfiguration
+	}
+	if err := authority.AuthorizeDelegation(ctx, b); err != nil {
+		if definitiveDelegationFailure(err) {
+			return ErrConfiguration
+		}
+		return ErrTemporary
 	}
 	if err := s.store.revoke(ctx, b); err != nil {
 		return ErrTemporary

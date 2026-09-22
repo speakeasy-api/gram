@@ -52,9 +52,12 @@ func (s *delegationAdapterFixture) decrypt(v string) (string, error) {
 
 type delegationAdapterStore struct{ db *pgxpool.Pool }
 
-func (s *delegationAdapterStore) load(ctx context.Context, b DelegationBinding) (delegationCredential, error) {
+func (s *delegationAdapterStore) load(ctx context.Context, b DelegationBinding) (repo.TrustedIssuerSession, error) {
 	row, err := repo.New(s.db).GetTrustedDelegationCredential(ctx, repo.GetTrustedDelegationCredentialParams{OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String()})
-	return credentialFromRow(row), err
+	if err != nil {
+		return repo.TrustedIssuerSession{}, fmt.Errorf("load delegation test credential: %w", err)
+	}
+	return row, nil
 }
 
 type delegationTestAuthority func(context.Context, DelegationBinding) error
@@ -106,53 +109,6 @@ func newDelegationUnitFixture(t *testing.T) (*delegationAdapterFixture, *delegat
 		return nil
 	})
 	return s, &delegationAdapterStore{db}, p, b, allow
-}
-
-type delegationCredential struct {
-	generation      int64
-	claim           uuid.UUID
-	assertion       string
-	assertionExpiry time.Time
-	refresh         string
-	refreshExpiry   time.Time
-	subject         string
-	nonce           string
-	config          string
-	refusedAt       time.Time
-	requestConfig   string
-	status          string
-	observedAt      time.Time
-	obtainedAt      time.Time
-	refreshedAt     time.Time
-	retryAfter      time.Time
-}
-
-func (c delegationCredential) String() string               { return "[encrypted delegation credential]" }
-func (c delegationCredential) GoString() string             { return c.String() }
-func (c delegationCredential) MarshalJSON() ([]byte, error) { return []byte("{}"), nil }
-
-func credentialFromRow(row repo.TrustedIssuerSession) delegationCredential {
-	generation := int64(1)
-	if row.CredentialGeneration.Valid {
-		generation = row.CredentialGeneration.Int64
-	}
-	return delegationCredential{
-		generation: generation, claim: row.RefreshClaimID.UUID,
-		assertion:       row.IdentityAssertionEncrypted.String,
-		assertionExpiry: row.IdentityAssertionExpiresAt.Time,
-		refresh:         row.RefreshTokenEncrypted.String,
-		refreshExpiry:   row.RefreshExpiresAt.Time,
-		subject:         row.UpstreamSubjectEncrypted.String,
-		nonce:           row.NonceEncrypted.String,
-		config:          row.CredentialConfigHash.String,
-		status:          row.ObservationStatus.String,
-		observedAt:      row.ObservedAt.Time,
-		obtainedAt:      row.CredentialObtainedAt.Time,
-		refreshedAt:     row.LastRefreshSucceededAt.Time,
-		retryAfter:      row.RetryAfter.Time,
-		refusedAt:       row.OfflineAccessRefusedAt.Time,
-		requestConfig:   row.OfflineAccessRequestConfigHash.String,
-	}
 }
 
 func delegationLogin(p *FederatedProvider, now time.Time, id, refresh string, ttl time.Duration) *FederatedIdentity {
