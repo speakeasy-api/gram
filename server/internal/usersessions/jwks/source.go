@@ -122,6 +122,11 @@ func NewRemoteSource(jwksURI string) (Source, error) {
 	return Source{kind: sourceRemote, inline: nil, uri: jwksURI, origin: parsed.Host, cacheKey: "", refreshNamespace: "", fetchScope: "", doer: nil}, nil
 }
 
+// ErrURINotHTTPS reports a jwks_uri that is not https. Named so a caller can
+// tell a plain-http key set location, a configuration an operator has to fix,
+// from other malformed values.
+var ErrURINotHTTPS = errors.New("jwks_uri must use the https scheme")
+
 // ValidateURI reports whether a jwks_uri satisfies the syntax every remote
 // key source must satisfy, without building a Source from it.
 //
@@ -167,7 +172,7 @@ func parseJWKSURI(raw string) (*url.URL, error) {
 		return nil, errors.New("jwks_uri is not a valid URL")
 	}
 	if parsed.Scheme != "https" {
-		return nil, errors.New("jwks_uri must use the https scheme")
+		return nil, ErrURINotHTTPS
 	}
 	if parsed.User != nil {
 		return nil, errors.New("jwks_uri must not contain a userinfo component")
