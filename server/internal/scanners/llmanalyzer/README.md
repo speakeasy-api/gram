@@ -119,7 +119,10 @@ boolean→multivariate change breaks every boolean read of the key (the server's
    `llm`). Orgs outside every condition evaluate `off`.
 3. Verify: legacy enforcement unchanged; `risk.llm.shadow_comparison` and
    `risk.llm.policy_evaluations{outcome=shadow_*}` populate; watch hook p99.
-4. Merge the shadow-persistence migration; run the comparison query below.
+4. Deploy the `mark-shadow-risk-findings` ClickHouse migration and the
+   handler that publishes shadow findings (they ship together); from then on
+   both engines' findings for the dogfood org land in `risk_findings`, the
+   model's marked `shadow = 1`. Run the comparison query below.
 5. Flip the dogfood org to `llm` when satisfied. A follow-up `chore:` removes
    the boolean fallback from `RiskLLMAnalyzerVariant` and the dashboard hook.
 
@@ -127,46 +130,64 @@ Never switch the flag type before step 1 is live: old code reads `off`.
 
 ### Comparison query
 
-Once the shadow-persistence migration lands, `risk_findings` carries
-`shadow UInt8 DEFAULT 0` and the batch lane stores both engines' findings for
-a shadow org. Per policy and message, legacy rows (`shadow = 0`,
-`source != 'llm_analyzer'`) and model rows (`shadow = 1`,
-`source = 'llm_analyzer'`) join on the message anchor:
+`risk_findings` carries `shadow UInt8 DEFAULT 0`. For a shadow org the batch
+lane stores both engines' findings: the legacy rows as always, and the
+model's rows marked `shadow = 1` (`source = 'llm_analyzer'`), which every
+user-facing read path filters out. Per policy and message anchor
+(`chat_message_id`, `content_part_id`), the legacy rows for the sources the
+model covers and the model's rows join into agree / legacy-only / model-only
+counts per policy:
 
 ```sql
 with
   legacy as (
-    select risk_policy_id, chat_message_id, content_part_id, count() as n
+    select risk_policy_id, chat_message_id, content_part_id, uniqExact(id) as n
     from risk_findings
-    where shadow = 0 and source != 'llm_analyzer' and project_id = '<PROJECT_ID>'
+    where project_id = '<PROJECT_ID>'
+      and created_at >= now() - interval 7 day
+      and shadow = 0 and dead_letter_reason = ''
+      and source in ('gitleaks', 'presidio', 'prompt_injection', 'destructive_tool', 'cli_destructive')
     group by 1, 2, 3
   ),
   model as (
-    select risk_policy_id, chat_message_id, content_part_id, count() as n
+    select risk_policy_id, chat_message_id, content_part_id, uniqExact(id) as n
     from risk_findings
-    where shadow = 1 and source = 'llm_analyzer' and project_id = '<PROJECT_ID>'
+    where project_id = '<PROJECT_ID>'
+      and created_at >= now() - interval 7 day
+      and shadow = 1 and dead_letter_reason = '' and source = 'llm_analyzer'
     group by 1, 2, 3
   )
 select
-  coalesce(l.risk_policy_id, m.risk_policy_id) as risk_policy_id,
+  if(l.risk_policy_id != '', l.risk_policy_id, m.risk_policy_id) as policy_id,
   countIf(l.n > 0 and m.n > 0) as agree_match,
-  countIf(l.n > 0 and m.n is null) as legacy_only,
-  countIf(l.n is null and m.n > 0) as llm_only
+  countIf(l.n > 0 and m.n = 0) as legacy_only,
+  countIf(l.n = 0 and m.n > 0) as llm_only
 from legacy l
 full outer join model m
   on l.risk_policy_id = m.risk_policy_id
  and l.chat_message_id = m.chat_message_id
  and l.content_part_id = m.content_part_id
-group by 1
-settings join_algorithm = 'full_sorting_merge', join_use_nulls = 1;
+group by policy_id
+order by policy_id;
 ```
 
-The unmatched side of the full join is `NULL` (with `join_use_nulls = 1`; the
-default would fill `0`, which the `is null` tests would miss), and ClickHouse
-only runs a `FULL OUTER JOIN` under the `full_sorting_merge` algorithm.
+Reading notes:
 
-`agree_clean` is not a row in this store (a clean message has no finding);
-read it from the realtime counter or from the batch's scanned-message count.
+- The table is append-only under at-least-once delivery, so each side counts
+  distinct finding ids rather than rows; dead-letter sentinels are skipped.
+  The `created_at` bound keeps the scan to a few daily partitions.
+- The legacy side is restricted to the sources the model covers
+  (`CoveredSources`), so a `shadow_mcp` or `account_identity` finding never
+  counts as `legacy_only`.
+- The unmatched side of the full outer join reads as defaults (`n = 0`, an
+  empty policy id) under ClickHouse's default `join_use_nulls = 0`, which the
+  `countIf` arms and the `if` on the policy id rely on.
+- Suppression is deliberately ignored: a legacy finding a user later dismissed
+  still counts as `legacy_only`, which is exactly the disagreement worth
+  reading. Add `excluded_at IS NULL` on a latest-copy-per-id subquery to
+  compare live rows only.
+- `agree_clean` is not a row in this store (a clean message has no finding);
+  read it from the realtime counter or from the batch's scanned-message count.
 
 ## Architecture
 
