@@ -13,16 +13,19 @@ daemons = ["dev-idp", "dev-idp-dashboard", "admin", "admin-dashboard", "mock-oid
 [daemons.park]
 run = "mise run park"
 ready_output = "Parked on port"
+retry = 0
 
 # Finite operations: acknowledge dispatch immediately; Pitchfork retains
 # ownership until exit. They must not wait on the daemon they are stopping.
 [daemons.pause-stack]
 run = "mise run pause"
 ready_delay = 0
+retry = 0
 
 [daemons.wake-stack]
 run = "mise run wake"
 ready_delay = 0
+retry = 0
 
 [daemons.dev-idp]
 run = "mise run start:dev-idp"

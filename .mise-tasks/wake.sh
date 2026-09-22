@@ -104,7 +104,7 @@ if [ -z "$containers" ]; then
     # this lock is the only thing keeping a pause or another wake off the
     # containers while it migrates and seeds. Running it as a child keeps the
     # EXIT trap, and with it the lock, until the boot is done.
-    INFRA_READINESS_TIMEOUT=300 ./zero --agent
+    GRAM_STACK_LOCK_OWNER="$$" INFRA_READINESS_TIMEOUT=300 ./zero --agent
     exit $?
 fi
 
@@ -115,7 +115,7 @@ docker compose --profile "*" start > /dev/null 2>&1 || true
 
 mise run infra:start
 release_port
-mise run start
+mise run start --lock-owner "$$"
 
 # Schedule registration runs when the worker starts. Resume only schedules
 # that `pause` changed; schedules paused manually remain paused.

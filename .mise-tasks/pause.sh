@@ -80,8 +80,8 @@ if ! mise run temporal:schedules --state pause --lock-owner "$$"; then
     echo "⚠️  Some Temporal schedules could not be paused; the stack will still be stopped." >&2
 fi
 
-# Best-effort, as in infra:stop: a supervisor that is not running is not an
-# error here, and neither is a daemon that has already exited.
+# Missing/stopped daemons are successful no-ops in Pitchfork. Real stop errors
+# must surface rather than marking a still-running application stack paused.
 if pitchfork supervisor status &> /dev/null; then
     pitchfork stop --group application
     pitchfork stop idle-pause
@@ -102,7 +102,9 @@ docker compose --profile "*" stop
 rm -f "$gitdir/gram-stack-lastseen"
 
 # Pitchfork owns the listener, so normal worktree teardown stops it too.
-pitchfork supervisor start
-pitchfork start park
-
-echo "Stack paused. Resume with \`mise run wake\`, or from ${GRAM_SITE_URL:-the dashboard URL}."
+if pitchfork supervisor start && pitchfork start park; then
+    echo "Stack paused. Resume with \`mise run wake\`, or from ${GRAM_SITE_URL:-the dashboard URL}."
+else
+    echo "Stack paused, but the resume page could not start. Use \`mise run wake\` to resume." >&2
+    echo "Inspect \`pitchfork logs park\` for the startup failure." >&2
+fi

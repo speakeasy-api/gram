@@ -60,6 +60,9 @@ pitchfork = "2.22.0"
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
 [env]
+# Do not inherit another worktree's Compose project from the shared supervisor.
+# git:workinit overrides this in mise.local.toml for linked worktrees.
+COMPOSE_PROJECT_NAME = "gram"
 ###########################
 ## Runtime configuration ##
 ###########################
