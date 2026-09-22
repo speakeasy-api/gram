@@ -97,7 +97,7 @@ export function MeterUsageTable({
 
   return (
     <div className="border-border border">
-      <Page.Toolbar>
+      <Page.Toolbar className="border-0">
         <Page.Toolbar.Leading>
           <span className="font-medium">Cumulative breakdown</span>
           <span className="text-muted-foreground text-sm">
@@ -109,6 +109,7 @@ export function MeterUsageTable({
         </Page.Toolbar.Actions>
       </Page.Toolbar>
       <Table
+        className="border-x-0 border-b-0"
         columns={columns}
         data={rows}
         rowKey={(row) => row.identity}

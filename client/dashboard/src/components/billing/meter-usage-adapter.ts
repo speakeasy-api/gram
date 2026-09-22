@@ -57,7 +57,7 @@ type MeterNotation = "compact" | "standard";
 function formatMeterRatio(
   value: bigint,
   denominator: bigint,
-  unit: string,
+  unit: MeterUsageData["unit"],
   notation: MeterNotation,
 ): string {
   const units = unit === "bytes" ? BYTE_UNITS : TOKEN_UNITS;
@@ -86,13 +86,16 @@ function formatMeterRatio(
 
 export function formatMeterQuantity(
   value: string,
-  unit: string,
+  unit: MeterUsageData["unit"],
   notation: MeterNotation = "compact",
 ): string {
   return formatMeterRatio(BigInt(value), 1n, unit, notation);
 }
 
-export function formatScaledMeterQuantity(value: string, unit: string): string {
+export function formatScaledMeterQuantity(
+  value: string,
+  unit: MeterUsageData["unit"],
+): string {
   const isBytes = unit === "bytes";
   const divisor = isBytes ? 1024n ** 3n : 1_000_000n;
   const quantity = BigInt(value);
@@ -105,7 +108,7 @@ export function formatScaledMeterQuantity(value: string, unit: string): string {
 }
 export function formatDailyMeterRate(
   total: string,
-  unit: string,
+  unit: MeterUsageData["unit"],
   from: Date,
   to: Date,
   now: Date,
@@ -122,6 +125,9 @@ export function formatDailyMeterRate(
   return `${perDay}/day`;
 }
 
-export function formatMeterAxis(value: number, unit: string): string {
+export function formatMeterAxis(
+  value: number,
+  unit: MeterUsageData["unit"],
+): string {
   return formatMeterRatio(BigInt(Math.round(value * 10)), 10n, unit, "compact");
 }

@@ -1,4 +1,5 @@
 import {
+  type MeterUsageData,
   formatMeterQuantity,
   formatScaledMeterQuantity,
 } from "./meter-usage-adapter";
@@ -9,7 +10,7 @@ export function MeterQuantityCell({
   showRaw,
 }: {
   quantity: string;
-  unit: string;
+  unit: MeterUsageData["unit"];
   showRaw: boolean;
 }): JSX.Element {
   let usage: string;

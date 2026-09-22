@@ -47,7 +47,7 @@ const PROJECT: MeterBreakdownOption = {
 
 export const METER_FAMILIES: Record<MeterFamily, MeterFamilyDefinition> = {
   agent_session_storage: {
-    label: "Stored sessions",
+    label: "Session storage",
     description:
       "Stored-message workload measured in tokens, not provider input or output tokens.",
     defaultBreakdown: "total",
@@ -82,7 +82,7 @@ export const METER_FAMILIES: Record<MeterFamily, MeterFamilyDefinition> = {
     ],
   },
   mcp_bandwidth: {
-    label: "MCP bandwidth",
+    label: "MCP gateway",
     description:
       "Application-visible request and response body bytes, excluding headers, framing, and upstream fanout.",
     defaultBreakdown: "direction",
@@ -100,7 +100,7 @@ export const METER_FAMILIES: Record<MeterFamily, MeterFamilyDefinition> = {
     ],
   },
   risk_content_scans: {
-    label: "Risk content scans",
+    label: "Risk scans",
     description:
       "Content volume scanned by the six risk scanners, measured in tokens. Content scanned by multiple scanners contributes to each.",
     defaultBreakdown: "scanner",
