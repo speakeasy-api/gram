@@ -196,7 +196,9 @@ type tokenGrantClientlessHandler func(
 	ctx context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
+	endpoint *ResolvedMcpEndpoint,
 	creds presentedClientCredentials,
+	baseURL string,
 	logger *slog.Logger,
 ) error
 
@@ -308,7 +310,7 @@ func (s *Service) serveTokenGrant(
 		}
 		return grant.authenticated(ctx, w, r, endpoint, clientRow, baseURL, creds.method, logger)
 	case grant.clientAuth == tokenClientAuthNone && grant.clientless != nil:
-		return grant.clientless(ctx, w, r, creds, logger)
+		return grant.clientless(ctx, w, r, endpoint, creds, baseURL, logger)
 	default:
 		err := fmt.Errorf("token grant %q has client authentication %q without a matching handler", grantType, grant.clientAuth)
 		return oops.E(oops.CodeUnexpected, err, "dispatch token grant").LogError(ctx, logger)

@@ -345,16 +345,16 @@ func (s *Service) handleWorkloadAssertionGrant(
 	// While the grant is off, the answer is indistinguishable from a
 	// deployment without it.
 	if s.workloadGrant == nil {
-		return refuseClientlessTokenGrant(ctx, w, r, endpoint, creds, baseURL, logger)
+		return refuseClientlessTokenGrant(ctx, w, r, creds, logger)
 	}
 	enabled, err := s.workloadAssertionGrantEnabled(ctx, endpoint)
 	if err != nil {
 		// Fails closed to the answer the endpoint gives with the grant off.
 		logger.WarnContext(ctx, "workload assertion grant flag unavailable, refusing as disabled", attr.SlogError(err))
-		return refuseClientlessTokenGrant(ctx, w, r, endpoint, creds, baseURL, logger)
+		return refuseClientlessTokenGrant(ctx, w, r, creds, logger)
 	}
 	if !enabled {
-		return refuseClientlessTokenGrant(ctx, w, r, endpoint, creds, baseURL, logger)
+		return refuseClientlessTokenGrant(ctx, w, r, creds, logger)
 	}
 	// A workload acts through its assigned agent's policy, which the MCP side
 	// honours only under the agent authorization rollout. Minting without it
