@@ -13,6 +13,7 @@ const mockUnproxiedDeleteServer = vi.fn();
 const mockFetchImageFromURL = vi.fn();
 const mockMcpMetadataSet = vi.fn();
 const mockAutoConfigureRemoteMcpAuth = vi.fn();
+const mockUseEffectiveUserSessionIssuers = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
 const mockClient = {
@@ -59,6 +60,11 @@ vi.mock("@/pages/sources/remote-mcp/autoConfigureAuth", () => ({
     mockAutoConfigureRemoteMcpAuth(...args),
 }));
 
+vi.mock("@/hooks/useEffectiveUserSessionIssuers", () => ({
+  useEffectiveUserSessionIssuers: (...args: unknown[]) =>
+    mockUseEffectiveUserSessionIssuers(...args),
+}));
+
 vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), success: vi.fn(), error: vi.fn() },
 }));
@@ -99,7 +105,10 @@ vi.mock("@tanstack/react-query", () => ({
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
-import { useRemoteMcpInstallWorkflow } from "./useRemoteMcpInstallWorkflow";
+import {
+  ISSUER_LOOKUP_FAILED_MESSAGE,
+  useRemoteMcpInstallWorkflow,
+} from "./useRemoteMcpInstallWorkflow";
 
 const mockUseRemoteMcpServers = vi.mocked(useRemoteMcpServers);
 
@@ -137,6 +146,12 @@ const EMPTY_SERVERS: PulseMCPServer[] = [];
 describe("useRemoteMcpInstallWorkflow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseEffectiveUserSessionIssuers.mockReturnValue({
+      issuers: [],
+      organizationIssuers: [],
+      isLoading: false,
+      isError: false,
+    });
     mockUseRemoteMcpServers.mockReturnValue({
       data: undefined,
     } as ReturnType<typeof useRemoteMcpServers>);
@@ -398,6 +413,106 @@ describe("useRemoteMcpInstallWorkflow", () => {
       mcpServerParam: "mcp-server-slug",
     });
     expect(state.statuses[0]!.mcpEndpointUrl).toContain("/mcp/test-org-abc123");
+  });
+
+  it("uses an organization issuer for noninteractive catalog installs", async () => {
+    mockUseEffectiveUserSessionIssuers.mockReturnValue({
+      issuers: [{ id: "project-issuer" }, { id: "organization-issuer" }],
+      organizationIssuers: [{ id: "organization-issuer" }],
+      isLoading: false,
+      isError: false,
+    });
+    const servers = [makeServer({ title: "My Server" })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    expect(mockMcpServersCreate).toHaveBeenCalledWith(
+      {
+        createMcpServerForm: expect.objectContaining({
+          userSessionIssuerId: "organization-issuer",
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    // Auto-config must not bind this project's upstream client to the shared
+    // organization issuer.
+    expect(mockAutoConfigureRemoteMcpAuth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationOwnedUserSessionIssuer: true,
+      }),
+    );
+  });
+
+  it("lets auto-config bind a client to the project-specific issuer", async () => {
+    const servers = [makeServer({ title: "My Server" })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    expect(mockMcpServersCreate).toHaveBeenCalledWith(
+      {
+        createMcpServerForm: expect.objectContaining({
+          userSessionIssuerId: undefined,
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    expect(mockAutoConfigureRemoteMcpAuth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationOwnedUserSessionIssuer: false,
+      }),
+    );
+  });
+
+  it("blocks install while the issuer lookup is loading", () => {
+    mockUseEffectiveUserSessionIssuers.mockReturnValue({
+      issuers: [],
+      organizationIssuers: [],
+      isLoading: true,
+      isError: false,
+    });
+    const servers = [makeServer({ title: "My Server" })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+    const state = result.current;
+    if (state.phase !== "configure") throw new Error("unexpected phase");
+    expect(state.canInstall).toBe(false);
+    expect(state.installBlockedReason).toBeUndefined();
+  });
+
+  it("blocks install with a reason when the issuer lookup fails", async () => {
+    mockUseEffectiveUserSessionIssuers.mockReturnValue({
+      issuers: [],
+      organizationIssuers: [],
+      isLoading: false,
+      isError: true,
+    });
+    const servers = [makeServer({ title: "My Server" })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+    const state = result.current;
+    if (state.phase !== "configure") throw new Error("unexpected phase");
+    expect(state.canInstall).toBe(false);
+    expect(state.installBlockedReason).toBe(ISSUER_LOOKUP_FAILED_MESSAGE);
+
+    // A failed lookup must not fall through to a project-specific issuer.
+    await act(async () => {
+      await state.startInstall();
+    });
+    expect(result.current.phase).toBe("configure");
+    expect(mockCreateServer).not.toHaveBeenCalled();
+    expect(mockMcpServersCreate).not.toHaveBeenCalled();
   });
 
   it("creates an unproxied MCP server for Figma instead of a remote one", async () => {

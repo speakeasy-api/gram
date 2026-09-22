@@ -14,6 +14,7 @@ const serverState = vi.hoisted(() => ({
   workflow: {
     phase: "configure",
     canInstall: false,
+    installBlockedReason: undefined as string | undefined,
     statuses: [] as Array<Record<string, unknown>>,
     startInstall: vi.fn(),
     reset: vi.fn(),
@@ -102,6 +103,7 @@ beforeEach(() => {
   serverState.catalog.data.servers = [];
   serverState.workflow.phase = "configure";
   serverState.workflow.canInstall = false;
+  serverState.workflow.installBlockedReason = undefined;
   serverState.workflow.statuses = [];
   serverState.workflow.startInstall.mockReset();
   serverState.workflow.reset.mockReset();
@@ -121,6 +123,34 @@ function renderStep(onComplete: () => void) {
 }
 
 describe("DistributeServersStep", () => {
+  it("surfaces a blocked install instead of spinning forever", async () => {
+    serverState.catalog.data.servers = [
+      {
+        registryId: "registry-1",
+        registrySpecifier: "example/server",
+        title: "Example Server",
+        description: "Example description",
+        supportsDcr: true,
+        remotes: [
+          { url: "https://example.com/mcp", transportType: "streamable-http" },
+        ],
+      },
+    ];
+    serverState.workflow.installBlockedReason =
+      "Could not load the organization's issuers.";
+    renderStep(() => {});
+
+    fireEvent.click(screen.getByRole("button", { name: /Example Server/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Distribute 1 server" }),
+    );
+
+    expect(
+      await screen.findByText("Could not load the organization's issuers."),
+    ).toBeTruthy();
+    expect(serverState.workflow.startInstall).not.toHaveBeenCalled();
+  });
+
   it("keeps successful deployment instructions visible until Finish completes the step", async () => {
     serverState.catalog.data.servers = [
       {

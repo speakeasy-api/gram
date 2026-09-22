@@ -1173,11 +1173,11 @@ BEGIN
   -- mint rejects Months/Days components (see usersessions/minthandler.go).
   INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
                                     authn_challenge_mode, session_duration) VALUES
+    (demo.det_uuid('gram-demo-issuer-workforce'), NULL, demo_org, 'acme-workforce',
+     'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
     (demo.det_uuid('gram-demo-issuer-linear'), proj_a, demo_org, 'linear',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
     (demo.det_uuid('gram-demo-issuer-slack'), proj_a, demo_org, 'slack',
-     'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
-    (demo.det_uuid('gram-demo-issuer-github'), proj_a, demo_org, 'github',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
     (demo.det_uuid('gram-demo-issuer-gateway'), proj_a, demo_org, 'acme-agent-gateway',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60));
@@ -1197,7 +1197,7 @@ BEGIN
      demo.det_uuid('gram-demo-issuer-slack'), 'private'),
     (demo.det_uuid('gram-demo-mcpserver-github'), proj_a, 'GitHub', 'github',
      NULL, demo.det_uuid('gram-demo-remotemcp-github'),
-     demo.det_uuid('gram-demo-issuer-github'), 'private');
+     demo.det_uuid('gram-demo-issuer-workforce'), 'private');
 
   -- Leave instructions NULL so Settings starts with the editable built-in
   -- instructions, matching the gateway's initialize and server/discover text.
@@ -2947,12 +2947,19 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- credential kind, plus the pre-column row. A rerun that dropped or
   -- duplicated any of them would leave the badges telling a different story
   -- than the one they were seeded to tell.
-  -- One issuer per Connections credential story (acme-partner-gateway) plus
-  -- the four MCP server issuers (linear, slack, github, acme-agent-gateway).
+  -- One issuer per Connections credential story (acme-partner-gateway), three
+  -- project MCP issuers, and the organization-wide workforce issuer used by
+  -- GitHub.
   SELECT count(*) INTO stray FROM user_session_issuers
   WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 5 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 5 user session issuers, found %', stray;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 project user session issuers, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM user_session_issuers
+  WHERE organization_id = demo_org AND project_id IS NULL AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 organization user session issuer, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_session_clients

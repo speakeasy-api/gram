@@ -71,6 +71,10 @@ export type CreateMcpServerForm = {
    */
   unproxiedMcpServerId?: string | undefined;
   /**
+   * The ID of an existing project- or organization-owned user session issuer to attach. Omit to preserve the legacy create behavior, which mints an issuer for remote and tunneled backends.
+   */
+  userSessionIssuerId?: string | undefined;
+  /**
    * The visibility of an MCP server
    */
   visibility: CreateMcpServerFormVisibility;
@@ -96,6 +100,7 @@ export type CreateMcpServerForm$Outbound = {
   toolset_id?: string | undefined;
   tunneled_mcp_server_id?: string | undefined;
   unproxied_mcp_server_id?: string | undefined;
+  user_session_issuer_id?: string | undefined;
   visibility: string;
 };
 
@@ -113,6 +118,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
     toolsetId: z.optional(z.string()),
     tunneledMcpServerId: z.optional(z.string()),
     unproxiedMcpServerId: z.optional(z.string()),
+    userSessionIssuerId: z.optional(z.string()),
     visibility: CreateMcpServerFormVisibility$outboundSchema,
   }),
   z.transform((v) => {
@@ -124,6 +130,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
       toolsetId: "toolset_id",
       tunneledMcpServerId: "tunneled_mcp_server_id",
       unproxiedMcpServerId: "unproxied_mcp_server_id",
+      userSessionIssuerId: "user_session_issuer_id",
     });
   }),
 );

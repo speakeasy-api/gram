@@ -50,6 +50,14 @@ vi.mock("@/contexts/Auth", () => ({ useIsSpeakeasyStaff: () => true }));
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => true }),
 }));
+vi.mock("@/hooks/useEffectiveUserSessionIssuers", () => ({
+  useEffectiveUserSessionIssuers: () => ({
+    issuers: [],
+    organizationIssuers: [],
+    isLoading: false,
+    isError: false,
+  }),
+}));
 vi.mock("@/pages/sources/remote-mcp/hooks", () => ({
   useCreateRemoteMcpSource: () => ({ mutateAsync: state.create }),
 }));

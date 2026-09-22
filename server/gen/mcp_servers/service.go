@@ -128,6 +128,10 @@ type CreateMcpServerPayload struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server. Omit to leave filtering disabled.
 	ToolVariationsGroupID *string
+	// The ID of an existing project- or organization-owned user session issuer to
+	// attach. Omit to preserve the legacy create behavior, which mints an issuer
+	// for remote and tunneled backends.
+	UserSessionIssuerID *string
 	// The visibility of the server
 	Visibility types.McpServerVisibility
 	// The allowed network surfaces. Omit to default to public_only.
@@ -316,6 +320,9 @@ type UpdateMcpServerPayload struct {
 	// server. Omit to disable filtering (cleared to null, consistent with the
 	// full-record replace semantics of the other UUID references).
 	ToolVariationsGroupID *string
+	// The ID of an existing project- or organization-owned user session issuer to
+	// attach. Omit to preserve the current issuer.
+	UserSessionIssuerID *string
 	// The visibility of the server
 	Visibility types.McpServerVisibility
 	// The allowed network surfaces. Omit to preserve the stored mode.

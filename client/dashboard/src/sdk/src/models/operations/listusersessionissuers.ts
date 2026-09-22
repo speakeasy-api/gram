@@ -37,6 +37,10 @@ export type ListUserSessionIssuersRequest = {
    */
   limit?: number | undefined;
   /**
+   * Optional MCP server or toolset resource ID used to authorize callers with resource-scoped mcp:write access. The resource must belong to the selected project.
+   */
+  mcpResourceId?: string | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -163,6 +167,7 @@ export function listUserSessionIssuersSecurityToJSON(
 export type ListUserSessionIssuersRequest$Outbound = {
   cursor?: string | undefined;
   limit?: number | undefined;
+  mcp_resource_id?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -176,12 +181,14 @@ export const ListUserSessionIssuersRequest$outboundSchema: z.ZodMiniType<
   z.object({
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
+    mcpResourceId: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      mcpResourceId: "mcp_resource_id",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

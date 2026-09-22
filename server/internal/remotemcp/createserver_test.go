@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
@@ -17,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	remotemcpproxy "github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -85,6 +87,68 @@ func TestCreateServerAndMcpServer(t *testing.T) {
 	afterMcpAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerCreate)
 	require.NoError(t, err)
 	require.Equal(t, beforeMcpAuditCount+1, afterMcpAuditCount)
+}
+
+func TestCreateServerAndMcpServer_AttachesOrganizationUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true},
+		Slug:                         "shared-workforce",
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: 14 * 24 * 60 * 60 * 1_000_000, Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	issuerID := issuer.ID.String()
+
+	result, err := ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+		Name:                new("Remote source"),
+		URL:                 "https://mcp.example.com",
+		TransportType:       "streamable-http",
+		UserSessionIssuerID: &issuerID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, issuerID, *result.McpServer.UserSessionIssuerID)
+}
+
+func TestCreateServerAndMcpServer_RejectsForeignOrganizationUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	foreignOrganizationID := "org-" + uuid.NewString()
+	require.NoError(t, organizationsrepo.New(ti.conn).CreateOrganizationMetadata(ctx, organizationsrepo.CreateOrganizationMetadataParams{
+		ID:   foreignOrganizationID,
+		Name: "Foreign Organization",
+		Slug: "foreign-" + uuid.NewString(),
+	}))
+	issuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               pgtype.Text{String: foreignOrganizationID, Valid: true},
+		Slug:                         "foreign-workforce",
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: 14 * 24 * 60 * 60 * 1_000_000, Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	issuerID := issuer.ID.String()
+
+	_, err = ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+		Name:                new("Foreign issuer source"),
+		URL:                 "https://mcp.example.com/foreign-issuer",
+		TransportType:       "streamable-http",
+		UserSessionIssuerID: &issuerID,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	remoteCount, mcpCount, issuerCount := provisionedResourceCounts(t, ctx, ti, *authCtx.ProjectID)
+	require.Zero(t, remoteCount)
+	require.Zero(t, mcpCount)
+	require.Zero(t, issuerCount)
 }
 
 func TestCreateServerAndMcpServer_AllowsSSE(t *testing.T) {
@@ -224,6 +288,19 @@ func TestCreateServer(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteMcpServerCreate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestCreateServer_RejectsUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuerID := uuid.NewString()
+	_, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		URL:                 "https://mcp.example.com",
+		TransportType:       "streamable-http",
+		UserSessionIssuerID: &issuerID,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 // requireCreateServerInvalidURL asserts that creating a remote MCP server

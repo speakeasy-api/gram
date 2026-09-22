@@ -23,6 +23,11 @@ type CreateServerRequestBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server (e.g. streamable-http)
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+	// For createServerAndMcpServer, the ID of an existing project- or
+	// organization-owned user session issuer to attach to the linked MCP server.
+	// Omit to mint a project issuer. The source-only createServer method rejects
+	// this field.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 }
 
 // CreateServerAndMcpServerRequestBody is the type of the "remoteMcp" service
@@ -35,6 +40,11 @@ type CreateServerAndMcpServerRequestBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server (e.g. streamable-http)
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+	// For createServerAndMcpServer, the ID of an existing project- or
+	// organization-owned user session issuer to attach to the linked MCP server.
+	// Omit to mint a project issuer. The source-only createServer method rejects
+	// this field.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 }
 
 // UpdateServerRequestBody is the type of the "remoteMcp" service
@@ -3019,9 +3029,10 @@ type RemoteMcpServerHeaderResponseBody struct {
 // the "createServer" endpoint of the "remoteMcp" service.
 func NewCreateServerRequestBody(p *remotemcp.CreateServerPayload) *CreateServerRequestBody {
 	body := &CreateServerRequestBody{
-		Name:          p.Name,
-		URL:           p.URL,
-		TransportType: p.TransportType,
+		Name:                p.Name,
+		URL:                 p.URL,
+		TransportType:       p.TransportType,
+		UserSessionIssuerID: p.UserSessionIssuerID,
 	}
 	return body
 }
@@ -3031,9 +3042,10 @@ func NewCreateServerRequestBody(p *remotemcp.CreateServerPayload) *CreateServerR
 // service.
 func NewCreateServerAndMcpServerRequestBody(p *remotemcp.CreateServerAndMcpServerPayload) *CreateServerAndMcpServerRequestBody {
 	body := &CreateServerAndMcpServerRequestBody{
-		Name:          p.Name,
-		URL:           p.URL,
-		TransportType: p.TransportType,
+		Name:                p.Name,
+		URL:                 p.URL,
+		TransportType:       p.TransportType,
+		UserSessionIssuerID: p.UserSessionIssuerID,
 	}
 	return body
 }

@@ -273,6 +273,24 @@ export function AddServerDialog({
       return;
     }
 
+    // Dead-end guard: when the issuer lookup failed, canInstall never becomes
+    // true and the install never starts. Interactive users see the reason in
+    // the configure step, but headless/auto-start callers would wait forever.
+    if (
+      releaseState.phase === "configure" &&
+      releaseState.installBlockedReason
+    ) {
+      finishedRef.current = true;
+      onInstallFinished({
+        projectSlug,
+        status: "failed",
+        succeededCount: 0,
+        failedCount: servers.length,
+        error: releaseState.installBlockedReason,
+      });
+      return;
+    }
+
     // Dead-end guard: when no server has a compatible endpoint, canInstall
     // never becomes true and the install never starts. Interactive users see
     // the warning in the configure step, but headless/auto-start callers would
@@ -721,7 +739,11 @@ function ConfigurePhaseContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only trigger on install readiness changes, not on every releaseState update
   }, [nothingToConfigure, releaseState.canInstall]);
 
-  if (nothingToConfigure && releaseState.serverConfigs.length > 0) {
+  if (
+    nothingToConfigure &&
+    releaseState.serverConfigs.length > 0 &&
+    !releaseState.installBlockedReason
+  ) {
     return (
       <div className="flex items-center justify-center gap-2 py-4">
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -749,6 +771,9 @@ function ConfigurePhaseContent({
           />
         )}
         {!bulk && <HeaderValueSections releaseState={releaseState} />}
+        {releaseState.installBlockedReason && (
+          <InstallBlockedWarning reason={releaseState.installBlockedReason} />
+        )}
       </Stack>
       <Dialog.Footer>
         <div className="flex gap-2">
@@ -887,6 +912,17 @@ function BatchServerConfig({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function InstallBlockedWarning({ reason }: { reason: string }) {
+  return (
+    <div className="border-destructive/30 bg-destructive/5 flex items-start gap-2 border p-2">
+      <AlertCircle className="text-destructive mt-0.5 h-4 w-4 shrink-0" />
+      <Text small className="text-destructive/80">
+        {reason}
+      </Text>
     </div>
   );
 }
