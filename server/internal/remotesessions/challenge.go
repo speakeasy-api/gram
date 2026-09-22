@@ -54,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
@@ -205,6 +206,9 @@ type ChallengeManager struct {
 	// metrics carries the unsampled upstream-authorize census that the PKCE
 	// enforcement decision (AIS-566) reads.
 	metrics *remotesessionmetrics.Authorize
+
+	registrationTelemetry registration.Recorder
+
 	// privateAuthorityValidator is injected at construction. The callback package
 	// owns state mechanics; the caller owns endpoint resolution.
 	privateAuthorityValidator PrivateAuthorityValidator
@@ -323,6 +327,7 @@ func NewChallengeManager(
 			interceptors.NewGoogle(logger),
 		},
 		metrics:                   remotesessionmetrics.NewAuthorize(logger, meterProvider),
+		registrationTelemetry:     registration.NewMetrics(logger, meterProvider),
 		privateAuthorityValidator: nil,
 		idTokens:                  NoIDTokenVerifier(),
 		enricher:                  nil,
@@ -339,7 +344,7 @@ func NewChallengeManager(
 	}
 	// The manager's own refreshes restate identity with the same verifier.
 	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions))
-	manager.rotator = NewClientRotator(logger, db, enc, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger)
+	manager.rotator = NewClientRotator(logger, db, enc, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger, manager.registrationTelemetry)
 	return manager
 }
 
@@ -1058,6 +1063,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			}
 			return m.retryWithoutResource(ctx, logger, state, cause)
 		}
+		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
 		return none, denied(ctx, logger, q)
 	}
 
@@ -1347,6 +1353,31 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			RemoteSessionUpdatedAt: storedSession.UpdatedAt.Time,
 		},
 	}, nil
+}
+
+func (m *ChallengeManager) recordCIMDAuthorizationFailure(ctx context.Context, state RemoteLoginState, code, description string) {
+	if m.registrationTelemetry == nil {
+		return
+	}
+
+	// Classify first: access_denied is the ordinary user cancellation and is
+	// not recorded, so the lookup that only decides whether this was a CIMD
+	// client is wasted on the most common denial there is.
+	failure, record := registration.ClassifyCIMDAuthorizationError(code, description)
+	if !record {
+		return
+	}
+
+	clientRow, err := remotesessions_repo.New(m.db).GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
+		ID:             state.RemoteSessionClientID,
+		ProjectID:      state.ProjectID,
+		OrganizationID: state.OrganizationID,
+	})
+	if err != nil || !clientRow.RemoteSessionClient.ClientIDMetadataUri.Valid {
+		return
+	}
+
+	m.registrationTelemetry.RecordFailure(ctx, registration.MethodCIMD, failure)
 }
 
 // denied rejects the callback; the public message echoes only IETF-registered error codes.
