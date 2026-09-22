@@ -79,23 +79,11 @@ if [ -f "$gitdir/gram-stack-boot.pid" ]; then
     fi
 fi
 
-# `mise run pause` parks a placeholder server on the site port (see
-# `mise run park`), which serves the resume page for as long as it holds it.
-# Killing it is deferred until the containers are up, just before vite binds: a
-# wake takes tens of seconds, and every reload or extra tab in that window
-# should get the page rather than a connection error.
-parked="$gitdir/gram-stack-parked.pid"
+# Keep the resume page available while infrastructure starts. Pitchfork owns
+# the listener and waits for it to stop before the dashboard takes its port.
 release_port() {
-    if [ -f "$parked" ]; then
-        # A pid file can outlive its process (SIGKILL, a reboot) and pids are
-        # reused, so check what the pid actually is before signalling it.
-        park_pid=$(cat "$parked")
-        if ps -o command= -p "$park_pid" 2> /dev/null | grep -q "park"; then
-            kill "$park_pid" 2> /dev/null || true
-            # The listener closes on signal delivery, not on return from kill.
-            sleep 1
-        fi
-        rm -f "$parked"
+    if pitchfork supervisor status > /dev/null 2>&1; then
+        pitchfork stop park
     fi
 }
 

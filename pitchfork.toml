@@ -2,6 +2,28 @@
 
 # Config docs: https://pitchfork.jdx.dev/reference/configuration.html
 
+# Lifecycle operations and the parked page are explicitly started, never part
+# of application startup. Bulk stop still includes them for worktree removal.
+[groups.application]
+daemons = ["dev-idp", "dev-idp-dashboard", "admin", "admin-dashboard", "mock-oidc", "server", "worker", "streams", "pystreams-multi", "dashboard", "assistant-runtime", "tunnel-gateway"]
+
+[groups.default]
+daemons = ["dev-idp", "dev-idp-dashboard", "admin", "admin-dashboard", "mock-oidc", "server", "worker", "streams", "pystreams-multi", "dashboard", "assistant-runtime", "tunnel-gateway", "idle-pause"]
+
+[daemons.park]
+run = "mise run park"
+ready_output = "Parked on port"
+
+# Finite operations: acknowledge dispatch immediately; Pitchfork retains
+# ownership until exit. They must not wait on the daemon they are stopping.
+[daemons.pause-stack]
+run = "mise run pause"
+ready_delay = 0
+
+[daemons.wake-stack]
+run = "mise run wake"
+ready_delay = 0
+
 [daemons.dev-idp]
 run = "mise run start:dev-idp"
 ready_cmd = "mise run check:daemon --name {{name}}"

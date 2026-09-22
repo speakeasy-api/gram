@@ -21,25 +21,19 @@
 // where nothing is listening, which the page covers by polling from the
 // browser: the page is already loaded, so a refused fetch is just another retry.
 //
-// Started detached by `mise run pause`. Killed by `mise run wake`; the timeout
-// below is the backstop for a wake that dies before it gets there, since a
-// parker that outlived its wake would hold the port against vite forever.
+// Pitchfork owns this listener and the separate wake-stack operation. Stopping
+// park during the port handoff must not stop the operation bringing up the stack.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
-import path from "node:path";
 
 const port = Number(process.env["GRAM_SITE_PORT"]);
 if (!Number.isInteger(port) || port <= 0) {
   console.error("GRAM_SITE_PORT is not set to a port number");
   process.exit(1);
 }
-
-const gitDir = process.env["GRAM_PARK_GIT_DIR"];
-const pidFile = gitDir ? path.join(gitDir, "gram-stack-parked.pid") : null;
-const wakeLog = gitDir ? path.join(gitDir, "gram-stack-wake.log") : null;
 
 // Same key/cert vite serves with, so the browser sees one origin across the
 // handover instead of an https:// URL that suddenly speaks plain HTTP.
@@ -295,23 +289,24 @@ function wake(): void {
   if (waking) return;
   waking = true;
 
-  setTimeout(() => {
-    console.error(
-      "wake did not take the port within 10 minutes; releasing it. " +
-        "Check the wake log, then run `mise run wake` by hand.",
-    );
-    process.exit(1);
-  }, WAKE_TIMEOUT_MS).unref();
-
-  const out = wakeLog
-    ? fs.openSync(wakeLog, "a")
-    : ("ignore" as unknown as number);
-  const child = spawn("mise", ["run", "wake"], {
-    detached: true,
-    stdio: ["ignore", out, out],
+  // This client stays in our process group; the supervisor owns the actual
+  // operation, which survives when wake stops park to release the port.
+  const child = spawn("pitchfork", ["start", "wake-stack"], {
+    stdio: "inherit",
     cwd: process.cwd(),
   });
-  child.unref();
+  child.on("error", (err) => {
+    console.error("Could not request stack wake:", err);
+    waking = false;
+  });
+  child.on("exit", (code) => {
+    // Pitchfork deduplicates running wake operations. Release the dispatch
+    // latch so a failed operation can be requested again from a fresh page.
+    waking = false;
+    if (code !== 0) {
+      console.error("Stack wake failed; inspect pitchfork logs wake-stack.");
+    }
+  });
 }
 
 const creds = tls();
@@ -374,22 +369,9 @@ server.on("error", (err: NodeJS.ErrnoException) => {
 });
 
 server.listen(port, () => {
-  if (pidFile) fs.writeFileSync(pidFile, String(process.pid));
   console.log(`Parked on port ${port}; serving the resume page.`);
 });
 
-// Backstop, generous enough to cover a cold `wake` (image pulls, a slow
-// ClickHouse) but bounded, so a wake that died on its way to killing the parker
-// cannot leave the port held. Only armed once a wake is actually running -- an
-// untouched parker on a paused worktree is meant to sit there indefinitely.
-const WAKE_TIMEOUT_MS = 10 * 60 * 1000;
-
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
-  process.on(sig, () => {
-    if (pidFile) fs.rmSync(pidFile, { force: true });
-    process.exit(0);
-  });
+  process.on(sig, () => process.exit(0));
 }
-process.on("exit", () => {
-  if (pidFile) fs.rmSync(pidFile, { force: true });
-});
