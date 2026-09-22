@@ -26,6 +26,12 @@ type FindingMetadata struct {
 	OrganizationID    string
 	RiskPolicyID      string
 	RiskPolicyVersion int64
+
+	// Shadow marks every published finding as an engine-comparison record:
+	// the LLM analyzer's verdict under the shadow risk engine mode, never
+	// enforced, stored by the ClickHouse writer as shadow = 1 and hidden from
+	// every user-facing read path. False for the enforcing engines.
+	Shadow bool
 }
 
 func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher[*riskv1.Finding], meta FindingMetadata, findings []Finding, logPrefix string) (int, []string, error) {
@@ -107,6 +113,7 @@ func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding
 			// (suppression/unsuppression) are built elsewhere and never pass
 			// through here.
 			EventKind: new(chrepo.EventKindFinding),
+			Shadow:    &meta.Shadow,
 		}.Build()
 
 		results = append(results, pub.Publish(ctx, msg))

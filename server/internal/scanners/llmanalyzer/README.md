@@ -61,12 +61,16 @@ PostHog); anything else — off, absent, unrecognized, provider error — is `of
   their analysis requests exactly as under `off`, and the same messages are
   also published to the `LLMAnalysis` topic with `shadow = true` and
   `execution_path = llm_shadow_stream`. The consumer evaluates and meters the
-  request like any other but **withholds its findings from the Finding topic**
-  (`risk.async_scan.handler_messages{outcome=shadow_unpublished}`) until the
-  findings store can mark shadow rows; that persistence (a `shadow` column on
-  `risk_findings`, hidden from Risk Events and the overview by default) is a
-  follow-up migration PR. A shadow publish failure never fails the activity:
-  the legacy engines' inline findings still land and the gap is counted
+  request like any other and publishes its findings with `shadow = true` on
+  the `Finding` (`risk.async_scan.handler_messages{outcome=shadow_published}`).
+  The ClickHouse writer stores them as `risk_findings.shadow = 1`, and every
+  user-facing read path filters `shadow = 0`, so they are **hidden from Risk
+  Events, the Dismissed listing, the overview, signals, the Watchdog and
+  reveal by default** and only the comparison query below reads them.
+  Deterministic finding ids include the source, so the model's rows and the
+  legacy engines' rows for the same message coexist. A shadow publish
+  failure never fails the activity: the legacy engines' inline findings
+  still land and the gap is counted
   (`risk.llm.policy_evaluations{scan_mode=async,outcome=shadow_publish_error}`),
   so an LLM transport outage costs the comparison lane messages rather than
   holding enforcement back. Without a configured analyzer the comparison lane
@@ -235,8 +239,9 @@ scanners.PublishFindings ─► Finding topic ─► FindingCHWriter ─► Clic
   published and nacks only when the findings publish fails. A batch whose LLM
   publish fails fails the activity: in the `llm` mode nothing else scans those
   sources for the org, and in the `shadow` mode the retry keeps both engines'
-  coverage identical. Shadow requests are evaluated and metered but their
-  findings are withheld from the topic until the shadow-persistence migration.
+  coverage identical. Shadow requests are evaluated, metered and published
+  like enforcing ones, with the shadow marker on every finding so the
+  findings store hides them from users.
 - `AnalyzeBatch` runs per policy, so N policies with covered sources produce
   N requests, and N model calls, per message. A verdict cache that collapses
   them to about one call per message is deferred to a follow-up; v0 pays the
@@ -423,7 +428,7 @@ the dispatcher's `lane`, which is scanner + policy) and
 | `risk.enforcement.llm.stale_dropped`      | counter   | mode=`sync`                                                                                                                                                                                                                           | streams        |
 | `risk.enforcement.llm.reply_write_errors` | counter   | mode=`sync`                                                                                                                                                                                                                           | streams        |
 | `risk.enforcement.pubsub_degraded`        | counter   | `lane` = `ENFORCEMENT_SCANNER_LLM_ANALYZER`, `reason`, `gram.risk.enforcement.fail_mode` ∈ `closed` (llm) \| `shadow` (shared with legacy lanes, which use `open`)                                                                    | server         |
-| `risk.async_scan.handler_messages`        | counter   | org, `scanner` = `llm_analyzer`, `engine` = `real`, `gram.outcome` ∈ `ok` \| `scan_error` \| `publish_error` \| `disabled` \| `shadow_unpublished`, `gate_reason` = `not_gated` (shared)                                              | streams        |
+| `risk.async_scan.handler_messages`        | counter   | org, `scanner` = `llm_analyzer`, `engine` = `real`, `gram.outcome` ∈ `ok` \| `scan_error` \| `publish_error` \| `disabled` \| `shadow_published`, `gate_reason` = `not_gated` (shared)                                                | streams        |
 
 A parse failure counts as `success` on `risk.llm.requests` (the HTTP call
 succeeded) and increments `risk.llm.parse_failures`.
@@ -451,7 +456,6 @@ Log lines worth grepping: `risk llm completion failed`,
 `risk llm analysis failed; returning dead-letter result`,
 `pub/sub enforcement lane degraded` (with `fail_mode=closed` or `shadow`),
 `llm analyzer scan failed; acking without findings`,
-`llm analyzer shadow findings withheld from the finding topic` (debug),
 `LLM analyzer mode llm but GRAM_RISK_LLM_URL empty` (worker, once),
 `write llm enforcement reply; acknowledging request`.
 

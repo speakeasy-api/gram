@@ -207,6 +207,27 @@ func TestStartPublishFindingsStampsRevealMetadata(t *testing.T) {
 	require.Equal(t, "call_2", pub.messages[3].GetToolCallId())
 }
 
+// TestStartPublishFindingsStampsShadow pins the engine-comparison marker:
+// every finding published under shadow metadata carries shadow = true, and
+// enforcing metadata leaves it unset.
+func TestStartPublishFindingsStampsShadow(t *testing.T) {
+	t.Parallel()
+
+	pub := &recordingFindingPublisher{results: nil, messages: nil}
+
+	enforcing := testFindingMetadata()
+	shadow := testFindingMetadata()
+	shadow.Shadow = true
+
+	_, _ = scanners.StartPublishFindings(t.Context(), pub, enforcing, []scanners.Finding{testFinding()})
+	_, _ = scanners.StartPublishFindings(t.Context(), pub, shadow, []scanners.Finding{testFinding(), testFinding()})
+	require.Len(t, pub.messages, 3)
+
+	require.False(t, pub.messages[0].GetShadow())
+	require.True(t, pub.messages[1].GetShadow())
+	require.True(t, pub.messages[2].GetShadow())
+}
+
 // The span-level arms must stay byte-identical with the offline backfill's
 // spanSurface (server/cmd/tools/migrations/riskfindings); the field=="" arms
 // are the live per-source defaults.
@@ -253,6 +274,7 @@ func testFindingMetadata() scanners.FindingMetadata {
 		OrganizationID:    "org-1",
 		RiskPolicyID:      "policy-1",
 		RiskPolicyVersion: 3,
+		Shadow:            false,
 	}
 }
 
