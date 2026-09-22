@@ -148,10 +148,18 @@ type IdentityProviderConnectionApplicationsSync struct {
 type IdentityProviderConnectionChecklistItem struct {
 	// Stable step identifier.
 	Key string
+	// Which phase the step belongs to: connect (the service app the connection
+	// authenticates with) or cross_app_access (the AI agent).
+	Group string
 	// Short step title.
 	Title string
 	// What to do in the console, including any value copied from this connection.
 	Description string
+	// Sub-steps, in order. Empty when the description says it all.
+	Details []string
+	// Whether the last verification observed this step done. Omitted for steps the
+	// server cannot observe; the administrator tracks those.
+	Completed *bool
 }
 
 // One applications snapshot run and the changes it applied.

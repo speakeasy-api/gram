@@ -833,6 +833,8 @@ tags:
     description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
   - name: networkIngress
     description: Manage an organization's private network ingress desired state.
+  - name: oktaResourceConnections
+    description: 'Okta resource connections per MCP server: what the organization administrator still has to do in the identity provider console, what they confirmed, and what the exchange path observed. Advisory only; the exchange path never consults it.'
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: otel

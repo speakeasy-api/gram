@@ -31,12 +31,13 @@ import {
   MailIcon,
   MapIcon,
   MessageCircleIcon,
-  MoreHorizontal,
   PencilIcon,
   SettingsIcon,
+  UserIcon,
 } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
+import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   isPylonChatOpen,
@@ -61,6 +62,7 @@ export function SidebarUserMenu(): JSX.Element {
   const client = useSdkClient();
   const { projectSlug } = useSlugs();
   const { hasAnyScope } = useRBAC();
+  const identityHref = useIdentityHrefBuilder()({ userId: user.id });
 
   const canAccessOrgRoutes = hasAnyScope(["org:read", "org:admin"]);
   const isMultiOrg = session.organizations.length > 1;
@@ -88,37 +90,17 @@ export function SidebarUserMenu(): JSX.Element {
 
   return (
     <div className="flex items-center gap-2 px-1 py-1">
-      {/* Compact identity preview — clicking it opens the same menu. Expanded only. */}
-      <button
-        type="button"
-        aria-label="Open account menu"
-        onClick={() => setMenuOpen(true)}
-        className="hover:bg-accent flex min-w-0 flex-1 items-center gap-2 p-1 text-left group-data-[collapsible=icon]:hidden"
-      >
-        <Avatar className="size-7 shrink-0">
-          <AvatarImage
-            src={user.photoUrl}
-            alt={user.displayName || user.email}
-          />
-          <AvatarFallback className="text-xs">{userInitials}</AvatarFallback>
-        </Avatar>
-        <span className="truncate text-sm font-medium">{firstName}</span>
-      </button>
-
-      {/* Smaller inline theme switcher — expanded only */}
-      <ThemeSwitcher className="group-data-[collapsible=icon]:hidden" />
-
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        {/* The identity preview is the menu trigger — collapsed it is the avatar
+            alone, so the menu stays reachable without a second control. */}
         <DropdownMenuTrigger asChild>
           <button
             data-testid="user-menu-trigger"
             type="button"
             aria-label="Account menu"
-            className="border-border text-muted-foreground hover:bg-accent hover:text-foreground flex size-9 shrink-0 items-center justify-center border group-data-[collapsible=icon]:mx-auto"
+            className="hover:bg-accent flex min-w-0 flex-1 items-center gap-2 p-1 text-left group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center"
           >
-            <MoreHorizontal className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
-            {/* Collapsed: the round trigger shows the avatar so the menu stays reachable */}
-            <Avatar className="hidden size-7 group-data-[collapsible=icon]:block">
+            <Avatar className="size-7 shrink-0">
               <AvatarImage
                 src={user.photoUrl}
                 alt={user.displayName || user.email}
@@ -127,6 +109,9 @@ export function SidebarUserMenu(): JSX.Element {
                 {userInitials}
               </AvatarFallback>
             </Avatar>
+            <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
+              {firstName}
+            </span>
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="end" className="w-56">
@@ -154,6 +139,14 @@ export function SidebarUserMenu(): JSX.Element {
                 >
                   <CrownIcon className="h-4 w-4" />
                 </a>
+              </DropdownMenuItem>
+            )}
+            {identityHref && (
+              <DropdownMenuItem asChild>
+                <Link to={identityHref}>
+                  <UserIcon className="mr-2 h-4 w-4" />
+                  View user profile
+                </Link>
               </DropdownMenuItem>
             )}
           </DropdownMenuGroup>
@@ -254,6 +247,9 @@ export function SidebarUserMenu(): JSX.Element {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Smaller inline theme switcher — expanded only */}
+      <ThemeSwitcher className="group-data-[collapsible=icon]:hidden" />
     </div>
   );
 }

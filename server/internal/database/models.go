@@ -18,6 +18,7 @@ type Agent struct {
 	ID                          uuid.UUID
 	OrganizationID              string
 	OwnerUserID                 string
+	ProjectID                   uuid.NullUUID
 	Name                        string
 	SuspendedAt                 pgtype.Timestamptz
 	RevokedAt                   pgtype.Timestamptz
@@ -3525,6 +3526,7 @@ type UserSessionIssuer struct {
 	ClientIDMetadataAdmissionMode pgtype.Text
 	TrustedRemoteSessionIssuerID  uuid.NullUUID
 	TrustedRemoteSessionClientID  uuid.NullUUID
+	UseAuthenticationHost         bool
 	CreatedAt                     pgtype.Timestamptz
 	UpdatedAt                     pgtype.Timestamptz
 	DeletedAt                     pgtype.Timestamptz

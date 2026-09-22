@@ -16,9 +16,17 @@ const orgSlug = vi.hoisted(() => ({ current: "acme" }));
 const isPlatformAdmin = vi.hoisted(() => vi.fn(() => true));
 const exploreDemoGoTo = vi.hoisted(() => vi.fn());
 const logout = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const hasAnyScope = vi.hoisted(() =>
+  vi.fn((): ((scopes: string[]) => boolean) => () => true),
+);
 
 vi.mock("@/contexts/Auth", () => ({
-  useUser: () => ({ displayName: "Sagar", email: "s@x.dev", photoUrl: "" }),
+  useUser: () => ({
+    id: "user_01h8x",
+    displayName: "Sagar",
+    email: "s@x.dev",
+    photoUrl: "",
+  }),
   useSession: () => ({ organizations: [{ id: "o1" }] }),
   useOrganization: () => ({ slug: orgSlug.current }),
   useIsPlatformAdmin: () => isPlatformAdmin(),
@@ -26,14 +34,20 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ projectSlug: "proj" }),
   useSdkClient: () => ({ auth: { logout } }),
+  useProjectSlugForRequests: () => "proj",
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasAnyScope: () => true }),
+  useRBAC: () => ({ hasAnyScope: hasAnyScope(), isLoading: false }),
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     settings: { goTo: vi.fn() },
     exploreDemo: { goTo: exploreDemoGoTo },
+    identities: {
+      detail: {
+        overview: { href: (urn: string) => `/identities/${urn}` },
+      },
+    },
   }),
   useOrgRoutes: () => ({
     billing: { goTo: vi.fn() },
@@ -41,6 +55,19 @@ vi.mock("@/routes", () => ({
 }));
 vi.mock("react-router", () => ({
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ search: "" }),
+  Link: ({
+    to,
+    children,
+    ...props
+  }: {
+    to: string;
+    children: React.ReactNode;
+  }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
 }));
 vi.mock("@/components/ui/Dropdown", () => ({
   // Radix DropdownMenu requires pointerDown+click to open in happy-dom.
@@ -108,6 +135,8 @@ afterEach(() => {
   isPlatformAdmin.mockReset();
   isPlatformAdmin.mockReturnValue(true);
   exploreDemoGoTo.mockReset();
+  hasAnyScope.mockReset();
+  hasAnyScope.mockReturnValue(() => true);
   logout.mockReset().mockResolvedValue(undefined);
   restoreLocation();
 });
@@ -117,6 +146,27 @@ describe("SidebarUserMenu", () => {
     render(<SidebarUserMenu />);
     expect(screen.getByTestId("theme-switcher")).toBeTruthy();
     expect(screen.getAllByText("Sagar").length).toBeGreaterThan(0);
+  });
+
+  it("links View user profile to the signed-in user's identity page", () => {
+    render(<SidebarUserMenu />);
+
+    expect(
+      screen
+        .getByRole("link", { name: "View user profile" })
+        .getAttribute("href"),
+    ).toBe("/identities/user%3Auser_01h8x");
+  });
+
+  it("hides View user profile from a reader without org:read", () => {
+    hasAnyScope.mockReturnValue(
+      (scopes: string[]) => !scopes.includes("org:read"),
+    );
+    render(<SidebarUserMenu />);
+
+    expect(
+      screen.queryByRole("link", { name: "View user profile" }),
+    ).toBeNull();
   });
 
   it("links the crown icon to Platform admin in a new tab", () => {

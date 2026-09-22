@@ -306,6 +306,21 @@ WHERE a.organization_id = @organization_id
 ORDER BY (a.removed_at IS NULL) DESC, a.label ASC, a.okta_app_id ASC
 LIMIT @limit_count;
 
+-- Reads the last sync, so it is only as fresh as that sync.
+-- name: GetApplicationState :one
+SELECT
+    a.status
+  , (SELECT COUNT(*) FROM okta_application_assignments AS s
+      WHERE s.organization_id = a.organization_id
+        AND s.identity_provider_connection_id = a.identity_provider_connection_id
+        AND s.okta_app_id = a.okta_app_id
+        AND s.removed_at IS NULL)::integer AS assignments
+FROM okta_applications AS a
+WHERE a.organization_id = @organization_id
+  AND a.identity_provider_connection_id = @identity_provider_connection_id
+  AND a.okta_app_id = @okta_app_id
+  AND a.removed_at IS NULL;
+
 -- name: CountApplicationsForConnection :one
 SELECT COUNT(*)
 FROM okta_applications

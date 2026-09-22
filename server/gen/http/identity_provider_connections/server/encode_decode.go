@@ -1980,8 +1980,18 @@ func marshalIdentityproviderconnectionsIdentityProviderConnectionActiveKeyToIden
 func marshalIdentityproviderconnectionsIdentityProviderConnectionChecklistItemToIdentityProviderConnectionChecklistItemResponseBody(v *identityproviderconnections.IdentityProviderConnectionChecklistItem) *IdentityProviderConnectionChecklistItemResponseBody {
 	res := &IdentityProviderConnectionChecklistItemResponseBody{
 		Key:         v.Key,
+		Group:       v.Group,
 		Title:       v.Title,
 		Description: v.Description,
+		Completed:   v.Completed,
+	}
+	if v.Details != nil {
+		res.Details = make([]string, len(v.Details))
+		for i, val := range v.Details {
+			res.Details[i] = val
+		}
+	} else {
+		res.Details = []string{}
 	}
 
 	return res

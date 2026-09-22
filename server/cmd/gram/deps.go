@@ -816,7 +816,7 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 // server down over it would take login, the organizations list, the detail page
 // and every update endpoint with it. The condition is logged at Error on
 // startup, which is what makes it visible before an operator goes looking.
-func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) orgprovision.WorkOSOrganizationCreator {
+func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) orgprovision.WorkOSVerifiedDomainCreator {
 	apiKey := c.String("workos-api-key")
 	haveRealKey := apiKey != "" && apiKey != "unset"
 	opts := workosClientOpts(c)

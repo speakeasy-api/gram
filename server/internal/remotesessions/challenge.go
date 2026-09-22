@@ -1455,13 +1455,13 @@ func (m *ChallengeManager) exchangeCode(
 
 	resp, err := doer.Do(req)
 	if err != nil {
-		return tokenResponse{}, fmt.Errorf("post token: %w", err)
+		return tokenResponse{}, &tokenExchangeUnavailableError{err: fmt.Errorf("post token: %w", err)}
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
-		return tokenResponse{}, fmt.Errorf("read token response body: %w", err)
+		return tokenResponse{}, &tokenExchangeUnavailableError{err: fmt.Errorf("read token response body: %w", err)}
 	}
 	if resp.StatusCode/100 != 2 {
 		return tokenResponse{}, newTokenEndpointError(resp.StatusCode, resp.Status, body)
@@ -1615,3 +1615,9 @@ func s256Challenge(verifier string) string {
 	sum := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
+
+// tokenExchangeUnavailableError preserves the shared exchange error contract.
+type tokenExchangeUnavailableError struct{ err error }
+
+func (e *tokenExchangeUnavailableError) Error() string { return e.err.Error() }
+func (e *tokenExchangeUnavailableError) Unwrap() error { return e.err }

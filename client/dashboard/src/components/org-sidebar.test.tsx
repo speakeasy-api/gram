@@ -20,9 +20,9 @@ vi.mock("@/routes", () => ({
       {},
       {
         get: (_, key: string) => ({
-          title: key,
+          title: key === "identity" ? "IDP and SSO" : key,
           active: key === mocks.active,
-          href: () => `/${key}`,
+          href: () => (key === "identity" ? "/example/identity" : `/${key}`),
         }),
       },
     ),
@@ -113,6 +113,16 @@ afterEach(() => {
   mocks.canManageIngress = false;
 });
 
+it("lists one IDP and SSO entry under Team and no vendor entry", () => {
+  render(<OrgSidebar />);
+  expect(screen.queryByRole("link", { name: "okta" })).toBeNull();
+  expect(
+    screen.queryByRole("link", { name: "Enterprise Managed Auth" }),
+  ).toBeNull();
+  const identity = screen.getByRole("link", { name: "IDP and SSO" });
+  expect(identity.getAttribute("href")).toBe("/example/identity");
+});
+
 it.each(["loading", "error"] as const)(
   "keeps Network Access visible while entitlement lookup is %s",
   (status) => {
@@ -137,7 +147,7 @@ it.each([
     group,
   );
   expect(screen.getByTestId("selection").getAttribute("data-item")).toBe(
-    active,
+    active === "identity" ? "IDP and SSO" : active,
   );
 });
 

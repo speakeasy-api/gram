@@ -796,21 +796,12 @@ var _ = Service("admin", func() {
 
 		Payload(func() {
 			security.AdminAuthPayload()
-			Required("name")
-
-			// A body of one required string is structurally identical to several
-			// others in this design, and Goa's OpenAPI emitter deduplicates
-			// request bodies by shape, reusing whichever name it registered
-			// first. MinLength makes this shape its own, and an explicit
-			// typename stops a future identically-shaped body from taking it.
+			Required("url", "ownership_confirmed")
 			Meta("openapi:typename", "CreateOrganizationRequestBody")
-
-			// The length and character rules live in orgprovision.ValidateName,
-			// which the handler runs and which the signup path runs too. Only
-			// the emptiness floor is repeated here.
-			Attribute("name", String, "Display name for the new organization.", func() {
+			Attribute("url", String, "Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.", func() {
 				MinLength(1)
 			})
+			Attribute("ownership_confirmed", Boolean, "The operator confirms that domain ownership was established outside this form.")
 		})
 
 		Result(AdminOrganization)
