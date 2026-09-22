@@ -123,7 +123,9 @@ export function MethodEditor({
   capability,
   draft,
   onSave,
+  embedded = false,
 }: {
+  embedded?: boolean;
   method: Method;
   product?: Product;
   capability: Capability;
@@ -166,9 +168,13 @@ export function MethodEditor({
     setSaving(false);
   }
   return (
-    <section className="space-y-4 rounded-lg border p-4">
+    <section
+      className={
+        embedded ? "space-y-4 px-4 pb-4" : "space-y-4 rounded-lg border p-4"
+      }
+    >
       <div>
-        <h3 className="font-medium">{method.name}</h3>
+        {!embedded && <h3 className="font-medium">{method.name}</h3>}
         <p className="text-muted-foreground mt-1 text-xs">{method.plans}</p>
       </div>
       {product && (
@@ -317,15 +323,14 @@ export function MethodList({
                 </span>
               </span>
             </summary>
-            <div className="p-2">
-              <MethodEditor
-                method={method}
-                product={product}
-                capability={capability}
-                draft={draft}
-                onSave={onSave}
-              />
-            </div>
+            <MethodEditor
+              embedded
+              method={method}
+              product={product}
+              capability={capability}
+              draft={draft}
+              onSave={onSave}
+            />
           </details>
         );
       })}

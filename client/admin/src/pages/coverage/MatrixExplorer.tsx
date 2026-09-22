@@ -301,7 +301,7 @@ function FactCell({
 }): JSX.Element {
   const { fact } = cell;
   return (
-    <Tooltip>
+    <Tooltip delayDuration={450}>
       <TooltipTrigger asChild>
         <button
           type="button"
