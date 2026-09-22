@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -154,6 +155,20 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		projectID, err := parseAgentProjectID(payload.ProjectID)
 		if err != nil {
 			return err
+		}
+		// The composite key proves tenancy but not liveness — projects are soft
+		// deleted, so the foreign key still matches one that is gone. Check it
+		// here so an agent cannot be born pointing at a deleted project.
+		if projectID.Valid {
+			if _, err := projectsrepo.New(tx).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
+				ID:             projectID.UUID,
+				OrganizationID: human.Auth.ActiveOrganizationID,
+			}); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return oops.E(oops.CodeNotFound, err, "project not found")
+				}
+				return oops.E(oops.CodeUnexpected, err, "read agent project").LogError(ctx, s.logger)
+			}
 		}
 		agent, err := repo.New(tx).CreateAgentWithID(ctx, repo.CreateAgentWithIDParams{
 			ID:             agentID,

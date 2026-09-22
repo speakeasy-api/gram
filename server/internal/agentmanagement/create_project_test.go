@@ -119,19 +119,59 @@ func TestCreateAgentRejectsProjectFromAnotherOrganization(t *testing.T) {
 	_, err := service.Create(ctx, &gen.CreatePayload{Name: "Cross tenant agent", ProjectID: &foreignID})
 	require.Error(t, err)
 
-	// Naming a project the caller's organization does not own is the client
-	// being wrong, not a fault, so it must not read as an internal error.
+	// Another tenant's project is indistinguishable from one that does not
+	// exist, and naming it is the client being wrong, not a fault.
 	requireOopsCode(t, err, oops.CodeNotFound)
-
-	// Naming the constraint is the point: a bare require.Error would still pass
-	// if the composite key stopped enforcing and something else happened to
-	// reject the write.
-	var pgErr *pgconn.PgError
-	require.ErrorAs(t, err, &pgErr)
-	require.Equal(t, pgerrcode.ForeignKeyViolation, pgErr.Code)
-	require.Equal(t, "agents_organization_id_project_id_fkey", pgErr.ConstraintName)
 
 	stored, err := repo.New(conn).ListManagedAgents(t.Context(), "org-agent-tenant-a")
 	require.NoError(t, err)
 	require.Empty(t, stored, "a rejected create must leave no agent behind")
+}
+
+// The service rejects a cross-tenant binding before the insert, so this pins
+// the database backstop directly: any writer that skips that check still
+// cannot record one.
+func TestAgentProjectBindingIsPinnedToItsOrganization(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-agent-pin-a")
+	seedOrganizationUser(t, conn, "org-agent-pin-a", "owner")
+	seedOrganization(t, conn, "org-agent-pin-b")
+	foreign := seedProject(t, conn, "org-agent-pin-b", "agent-project-pin")
+
+	_, err := repo.New(conn).CreateAgent(t.Context(), repo.CreateAgentParams{
+		OrganizationID: "org-agent-pin-a",
+		OwnerUserID:    "owner",
+		ProjectID:      uuid.NullUUID{UUID: foreign.ID, Valid: true},
+		Name:           "Direct cross tenant agent",
+	})
+	require.Error(t, err)
+
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, pgerrcode.ForeignKeyViolation, pgErr.Code)
+	require.Equal(t, "agents_organization_id_project_id_fkey", pgErr.ConstraintName)
+}
+
+// Projects are soft deleted, so the composite key still matches one that is
+// gone. An agent must not be born bound to a deleted project.
+func TestCreateAgentRejectsDeletedProject(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-agent-deleted-project")
+	seedOrganizationUser(t, conn, "org-agent-deleted-project", "owner")
+	project := seedProject(t, conn, "org-agent-deleted-project", "agent-project-gone")
+	_, err := projectsrepo.New(conn).DeleteProject(t.Context(), project.ID)
+	require.NoError(t, err)
+	service := newProjectScopedService(t, conn)
+
+	projectID := project.ID.String()
+	ctx := validatedHumanContext(t, "org-agent-deleted-project", "owner")
+	_, err = service.Create(ctx, &gen.CreatePayload{Name: "Deleted project agent", ProjectID: &projectID})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	stored, err := repo.New(conn).ListManagedAgents(t.Context(), "org-agent-deleted-project")
+	require.NoError(t, err)
+	require.Empty(t, stored)
 }
