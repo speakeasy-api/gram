@@ -503,6 +503,7 @@ SELECT
     t.ends_at AS trial_ends_at,
     t.converted_at AS trial_converted_at,
     t.demoted_at AS trial_demoted_at,
+    om.creation_source,
     om.created_at,
     om.updated_at,
     (

@@ -488,6 +488,7 @@ describe("organizationFromSdk", () => {
         trialTier: "enterprise",
         trialConvertedAt: new Date("2026-04-01T00:00:00Z"),
         trialDemotedAt: new Date("2026-04-02T00:00:00Z"),
+        creationSource: "platform_admin",
         memberCount: 3,
         createdAt: new Date("2026-01-02T00:00:00Z"),
         updatedAt: new Date("2026-01-07T00:00:00Z"),
@@ -507,6 +508,10 @@ describe("organizationFromSdk", () => {
       trial_tier: "enterprise",
       trial_converted_at: "2026-04-01T00:00:00.000Z",
       trial_demoted_at: "2026-04-02T00:00:00.000Z",
+      // A field this mapper forgets is not a type error, because every field
+      // it names is optional on the way out. Only naming it here catches a
+      // lifecycle write that answers with the record and drops it.
+      creation_source: "platform_admin",
       member_count: 3,
       created_at: "2026-01-02T00:00:00.000Z",
       updated_at: "2026-01-07T00:00:00.000Z",
@@ -532,6 +537,7 @@ describe("organizationFromSdk", () => {
     expect(record.trial_demoted_at).toBeUndefined();
     expect(record.workos_id).toBeUndefined();
     expect(record.stripe_customer_id).toBeUndefined();
+    expect(record.creation_source).toBeUndefined();
   });
 });
 
