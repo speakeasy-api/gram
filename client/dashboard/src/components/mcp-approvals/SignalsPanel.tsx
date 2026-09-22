@@ -24,23 +24,18 @@ const SECTION_LABELS: Record<EvidenceSectionId, string> = {
 
 const TONE_ORDER: SignalTone[] = ["concern", "watch", "unknown", "clean"];
 
+/**
+ * One word per tone, used both as the group heading and as the unit in the
+ * tally beside the panel title. Deliberately the same word in both places:
+ * a heading reading "Not established" over a count reading "3 unknown" is two
+ * vocabularies for one thing, on a page whose whole problem was that its
+ * status words did not agree with each other.
+ */
 const TONE_HEADINGS: Record<SignalTone, string> = {
   concern: "Concerns",
   watch: "Notable",
-  unknown: "Not established",
-  clean: "Checked, nothing found",
-};
-
-/**
- * The same tones as a count beside the panel heading. Shorter than the group
- * headings, which read as sentences rather than as units: "2 Checked, nothing
- * found" is not a quantity of anything.
- */
-const TONE_TALLY: Record<SignalTone, string> = {
-  concern: "concerns",
-  watch: "notable",
-  unknown: "unknown",
-  clean: "checked clean",
+  unknown: "Unknown",
+  clean: "Checked clean",
 };
 
 /**
@@ -126,7 +121,7 @@ function SignalTally({
           key={tone}
           className={cn("text-eyebrow", TONE_HEADING_CLASS[tone])}
         >
-          {counts[tone]} {TONE_TALLY[tone]}
+          {counts[tone]} {TONE_HEADINGS[tone].toLowerCase()}
         </span>
       ))}
     </div>

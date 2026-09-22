@@ -48,9 +48,13 @@ describe("SignalsPanel", () => {
 
     expect(screen.getByRole("heading", { name: "Concerns" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Notable" })).toBeTruthy();
-    expect(
-      screen.getByRole("heading", { name: "Not established" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Unknown" })).toBeTruthy();
+  });
+
+  it("uses one word per tone for both the heading and the tally", () => {
+    render(<SignalsPanel signals={SIGNALS} />);
+    expect(screen.getByText("2 notable")).toBeTruthy();
+    expect(screen.getByText("1 unknown")).toBeTruthy();
   });
 
   it("tallies only the tones that have something in them", () => {
