@@ -10,14 +10,15 @@ import (
 )
 
 func TestConformance(t *testing.T) {
+	t.Parallel()
 	raw, err := os.ReadFile("conformance.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var cases []struct {
-		Name   string
-		Record json.RawMessage
-		Valid  bool
+		Name   string          `json:"name"`
+		Record json.RawMessage `json:"record"`
+		Valid  bool            `json:"valid"`
 	}
 	if err := json.Unmarshal(raw, &cases); err != nil {
 		t.Fatal(err)
@@ -28,6 +29,7 @@ func TestConformance(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
+			t.Parallel()
 			value, err := decode(c.Record)
 			if err != nil {
 				t.Fatal(err)
@@ -39,6 +41,7 @@ func TestConformance(t *testing.T) {
 	}
 }
 func TestRejectUnknownFormat(t *testing.T) {
+	t.Parallel()
 	if _, err := Compile([]byte(`{"type":"string","format":"unsupported-required-format"}`)); err == nil {
 		t.Fatal("unknown format accepted")
 	}
@@ -51,9 +54,13 @@ func TestStarterBaseline(t *testing.T) {
 		t.Fatal(err)
 	}
 	var manifest struct {
-		Count        int
+		Count        int    `json:"count"`
 		SchemaSHA256 string `json:"schema_sha256"`
-		Records      []struct{ File, Name, SHA256 string }
+		Records      []struct {
+			File   string `json:"file"`
+			Name   string `json:"name"`
+			SHA256 string `json:"sha256"`
+		} `json:"records"`
 	}
 	if err = json.Unmarshal(raw, &manifest); err != nil {
 		t.Fatal(err)
@@ -87,7 +94,15 @@ func TestStarterBaseline(t *testing.T) {
 		if schema.Validate(value) != nil {
 			t.Fatal("starter record invalid")
 		}
-		if value.(map[string]any)["server"].(map[string]any)["name"] != record.Name {
+		object, ok := value.(map[string]any)
+		if !ok {
+			t.Fatal("record is not an object")
+		}
+		server, ok := object["server"].(map[string]any)
+		if !ok {
+			t.Fatal("server is not an object")
+		}
+		if server["name"] != record.Name {
 			t.Fatal("record name mismatch")
 		}
 	}
