@@ -248,13 +248,15 @@ function CreateAgent({
   const organization = useOrganization();
   const project = useProject();
   const [name, setName] = useState("");
-  // Project is the common case, so it leads — but only once a project has
-  // resolved, since the Project option is unselectable until then.
-  const [scope, setScope] = useState<AgentScope>(
-    project.id ? "project" : "organization",
-  );
+  // null until the person picks, so the default can follow the project as it
+  // resolves. A useState initializer would run once, before useProject has an
+  // id, and strand the form on organization scope.
+  const [chosenScope, setChosenScope] = useState<AgentScope | null>(null);
   const [draft, setDraft] = useState<AgentPolicyDraft>({});
   const [error, setError] = useState<string | null>(null);
+  // Project leads once one is available; an explicit pick always wins.
+  const scope: AgentScope =
+    chosenScope ?? (project.id ? "project" : "organization");
   const { user } = useSession();
   const queryClient = useQueryClient();
   const create = useCreateAgentMutation({
@@ -337,7 +339,7 @@ function CreateAgent({
           <RadioCardGroup
             orientation="horizontal"
             value={scope}
-            onValueChange={(value) => setScope(value as AgentScope)}
+            onValueChange={(value) => setChosenScope(value as AgentScope)}
             disabled={disabled || create.isPending}
             aria-label="Agent scope"
           >
