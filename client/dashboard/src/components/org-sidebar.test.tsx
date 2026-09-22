@@ -7,12 +7,6 @@ import type { ReactNode } from "react";
 const mocks = vi.hoisted(() => ({
   active: "agents",
   isPlatformAdmin: false,
-  networkIngressStatus: "disabled" as
-    | "loading"
-    | "enabled"
-    | "disabled"
-    | "error",
-  canManageIngress: false,
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () =>
@@ -33,12 +27,7 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({ useRBAC: () => ({ isLoading: false }) }));
 vi.mock("@/hooks/useCanSetUpOrg", () => ({ useCanSetUpOrg: () => false }));
-vi.mock("@/hooks/useNetworkIngressRollout", () => ({
-  useNetworkIngressRollout: () => ({
-    status: mocks.networkIngressStatus,
-    canManageIngress: mocks.canManageIngress,
-  }),
-}));
+
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => false }),
 }));
@@ -109,8 +98,6 @@ afterEach(() => {
   cleanup();
   mocks.active = "agents";
   mocks.isPlatformAdmin = false;
-  mocks.networkIngressStatus = "disabled";
-  mocks.canManageIngress = false;
 });
 
 it("lists one IDP and SSO entry under Team and no vendor entry", () => {
@@ -123,17 +110,10 @@ it("lists one IDP and SSO entry under Team and no vendor entry", () => {
   expect(identity.getAttribute("href")).toBe("/example/identity");
 });
 
-it.each(["loading", "error"] as const)(
-  "keeps Network Access visible while entitlement lookup is %s",
-  (status) => {
-    mocks.networkIngressStatus = status;
-    mocks.canManageIngress = true;
-
-    render(<OrgSidebar />);
-
-    expect(screen.getByText("Network Access")).toBeTruthy();
-  },
-);
+it("keeps Network Access visible without a staff entitlement", () => {
+  render(<OrgSidebar />);
+  expect(screen.getByText("Network Access")).toBeTruthy();
+});
 
 it.each([
   ["team", "Team"],

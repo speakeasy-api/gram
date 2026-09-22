@@ -11,19 +11,18 @@ import {
 } from "@/components/ui/Sidebar";
 import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
 
+import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { Icon } from "@/components/ui/Icon";
 import { RequireScope } from "@/components/require-scope";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import { SidebarBrandHeader } from "./sidebar-brand-header";
-import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { TrialStatusCard } from "./trial-status-card";
 import { Wrench } from "lucide-react";
 import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
-import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -70,10 +69,6 @@ export function OrgSidebar({
     },
   );
   const isPlatformAdmin = useIsPlatformAdmin();
-  const { status: networkIngressRolloutStatus, canManageIngress } =
-    useNetworkIngressRollout();
-  const showNetworkAccess =
-    canManageIngress && networkIngressRolloutStatus !== "disabled";
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
 
@@ -187,7 +182,7 @@ export function OrgSidebar({
                   {
                     item: orgRoutes.domains,
                     scope: orgReadOrAdmin,
-                    label: showNetworkAccess ? "Network Access" : undefined,
+                    label: "Network Access",
                   },
                   { item: orgRoutes.logs, scope: orgReadOrAdmin },
                   { item: orgRoutes.skills, scope: "org:admin" },

@@ -21,8 +21,10 @@ import {
   privateMcpEndpointUrls,
 } from "@/hooks/usePrivateMcpServerUrls";
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
+import { useProductTier } from "@/hooks/useProductTier";
 import { customDomainMcpEndpointUrl } from "@/hooks/useToolsetUrl";
 
+import { BOOK_DEMO_URL } from "@/lib/constants";
 import { getServerURL } from "@/lib/utils";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import {
@@ -62,7 +64,11 @@ export function NetworkAccessSection({
   const hasStoredPrivateMode =
     mcpServer.networkAccessMode !== McpServerNetworkAccessMode.PublicOnly;
 
-  if (rolloutStatus === "disabled" && !hasStoredPrivateMode) {
+  if (
+    rolloutStatus === "disabled" &&
+    !canManageIngress &&
+    !hasStoredPrivateMode
+  ) {
     return null;
   }
 
@@ -85,6 +91,7 @@ function NetworkAccessSectionContent({
   canReadIngress: boolean;
 }): JSX.Element {
   const organization = useOrganization();
+  const enterprise = useProductTier() === "enterprise";
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<UpdateMcpServerFormNetworkAccessMode>(
     mcpServer.networkAccessMode,
@@ -117,7 +124,7 @@ function NetworkAccessSectionContent({
   });
   const domains = domainsResult.data?.domains;
 
-  const entitled = features.data?.networkIngressEnabled === true;
+  const entitled = enterprise && features.data?.networkIngressEnabled === true;
   const ingressOnline =
     ingress?.enabled === true && ingress.status === "online";
   const eligibleEndpoints = useMemo(
@@ -341,7 +348,25 @@ function NetworkAccessSectionContent({
             )}
         </SettingsSection.Body>
         <SettingsSection.Footer>
-          <SettingsSection.FooterHint>{footerHint}</SettingsSection.FooterHint>
+          <SettingsSection.FooterHint>
+            {!enterprise &&
+            mcpServer.networkAccessMode ===
+              McpServerNetworkAccessMode.PublicOnly ? (
+              <>
+                Tailscale private access is available on the Enterprise plan.{" "}
+                <a
+                  href={BOOK_DEMO_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  Talk to our team about upgrading
+                </a>
+              </>
+            ) : (
+              footerHint
+            )}
+          </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope
               scope="mcp:write"
