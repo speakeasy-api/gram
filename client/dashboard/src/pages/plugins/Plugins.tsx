@@ -781,12 +781,19 @@ function PlatformMCPPluginCard(): JSX.Element | null {
   const telemetry = useTelemetry();
   const recordedImpression = useRef(false);
   const isAdmin = hasScope("org:admin");
+  const eligible =
+    !isLoading &&
+    !error &&
+    !isAdmin &&
+    (hasScope("project:read") ||
+      hasScope("skill:read") ||
+      hasScope("mcp:read"));
   const onboarding = useOrganizationPlatformMCPOnboarding(organization.id, {
-    enabled: !isLoading && !error && !isAdmin,
+    enabled: eligible,
     throwOnError: false,
   });
   const memberVisible =
-    !isLoading && !error && !isAdmin && !!onboarding.data?.enabled;
+    eligible && !!onboarding.data?.enabled && !onboarding.isError;
   useEffect(() => {
     if (!memberVisible || recordedImpression.current) return;
     recordedImpression.current = true;
