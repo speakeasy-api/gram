@@ -88,6 +88,7 @@ const mocks = vi.hoisted(() => ({
       ownerProfile: undefined as
         | { displayName: string; photoUrl?: string }
         | undefined,
+      projectId: undefined as string | undefined,
       lifecycle: "active",
       permissions: { read: true, write: true, authorize: true, transfer: true },
     },
@@ -486,5 +487,44 @@ describe("Agent scope without an active project", () => {
 
     const form = mocks.createMutate.mock.calls[0]?.[0].request.createAgentForm;
     expect(form?.projectId).toBeUndefined();
+  });
+});
+
+describe("Agent list scope filtering", () => {
+  const inventory = [...mocks.agents];
+  afterEach(() => {
+    mocks.agents = [...inventory];
+  });
+
+  it("hides agents bound to another project and keeps organization-wide ones", () => {
+    mocks.agents = [
+      {
+        ...mocks.agents[0]!,
+        id: "agent_here",
+        name: "This project agent",
+        projectId: mocks.projectId,
+      },
+      {
+        ...mocks.agents[0]!,
+        id: "agent_elsewhere",
+        name: "Other project agent",
+        projectId: "00000000-0000-4000-8000-0000000000ff",
+      },
+      {
+        ...mocks.agents[0]!,
+        id: "agent_org",
+        name: "Org wide agent",
+        projectId: undefined,
+      },
+    ];
+    setup();
+
+    expect(
+      screen.getByRole("button", { name: "This project agent" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Org wide agent" })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Other project agent" }),
+    ).toBeNull();
   });
 });

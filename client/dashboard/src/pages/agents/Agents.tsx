@@ -156,9 +156,15 @@ function AgentList({
 }) {
   // Ownership is an independent authorization path. Do not gate this query on RBAC.
   const agents = useReadableAgents(true);
+  const project = useProject();
   const [search, setSearch] = useState("");
-  const rows = (agents.data ?? []).filter((agent) =>
-    agent.name.toLowerCase().includes(search.trim().toLowerCase()),
+  const rows = (agents.data ?? []).filter(
+    (agent) =>
+      // An agent bound to another project is that project's to manage, so
+      // showing it here reads as a listing bug. Organization-wide agents have
+      // no home project and belong in every project's list.
+      (!agent.projectId || agent.projectId === project.id) &&
+      agent.name.toLowerCase().includes(search.trim().toLowerCase()),
   );
   const columns: Column<ManagedAgent>[] = [
     {
@@ -237,6 +243,24 @@ function AgentOwner({ agent }: { agent: ManagedAgent }) {
 
 /** Where a new agent belongs. Mirrors the optional project binding on API keys. */
 type AgentScope = "organization" | "project";
+
+/**
+ * Names the project an agent belongs to, or says it belongs to none. An agent
+ * bound to another project can still be reached by id, so this reports the
+ * binding rather than assuming it is the project being viewed.
+ */
+function AgentScopeLabel({ agent }: { agent: ManagedAgent }) {
+  const organization = useOrganization();
+  const project = useProject();
+  if (!agent.projectId) {
+    return <Text>{organization.name} (all projects)</Text>;
+  }
+  return (
+    <Text>
+      {agent.projectId === project.id ? project.name : "Another project"}
+    </Text>
+  );
+}
 
 function CreateAgent({
   disabled,
@@ -541,6 +565,10 @@ function AgentIdentity({
             <dt className="text-muted-foreground">Owner</dt>
             <dd>
               <AgentOwner agent={agent} />
+            </dd>
+            <dt className="text-muted-foreground">Scope</dt>
+            <dd>
+              <AgentScopeLabel agent={agent} />
             </dd>
             <dt className="text-muted-foreground">Lifecycle</dt>
             <dd>
