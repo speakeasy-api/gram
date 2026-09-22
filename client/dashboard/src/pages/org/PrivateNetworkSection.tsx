@@ -8,6 +8,7 @@ import {
 } from "@gram/client/react-query/networkIngress.js";
 
 import { Alert } from "@/components/ui/Alert";
+import { BOOK_DEMO_URL } from "@/lib/constants";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EnterpriseGate } from "@/components/enterprise-gate";
@@ -162,7 +163,7 @@ function ConfiguredPrivateNetwork({
             access.{" "}
             {!enterprise && (
               <a
-                href="https://www.speakeasy.com/book-demo"
+                href={BOOK_DEMO_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline"

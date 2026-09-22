@@ -24,6 +24,7 @@ import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useProductTier } from "@/hooks/useProductTier";
 import { customDomainMcpEndpointUrl } from "@/hooks/useToolsetUrl";
 
+import { BOOK_DEMO_URL } from "@/lib/constants";
 import { getServerURL } from "@/lib/utils";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import {
@@ -354,7 +355,7 @@ function NetworkAccessSectionContent({
               <>
                 Tailscale private access is available on the Enterprise plan.{" "}
                 <a
-                  href="https://www.speakeasy.com/book-demo"
+                  href={BOOK_DEMO_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline"

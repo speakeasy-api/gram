@@ -1,3 +1,4 @@
+import { BOOK_DEMO_URL } from "@/lib/constants";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { IconName } from "@/components/ui/Icon/names";
@@ -38,11 +39,7 @@ export function EnterpriseGate({
         {description}
       </Text>
       <Button variant="brand" asChild>
-        <a
-          href="https://www.speakeasy.com/book-demo"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+        <a href={BOOK_DEMO_URL} target="_blank" rel="noopener noreferrer">
           Talk to our team
         </a>
       </Button>

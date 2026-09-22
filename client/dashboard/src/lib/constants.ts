@@ -4,6 +4,7 @@ export const PROMPT_NAME_PATTERN = "^[a-z0-9_-]{1,128}$";
 const PROMPT_ARG_PATTERN = "^[a-zA-Z]+(?:[_][a-zA-Z0-9]+)*$";
 const MUSTACHE_VAR_PATTERN = String.raw`\{\{\{?\s*(${PROMPT_ARG_PATTERN.slice(1, -1)})\s*\}\}\}?`;
 export const MUSTACHE_VAR_REGEX = new RegExp(MUSTACHE_VAR_PATTERN, "g");
+export const BOOK_DEMO_URL = "https://www.speakeasy.com/book-demo";
 
 /**
  * Converts a string to match the TOOL_NAME_PATTERN format.
