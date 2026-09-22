@@ -202,7 +202,11 @@ assert len(set(names)) == 2
 
 **Consumes:** storage contract; no imported data. **Produces:** additive table available before A2 application deployment.
 
-- [ ] Add this SDL next to registry tables:
+**Publication evidence (2026-09-22):** Schema-only PR [#6644](https://github.com/speakeasy-api/gram/pull/6644), branch `walker/mcp-registry-schema`, commit `aa8d7ac791`, targets `main`. Independent review approved the DDL before publication. Its diff contains only `schema.sql`, the Atlas-generated migration and `atlas.sum`; no application data or code. Latest-main migration ordering, structural migration lint and `atlas migrate validate` pass. Full Atlas lint could not be rerun during publication because the local database on port 5439 was unavailable; no production database was accessed. Deployment and local apply/uniqueness evidence are not established by this publication step.
+
+**Application stack:** `walker/mcp-registry-foundation` independently targets `main` with Task 0 and planning only; the approved two-record source hashes remain unchanged. Integrated Go contract checks and all 34 JavaScript contract tests pass. Continue Task 2 on a new branch based on this foundation; do not duplicate DDL into its diff. The schema PR must be deployed before releasing the future service. All future API work uses Goa and generated SDKs; the registry stays discovery-only with one mutable record and no synchronization or version history.
+
+- [x] Add this SDL next to registry tables:
 
 ```sql
 CREATE TABLE IF NOT EXISTS mcp_registry_entries (
