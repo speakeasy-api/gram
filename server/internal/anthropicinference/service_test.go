@@ -348,7 +348,7 @@ func (s *checkpointHeadroomSession) Accept(ctx context.Context, hashes [][]byte)
 	deadline, ok := ctx.Deadline()
 	require.True(s.t, ok)
 	require.Equal(s.t, checkpointBudget, time.Until(deadline))
-	time.Sleep(checkpointBudget - time.Millisecond)
+	<-time.After(checkpointBudget - time.Millisecond)
 	return s.memoryCheckpoint.Accept(ctx, hashes)
 }
 
@@ -359,11 +359,12 @@ func TestServiceReservesCheckpointAndResponseHeadroom(t *testing.T) {
 	require.Less(t, requestBudget, 10*time.Second)
 	for _, elapsed := range []time.Duration{0, time.Second} {
 		t.Run(elapsed.String(), func(t *testing.T) {
+			t.Parallel()
 			synctest.Test(t, func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(t.Context(), requestBudget)
 				defer cancel()
 				// Account for configuration/body work before Process starts.
-				time.Sleep(elapsed)
+				<-time.After(elapsed)
 				frame := exampleFrame()
 				frame.Messages = []Message{textMessage("user", "first"), textMessage("assistant", "reply"), textMessage("user", "stall")}
 				store := &checkpointHeadroomStore{t: t}
