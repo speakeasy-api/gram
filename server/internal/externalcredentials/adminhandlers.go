@@ -206,7 +206,7 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 	// Confirm the id is a platform gcp_iam credential (organization_id NULL,
 	// project_id NULL, provider gcp_iam) before touching the subtype, whose
 	// update is keyed on the id alone.
-	_, err = q.GetGcpIamCredential(ctx, repo.GetGcpIamCredentialParams{ID: id, OrganizationID: platformOrganizationID})
+	prior, err := q.GetGcpIamCredential(ctx, repo.GetGcpIamCredentialParams{ID: id, OrganizationID: platformOrganizationID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "platform gcp iam credential not found")
@@ -255,7 +255,9 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 	}
 
 	logPlatformMutation(ctx, logger, authCtx, "update", "gcp_iam_credential", ec.ID.String())
-	if exempt {
+	// A rename that keeps an exempted target is not a new grant.
+	carried := prior.GcpIamCredential.SkipProjectVerification && strings.EqualFold(strings.TrimSpace(prior.GcpIamCredential.ImpersonateServiceAccount.String), strings.TrimSpace(cols.ImpersonateServiceAccount.String))
+	if exempt && !carried {
 		logExemptionGranted(ctx, logger, authCtx, id, cols.ImpersonateServiceAccount.String)
 	}
 

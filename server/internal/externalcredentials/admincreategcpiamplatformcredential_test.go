@@ -1,6 +1,7 @@
 package externalcredentials_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -100,4 +101,32 @@ func TestCreateGcpIamPlatformCredential_RejectsStaleAdminFlag(t *testing.T) {
 		WifProjectNumber:          nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestUpdateGcpIamPlatformCredential_RenameDoesNotRelogExemption(t *testing.T) {
+	t.Parallel()
+	ctx, ti, logs := newTestServiceWithLogs(t)
+	const grant = "exempted a gcp iam credential from own-project screening"
+	signer := provisiontest.SigningServiceAccount()
+
+	cred, err := ti.service.CreateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.CreateGcpIamPlatformCredentialPayload{
+		SessionToken: nil, Name: "identity-provider-signer", ImpersonateServiceAccount: conv.PtrEmpty(signer),
+		WifPoolID: nil, WifProviderID: nil, WifProjectNumber: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, strings.Count(logs.String(), grant))
+
+	_, err = ti.service.UpdateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
+		SessionToken: nil, ID: cred.ID, Name: "identity-provider-signer-renamed", ImpersonateServiceAccount: conv.PtrEmpty(signer),
+		WifPoolID: nil, WifProviderID: nil, WifProjectNumber: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, strings.Count(logs.String(), grant), "a rename that keeps the target is not a new grant")
+
+	_, err = ti.service.UpdateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
+		SessionToken: nil, ID: cred.ID, Name: "identity-provider-signer-renamed", ImpersonateServiceAccount: conv.PtrEmpty("other-" + signer),
+		WifPoolID: nil, WifProviderID: nil, WifProjectNumber: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 2, strings.Count(logs.String(), grant), "a new own-project target is a new grant")
 }
