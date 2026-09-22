@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/table";
 import { matrixCsv, downloadMatrixCsv } from "./csv";
 import { resolveMatrixCell } from "./matrixCell";
+import { CopyForAgents } from "./CopyForAgents";
 import { CoverageTooltip } from "./CoverageTooltip";
 import { IntegrationRequirements } from "./IntegrationRequirements";
 import { Choice } from "./CoverageEditor";
@@ -641,6 +642,7 @@ export function MatrixExplorer({
             <Download className="size-4" />
             Export CSV
           </Button>
+          <CopyForAgents catalog={catalog} draft={draft} />
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
