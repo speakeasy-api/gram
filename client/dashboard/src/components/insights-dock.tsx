@@ -1533,10 +1533,11 @@ export function InsightsProvider({
     </div>
   );
 
-  // Page content (outlet) + the docked composer. Relative so the composer
-  // floats at the bottom-center of the content area.
+  // Page content (outlet) + the docked composer. The document scrolls, so the
+  // composer rides a zero-height sticky rail at the end of the content: it
+  // pins to the viewport bottom and spans the content area's width.
   const dockSurface = (
-    <div className="relative h-full w-full overflow-hidden">
+    <div className="relative flex w-full flex-1 flex-col">
       {children}
 
       {/* Backdrop overlay - closes the chat panel when clicked */}
@@ -1553,18 +1554,20 @@ export function InsightsProvider({
             Hidden on pages that opt out via hideTrigger, and while dismissed
             to the sidebar resume button. */}
       {!hideTrigger && !dockDismissed && (
-        <InsightsDock
-          suggestions={suggestions}
-          open={isExpanded}
-          focusKey={focusComposerKey}
-          onSubmitPrompt={handleDockSubmit}
-          onContinue={handleReopenChat}
-          continueMode={continueMode}
-          onDismiss={handleDockDismiss}
-          onOpenHistory={handleOpenHistory}
-          panel={panelContent}
-          runtimeReady={runtimeMounted}
-        />
+        <div className="pointer-events-none sticky bottom-0 z-30 h-0 shrink-0">
+          <InsightsDock
+            suggestions={suggestions}
+            open={isExpanded}
+            focusKey={focusComposerKey}
+            onSubmitPrompt={handleDockSubmit}
+            onContinue={handleReopenChat}
+            continueMode={continueMode}
+            onDismiss={handleDockDismiss}
+            onOpenHistory={handleOpenHistory}
+            panel={panelContent}
+            runtimeReady={runtimeMounted}
+          />
+        </div>
       )}
     </div>
   );

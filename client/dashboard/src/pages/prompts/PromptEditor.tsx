@@ -261,7 +261,7 @@ export function PromptEditor({
           </Button>
         </div>
       </form>
-      <aside className="bg-secondary sticky top-8 w-80 flex-shrink-0 space-y-6 p-6">
+      <aside className="bg-secondary sticky top-[calc(var(--page-sticky-top,0px)+2rem)] w-80 flex-shrink-0 space-y-6 p-6">
         <div>
           <h3 className="mb-2 text-sm font-medium">Prompt Templates</h3>
           <p className="text-muted-foreground text-sm">

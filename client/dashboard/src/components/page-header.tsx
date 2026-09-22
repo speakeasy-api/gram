@@ -15,6 +15,28 @@ import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/Breadcrumb";
 import { WorkspaceSwitcher } from "./workspace-switcher.tsx";
 import { SidebarTrigger } from "@/components/ui/Sidebar";
 
+// Publishes where the sticky header ends as --page-sticky-top on <html>, so
+// in-page sticky elements sit below it and scrollIntoView targets (via
+// scroll-padding-top in App.css) don't land underneath it.
+function useStickyTopVar(): React.RefCallback<HTMLDivElement> {
+  return React.useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    const root = document.documentElement;
+    const observer = new ResizeObserver(() => {
+      const offset = parseFloat(getComputedStyle(el).top) || 0;
+      root.style.setProperty(
+        "--page-sticky-top",
+        `${offset + el.offsetHeight}px`,
+      );
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--page-sticky-top");
+    };
+  }, []);
+}
+
 function PageHeaderComponent({
   className,
   children,
@@ -28,45 +50,53 @@ function PageHeaderComponent({
   // on.
   const onBillingPage = useMatch("/:orgSlug/billing") !== null;
   const showBreadcrumbs = useShowBreadcrumbs();
+  const stickyRef = useStickyTopVar();
 
   return (
     <>
-      <header
-        className={cn(
-          "flex h-(--header-height) shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)",
-          className,
-        )}
+      {/* The document scrolls, so the header bar and crumbs stick to the top
+          of the viewport, below the impersonation banner. */}
+      <div
+        ref={stickyRef}
+        className="bg-card sticky top-(--banner-offset) z-20 shrink-0"
       >
-        {/* px-8 matches Page.Body's padding; the switcher pulls back by its own
+        <header
+          className={cn(
+            "flex h-(--header-height) shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)",
+            className,
+          )}
+        >
+          {/* px-8 matches Page.Body's padding; the switcher pulls back by its own
             inner padding so its tile lines up with the content edge. Mobile
             uses reduced padding (px-4) to fit the sidebar trigger. */}
-        <div className="flex w-full items-center gap-3 px-4 md:px-8">
-          {/* Mobile navigation trigger — opens the sidebar sheet on small
+          <div className="flex w-full items-center gap-3 px-4 md:px-8">
+            {/* Mobile navigation trigger — opens the sidebar sheet on small
               screens where the sidebar is hidden. */}
-          <SidebarTrigger className="md:hidden" />
-          {/* Project context lives here, in the slot the breadcrumbs used to
+            <SidebarTrigger className="md:hidden" />
+            {/* Project context lives here, in the slot the breadcrumbs used to
               occupy, rather than in the sidebar. The collapse control moved to
               the sidebar header alongside the logo. */}
-          <WorkspaceSwitcher className="-ml-1.5 w-auto border-0 px-1.5" />
-          {!showBreadcrumbs && children}
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            <InsightsDockShortcutHint />
-            <CommandPaletteTrigger />
+            <WorkspaceSwitcher className="-ml-1.5 w-auto border-0 px-1.5" />
+            {!showBreadcrumbs && children}
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <InsightsDockShortcutHint />
+              <CommandPaletteTrigger />
+            </div>
           </div>
-        </div>
-      </header>
-      {/* Crosshatch rule (marketing-site idiom) divides header from content and
+        </header>
+        {/* Crosshatch rule (marketing-site idiom) divides header from content and
           continues the sidebar header's own rule across the pane boundary. */}
-      <HatchRule />
-      {/* The trail gets its own bar rather than sharing the header row: the
+        <HatchRule />
+        {/* The trail gets its own bar rather than sharing the header row: the
           switcher names where you are and the trail names how you got there,
           and on one line the two read as a single path. px-8 matches
           Page.Body so the crumbs line up with the content edge. */}
-      {showBreadcrumbs && (
-        <div className="border-foreground/10 flex shrink-0 items-center gap-2 border-b px-8 py-2.5">
-          {children}
-        </div>
-      )}
+        {showBreadcrumbs && (
+          <div className="border-foreground/10 flex shrink-0 items-center gap-2 border-b px-8 py-2.5">
+            {children}
+          </div>
+        )}
+      </div>
       {/* Inference stopping is felt on whichever page the user was working on,
           so the reason for it rides the header rather than waiting on the
           billing page. Billing renders all of its banners together so payment

@@ -17,10 +17,12 @@ import { PageEyebrow } from "./page-eyebrow";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
-    // Height accounts for the SidebarInset visual gutter (m-2 top+bottom = 1rem)
-    // and the impersonation banner via --banner-offset. The top bar is gone, so
-    // there's no header/pt-2 term to subtract.
-    <div className="flex h-[calc(100vh-1rem-var(--banner-offset,0px))] flex-col overflow-hidden">
+    // The document scrolls and the page header sticks, so the layout only sets
+    // a minimum height. Pages whose body fills the viewport (fullHeight /
+    // overflowHidden) pin the layout to the viewport instead. Height accounts
+    // for the SidebarInset visual gutter (m-2 top+bottom = 1rem) and the
+    // impersonation banner via --banner-offset.
+    <div className="flex min-h-[calc(100vh-1rem-var(--banner-offset,0px))] flex-col has-[[data-page-bound]]:h-[calc(100vh-1rem-var(--banner-offset,0px))] has-[[data-page-bound]]:overflow-hidden">
       <ContentErrorBoundary>{children}</ContentErrorBoundary>
     </div>
   );
@@ -42,17 +44,21 @@ function PageBody({
   className?: string;
 }) {
   return (
-    // Nest the max-width container inside another div so that the entire page area remains scrollable
+    // Nest the max-width container inside another div so the full-width page
+    // area below the header stays one block
     <div
-      // Anchor for useTabScrollReset: the one scroll container a page owns.
-      data-page-scroll=""
+      // Marks a body that fills the viewport rather than scrolling the page;
+      // PageLayout pins its height when it sees one.
+      data-page-bound={fullHeight || overflowHidden ? "" : undefined}
       className={cn(
         // flex-1 + min-h-0 ensures this pane occupies exactly the remaining
         // space in PageLayout's flex column (after PageHeader). Using h-full
         // here would resolve to 100% of PageLayout and overflow past the
         // header, clipping content at the bottom.
         "min-h-0 w-full flex-1",
-        overflowHidden ? "flex flex-col overflow-hidden" : "overflow-y-auto",
+        overflowHidden
+          ? "flex flex-col overflow-hidden"
+          : fullHeight && "overflow-y-auto",
       )}
     >
       <div
