@@ -1,0 +1,27 @@
+server/internal/risk/enforcereply/dispatch.go
+  s_35c5aab50a9d92::t_9caba3caabb96d 8,112-113,253,255-258,260-261,263-268,271
+server/internal/risk/enforcereply/dispatch_test.go
+  s_35c5aab50a9d92::t_9751a0ad0b1a35 71,81,83,85,127-134,195-200,249-254,275-280,307-312,420-425,441-446,486,755,766-771
+server/internal/risk/policyflags/policyflags.go
+  s_35c5aab50a9d92::t_a44ad0b27f5834 28,39,81-83,85,89,94,96-97,99,102-104,108-110,112,131,135,140,142
+server/internal/risk/policyflags/policyflags_test.go
+  s_35c5aab50a9d92::t_9c7665a50644b0 66,72,77-78,81-82,91,100-101,111,117,120,129,135,141,148,159,165,173
+server/internal/risk/scanner.go
+  s_35c5aab50a9d92::t_ef6c26c6bf7b2d 1232,1331
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e1219a8947eb699487174f2291366cbbc1275cef",
+  "prompts": {},
+  "sessions": {
+    "s_35c5aab50a9d92": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f8ac481c-58f2-4c89-aa2e-52fe39f12b86",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
