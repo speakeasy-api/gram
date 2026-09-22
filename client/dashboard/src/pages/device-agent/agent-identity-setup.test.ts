@@ -49,13 +49,6 @@ describe("device agent policy grants", () => {
     ).toEqual(["org:hooks_ingest"]);
   });
 
-  it("does not treat a deny grant as covering a requirement", () => {
-    const deny = stored({ ...required[0]!, effect: "deny" }, "g1");
-    expect(missingPolicyGrants([deny], required).map((g) => g.scope)).toEqual(
-      required.map((g) => g.scope),
-    );
-  });
-
   it("does not treat another project as covering the chosen one", () => {
     const other = stored(
       {

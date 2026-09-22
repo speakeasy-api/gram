@@ -33,7 +33,6 @@ import {
   MessageCircleIcon,
   PencilIcon,
   SettingsIcon,
-  UserIcon,
 } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
 import { Link, useNavigate } from "react-router";
@@ -87,6 +86,16 @@ export function SidebarUserMenu(): JSX.Element {
 
   // Only the first name in the compact footer preview so it never truncates.
   const firstName = user.displayName?.trim().split(/\s+/)[0] || "User";
+  const accountDetails = (
+    <div className="flex min-w-0 flex-col space-y-1">
+      <p className="truncate text-sm leading-none font-medium">
+        {user.displayName || "User"}
+      </p>
+      <p className="text-muted-foreground truncate text-xs leading-none">
+        {user.email}
+      </p>
+    </div>
+  );
 
   return (
     <div className="flex items-center gap-2 px-1 py-1">
@@ -116,16 +125,15 @@ export function SidebarUserMenu(): JSX.Element {
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="end" className="w-56">
           <DropdownMenuGroup className="relative">
-            <DropdownMenuLabel className="pr-8 font-normal">
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm leading-none font-medium">
-                  {user.displayName || "User"}
-                </p>
-                <p className="text-muted-foreground text-xs leading-none">
-                  {user.email}
-                </p>
-              </div>
-            </DropdownMenuLabel>
+            {identityHref ? (
+              <DropdownMenuItem asChild className="pr-8 font-normal">
+                <Link to={identityHref}>{accountDetails}</Link>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuLabel className="pr-8 font-normal">
+                {accountDetails}
+              </DropdownMenuLabel>
+            )}
             {isPlatformAdmin && adminServerUrl && (
               <DropdownMenuItem
                 asChild
@@ -139,14 +147,6 @@ export function SidebarUserMenu(): JSX.Element {
                 >
                   <CrownIcon className="h-4 w-4" />
                 </a>
-              </DropdownMenuItem>
-            )}
-            {identityHref && (
-              <DropdownMenuItem asChild>
-                <Link to={identityHref}>
-                  <UserIcon className="mr-2 h-4 w-4" />
-                  View user profile
-                </Link>
               </DropdownMenuItem>
             )}
           </DropdownMenuGroup>
