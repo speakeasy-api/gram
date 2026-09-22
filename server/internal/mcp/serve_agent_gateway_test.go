@@ -26,17 +26,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // agentGatewayFixture is one agent, one key, and two private member servers in
 // the caller's project: the agent is granted one of them and not the other.
 type agentGatewayFixture struct {
-	agent   agentsrepo.Agent
-	token   string
-	granted string
-	denied  string
-	open    string
+	agent          agentsrepo.Agent
+	token          string
+	granted        string
+	grantedProject string
+	denied         string
+	open           string
 }
 
 // mcpServerBySlug resolves the id a proxy-backed member's mcp:connect grant is
@@ -72,6 +74,8 @@ func seedAgentGateway(t *testing.T, ctx context.Context, ti *testInstance) agent
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "public member", publicSlug, 2, mcpservers.VisibilityPublic)
 
 	grantedServer := mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, grantedSlug)
+	project, perr := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
+	require.NoError(t, perr)
 
 	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -115,7 +119,11 @@ func seedAgentGateway(t *testing.T, ctx context.Context, ti *testInstance) agent
 	})
 	require.NoError(t, err)
 
-	return agentGatewayFixture{agent: agent, token: token, granted: grantedSlug, denied: deniedSlug, open: publicSlug}
+	return agentGatewayFixture{
+		agent: agent, token: token,
+		granted: grantedSlug, grantedProject: project.Slug,
+		denied: deniedSlug, open: publicSlug,
+	}
 }
 
 // serveAgentGatewayHTTP drives the handler the way the router does, including
@@ -211,4 +219,37 @@ func TestServeAgentGateway_RejectsMissingAndForeignCredentials(t *testing.T) {
 	// A malformed agent id never reaches authentication.
 	_, err = serveAgentGatewayHTTP(t, ti, "not-a-uuid", fx.token, body)
 	requireAgentGatewayCode(t, err, oops.CodeNotFound)
+}
+
+// Slugs are unique per project, not per organization, so an agent reaching two
+// projects can meet the same slug twice. Qualifying by project is what keeps a
+// qualified name pointing at one member.
+func TestServeAgentGateway_QualifiesMemberSlugsByProject(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	second, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "second",
+		Slug:           "second-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	// Deliberately the same slug as the first project's granted member, and
+	// public so it is admitted without a second set of grants.
+	metaTwo := createMetaMcpEndpoint(t, ctx, ti.conn, second.ID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
+	seedMetaMember(t, ctx, ti.conn, second.ID, metaTwo.ID, "twin member", fx.granted, 0, mcpservers.VisibilityPublic)
+
+	w, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      "list_servers",
+		"arguments": map[string]any{},
+	}))
+	require.NoError(t, err)
+
+	body := w.Body.String()
+	require.Contains(t, body, second.Slug+"."+fx.granted)
+	require.Contains(t, body, fx.grantedProject+"."+fx.granted)
 }

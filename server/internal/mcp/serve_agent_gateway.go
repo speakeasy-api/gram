@@ -28,6 +28,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// AgentGatewayRoute is the gateway's path, addressed by agent rather than by
+// slug so it can never be shadowed by a server whose slug is "agent".
+const AgentGatewayRoute = "/agent-mcp/{agentID}"
+
 // agentGatewayNamespace derives the synthetic meta-server id an agent gateway
 // reports. There is no meta_mcp_servers row behind it, so it must never be
 // used to read one back; it exists so telemetry and session records group per

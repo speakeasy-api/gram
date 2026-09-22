@@ -184,7 +184,14 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		gate.apiKeyID = authCtx.APIKeyID
 		// authenticated = the caller's org owns the endpoint's project,
 		// unlocking gram environments for hosted-member execution.
-		if authCtx.ActiveOrganizationID != "" {
+		//
+		// An agent gateway has no endpoint project to own, and its key was
+		// already authenticated against this organization before dispatch. It
+		// is authenticated by construction; leaving it false would list a
+		// granted private member and then fail to drill into it.
+		if agentID != uuid.Nil {
+			gate.authenticated = authCtx.ActiveOrganizationID == metaServer.OrganizationID
+		} else if authCtx.ActiveOrganizationID != "" {
 			projects, err := s.authRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return oops.E(oops.CodeUnexpected, err, "error checking project access").LogError(ctx, logger)

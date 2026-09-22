@@ -447,6 +447,7 @@ WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;
 SELECT
     s.id AS mcp_server_id,
     s.project_id AS mcp_server_project_id,
+    p.slug AS mcp_server_project_slug,
     s.name AS mcp_server_name,
     s.slug AS mcp_server_slug,
     s.visibility AS mcp_server_visibility,

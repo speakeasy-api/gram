@@ -878,6 +878,7 @@ const listServableMCPServersByOrganizationID = `-- name: ListServableMCPServersB
 SELECT
     s.id AS mcp_server_id,
     s.project_id AS mcp_server_project_id,
+    p.slug AS mcp_server_project_slug,
     s.name AS mcp_server_name,
     s.slug AS mcp_server_slug,
     s.visibility AS mcp_server_visibility,
@@ -907,6 +908,7 @@ ORDER BY s.project_id, s.slug
 type ListServableMCPServersByOrganizationIDRow struct {
 	McpServerID                    uuid.UUID
 	McpServerProjectID             uuid.UUID
+	McpServerProjectSlug           string
 	McpServerName                  pgtype.Text
 	McpServerSlug                  pgtype.Text
 	McpServerVisibility            string
@@ -949,6 +951,7 @@ func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, or
 		if err := rows.Scan(
 			&i.McpServerID,
 			&i.McpServerProjectID,
+			&i.McpServerProjectSlug,
 			&i.McpServerName,
 			&i.McpServerSlug,
 			&i.McpServerVisibility,

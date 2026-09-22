@@ -37,6 +37,7 @@ type metaMember struct {
 	// gateway's project, but an agent gateway's can span several, so member
 	// dispatch keys on this rather than on the request's project.
 	projectID             uuid.UUID
+	projectSlug           string
 	slug                  string
 	name                  string
 	sortOrder             int32
@@ -91,6 +92,7 @@ func (s *Service) memberStatus(ctx context.Context, member metaMember) string {
 type metaMemberCandidate struct {
 	serverID                   uuid.UUID
 	projectID                  uuid.UUID
+	projectSlug                string
 	slug                       string
 	name                       string
 	sortOrder                  int32
@@ -135,8 +137,10 @@ func (s *Service) resolveMetaMemberSnapshot(
 		candidates = append(candidates, metaMemberCandidate{
 			serverID: row.McpServerID,
 			// A stored gateway's members are all in its own project, which the
-			// membership query already constrains.
+			// membership query already constrains. Its slugs are unique within
+			// that project, so they need no qualifying prefix.
 			projectID:                  projectID,
+			projectSlug:                "",
 			slug:                       conv.PtrValOr(conv.FromPGText[string](row.McpServerSlug), ""),
 			name:                       conv.PtrValOr(conv.FromPGText[string](row.McpServerName), ""),
 			sortOrder:                  row.SortOrder,
@@ -180,10 +184,11 @@ func (s *Service) resolveAgentMemberSnapshot(
 	candidates := make([]metaMemberCandidate, 0, len(rows))
 	for _, row := range rows {
 		candidates = append(candidates, metaMemberCandidate{
-			serverID:  row.McpServerID,
-			projectID: row.McpServerProjectID,
-			slug:      conv.PtrValOr(conv.FromPGText[string](row.McpServerSlug), ""),
-			name:      conv.PtrValOr(conv.FromPGText[string](row.McpServerName), ""),
+			serverID:    row.McpServerID,
+			projectID:   row.McpServerProjectID,
+			projectSlug: row.McpServerProjectSlug,
+			slug:        conv.PtrValOr(conv.FromPGText[string](row.McpServerSlug), ""),
+			name:        conv.PtrValOr(conv.FromPGText[string](row.McpServerName), ""),
 			// A derived gateway has no operator-authored ordering; the query
 			// orders by project and slug so the listing is stable across
 			// requests.
@@ -200,7 +205,30 @@ func (s *Service) resolveAgentMemberSnapshot(
 		})
 	}
 
-	return s.admitMetaMembers(ctx, logger, candidates)
+	ctx, members, err := s.admitMetaMembers(ctx, logger, candidates)
+	if err != nil {
+		return ctx, nil, err
+	}
+	return ctx, qualifyAgentMemberSlugs(members), nil
+}
+
+// qualifyAgentMemberSlugs prefixes every member slug with its project's.
+//
+// Slugs are unique per project, not per organization, and an agent gateway can
+// span projects — so two members could answer to the same slug, and the
+// qualified serverslug--toolname contract would resolve to whichever came
+// first. Qualifying every member, rather than only the colliding ones, keeps a
+// member's name stable: an unrelated project adding a server must not rename
+// anything an agent already holds.
+func qualifyAgentMemberSlugs(members []metaMember) []metaMember {
+	qualified := make([]metaMember, 0, len(members))
+	for _, member := range members {
+		if member.projectSlug != "" {
+			member.slug = member.projectSlug + "." + member.slug
+		}
+		qualified = append(qualified, member)
+	}
+	return qualified
 }
 
 // admitMetaMembers applies the visibility and RBAC filter every meta surface
@@ -258,6 +286,7 @@ func (s *Service) admitMetaMembers(
 		members = append(members, metaMember{
 			serverID:                   candidate.serverID,
 			projectID:                  candidate.projectID,
+			projectSlug:                candidate.projectSlug,
 			slug:                       candidate.slug,
 			name:                       candidate.name,
 			sortOrder:                  candidate.sortOrder,
