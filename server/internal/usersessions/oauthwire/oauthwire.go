@@ -70,6 +70,25 @@ const (
 	ResponseTypeCode = "code"
 )
 
+// Client authentication parameters as they appear in a token or revocation
+// request body.
+const (
+	// ParamClientID identifies the client (RFC 6749 §2.3.1).
+	ParamClientID = "client_id"
+
+	// ParamClientSecret carries the client secret in the request body (RFC
+	// 6749 §2.3.1).
+	ParamClientSecret = "client_secret"
+
+	// ParamClientAssertion carries a client authentication assertion (RFC
+	// 7521 §4.2).
+	ParamClientAssertion = "client_assertion"
+
+	// ParamClientAssertionType names the format of ParamClientAssertion (RFC
+	// 7521 §4.2).
+	ParamClientAssertionType = "client_assertion_type"
+)
+
 // Error carries an OAuth wire error: the shared shape used across the
 // issuer-gated endpoints (RFC 6749 / RFC 7591 / RFC 7009). The structure is
 // identical everywhere — error code plus human-readable description — so
