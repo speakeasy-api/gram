@@ -1021,6 +1021,7 @@ pubsub:
           string organization_slug = 25;
           repeated string sources = 26;
           bool content_truncated = 27;
+          bool shadow = 28;
           message ToolCall {
             string id = 1;
             string name = 2;

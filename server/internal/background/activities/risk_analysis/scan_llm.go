@@ -17,6 +17,18 @@ import (
 // where the model reply is known.
 const llmPolicyEvaluationPublished = "published"
 
+// llmPolicyEvaluationShadowPublished is the policy_evaluations outcome
+// recorded once a shadow-mode batch's analysis requests are acknowledged by
+// the topic, one per published message, so the comparison lane's volume can
+// be lined up with the legacy engines' inline scans of the same batch.
+const llmPolicyEvaluationShadowPublished = "shadow_published"
+
+// llmPolicyEvaluationShadowSkipped is the policy_evaluations outcome recorded
+// when the organization is in the shadow engine mode but the worker has no
+// analyzer configured, so the batch ran the legacy engines alone and the
+// comparison lane produced nothing. Counted once per batch.
+const llmPolicyEvaluationShadowSkipped = "shadow_skipped"
+
 // llmPolicyEvaluationFallbackLegacy is the policy_evaluations outcome recorded
 // when the organization is on the LLM analyzer flag but the worker has no
 // analyzer configured, so the batch ran the legacy engines instead. It is
@@ -56,9 +68,19 @@ func llmMessageSources(masks CategoryScopeMasks, i int, coveredSources []string)
 // findings and usage readings attribute identically. Messages every covered
 // source's detection scope excludes are not published, just as the legacy
 // engines never scan them. The publish must succeed for the activity to
-// succeed: this lane is the only engine evaluating the covered sources for
-// the organization, so a dropped request is a silently unscanned message.
-func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, orgSlug string, coveredSources []string, masks CategoryScopeMasks) error {
+// succeed. In the llm mode this lane is the only engine evaluating the
+// covered sources for the organization, so a dropped request is a silently
+// unscanned message; in the shadow mode (shadow true, execution path
+// llm_shadow_stream) a dropped request would leave the comparison lane with
+// less coverage than the legacy engines that scanned the same batch inline,
+// and the activity retry replays both with the same deterministic ids.
+func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, orgSlug string, coveredSources []string, masks CategoryScopeMasks, shadow bool) error {
+	executionPath := llmAnalyzerStreamExecutionPath
+	outcome := llmPolicyEvaluationPublished
+	if shadow {
+		executionPath = llmShadowStreamExecutionPath
+		outcome = llmPolicyEvaluationShadowPublished
+	}
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	requestID := batchScanRequestID(args, "standard")
@@ -68,7 +90,7 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 			continue
 		}
 		chatMessageID, contentPartID := msg.anchorIDStrings()
-		provenance := batchRiskProvenance(args, msg, llmAnalyzerStreamExecutionPath, requestID.String())
+		provenance := batchRiskProvenance(args, msg, executionPath, requestID.String())
 		body, toolCalls := llmMessageInput(msg)
 
 		publishResults = append(publishResults, a.llmPub.Publish(ctx, riskv1.LLMAnalysis_builder{
@@ -85,7 +107,7 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 			OriginRiskPolicyId:      new(args.RiskPolicyID.String()),
 			OriginRiskPolicyVersion: &args.PolicyVersion,
 			MessageLinkReason:       &provenance.MessageLinkReason,
-			ExecutionPath:           new(llmAnalyzerStreamExecutionPath),
+			ExecutionPath:           &executionPath,
 			ToolCallId:              &provenance.ToolCallID,
 			HookSource:              &msg.Source,
 			PolicyLinkReason:        nil,
@@ -103,12 +125,13 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 			// reports truncation on its own span; the request carries the
 			// full text.
 			ContentTruncated: new(false),
+			Shadow:           &shadow,
 		}.Build()))
 	}
 	if err := drainPublishAcks(ctx, "publish llm analysis requests", publishResults); err != nil {
 		return err
 	}
-	a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), llmPolicyEvaluationPublished, len(publishResults))
+	a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), outcome, len(publishResults))
 	return nil
 }
 

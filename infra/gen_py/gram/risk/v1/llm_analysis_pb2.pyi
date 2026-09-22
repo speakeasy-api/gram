@@ -8,7 +8,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class LLMAnalysis(_message.Message):
-    __slots__ = ("request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "content", "user_id", "message_type", "body", "tool_name", "tool_calls", "content_part_id", "chat_id", "parent_chat_message_id", "origin_risk_policy_id", "origin_risk_policy_version", "message_link_reason", "execution_path", "tool_call_id", "hook_source", "policy_link_reason", "external_conversation_id", "organization_slug", "sources", "content_truncated")
+    __slots__ = ("request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "content", "user_id", "message_type", "body", "tool_name", "tool_calls", "content_part_id", "chat_id", "parent_chat_message_id", "origin_risk_policy_id", "origin_risk_policy_version", "message_link_reason", "execution_path", "tool_call_id", "hook_source", "policy_link_reason", "external_conversation_id", "organization_slug", "sources", "content_truncated", "shadow")
     class ToolCall(_message.Message):
         __slots__ = ("id", "name", "arguments")
         ID_FIELD_NUMBER: _ClassVar[int]
@@ -45,6 +45,7 @@ class LLMAnalysis(_message.Message):
     ORGANIZATION_SLUG_FIELD_NUMBER: _ClassVar[int]
     SOURCES_FIELD_NUMBER: _ClassVar[int]
     CONTENT_TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+    SHADOW_FIELD_NUMBER: _ClassVar[int]
     request_id: str
     chat_message_id: str
     project_id: str
@@ -72,4 +73,5 @@ class LLMAnalysis(_message.Message):
     organization_slug: str
     sources: _containers.RepeatedScalarFieldContainer[str]
     content_truncated: bool
-    def __init__(self, request_id: _Optional[str] = ..., chat_message_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., risk_policy_id: _Optional[str] = ..., risk_policy_version: _Optional[int] = ..., created_at: _Optional[str] = ..., content: _Optional[str] = ..., user_id: _Optional[str] = ..., message_type: _Optional[str] = ..., body: _Optional[str] = ..., tool_name: _Optional[str] = ..., tool_calls: _Optional[_Iterable[_Union[LLMAnalysis.ToolCall, _Mapping]]] = ..., content_part_id: _Optional[str] = ..., chat_id: _Optional[str] = ..., parent_chat_message_id: _Optional[str] = ..., origin_risk_policy_id: _Optional[str] = ..., origin_risk_policy_version: _Optional[int] = ..., message_link_reason: _Optional[str] = ..., execution_path: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., hook_source: _Optional[str] = ..., policy_link_reason: _Optional[str] = ..., external_conversation_id: _Optional[str] = ..., organization_slug: _Optional[str] = ..., sources: _Optional[_Iterable[str]] = ..., content_truncated: _Optional[bool] = ...) -> None: ...
+    shadow: bool
+    def __init__(self, request_id: _Optional[str] = ..., chat_message_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., risk_policy_id: _Optional[str] = ..., risk_policy_version: _Optional[int] = ..., created_at: _Optional[str] = ..., content: _Optional[str] = ..., user_id: _Optional[str] = ..., message_type: _Optional[str] = ..., body: _Optional[str] = ..., tool_name: _Optional[str] = ..., tool_calls: _Optional[_Iterable[_Union[LLMAnalysis.ToolCall, _Mapping]]] = ..., content_part_id: _Optional[str] = ..., chat_id: _Optional[str] = ..., parent_chat_message_id: _Optional[str] = ..., origin_risk_policy_id: _Optional[str] = ..., origin_risk_policy_version: _Optional[int] = ..., message_link_reason: _Optional[str] = ..., execution_path: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., hook_source: _Optional[str] = ..., policy_link_reason: _Optional[str] = ..., external_conversation_id: _Optional[str] = ..., organization_slug: _Optional[str] = ..., sources: _Optional[_Iterable[str]] = ..., content_truncated: _Optional[bool] = ..., shadow: _Optional[bool] = ...) -> None: ...
