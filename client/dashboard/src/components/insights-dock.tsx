@@ -22,7 +22,8 @@ import {
 import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
 import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";
-import { useSession } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { emailsMatch, resolveChatOwner } from "@/lib/chat-owner";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
@@ -992,7 +993,12 @@ export function InsightsProvider({
   // extra request, and avoids the cross-origin auth mismatch a direct fetch
   // from inside Elements would hit (its request headers are scoped to the
   // chat API, not `access.listMembers`).
-  const { data: membersData } = useMembers();
+  const organization = useOrganization();
+  const { hasScope } = useRBAC();
+  const canReadMembers = hasScope("org:read", organization.id);
+  const { data: membersData } = useMembers(undefined, undefined, {
+    enabled: canReadMembers,
+  });
   const resolveCreator = useCallback(
     ({
       userId,
@@ -1001,7 +1007,8 @@ export function InsightsProvider({
       userId?: string;
       externalUserId?: string;
     }) => {
-      if (!userId && !externalUserId) return undefined;
+      // Disabled queries retain cached data; authorization also gates its use.
+      if (!canReadMembers || (!userId && !externalUserId)) return undefined;
       // Chats started from the dashboard itself have no `userId` at capture
       // time and stash the caller's email in `externalUserId` instead —
       // resolveChatOwner falls back to a case-insensitive email match so
@@ -1018,7 +1025,7 @@ export function InsightsProvider({
         }
       );
     },
-    [membersData],
+    [canReadMembers, membersData],
   );
 
   // The backend only lets a chat's creator send into it (see

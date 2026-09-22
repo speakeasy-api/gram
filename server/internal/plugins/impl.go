@@ -27,6 +27,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
 	redisCache "github.com/go-redis/cache/v9"
@@ -259,6 +260,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	// Only the minimal discovery handlers own skill-scoped project access.
+	// Keep the existing upstream project checks for every full/admin endpoint.
+	switch ctx.Value(goa.MethodKey) {
+	case "listDistributionPlugins", "getDistributionPlugin":
+		return s.auth.AuthorizeWithHandlerProjectAccess(ctx, key, schema)
+	}
 	return s.auth.Authorize(ctx, key, schema)
 }
 
@@ -341,11 +348,11 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 // ensureDefaultPlugin provisions the project's Default plugin if it doesn't
 // exist yet, covering projects created before CreateProject started
 // provisioning one. No-ops (no audit event, no error) when the plugin
-// already exists, or when the caller lacks the admin scope that plugin
+// already exists, or when the caller lacks the plugin write permission that plugin
 // creation normally requires (CreatePlugin/AddPluginServer) — a read-only
 // viewer loading the dashboard shouldn't be able to trigger a write.
 func (s *Service) ensureDefaultPlugin(ctx context.Context, ac *contextvalues.AuthContext) error {
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
 		return nil
 	}
 
@@ -456,8 +463,8 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
+		return nil, fmt.Errorf("authorize plugin write: %w", err)
 	}
 
 	var slug string
@@ -548,8 +555,8 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
+		return nil, fmt.Errorf("authorize plugin write: %w", err)
 	}
 
 	pluginID, err := uuid.Parse(payload.ID)
@@ -653,8 +660,8 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return err
+	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
+		return fmt.Errorf("authorize plugin write: %w", err)
 	}
 
 	pluginID, err := uuid.Parse(payload.ID)
@@ -776,8 +783,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
+		return nil, fmt.Errorf("authorize plugin write: %w", err)
 	}
 
 	pluginID, err := uuid.Parse(payload.PluginID)
@@ -981,8 +988,8 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
+		return nil, fmt.Errorf("authorize plugin write: %w", err)
 	}
 
 	serverID, err := uuid.Parse(payload.ID)
@@ -1055,8 +1062,8 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return err
+	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
+		return fmt.Errorf("authorize plugin write: %w", err)
 	}
 
 	serverID, err := uuid.Parse(payload.ID)
@@ -1824,8 +1831,8 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
+		return nil, fmt.Errorf("authorize plugin write: %w", err)
 	}
 
 	if s.github == nil {

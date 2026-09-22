@@ -13,7 +13,7 @@ export function MarketplaceCard({
   observabilityEnabled = true,
 }: {
   publishStatus: PublishStatusResult;
-  onManageCollaborators: () => void;
+  onManageCollaborators?: () => void;
   onRename?: () => void;
   /** Republishes the marketplace to pick up unpublished plugin edits. */
   onSync?: () => void;
@@ -134,7 +134,8 @@ export function MarketplaceCard({
             <button
               type="button"
               onClick={onManageCollaborators}
-              className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors"
+              disabled={!onManageCollaborators}
+              className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
             >
               <Users className="h-4 w-4" />
               Manage collaborators
@@ -178,8 +179,8 @@ export function UninitializedMarketplaceCard({
     "repoOwner" | "repoName" | "repoUrl"
   >;
   defaultName?: string;
-  onSetup: () => void;
-  onAddCollaborators: () => void;
+  onSetup?: () => void;
+  onAddCollaborators?: () => void;
   /** Drives the copy: a disabled project's marketplace has no observability plugins in it. */
   observabilityEnabled?: boolean;
 }): JSX.Element {
@@ -257,7 +258,8 @@ export function UninitializedMarketplaceCard({
               <button
                 type="button"
                 onClick={onAddCollaborators}
-                className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors"
+                disabled={!onAddCollaborators}
+                className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
               >
                 <Users className="h-4 w-4" />
                 Add collaborators
@@ -266,7 +268,8 @@ export function UninitializedMarketplaceCard({
               <button
                 type="button"
                 onClick={onSetup}
-                className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors"
+                disabled={!onSetup}
+                className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
               >
                 <Settings className="h-4 w-4" />
                 Publish now

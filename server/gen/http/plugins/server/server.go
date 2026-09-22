@@ -21,6 +21,8 @@ import (
 // Server lists the plugins service endpoint HTTP handlers.
 type Server struct {
 	Mounts                      []*MountPoint
+	ListDistributionPlugins     http.Handler
+	GetDistributionPlugin       http.Handler
 	ListPlugins                 http.Handler
 	GetPlugin                   http.Handler
 	CreatePlugin                http.Handler
@@ -67,6 +69,8 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"ListDistributionPlugins", "GET", "/rpc/plugins.listDistributionPlugins"},
+			{"GetDistributionPlugin", "GET", "/rpc/plugins.getDistributionPlugin"},
 			{"ListPlugins", "GET", "/rpc/plugins.listPlugins"},
 			{"GetPlugin", "GET", "/rpc/plugins.getPlugin"},
 			{"CreatePlugin", "POST", "/rpc/plugins.createPlugin"},
@@ -85,6 +89,8 @@ func New(
 			{"GetMarketplaceSettings", "GET", "/rpc/plugins.getMarketplaceSettings"},
 			{"UpdateMarketplaceSettings", "POST", "/rpc/plugins.updateMarketplaceSettings"},
 		},
+		ListDistributionPlugins:     NewListDistributionPluginsHandler(e.ListDistributionPlugins, mux, decoder, encoder, errhandler, formatter),
+		GetDistributionPlugin:       NewGetDistributionPluginHandler(e.GetDistributionPlugin, mux, decoder, encoder, errhandler, formatter),
 		ListPlugins:                 NewListPluginsHandler(e.ListPlugins, mux, decoder, encoder, errhandler, formatter),
 		GetPlugin:                   NewGetPluginHandler(e.GetPlugin, mux, decoder, encoder, errhandler, formatter),
 		CreatePlugin:                NewCreatePluginHandler(e.CreatePlugin, mux, decoder, encoder, errhandler, formatter),
@@ -110,6 +116,8 @@ func (s *Server) Service() string { return "plugins" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.ListDistributionPlugins = m(s.ListDistributionPlugins)
+	s.GetDistributionPlugin = m(s.GetDistributionPlugin)
 	s.ListPlugins = m(s.ListPlugins)
 	s.GetPlugin = m(s.GetPlugin)
 	s.CreatePlugin = m(s.CreatePlugin)
@@ -134,6 +142,8 @@ func (s *Server) MethodNames() []string { return plugins.MethodNames[:] }
 
 // Mount configures the mux to serve the plugins endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountListDistributionPluginsHandler(mux, h.ListDistributionPlugins)
+	MountGetDistributionPluginHandler(mux, h.GetDistributionPlugin)
 	MountListPluginsHandler(mux, h.ListPlugins)
 	MountGetPluginHandler(mux, h.GetPlugin)
 	MountCreatePluginHandler(mux, h.CreatePlugin)
@@ -156,6 +166,113 @@ func Mount(mux goahttp.Muxer, h *Server) {
 // Mount configures the mux to serve the plugins endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountListDistributionPluginsHandler configures the mux to serve the
+// "plugins" service "listDistributionPlugins" endpoint.
+func MountListDistributionPluginsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/plugins.listDistributionPlugins", f)
+}
+
+// NewListDistributionPluginsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "plugins" service "listDistributionPlugins"
+// endpoint.
+func NewListDistributionPluginsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListDistributionPluginsRequest(mux, decoder)
+		encodeResponse = EncodeListDistributionPluginsResponse(encoder)
+		encodeError    = EncodeListDistributionPluginsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listDistributionPlugins")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetDistributionPluginHandler configures the mux to serve the "plugins"
+// service "getDistributionPlugin" endpoint.
+func MountGetDistributionPluginHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/plugins.getDistributionPlugin", f)
+}
+
+// NewGetDistributionPluginHandler creates a HTTP handler which loads the HTTP
+// request and calls the "plugins" service "getDistributionPlugin" endpoint.
+func NewGetDistributionPluginHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetDistributionPluginRequest(mux, decoder)
+		encodeResponse = EncodeGetDistributionPluginResponse(encoder)
+		encodeError    = EncodeGetDistributionPluginError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getDistributionPlugin")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountListPluginsHandler configures the mux to serve the "plugins" service

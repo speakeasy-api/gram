@@ -13,7 +13,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
@@ -259,7 +261,7 @@ func TestSkillDistributionProjectIsolationAndArchiveRevocation(t *testing.T) {
 	_, err = ti.service.Distribute(assistantCtx, &gen.DistributePayload{ID: created.Skill.ID, AssistantID: new(assistant.ID.String()), PinnedVersionID: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 
-	otherCtx, _ := createProjectContext(t, ctx, ti, authz.ScopeSkillWrite)
+	otherCtx, _ := createProjectContext(t, ctx, ti, authz.ScopeSkillWrite, authz.ScopePluginWrite)
 	_, err = ti.service.Distribute(otherCtx, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(pluginA.ID.String()), PinnedVersionID: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeNotFound)
 	otherList, err := ti.service.ListDistributions(otherCtx, &gen.ListDistributionsPayload{Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
@@ -522,7 +524,7 @@ func TestAssistantSkillDistributionTargetValidationAndRBAC(t *testing.T) {
 	_, err = ti.service.Distribute(both, &gen.DistributePayload{ID: created.Skill.ID, AssistantID: new(foreign.ID.String()), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
-	// Plugin distribution remains skill:write-only.
+	// Plugin distribution uses its own write grant, separate from assistant access.
 	_, err = ti.service.Distribute(ctx, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String()), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 }
@@ -571,4 +573,260 @@ func TestSkillDistributionSignalsPluginRepublish(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, ti.publisher.recorded(), 3, "an assistant distribution publishes no package")
+}
+
+func TestSkillDistributionScopedWrite(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "scoped-distribution", "Scoped distribution.")
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "scoped-target")
+	scoped := authztest.WithExactGrants(t, ctx, authz.NewGrantWithSelector(authz.ScopeSkillWrite, authz.Selector{
+		authz.SelectorKeyResourceKind: authz.ResourceKindSkill,
+		authz.SelectorKeyResourceID:   created.Skill.ID,
+	}))
+	_, err := ti.service.Distribute(scoped, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	requireOopsCode(t, ti.service.Undistribute(scoped, &gen.UndistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())}), oops.CodeForbidden)
+}
+
+func TestSkillScopedReads(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "scoped-reads", "Scoped reads.")
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "scoped-reads-target")
+	distribution, err := ti.service.Distribute(ctx, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
+	require.NoError(t, err)
+	scoped := authztest.WithExactGrants(t, ctx, authz.NewGrantWithSelector(authz.ScopeSkillRead, authz.Selector{
+		authz.SelectorKeyResourceKind: authz.ResourceKindSkill,
+		authz.SelectorKeyResourceID:   created.Skill.ID,
+	}))
+	got, err := ti.service.Get(scoped, &gen.GetPayload{ID: created.Skill.ID})
+	require.NoError(t, err)
+	require.Equal(t, created.Skill.ID, got.Skill.ID)
+	listed, err := ti.service.ListDistributions(scoped, &gen.ListDistributionsPayload{SkillID: &created.Skill.ID, Limit: 50})
+	require.NoError(t, err)
+	require.Len(t, listed.Distributions, 1)
+	require.Equal(t, distribution.ID, listed.Distributions[0].ID)
+	_, err = ti.service.ListDistributions(scoped, &gen.ListDistributionsPayload{Limit: 50})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ListDistributions(scoped, &gen.ListDistributionsPayload{PluginID: new(plugin.ID.String()), Limit: 50})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.List(scoped, &gen.ListPayload{Limit: 50})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+//nolint:paralleltest,tparallel // Subtests mutate the same distribution edge and verify its state.
+func TestSkillDistributionScopedAuthorizationBoundaries(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "scoped-boundaries", "Scoped boundaries.")
+	other := createSkill(t, ctx, ti, "other-scoped-skill", "Other skill.")
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "scoped-boundary-target")
+	grant := func(scope authz.Scope, resourceID string) authz.Grant {
+		return authz.NewGrantWithSelector(scope, authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindSkill,
+			authz.SelectorKeyResourceID:   resourceID,
+		})
+	}
+	for _, tc := range []struct {
+		name        string
+		grants      []authz.Grant
+		read, write bool
+	}{
+		{name: "skill write alone", grants: []authz.Grant{authz.NewGrant(authz.ScopeSkillWrite, ti.projectID.String())}, read: true},
+		{name: "plugin write alone", grants: []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String())}},
+		{name: "plugin write and skill read", grants: []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String()), grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true, write: true},
+		{name: "other project plugin write", grants: []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, uuid.NewString()), grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true},
+		{name: "admin and skill read", grants: []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, ti.authContext.ActiveOrganizationID), grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true, write: true},
+		{name: "plugin blocked overrides admin", grants: []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, ti.authContext.ActiveOrganizationID), authz.NewGrant(authz.ScopePluginBlockedWrite, ti.projectID.String()), grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true},
+		{name: "plugin blocked overrides plugin write", grants: []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String()), authz.NewGrant(authz.ScopePluginBlockedWrite, ti.projectID.String()), grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true},
+		{name: "admin blocked overrides plugin write", grants: []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String()), authz.NewGrant(authz.ScopeOrgBlockedAdmin, ti.authContext.ActiveOrganizationID), grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true},
+		{name: "skill read blocked", grants: []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String()), authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String()), grant(authz.ScopeSkillBlockedRead, created.Skill.ID)}},
+		{name: "skill write blocked does not block distribution", grants: []authz.Grant{authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String()), grant(authz.ScopeSkillRead, created.Skill.ID), grant(authz.ScopeSkillBlockedWrite, created.Skill.ID)}, read: true, write: true},
+		{name: "project read only", grants: []authz.Grant{authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String())}, read: true},
+		{name: "resource read only", grants: []authz.Grant{grant(authz.ScopeSkillRead, created.Skill.ID)}, read: true},
+		{name: "other skill", grants: []authz.Grant{grant(authz.ScopeSkillWrite, other.Skill.ID)}},
+		{name: "other skill write with project read", grants: []authz.Grant{authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String()), grant(authz.ScopeSkillWrite, other.Skill.ID)}, read: true},
+		{name: "other project", grants: []authz.Grant{authz.NewGrant(authz.ScopeSkillWrite, uuid.NewString())}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, grant := range tc.grants {
+				require.NoError(t, authz.ValidateSelector(grant.Scope, grant.Selector))
+			}
+			scoped := authztest.WithExactGrants(t, ctx, tc.grants...)
+			_, err := ti.service.Get(scoped, &gen.GetPayload{ID: created.Skill.ID})
+			if tc.read {
+				require.NoError(t, err)
+			} else {
+				requireOopsCode(t, err, oops.CodeForbidden)
+			}
+			_, err = ti.service.ListDistributions(scoped, &gen.ListDistributionsPayload{SkillID: &created.Skill.ID, Limit: 50})
+			if tc.read {
+				require.NoError(t, err)
+			} else {
+				requireOopsCode(t, err, oops.CodeForbidden)
+			}
+			// Keep an active edge so denied removal is also checked against real data.
+			_, err = ti.service.Distribute(ctx, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
+			require.NoError(t, err)
+			_, err = ti.service.Distribute(scoped, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
+			if tc.write {
+				require.NoError(t, err)
+			} else {
+				requireOopsCode(t, err, oops.CodeForbidden)
+			}
+			err = ti.service.Undistribute(scoped, &gen.UndistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
+			if tc.write {
+				require.NoError(t, err)
+			} else {
+				requireOopsCode(t, err, oops.CodeForbidden)
+				listed, err := ti.service.ListDistributions(ctx, &gen.ListDistributionsPayload{SkillID: &created.Skill.ID, Limit: 50})
+				require.NoError(t, err)
+				require.Len(t, listed.Distributions, 1)
+			}
+		})
+	}
+}
+
+//nolint:paralleltest,tparallel // Subtests mutate the same distribution edge and verify its state.
+func TestAssistantDistributionPreservesProjectWriteAndSkillRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillWrite, ti.projectID.String()), authz.NewGrant(authz.ScopeProjectWrite, ti.projectID.String()))
+	created := createSkill(t, ctx, ti, "assistant-scoped-boundaries", "Assistant scoped boundaries.")
+	assistant := createAssistant(t, ctx, ti, ti.projectID, "Scoped assistant target")
+	skillRead := authz.NewGrantWithSelector(authz.ScopeSkillRead, authz.Selector{
+		authz.SelectorKeyResourceKind: authz.ResourceKindSkill,
+		authz.SelectorKeyResourceID:   created.Skill.ID,
+	})
+	skillWrite := skillRead
+	skillWrite.Scope = authz.ScopeSkillWrite
+	for _, tc := range []struct {
+		name    string
+		grants  []authz.Grant
+		allowed bool
+	}{
+		{name: "scoped read and project write", grants: []authz.Grant{skillRead, authz.NewGrant(authz.ScopeProjectWrite, ti.projectID.String())}, allowed: true},
+		{name: "scoped skill write only", grants: []authz.Grant{skillWrite}},
+		{name: "project write only", grants: []authz.Grant{authz.NewGrant(authz.ScopeProjectWrite, ti.projectID.String())}},
+		{name: "other project write", grants: []authz.Grant{skillRead, authz.NewGrant(authz.ScopeProjectWrite, uuid.NewString())}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, grant := range tc.grants {
+				require.NoError(t, authz.ValidateSelector(grant.Scope, grant.Selector))
+			}
+			scoped := authztest.WithExactGrants(t, ctx, tc.grants...)
+			_, err := ti.service.Distribute(ctx, &gen.DistributePayload{ID: created.Skill.ID, AssistantID: new(assistant.ID.String())})
+			require.NoError(t, err)
+			_, err = ti.service.Distribute(scoped, &gen.DistributePayload{ID: created.Skill.ID, AssistantID: new(assistant.ID.String())})
+			if tc.allowed {
+				require.NoError(t, err)
+			} else {
+				requireOopsCode(t, err, oops.CodeForbidden)
+			}
+			err = ti.service.Undistribute(scoped, &gen.UndistributePayload{ID: created.Skill.ID, AssistantID: new(assistant.ID.String())})
+			if tc.allowed {
+				require.NoError(t, err)
+			} else {
+				requireOopsCode(t, err, oops.CodeForbidden)
+			}
+		})
+	}
+}
+
+//nolint:paralleltest,tparallel // The parent verifies the shared distribution after all denied operations.
+func TestSkillScopedAccessRejectsMismatchedOrganization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "org-isolated-skill", "Organization isolation.")
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "org-isolated-target")
+	_, err := ti.service.Distribute(ctx, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
+	require.NoError(t, err)
+
+	authContext := *ti.authContext
+	authContext.ActiveOrganizationID = "other-skills-org-" + uuid.NewString()
+	mismatched := contextvalues.SetAuthContext(ctx, &authContext)
+	mismatched = authztest.WithExactGrants(t, mismatched, authz.NewGrant(authz.ScopeSkillWrite, created.Skill.ID))
+	// Enable skills explicitly so feature gating cannot substitute for ownership.
+	ti.features.UpdateFeatureCache(mismatched, authContext.ActiveOrganizationID, productfeatures.FeatureSkills, true)
+
+	t.Run("get", func(t *testing.T) {
+		_, err := ti.service.Get(mismatched, &gen.GetPayload{ID: created.Skill.ID})
+		requireOopsCode(t, err, oops.CodeForbidden)
+	})
+	t.Run("list distributions", func(t *testing.T) {
+		_, err := ti.service.ListDistributions(mismatched, &gen.ListDistributionsPayload{SkillID: &created.Skill.ID, Limit: 50})
+		requireOopsCode(t, err, oops.CodeForbidden)
+	})
+	t.Run("distribute", func(t *testing.T) {
+		_, err := ti.service.Distribute(mismatched, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
+		requireOopsCode(t, err, oops.CodeForbidden)
+	})
+	t.Run("undistribute", func(t *testing.T) {
+		err := ti.service.Undistribute(mismatched, &gen.UndistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
+		requireOopsCode(t, err, oops.CodeForbidden)
+	})
+	listed, err := ti.service.ListDistributions(ctx, &gen.ListDistributionsPayload{SkillID: &created.Skill.ID, Limit: 50})
+	require.NoError(t, err)
+	require.Len(t, listed.Distributions, 1)
+}
+
+//nolint:paralleltest,tparallel // Subtests mutate the same distribution edge and verify its state.
+func TestSkillScopedExclusionsOverrideProjectAllow(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "excluded-skill", "Explicit exclusions.")
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "excluded-target")
+	for _, blocked := range []authz.Scope{authz.ScopeSkillBlockedRead, authz.ScopeSkillBlockedWrite} {
+		t.Run(string(blocked), func(t *testing.T) {
+			_, err := ti.service.Distribute(ctx, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
+			require.NoError(t, err)
+			scoped := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillWrite, ti.projectID.String()), authz.NewGrant(blocked, created.Skill.ID))
+			_, err = ti.service.Get(scoped, &gen.GetPayload{ID: created.Skill.ID})
+			if blocked == authz.ScopeSkillBlockedRead {
+				requireOopsCode(t, err, oops.CodeForbidden)
+			} else {
+				require.NoError(t, err)
+			}
+			_, err = ti.service.ListDistributions(scoped, &gen.ListDistributionsPayload{SkillID: &created.Skill.ID, Limit: 50})
+			if blocked == authz.ScopeSkillBlockedRead {
+				requireOopsCode(t, err, oops.CodeForbidden)
+			} else {
+				require.NoError(t, err)
+			}
+			_, err = ti.service.Distribute(scoped, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
+			requireOopsCode(t, err, oops.CodeForbidden)
+			err = ti.service.Undistribute(scoped, &gen.UndistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})
+			requireOopsCode(t, err, oops.CodeForbidden)
+		})
+	}
+}
+
+func TestSkillScopedGrantCannotCrossProjectLookup(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	local := createSkill(t, ctx, ti, "local-scoped-skill", "Local skill.")
+	otherCtx, otherProjectID := createProjectContext(t, ctx, ti, authz.ScopeSkillWrite, authz.ScopePluginWrite)
+	foreign := createSkill(t, otherCtx, ti, "foreign-scoped-skill", "Foreign skill.")
+	foreignPlugin := createPlugin(t, otherCtx, ti, otherProjectID, "foreign-scoped-target")
+	_, err := ti.service.Distribute(otherCtx, &gen.DistributePayload{ID: foreign.Skill.ID, PluginID: new(foreignPlugin.ID.String())})
+	require.NoError(t, err)
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "local-scoped-target")
+	// Even a valid exact grant to a foreign skill cannot bypass the project lookup.
+	scoped := authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeSkillRead, local.Skill.ID),
+		authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String()),
+		authz.NewGrant(authz.ScopeSkillRead, foreign.Skill.ID),
+	)
+	_, err = ti.service.Get(scoped, &gen.GetPayload{ID: local.Skill.ID})
+	require.NoError(t, err)
+	_, err = ti.service.Get(scoped, &gen.GetPayload{ID: foreign.Skill.ID})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	listed, err := ti.service.ListDistributions(scoped, &gen.ListDistributionsPayload{SkillID: &foreign.Skill.ID, Limit: 50})
+	require.NoError(t, err)
+	require.Empty(t, listed.Distributions, "project filter must hide existing foreign distributions")
+	_, err = ti.service.Distribute(scoped, &gen.DistributePayload{ID: foreign.Skill.ID, PluginID: new(plugin.ID.String())})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	err = ti.service.Undistribute(scoped, &gen.UndistributePayload{ID: foreign.Skill.ID, PluginID: new(plugin.ID.String())})
+	requireOopsCode(t, err, oops.CodeNotFound)
 }

@@ -372,3 +372,15 @@ describe("hasScopeInGrants", () => {
     expect(hasScopeInGrants(grants, "mcp:connect", "server_a")).toBe(true);
   });
 });
+
+describe("plugin scope isolation", () => {
+  it("uses project selectors for plugin scopes", () => {
+    expect(resourceKindForScope("plugin:write")).toBe("project");
+    expect(resourceKindForScope("plugin:blocked_write")).toBe("project");
+  });
+  it("does not grant skill or MCP editing through plugin write", () => {
+    const grants = [{ scope: "plugin:write" }];
+    expect(hasScopeInGrants(grants, "skill:write", "project-a")).toBe(false);
+    expect(hasScopeInGrants(grants, "mcp:write", "project-a")).toBe(false);
+  });
+});

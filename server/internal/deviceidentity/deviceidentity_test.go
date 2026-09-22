@@ -8,8 +8,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
 )
 
-func ptr(s string) *string { return &s }
-
 // NormalizeEnvironment is total: every input resolves to one of the three
 // constants and never to "". Call sites compare against those constants by
 // name, so an empty return would silently make an endpoint look like "no
@@ -27,16 +25,16 @@ func TestNormalizeEnvironmentIsTotal(t *testing.T) {
 		reported *string
 		want     string
 	}{
-		"ephemeral":   {ptr("ephemeral"), deviceidentity.EnvironmentEphemeral},
-		"server":      {ptr("server"), deviceidentity.EnvironmentServer},
-		"endpoint":    {ptr("endpoint"), deviceidentity.EnvironmentEndpoint},
+		"ephemeral":   {new("ephemeral"), deviceidentity.EnvironmentEphemeral},
+		"server":      {new("server"), deviceidentity.EnvironmentServer},
+		"endpoint":    {new("endpoint"), deviceidentity.EnvironmentEndpoint},
 		"absent":      {nil, deviceidentity.EnvironmentEndpoint},
-		"empty":       {ptr(""), deviceidentity.EnvironmentEndpoint},
-		"whitespace":  {ptr("   "), deviceidentity.EnvironmentEndpoint},
-		"padded":      {ptr("  EPHEMERAL  "), deviceidentity.EnvironmentEphemeral},
-		"mixed case":  {ptr("Server"), deviceidentity.EnvironmentServer},
-		"typo":        {ptr("ephemerial"), deviceidentity.EnvironmentEndpoint},
-		"future kind": {ptr("kiosk"), deviceidentity.EnvironmentEndpoint},
+		"empty":       {new(""), deviceidentity.EnvironmentEndpoint},
+		"whitespace":  {new("   "), deviceidentity.EnvironmentEndpoint},
+		"padded":      {new("  EPHEMERAL  "), deviceidentity.EnvironmentEphemeral},
+		"mixed case":  {new("Server"), deviceidentity.EnvironmentServer},
+		"typo":        {new("ephemerial"), deviceidentity.EnvironmentEndpoint},
+		"future kind": {new("kiosk"), deviceidentity.EnvironmentEndpoint},
 	} {
 		got := deviceidentity.NormalizeEnvironment(tc.reported)
 		require.Equal(t, tc.want, got, "input %q", name)
@@ -54,13 +52,13 @@ func TestNormalizeSerialCanonicalizes(t *testing.T) {
 		reported *string
 		want     string
 	}{
-		"plain":       {ptr("c02xk1abcdef"), "c02xk1abcdef"},
-		"upper case":  {ptr("C02XK1ABCDEF"), "c02xk1abcdef"},
-		"padded":      {ptr("  C02XK1ABCDEF \t"), "c02xk1abcdef"},
+		"plain":       {new("c02xk1abcdef"), "c02xk1abcdef"},
+		"upper case":  {new("C02XK1ABCDEF"), "c02xk1abcdef"},
+		"padded":      {new("  C02XK1ABCDEF \t"), "c02xk1abcdef"},
 		"absent":      {nil, ""},
-		"empty":       {ptr(""), ""},
-		"whitespace":  {ptr("   "), ""},
-		"punctuation": {ptr("FVFX-1234/5678"), "fvfx-1234/5678"},
+		"empty":       {new(""), ""},
+		"whitespace":  {new("   "), ""},
+		"punctuation": {new("FVFX-1234/5678"), "fvfx-1234/5678"},
 	} {
 		require.Equal(t, tc.want, deviceidentity.NormalizeSerial(tc.reported), "input %q", name)
 	}

@@ -589,7 +589,7 @@ BEGIN
       ('collaborator', 'Collaborator',
        'Builds and ships MCP servers and skills, without organization settings.',
        ARRAY['org:read', 'project:read', 'project:write', 'mcp:read',
-             'mcp:write', 'mcp:connect', 'skill:read', 'skill:write',
+             'mcp:write', 'mcp:connect', 'skill:read', 'skill:write', 'plugin:write',
              'environment:read', 'agent:read'],
        ARRAY['user_demo_jonas'],
        ARRAY[]::text[]),
@@ -645,7 +645,8 @@ BEGIN
       (organization_id, principal_urn, scope, selectors)
     SELECT demo_org, custom_role_urn, scope,
            jsonb_build_object(
-             'resource_kind', split_part(scope, ':', 1),
+             'resource_kind', CASE WHEN scope = 'plugin:write' THEN 'project'
+                                   ELSE split_part(scope, ':', 1) END,
              'resource_id', '*')
     FROM unnest(custom_role.scopes) AS scope;
 

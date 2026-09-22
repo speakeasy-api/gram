@@ -467,10 +467,12 @@ trackedFiles:
   src/funcs/pluginsDownloadCodexInstallScript.ts: {}
   src/funcs/pluginsDownloadObservabilityPlugin.ts: {}
   src/funcs/pluginsDownloadPluginPackage.ts: {}
+  src/funcs/pluginsGetDistributionPlugin.ts: {}
   src/funcs/pluginsGetMarketplaceSettings.ts: {}
   src/funcs/pluginsGetPlugin.ts: {}
   src/funcs/pluginsGetPublishStatus.ts: {}
   src/funcs/pluginsListAudiences.ts: {}
+  src/funcs/pluginsListDistributionPlugins.ts: {}
   src/funcs/pluginsListPlugins.ts: {}
   src/funcs/pluginsPublishPlugins.ts: {}
   src/funcs/pluginsRemovePluginServer.ts: {}
@@ -967,6 +969,7 @@ trackedFiles:
   src/models/components/dismissskillsuggestionrequestbody.ts: {}
   src/models/components/distributeonboardingcandidaterequestbody.ts: {}
   src/models/components/distributeskillrequestbody.ts: {}
+  src/models/components/distributionplugin.ts: {}
   src/models/components/domaindnsconfig.ts: {}
   src/models/components/employeedataflowedge.ts: {}
   src/models/components/employeedataflownode.ts: {}
@@ -1182,6 +1185,7 @@ trackedFiles:
   src/models/components/listdestinationsresult.ts: {}
   src/models/components/listdeviceintegrationprovidersresult.ts: {}
   src/models/components/listdeviceintegrationschedulesresult.ts: {}
+  src/models/components/listdistributionpluginsresult.ts: {}
   src/models/components/listenvironmentsresult.ts: {}
   src/models/components/listeventlogpayload.ts: {}
   src/models/components/listeventlogresult.ts: {}
@@ -2012,6 +2016,7 @@ trackedFiles:
   src/models/operations/getdeviceagentconfiguration.ts: {}
   src/models/operations/getdeviceintegrationconfig.ts: {}
   src/models/operations/getdeviceintegrationcoverage.ts: {}
+  src/models/operations/getdistributionplugin.ts: {}
   src/models/operations/getdomain.ts: {}
   src/models/operations/getemployeedataflowgraph.ts: {}
   src/models/operations/geteventfacets.ts: {}
@@ -2175,6 +2180,7 @@ trackedFiles:
   src/models/operations/listdeviceintegrationproviders.ts: {}
   src/models/operations/listdeviceintegrationschedules.ts: {}
   src/models/operations/listdismissedriskresults.ts: {}
+  src/models/operations/listdistributionplugins.ts: {}
   src/models/operations/listdomains.ts: {}
   src/models/operations/listemployeeaidetections.ts: {}
   src/models/operations/listenvironments.ts: {}
@@ -2740,6 +2746,10 @@ trackedFiles:
   src/react-query/dismissSkillSuggestion.ts: {}
   src/react-query/distributePlatformMCPOnboardingCandidate.ts: {}
   src/react-query/distributeSkill.ts: {}
+  src/react-query/distributionPlugin.core.ts: {}
+  src/react-query/distributionPlugin.ts: {}
+  src/react-query/distributionPlugins.core.ts: {}
+  src/react-query/distributionPlugins.ts: {}
   src/react-query/editKillswitch.ts: {}
   src/react-query/employeeAIDetections.core.ts: {}
   src/react-query/employeeAIDetections.ts: {}
@@ -6149,6 +6159,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getDistributionPlugin:
+    speakeasy-default-get-distribution-plugin:
+      parameters:
+        query:
+          skill_id: "62672d7e-05e4-4d51-9c2f-9dd010a992dc"
+          id: "6098023a-9459-4112-9fc6-70aaf112f6de"
+      responses:
+        "200":
+          application/json: {"id": "fdff237d-24ea-413d-8c74-6024052e853a", "is_default": true, "name": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getDomain:
     speakeasy-default-get-domain:
       responses:
@@ -8153,6 +8176,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listDistributionPlugins:
+    speakeasy-default-list-distribution-plugins:
+      parameters:
+        query:
+          skill_id: "6ba91024-704b-4bd4-9fe9-0ea780d46701"
+      responses:
+        "200":
+          application/json: {"plugins": [{"id": "962fb057-c6e3-4552-ac38-37f3c976c853", "is_default": false, "name": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listDomains:
     speakeasy-default-list-domains:
       responses:

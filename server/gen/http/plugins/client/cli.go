@@ -15,6 +15,79 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// BuildListDistributionPluginsPayload builds the payload for the plugins
+// listDistributionPlugins endpoint from CLI flags.
+func BuildListDistributionPluginsPayload(pluginsListDistributionPluginsSkillID string, pluginsListDistributionPluginsSessionToken string, pluginsListDistributionPluginsProjectSlugInput string) (*plugins.ListDistributionPluginsPayload, error) {
+	var err error
+	var skillID string
+	{
+		skillID = pluginsListDistributionPluginsSkillID
+		err = goa.MergeErrors(err, goa.ValidateFormat("skill_id", skillID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if pluginsListDistributionPluginsSessionToken != "" {
+			sessionToken = &pluginsListDistributionPluginsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsListDistributionPluginsProjectSlugInput != "" {
+			projectSlugInput = &pluginsListDistributionPluginsProjectSlugInput
+		}
+	}
+	v := &plugins.ListDistributionPluginsPayload{}
+	v.SkillID = skillID
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetDistributionPluginPayload builds the payload for the plugins
+// getDistributionPlugin endpoint from CLI flags.
+func BuildGetDistributionPluginPayload(pluginsGetDistributionPluginSkillID string, pluginsGetDistributionPluginID string, pluginsGetDistributionPluginSessionToken string, pluginsGetDistributionPluginProjectSlugInput string) (*plugins.GetDistributionPluginPayload, error) {
+	var err error
+	var skillID string
+	{
+		skillID = pluginsGetDistributionPluginSkillID
+		err = goa.MergeErrors(err, goa.ValidateFormat("skill_id", skillID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var id string
+	{
+		id = pluginsGetDistributionPluginID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if pluginsGetDistributionPluginSessionToken != "" {
+			sessionToken = &pluginsGetDistributionPluginSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsGetDistributionPluginProjectSlugInput != "" {
+			projectSlugInput = &pluginsGetDistributionPluginProjectSlugInput
+		}
+	}
+	v := &plugins.GetDistributionPluginPayload{}
+	v.SkillID = skillID
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListPluginsPayload builds the payload for the plugins listPlugins
 // endpoint from CLI flags.
 func BuildListPluginsPayload(pluginsListPluginsSessionToken string, pluginsListPluginsProjectSlugInput string) (*plugins.ListPluginsPayload, error) {
