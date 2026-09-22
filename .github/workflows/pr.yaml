@@ -1163,12 +1163,10 @@ jobs:
         run: mise run test:ci
 
       - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          install-mode: none
-          # Skips a JSONSchema fetch from golangci-lint.run on every run.
-          verify: false
-          working-directory: server
+        # Build the plugin with the pinned Go toolchain, as in local development.
+        # Stream build diagnostics directly: the action wraps custom-build errors
+        # in annotations that can truncate the underlying Go error.
+        run: mise run lint:server
 
       - name: Upload server build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
