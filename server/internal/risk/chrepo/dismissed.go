@@ -86,12 +86,14 @@ var dismissedStateColumns = []string{"dead_letter_reason", "excluded_reason", "e
 // Dedup must come first for the same reason it does in the Risk Events listing:
 // suppression state changes by appending a newer copy of the row, so gating
 // before the dedup would match a stale copy — here it would keep listing a
-// finding whose dismissal was since undone.
+// finding whose dismissal was since undone. The shadow marker is immutable
+// across copies and so is filtered before it, with the tenancy scope.
 func dismissedRiskFindingsLatest(p ListDismissedRiskFindingsParams, innerColumns []string, outerColumns ...string) squirrel.SelectBuilder {
 	latest := sq.Select(append(slices.Clone(innerColumns), dismissedStateColumns...)...).
 		From("risk_findings").
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
+		Where(notShadowCond).
 		// LIMIT BY takes the first row per key in the current order, so
 		// latestCopyOrderSQL makes that the winning copy (state-change copies
 		// outrank finding copies, latest inserted within a rank).

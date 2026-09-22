@@ -148,6 +148,12 @@ type RiskFindingRow struct {
 	// is. Read-time dedup ranks suppression/unsuppression copies above finding
 	// copies for the same id.
 	EventKind string `ch:"event_kind"`
+
+	// Shadow marks a finding the LLM analyzer produced under the shadow risk
+	// engine mode: recorded for per-message comparison with the legacy
+	// engines, never enforced, and filtered out (shadow = 0) by every
+	// user-facing read path. The flag is immutable across an id's copies.
+	Shadow bool `ch:"shadow"`
 }
 
 // chNullable maps a nil pointer to an untyped nil interface so a Nullable
@@ -213,6 +219,7 @@ var riskFindingColumns = []string{
 	"path",
 	"tool_call_id",
 	"event_kind",
+	"shadow",
 }
 
 // InsertRiskFindings writes findings using a server-side async insert with a
@@ -303,6 +310,9 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			row.Path,
 			row.ToolCallID,
 			row.EventKind,
+			// A bool binds as the literal 1 or 0 on this Exec path, matching
+			// the UInt8 column.
+			row.Shadow,
 		)
 	}
 

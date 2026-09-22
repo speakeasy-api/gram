@@ -144,6 +144,13 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 	foreignRow := chOverviewFinding(t, uuid.New(), "org_"+uuid.NewString(), aliceSecret1Chat, aliceSecret1, from.Add(37*time.Hour), "gitleaks", "secret.github_pat", "alice@example.com")
 	rows = append(rows, foreignRow)
 
+	// Shadow engine-comparison row (the LLM analyzer's verdict recorded under
+	// the shadow mode for the same message): stored, never counted. A distinct
+	// user so a leak would show up in the user counts as well.
+	shadowRow := chOverviewFinding(t, projectID, orgID, aliceSecret1Chat, aliceSecret1, from.Add(37*time.Hour), "gitleaks", "secret.github_pat", "carol@example.com")
+	shadowRow.Shadow = true
+	rows = append(rows, shadowRow)
+
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, rows))
 

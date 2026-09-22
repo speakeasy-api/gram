@@ -102,9 +102,12 @@ func TestRetroExclusion_RuleIDApplyAndReverse(t *testing.T) {
 
 	otherRule := chOverviewFinding(t, projectID, orgID, chat, msg(), createdAt.Add(9*time.Minute), "gitleaks", "secret.aws_access_key", "alice@example.com")
 
+	shadowRow := chOverviewFinding(t, projectID, orgID, chat, msg(), createdAt.Add(10*time.Minute), "gitleaks", "secret.github_pat", "alice@example.com")
+	shadowRow.Shadow = true
+
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
-		live1, live2, fpMarked, deadLetter, heldByOther, ingestExcluded, otherRule,
+		live1, live2, fpMarked, deadLetter, heldByOther, ingestExcluded, otherRule, shadowRow,
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
@@ -117,8 +120,9 @@ func TestRetroExclusion_RuleIDApplyAndReverse(t *testing.T) {
 		SourceFilter:       "",
 	}
 
-	// Apply: the two live rows plus the false-positive one; dead-letter and
-	// the row held by another exclusion stay untouched.
+	// Apply: the two live rows plus the false-positive one; dead-letter, the
+	// row held by another exclusion and the shadow engine-comparison row stay
+	// untouched.
 	count, err := chQueries.CountRetroExclusionApply(ctx, scope, predicate)
 	require.NoError(t, err)
 	require.Equal(t, uint64(3), count)
@@ -149,6 +153,9 @@ func TestRetroExclusion_RuleIDApplyAndReverse(t *testing.T) {
 
 	excluded, _, _ = latestExclusionState(t, ti, otherRule.ID)
 	require.False(t, excluded)
+
+	excluded, _, _ = latestExclusionState(t, ti, shadowRow.ID)
+	require.False(t, excluded, "shadow engine-comparison rows are never flagged")
 
 	// Idempotency: everything matching is already flagged.
 	count, err = chQueries.CountRetroExclusionApply(ctx, scope, predicate)

@@ -45,6 +45,8 @@ type unmaskFinding struct {
 	deadLetterReason string
 	excludedAt       *time.Time
 	falsePositiveAt  *time.Time
+	// shadow marks an engine-comparison row (shadow = 1), hidden from reveal.
+	shadow bool
 }
 
 // insertUnmaskFinding writes the fixture straight into risk_findings. Raw SQL
@@ -81,8 +83,8 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 			start_pos, end_pos, dead_letter_reason,
 			match_len, match_redacted,
 			excluded_at, false_positive_at, message_created_at,
-			surface, field, path, tool_call_id
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			surface, field, path, tool_call_id, shadow
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		f.id, createdAt, f.orgID, f.projectID,
 		f.chatMessageID, f.contentPartID, f.chatID,
@@ -90,7 +92,7 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 		f.startPos, f.endPos, f.deadLetterReason,
 		f.matchLen, f.matchRedacted,
 		nullableTime(f.excludedAt), nullableTime(f.falsePositiveAt), createdAt,
-		f.surface, f.field, f.path, f.toolCallID,
+		f.surface, f.field, f.path, f.toolCallID, f.shadow,
 	))
 	return f.id
 }
@@ -523,7 +525,11 @@ func TestUnmaskRiskResult_ClickHouseHiddenRowsNotFound(t *testing.T) {
 	foreign.projectID = uuid.NewString()
 	foreignID := insertUnmaskFinding(t, ti, foreign)
 
-	for _, id := range []uuid.UUID{excludedID, falsePositiveID, deadLetterID, foreignID} {
+	shadow := base
+	shadow.shadow = true
+	shadowID := insertUnmaskFinding(t, ti, shadow)
+
+	for _, id := range []uuid.UUID{excludedID, falsePositiveID, deadLetterID, foreignID, shadowID} {
 		_, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: id.String()})
 		require.Error(t, err, "row %s must read as absent", id)
 		var oopsErr *oops.ShareableError
