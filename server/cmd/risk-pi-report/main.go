@@ -207,6 +207,11 @@ type accuracySummary struct {
 	KnownGaps      []knownGapSummary   `json:"known_gaps,omitempty"`
 	RecallGate     recallGateSummary   `json:"recall_gate"`
 	RecallGateRuns []recallGateSummary `json:"recall_gate_runs"`
+	// JevRecallGate mirrors RecallGate's directive-present, in-taxonomy subset
+	// for the Jev candidate, when -jev is passed. It is reported alongside the
+	// judge's gate for comparison but never checked against floors.json: those
+	// floors were tuned for the judge, not for Jev.
+	JevRecallGate *recallGateSummary `json:"jev_recall_gate,omitempty"`
 }
 
 type recallGateSummary struct {
@@ -425,12 +430,15 @@ func run(ctx context.Context, opts options) error {
 	}
 	worstRecallGate := worstRecallGate(recallGateRuns)
 
+	var jevRecallGate *recallGateSummary
 	if opts.jev {
-		jevMode, _, err := scanJevMode(ctx, opts, corpus)
+		jevMode, jevFindings, err := scanJevMode(ctx, opts, corpus)
 		if err != nil {
 			return err
 		}
 		modes = append(modes, jevMode)
+		gate := summarizeRecallGate(corpus, jevFindings)
+		jevRecallGate = &gate
 	}
 
 	summary := accuracySummary{
@@ -445,6 +453,7 @@ func run(ctx context.Context, opts options) error {
 		KnownGaps:      summarizeKnownGaps(corpus),
 		RecallGate:     worstRecallGate,
 		RecallGateRuns: recallGateRuns,
+		JevRecallGate:  jevRecallGate,
 	}
 
 	printSummary(os.Stderr, modes)
@@ -454,6 +463,15 @@ func run(ctx context.Context, opts options) error {
 	for i, gate := range summary.RecallGateRuns {
 		fmt.Fprintf(os.Stderr, "recall gate run %d: TP=%d FN=%d recall=%.3f known_gaps_excluded=%d\n",
 			i+1, gate.Counts.TP, gate.Counts.FN, gate.Recall, gate.Excluded)
+		for _, source := range gate.BySource {
+			fmt.Fprintf(os.Stderr, "  %-24s TP=%-4d FN=%-4d recall=%.3f\n",
+				source.Source, source.Counts.TP, source.Counts.FN, source.Metrics.Recall)
+		}
+	}
+	if summary.JevRecallGate != nil {
+		gate := *summary.JevRecallGate
+		fmt.Fprintf(os.Stderr, "jev recall gate: TP=%d FN=%d recall=%.3f known_gaps_excluded=%d (not checked against floors.json)\n",
+			gate.Counts.TP, gate.Counts.FN, gate.Recall, gate.Excluded)
 		for _, source := range gate.BySource {
 			fmt.Fprintf(os.Stderr, "  %-24s TP=%-4d FN=%-4d recall=%.3f\n",
 				source.Source, source.Counts.TP, source.Counts.FN, source.Metrics.Recall)
