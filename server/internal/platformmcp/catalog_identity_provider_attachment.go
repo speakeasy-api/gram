@@ -449,6 +449,12 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 // It intentionally does not carry an upstream response detail into the MCP tool
 // result or logs.
 func identityProviderDynamicRegistrationError(err error) error {
+	// The caller going away is not a registration outcome. Classifying it
+	// would report the provider as unavailable for something it never did.
+	if errors.Is(err, context.Canceled) {
+		return err
+	}
+
 	failure := oauthregistration.ClassifyDCR(err)
 	if failure.Outcome == oauthregistration.OutcomeRefused {
 		return fmt.Errorf("register identity-provider client: %w", ErrIdentityProviderAttachmentUnsupported)

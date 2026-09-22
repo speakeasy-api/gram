@@ -402,6 +402,7 @@ func TestCIMD_CallbackAuthorizationFailureRecordsRegistrationOutcome(t *testing.
 
 	points := registrationFailurePoints(t, reader)
 	require.Len(t, points, 1)
+	require.EqualValues(t, 1, points[0].Value, "one denied callback records one failure, not a point that aggregated several")
 	require.Equal(t, attribute.NewSet(
 		attr.OAuthRegistrationMethod(registration.MethodCIMD),
 		attr.OAuthRegistrationOutcome(registration.OutcomeRefused),

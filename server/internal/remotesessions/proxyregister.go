@@ -123,7 +123,11 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, tunnels
 		return ProxyRegisterResponse{}, ErrInvalidDynamicClientRegistrationEndpoint
 	}
 	recordFailure := func(err error) {
-		if telemetry != nil && !errors.Is(err, context.Canceled) {
+		// ctx is the caller's; upstreamCtx below carries our own 30s budget. A
+		// live ctx means the deadline that expired was ours, which is an
+		// upstream timeout worth recording. An expired ctx is the caller
+		// giving up, which is not.
+		if telemetry != nil && ctx.Err() == nil && !errors.Is(err, context.Canceled) {
 			telemetry.RecordFailure(ctx, registration.MethodDCR, registration.ClassifyDCR(err))
 		}
 	}
@@ -182,14 +186,6 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, tunnels
 	}
 	resp, err := doer.Do(httpReq)
 	if err != nil {
-		if exhausted, ok := errors.AsType[*guardian.RetriesExhaustedError](err); ok && exhausted.StatusCode != 0 {
-			httpErr := &registration.HTTPError{
-				StatusCode:      exhausted.StatusCode,
-				ProviderMessage: registration.SanitizeProviderMessage(dcrErrorDetail([]byte(exhausted.Body))),
-			}
-			recordFailure(httpErr)
-			return ProxyRegisterResponse{}, httpErr
-		}
 		reachErr := fmt.Errorf("reach registration endpoint: %w", err)
 		recordFailure(reachErr)
 		return ProxyRegisterResponse{}, reachErr

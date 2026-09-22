@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -172,6 +173,7 @@ func TestRegisterDynamicClientClassifiesUnusableSuccess(t *testing.T) {
 
 	_, err = RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registrationServer.URL}, recorder)
 	require.Error(t, err)
+	require.Equal(t, []registration.Method{registration.MethodDCR}, recorder.methods)
 	require.Len(t, recorder.failures, 1)
 	require.Equal(t, registration.InvalidSuccessResponse(http.StatusCreated), recorder.failures[0])
 }
@@ -192,6 +194,7 @@ func TestRegisterDynamicClientClassifiesUnsupportedSuccessStatuses(t *testing.T)
 
 		_, err = RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registrationServer.URL}, recorder)
 		require.Error(t, err, status)
+		require.Equal(t, []registration.Method{registration.MethodDCR}, recorder.methods, status)
 		require.Len(t, recorder.failures, 1, status)
 		require.Equal(t, registration.InvalidSuccessResponse(status), recorder.failures[0], status)
 	}
@@ -213,6 +216,27 @@ func TestRegisterDynamicClientDoesNotRecordCallerCancellation(t *testing.T) {
 	_, err = RegisterDynamicClient(ctx, policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registrationServer.URL}, recorder)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Empty(t, recorder.failures)
+}
+
+// A caller that gives up is not the provider timing out. Our own 30s budget
+// expiring while the caller waits still is, so the guard turns on the caller's
+// context rather than on the error alone.
+func TestRegisterDynamicClientDoesNotRecordCallerDeadline(t *testing.T) {
+	t.Parallel()
+
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	t.Cleanup(registrationServer.Close)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	serverURL, err := url.Parse(registrationServer.URL)
+	require.NoError(t, err)
+	recorder := &captureRegistrationFailures{}
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	t.Cleanup(cancel)
+
+	_, err = RegisterDynamicClient(ctx, policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registrationServer.URL}, recorder)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Empty(t, recorder.failures, "the caller's deadline is not an upstream timeout")
 }
 
 func TestProxyRegistrationErrorPreservesOrdinaryProviderRefusals(t *testing.T) {
@@ -249,9 +273,13 @@ func TestRegisterDynamicClientAcceptsDuplicateClientIDs(t *testing.T) {
 	serverURL, err := url.Parse(registrationServer.URL)
 	require.NoError(t, err)
 
-	first, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registrationServer.URL}, nil)
+	recorder := &captureRegistrationFailures{}
+
+	first, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registrationServer.URL}, recorder)
 	require.NoError(t, err)
-	second, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registrationServer.URL}, nil)
+	second, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registrationServer.URL}, recorder)
 	require.NoError(t, err)
+	require.Equal(t, "same-client-id", first.ClientID)
 	require.Equal(t, first.ClientID, second.ClientID)
+	require.Empty(t, recorder.failures, "a provider reissuing one client_id is not a registration failure")
 }

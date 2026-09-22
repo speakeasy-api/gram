@@ -28,6 +28,7 @@ func TestClassifyDCRHTTPFailures(t *testing.T) {
 		{status: http.StatusConflict, outcome: OutcomeRefused, reason: ReasonAuthorizationRejected, retryable: false},
 		{status: http.StatusRequestTimeout, outcome: OutcomeUnreachable, reason: ReasonTimeout, retryable: true},
 		{status: http.StatusTooManyRequests, outcome: OutcomeUnreachable, reason: ReasonRateLimited, retryable: true},
+		{status: http.StatusInternalServerError, outcome: OutcomeUnreachable, reason: ReasonUpstreamUnavailable, retryable: true},
 		{status: http.StatusServiceUnavailable, outcome: OutcomeUnreachable, reason: ReasonUpstreamUnavailable, retryable: true},
 	}
 	for _, tc := range cases {
@@ -58,7 +59,12 @@ func TestClassifyDCRTransportAndInvalidResponseFailures(t *testing.T) {
 	require.Equal(t, Failure{Outcome: OutcomeUnreachable, Reason: ReasonTimeout, Retryable: true, HTTPStatus: nil, ProviderMessage: nil}, timeoutFailure)
 
 	invalidFailure := ClassifyDCR(&InvalidSuccessResponseError{Err: errors.New("missing client_id"), StatusCode: http.StatusCreated})
-	require.Equal(t, InvalidSuccessResponse(http.StatusCreated), invalidFailure)
+	require.Equal(t, OutcomeRefused, invalidFailure.Outcome)
+	require.Equal(t, ReasonInvalidSuccessResponse, invalidFailure.Reason)
+	require.False(t, invalidFailure.Retryable)
+	require.NotNil(t, invalidFailure.HTTPStatus)
+	require.Equal(t, http.StatusCreated, *invalidFailure.HTTPStatus)
+	require.Nil(t, invalidFailure.ProviderMessage, "an unusable success body carries nothing the provider said")
 }
 
 func TestClassifyDCRCallerCancellationIsNotACompletedFailure(t *testing.T) {

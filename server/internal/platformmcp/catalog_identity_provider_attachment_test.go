@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -42,6 +43,18 @@ func TestIdentityProviderDynamicRegistrationErrorTreatsTimeoutAndRateLimitAsRetr
 	err := identityProviderDynamicRegistrationError(&registration.HTTPError{StatusCode: http.StatusBadRequest, ProviderMessage: "provider-controlled detail"})
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
 	require.NotContains(t, err.Error(), "provider-controlled detail")
+}
+
+// A caller hanging up mid-registration is not an attachment outcome. Reporting
+// it as unavailable would blame the provider for something it never did.
+func TestIdentityProviderDynamicRegistrationErrorPreservesCallerCancellation(t *testing.T) {
+	t.Parallel()
+
+	err := identityProviderDynamicRegistrationError(context.Canceled)
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotErrorIs(t, err, ErrIdentityProviderAttachmentUnavailable)
+	require.NotErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
 }
 
 func TestValidBrowserCatalogDynamicClientRequiresConfidentialClient(t *testing.T) {

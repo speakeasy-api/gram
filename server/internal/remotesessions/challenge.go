@@ -1360,6 +1360,14 @@ func (m *ChallengeManager) recordCIMDAuthorizationFailure(ctx context.Context, s
 		return
 	}
 
+	// Classify first: access_denied is the ordinary user cancellation and is
+	// not recorded, so the lookup that only decides whether this was a CIMD
+	// client is wasted on the most common denial there is.
+	failure, record := registration.ClassifyCIMDAuthorizationError(code, description)
+	if !record {
+		return
+	}
+
 	clientRow, err := remotesessions_repo.New(m.db).GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
 		ID:             state.RemoteSessionClientID,
 		ProjectID:      state.ProjectID,
@@ -1369,10 +1377,7 @@ func (m *ChallengeManager) recordCIMDAuthorizationFailure(ctx context.Context, s
 		return
 	}
 
-	failure, record := registration.ClassifyCIMDAuthorizationError(code, description)
-	if record {
-		m.registrationTelemetry.RecordFailure(ctx, registration.MethodCIMD, failure)
-	}
+	m.registrationTelemetry.RecordFailure(ctx, registration.MethodCIMD, failure)
 }
 
 // denied rejects the callback; the public message echoes only IETF-registered error codes.
