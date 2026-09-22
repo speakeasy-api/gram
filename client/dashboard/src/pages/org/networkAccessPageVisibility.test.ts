@@ -6,16 +6,15 @@ describe("shouldShowNetworkAccessPage", () => {
   it.each(["loading", "enabled", "error"] as const)(
     "shows Network Access to every viewer when entitlement is %s",
     (status) => {
-      expect(shouldShowNetworkAccessPage(status, false, false)).toBe(true);
+      expect(shouldShowNetworkAccessPage(status, false)).toBe(true);
     },
   );
 
-  it("shows Network Access when an admin may need ingress recovery", () => {
-    expect(shouldShowNetworkAccessPage("disabled", true, true)).toBe(true);
+  it("shows Network Access to admins even before staff enables Tailscale", () => {
+    expect(shouldShowNetworkAccessPage("disabled", true)).toBe(true);
   });
 
-  it("shows Custom Domain only after confirming no ingress recovery path", () => {
-    expect(shouldShowNetworkAccessPage("disabled", false, true)).toBe(false);
-    expect(shouldShowNetworkAccessPage("disabled", true, false)).toBe(false);
+  it("keeps Custom Domain for non-admins without private access", () => {
+    expect(shouldShowNetworkAccessPage("disabled", false)).toBe(false);
   });
 });

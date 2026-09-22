@@ -70,10 +70,8 @@ export function OrgSidebar({
     },
   );
   const isPlatformAdmin = useIsPlatformAdmin();
-  const { status: networkIngressRolloutStatus, canManageIngress } =
-    useNetworkIngressRollout();
-  const showNetworkAccess =
-    canManageIngress && networkIngressRolloutStatus !== "disabled";
+  const { canManageIngress } = useNetworkIngressRollout();
+  const showNetworkAccess = canManageIngress;
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
 

@@ -7,6 +7,7 @@ import { NetworkAccessSection } from "./NetworkAccessSection";
 
 const testState = vi.hoisted(() => ({
   entitled: true,
+  productTier: "enterprise" as "enterprise" | "payg" | "base",
   featureStatus: "success" as "pending" | "success" | "error",
   rolloutStatus: undefined as
     | "loading"
@@ -55,6 +56,10 @@ vi.mock("@/components/require-scope", () => ({
     testState.requireScopeProps = props;
     return <>{children}</>;
   },
+}));
+
+vi.mock("@/hooks/useProductTier", () => ({
+  useProductTier: () => testState.productTier,
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -211,6 +216,7 @@ const endpoints: McpEndpoint[] = [
 
 beforeEach(() => {
   testState.entitled = true;
+  testState.productTier = "enterprise";
   testState.featureStatus = "success";
   testState.rolloutStatus = undefined;
   testState.featureFetching = false;
@@ -231,13 +237,38 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("NetworkAccessSection", () => {
-  it("renders nothing when the staff entitlement is disabled", () => {
+  it.each(["base", "payg"] as const)(
+    "blocks private choices for %s even with staff entitlement",
+    (tier) => {
+      testState.productTier = tier;
+      render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      );
+      expect(screen.getByText(/available on the Enterprise plan/)).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      );
+      expect(
+        screen
+          .getByRole("option", { name: /Public and private/ })
+          .getAttribute("data-disabled"),
+      ).toBe("");
+      expect(
+        screen
+          .getByRole("option", { name: /Private only/ })
+          .getAttribute("data-disabled"),
+      ).toBe("");
+    },
+  );
+
+  it("shows network access before staff enables Tailscale", () => {
     testState.entitled = false;
-    const { container } = render(
+    render(
       <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
     );
-
-    expect(container.textContent).toBe("");
+    expect(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    ).toBeTruthy();
   });
 
   it.each(["loading", "error"] as const)(

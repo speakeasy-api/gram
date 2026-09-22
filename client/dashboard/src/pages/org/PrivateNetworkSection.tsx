@@ -10,6 +10,7 @@ import {
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { EnterpriseGate } from "@/components/enterprise-gate";
 import { HumanizeDateTime } from "@/lib/dates";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import type { NetworkIngress } from "@gram/client/models/components/networkingress.js";
@@ -25,6 +26,7 @@ import { useNetworkIngressDeleteIngressMutation } from "@gram/client/react-query
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useOrganization } from "@/contexts/Auth";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useProductTier } from "@/hooks/useProductTier";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useUpdateNetworkIngressMutation } from "@gram/client/react-query/updateNetworkIngress.js";
@@ -121,9 +123,11 @@ function PrivateNetworkCleanup({
 function ConfiguredPrivateNetwork({
   ingress,
   entitled,
+  enterprise,
 }: {
   ingress: NetworkIngress;
   entitled: boolean;
+  enterprise: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [rotateOpen, setRotateOpen] = useState(false);
@@ -150,10 +154,22 @@ function ConfiguredPrivateNetwork({
       <SettingsSection.Body>
         {!entitled && (
           <Alert variant="warning" dismissible={false}>
-            Private network access is no longer enabled for this organization.
+            {enterprise
+              ? "Private network access is no longer enabled for this organization."
+              : "Private network access requires an Enterprise plan."}{" "}
             Existing restrictions remain enforced. You can disable or remove
             this ingress, and restore affected MCP servers to public-only
-            access.
+            access.{" "}
+            {!enterprise && (
+              <a
+                href="https://www.speakeasy.com/book-demo"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                Talk to our team about Enterprise
+              </a>
+            )}
           </Alert>
         )}
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -299,14 +315,14 @@ function ConfiguredPrivateNetwork({
 
 export function PrivateNetworkSection(): JSX.Element | null {
   const organization = useOrganization();
-  const { status: rolloutStatus, canManageIngress } =
-    useNetworkIngressRollout();
+  const enterprise = useProductTier() === "enterprise";
+  const { canManageIngress } = useNetworkIngressRollout();
   const features = useProductFeatures(
     { organizationId: organization.id },
     undefined,
     { throwOnError: false },
   );
-  const entitled = features.data?.networkIngressEnabled === true;
+  const entitled = enterprise && features.data?.networkIngressEnabled === true;
   const ingressResult = useNetworkIngress(undefined, undefined, {
     enabled: canManageIngress,
     retry: (failureCount) => failureCount < 2,
@@ -318,7 +334,6 @@ export function PrivateNetworkSection(): JSX.Element | null {
   const [setupOpen, setSetupOpen] = useState(false);
 
   if (!canManageIngress) return null;
-  if (rolloutStatus === "disabled" && !ingress) return null;
 
   return (
     <SettingsSection>
@@ -334,7 +349,7 @@ export function PrivateNetworkSection(): JSX.Element | null {
           ingress={ingress}
           statusStale={ingressResult.isError}
         />
-      ) : ingressResult.isPending || features.isPending ? (
+      ) : ingressResult.isPending || (enterprise && features.isPending) ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
             <Text small muted>
@@ -342,7 +357,8 @@ export function PrivateNetworkSection(): JSX.Element | null {
             </Text>
           </SettingsSection.Body>
         </SettingsSection.Panel>
-      ) : features.isError || !features.data || ingressResult.isError ? (
+      ) : ingressResult.isError ||
+        (enterprise && (features.isError || !features.data)) ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
             <Alert variant="error" dismissible={false}>
@@ -352,12 +368,27 @@ export function PrivateNetworkSection(): JSX.Element | null {
           </SettingsSection.Body>
         </SettingsSection.Panel>
       ) : ingress ? (
-        <ConfiguredPrivateNetwork ingress={ingress} entitled={entitled} />
+        <ConfiguredPrivateNetwork
+          ingress={ingress}
+          entitled={entitled}
+          enterprise={enterprise}
+        />
+      ) : !enterprise ? (
+        <EnterpriseGate
+          allowed={false}
+          icon="network"
+          title="Tailscale private access"
+          description="Connect your Tailscale network to serve MCP endpoints privately. Available on the Enterprise plan. Talk to our team about upgrading."
+        />
       ) : (
         <InlineEmptyState
           icon="network"
           heading="No private network connected"
-          description="Connect a Tailscale tailnet to create private URLs for this organization."
+          description={
+            entitled
+              ? "Connect a Tailscale tailnet to create private URLs for this organization."
+              : "Tailscale private access is available for Enterprise organizations. Contact our team to enable it for your organization."
+          }
           action={
             entitled ? (
               <RequireScope scope="org:admin" level="component">
@@ -369,7 +400,12 @@ export function PrivateNetworkSection(): JSX.Element | null {
           }
         />
       )}
-      <PrivateNetworkSetupSheet open={setupOpen} onOpenChange={setSetupOpen} />
+      {entitled && (
+        <PrivateNetworkSetupSheet
+          open={setupOpen}
+          onOpenChange={setSetupOpen}
+        />
+      )}
     </SettingsSection>
   );
 }

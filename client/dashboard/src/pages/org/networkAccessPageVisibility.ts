@@ -3,7 +3,6 @@ import type { NetworkIngressRolloutStatus } from "@/hooks/useNetworkIngressRollo
 export function shouldShowNetworkAccessPage(
   rolloutStatus: NetworkIngressRolloutStatus,
   canManageIngress: boolean,
-  ingressMayExist: boolean,
 ): boolean {
-  return rolloutStatus !== "disabled" || (canManageIngress && ingressMayExist);
+  return canManageIngress || rolloutStatus !== "disabled";
 }

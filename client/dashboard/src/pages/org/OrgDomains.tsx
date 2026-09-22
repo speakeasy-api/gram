@@ -57,7 +57,6 @@ import { toast } from "sonner";
 import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
 import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
-import { useNetworkIngress } from "@gram/client/react-query/networkIngress.js";
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useOrganization } from "@/contexts/Auth";
 import { useProductTier } from "@/hooks/useProductTier";
@@ -622,15 +621,9 @@ function OrgDomainsInner() {
   const canManageDomains = hasScope("org:admin");
   const { status: networkIngressRolloutStatus, canManageIngress } =
     useNetworkIngressRollout();
-  const networkIngress = useNetworkIngress(undefined, undefined, {
-    enabled: canManageIngress && networkIngressRolloutStatus === "disabled",
-    retry: false,
-    throwOnError: false,
-  });
   const showNetworkAccess = shouldShowNetworkAccessPage(
     networkIngressRolloutStatus,
     canManageIngress,
-    !networkIngress.isSuccess || networkIngress.data?.ingress !== undefined,
   );
   const queryClient = useQueryClient();
   const [isAddDomainDialogOpen, setIsAddDomainDialogOpen] = useState(false);
