@@ -29,6 +29,13 @@ const llmPolicyEvaluationShadowPublished = "shadow_published"
 // comparison lane produced nothing. Counted once per batch.
 const llmPolicyEvaluationShadowSkipped = "shadow_skipped"
 
+// llmPolicyEvaluationShadowPublishError is the policy_evaluations outcome
+// recorded when a shadow-mode batch's analysis requests could not be
+// published. The batch keeps the legacy engines' results and does not fail:
+// the comparison lane loses these messages, enforcement loses nothing.
+// Counted once per batch.
+const llmPolicyEvaluationShadowPublishError = "shadow_publish_error"
+
 // llmPolicyEvaluationFallbackLegacy is the policy_evaluations outcome recorded
 // when the organization is on the LLM analyzer flag but the worker has no
 // analyzer configured, so the batch ran the legacy engines instead. It is
@@ -67,13 +74,13 @@ func llmMessageSources(masks CategoryScopeMasks, i int, coveredSources []string)
 // source, carrying the same provenance the legacy analysis requests carry so
 // findings and usage readings attribute identically. Messages every covered
 // source's detection scope excludes are not published, just as the legacy
-// engines never scan them. The publish must succeed for the activity to
-// succeed. In the llm mode this lane is the only engine evaluating the
-// covered sources for the organization, so a dropped request is a silently
-// unscanned message; in the shadow mode (shadow true, execution path
-// llm_shadow_stream) a dropped request would leave the comparison lane with
-// less coverage than the legacy engines that scanned the same batch inline,
-// and the activity retry replays both with the same deterministic ids.
+// engines never scan them. In the llm mode this lane is the only engine
+// evaluating the covered sources for the organization, so a dropped request
+// is a silently unscanned message and the publish must succeed for the
+// activity to succeed. In the shadow mode (shadow true, execution path
+// llm_shadow_stream) the lane only compares, so the caller counts a failed
+// publish as shadow_publish_error and keeps the legacy engines' results
+// rather than hold enforcement behind the LLM transport.
 func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, orgSlug string, coveredSources []string, masks CategoryScopeMasks, shadow bool) error {
 	executionPath := llmAnalyzerStreamExecutionPath
 	outcome := llmPolicyEvaluationPublished

@@ -84,8 +84,10 @@ func ProjectFlagState(ctx context.Context, logger *slog.Logger, queries *repo.Qu
 // flag groups carry. It reads the flag's variant and, only when no variant
 // resolved, its boolean value, then normalizes both through
 // feature.RiskLLMAnalyzerVariant: a known variant wins, an empty variant with
-// the boolean on reads as feature.VariantRiskLLMLLM, and anything else —
-// including any lookup failure — reads as feature.VariantRiskLLMOff with an
+// the boolean on reads as feature.VariantRiskLLMLLM, and anything else reads
+// as feature.VariantRiskLLMOff. orgSlug is the organization slug the group
+// lookup resolved, whatever the mode; only a failed lookup (of the groups,
+// the variant or the boolean) returns feature.VariantRiskLLMOff with an
 // empty slug. Under WithRequestMemo the lookup runs once per project and
 // flag for the request.
 func ProjectFlagMode(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) (mode feature.Variant, orgSlug string) {

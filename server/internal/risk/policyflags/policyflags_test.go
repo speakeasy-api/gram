@@ -52,34 +52,26 @@ func (p *countingProvider) IsFlagEnabled(ctx context.Context, flag feature.Flag,
 
 func TestProjectFlagStateResolvesEachFlagOncePerRequest(t *testing.T) {
 	t.Parallel()
-	db, err := infra.CloneTestDatabase(t, "policyflagstest")
-	require.NoError(t, err)
-	orgID := "org_" + uuid.NewString()
-	_, err = orgrepo.New(db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
-		ID: orgID, Name: "Flags Example", Slug: orgID, WorkosID: pgtype.Text{String: orgID, Valid: true}, Whitelisted: pgtype.Bool{Bool: false, Valid: false},
-	})
-	require.NoError(t, err)
-	project, err := projectsrepo.New(db).CreateProject(t.Context(), projectsrepo.CreateProjectParams{Name: "Flags Example", Slug: "example", OrganizationID: orgID})
-	require.NoError(t, err)
+	fx := seedFlagFixture(t)
+	orgID, projectID, queries := fx.orgID, fx.projectID, fx.queries
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagRiskLLMAnalyzer, orgID, true)
 	provider := &countingProvider{Provider: flags}
 	logger := testenv.NewLogger(t)
-	queries := repo.New(db)
 
 	ctx := WithRequestMemo(t.Context())
 	for range 3 {
-		on, slug := ProjectFlagState(ctx, logger, queries, provider, orgID, project.ID, feature.FlagRiskLLMAnalyzer)
+		on, slug := ProjectFlagState(ctx, logger, queries, provider, orgID, projectID, feature.FlagRiskLLMAnalyzer)
 		require.True(t, on)
 		require.Equal(t, orgID, slug)
 	}
 	require.EqualValues(t, 1, provider.calls.Load())
-	require.False(t, ProjectFlagEnabled(ctx, logger, queries, provider, orgID, project.ID, feature.FlagRiskEnforcementPubsub))
-	require.False(t, ProjectFlagEnabled(ctx, logger, queries, provider, orgID, project.ID, feature.FlagRiskEnforcementPubsub))
+	require.False(t, ProjectFlagEnabled(ctx, logger, queries, provider, orgID, projectID, feature.FlagRiskEnforcementPubsub))
+	require.False(t, ProjectFlagEnabled(ctx, logger, queries, provider, orgID, projectID, feature.FlagRiskEnforcementPubsub))
 	require.EqualValues(t, 2, provider.calls.Load())
 
-	require.True(t, ProjectFlagEnabled(t.Context(), logger, queries, provider, orgID, project.ID, feature.FlagRiskLLMAnalyzer))
-	require.True(t, ProjectFlagEnabled(t.Context(), logger, queries, provider, orgID, project.ID, feature.FlagRiskLLMAnalyzer))
+	require.True(t, ProjectFlagEnabled(t.Context(), logger, queries, provider, orgID, projectID, feature.FlagRiskLLMAnalyzer))
+	require.True(t, ProjectFlagEnabled(t.Context(), logger, queries, provider, orgID, projectID, feature.FlagRiskLLMAnalyzer))
 	require.EqualValues(t, 4, provider.calls.Load())
 
 	// Concurrent scans sharing one memo still resolve each flag once.
@@ -88,7 +80,7 @@ func TestProjectFlagStateResolvesEachFlagOncePerRequest(t *testing.T) {
 	var group sync.WaitGroup
 	for range 8 {
 		for _, flag := range []feature.Flag{feature.FlagRiskLLMAnalyzer, feature.FlagRiskEnforcementPubsub} {
-			group.Go(func() { _ = ProjectFlagEnabled(ctx, logger, queries, provider, orgID, project.ID, flag) })
+			group.Go(func() { _ = ProjectFlagEnabled(ctx, logger, queries, provider, orgID, projectID, flag) })
 		}
 	}
 	group.Wait()
@@ -97,8 +89,8 @@ func TestProjectFlagStateResolvesEachFlagOncePerRequest(t *testing.T) {
 	// A failed lookup is not remembered; the next scan retries it.
 	failing := &countingProvider{Provider: failingProvider{}}
 	ctx = WithRequestMemo(t.Context())
-	require.False(t, ProjectFlagEnabled(ctx, logger, queries, failing, orgID, project.ID, feature.FlagRiskLLMAnalyzer))
-	require.False(t, ProjectFlagEnabled(ctx, logger, queries, failing, orgID, project.ID, feature.FlagRiskLLMAnalyzer))
+	require.False(t, ProjectFlagEnabled(ctx, logger, queries, failing, orgID, projectID, feature.FlagRiskLLMAnalyzer))
+	require.False(t, ProjectFlagEnabled(ctx, logger, queries, failing, orgID, projectID, feature.FlagRiskLLMAnalyzer))
 	require.EqualValues(t, 2, failing.calls.Load())
 }
 
@@ -145,15 +137,17 @@ func (p *countingVariantProvider) groups() map[string]string {
 	return p.lastGroups
 }
 
-type flagModeFixture struct {
+// flagFixture is one organization with one project (slug "example") in a
+// fresh database clone, the rows every flag resolution needs for its groups.
+type flagFixture struct {
 	orgID     string
 	projectID uuid.UUID
 	queries   *repo.Queries
 }
 
-func seedFlagModeFixture(t *testing.T) flagModeFixture {
+func seedFlagFixture(t *testing.T) flagFixture {
 	t.Helper()
-	db, err := infra.CloneTestDatabase(t, "policyflagsmodetest")
+	db, err := infra.CloneTestDatabase(t, "policyflagstest")
 	require.NoError(t, err)
 	orgID := "org_" + uuid.NewString()
 	_, err = orgrepo.New(db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
@@ -162,12 +156,12 @@ func seedFlagModeFixture(t *testing.T) flagModeFixture {
 	require.NoError(t, err)
 	project, err := projectsrepo.New(db).CreateProject(t.Context(), projectsrepo.CreateProjectParams{Name: "Flags Example", Slug: "example", OrganizationID: orgID})
 	require.NoError(t, err)
-	return flagModeFixture{orgID: orgID, projectID: project.ID, queries: repo.New(db)}
+	return flagFixture{orgID: orgID, projectID: project.ID, queries: repo.New(db)}
 }
 
 func TestProjectFlagModeResolvesOncePerRequestWithGroups(t *testing.T) {
 	t.Parallel()
-	fx := seedFlagModeFixture(t)
+	fx := seedFlagFixture(t)
 	flags := &feature.InMemory{}
 	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, fx.orgID, feature.VariantRiskLLMShadow)
 	provider := &countingVariantProvider{InMemory: flags}
@@ -208,7 +202,7 @@ func TestProjectFlagModeResolvesOncePerRequestWithGroups(t *testing.T) {
 
 func TestProjectFlagModeBooleanTrueWithoutVariantReadsLLM(t *testing.T) {
 	t.Parallel()
-	fx := seedFlagModeFixture(t)
+	fx := seedFlagFixture(t)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagRiskLLMAnalyzer, fx.orgID, true)
 	provider := &countingVariantProvider{InMemory: flags}
@@ -227,7 +221,7 @@ func TestProjectFlagModeBooleanTrueWithoutVariantReadsLLM(t *testing.T) {
 
 func TestProjectFlagModeExplicitOffBeatsBooleanTrue(t *testing.T) {
 	t.Parallel()
-	fx := seedFlagModeFixture(t)
+	fx := seedFlagFixture(t)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagRiskLLMAnalyzer, fx.orgID, true)
 	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, fx.orgID, feature.VariantRiskLLMOff)
@@ -241,7 +235,7 @@ func TestProjectFlagModeExplicitOffBeatsBooleanTrue(t *testing.T) {
 
 func TestProjectFlagModeUnknownOrMissingReadsOff(t *testing.T) {
 	t.Parallel()
-	fx := seedFlagModeFixture(t)
+	fx := seedFlagFixture(t)
 	logger := testenv.NewLogger(t)
 
 	mode, slug := ProjectFlagMode(t.Context(), logger, fx.queries, &feature.InMemory{}, fx.orgID, fx.projectID, feature.FlagRiskLLMAnalyzer)
@@ -261,7 +255,7 @@ func TestProjectFlagModeUnknownOrMissingReadsOff(t *testing.T) {
 
 func TestProjectFlagModeFailureReadsOffAndIsNotMemoized(t *testing.T) {
 	t.Parallel()
-	fx := seedFlagModeFixture(t)
+	fx := seedFlagFixture(t)
 	logger := testenv.NewLogger(t)
 
 	// A variant read that errors reads as off and is retried by the next scan.

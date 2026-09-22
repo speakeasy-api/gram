@@ -3,6 +3,7 @@ package risk_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -63,21 +65,30 @@ func okReply(lane enforcereply.Lane, findings ...*riskv1.EnforcementFinding) *ri
 }
 
 // perLaneDispatcher answers every dispatch lane by lane through reply; a nil
-// reply leaves the lane unanswered, as a lane past its wait deadline would
-// be. The last request is copied into captured when it is non-nil.
+// reply leaves the lane unanswered the way the production dispatcher reports
+// a lane past its wait deadline: absent from ByLane, its per-lane error in
+// Failed and Deadline set. truncated is reported on every outcome. The last
+// request is copied into captured when it is non-nil.
 func perLaneDispatcher(captured *enforcereply.DispatchRequest, reply func(lane enforcereply.Lane) *riskv1.EnforcementReply) *fakeEnforcementDispatcher {
+	return perLaneDispatcherTruncated(captured, false, reply)
+}
+
+func perLaneDispatcherTruncated(captured *enforcereply.DispatchRequest, truncated bool, reply func(lane enforcereply.Lane) *riskv1.EnforcementReply) *fakeEnforcementDispatcher {
 	return &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
 		if captured != nil {
 			*captured = request
 		}
 		byLane := map[enforcereply.Lane]*riskv1.EnforcementReply{}
+		failed := map[enforcereply.Lane]error{}
 		for _, lane := range request.Lanes {
 			if r := reply(lane); r != nil {
 				byLane[lane] = r
+			} else {
+				failed[lane] = fmt.Errorf("wait for %s reply: %w", lane, context.DeadlineExceeded)
 			}
 		}
 		complete := len(byLane) == len(request.Lanes)
-		return enforcereply.Outcome{ByLane: byLane, Failed: map[enforcereply.Lane]error{}, Complete: complete, Deadline: !complete, Truncated: false}, nil
+		return enforcereply.Outcome{ByLane: byLane, Failed: failed, Complete: complete, Deadline: !complete, Truncated: truncated}, nil
 	}}
 }
 
@@ -153,8 +164,10 @@ func degradedFailModes(t *testing.T, reader *sdkmetric.ManualReader) map[string]
 			sum, ok := instrument.Data.(metricdata.Sum[int64])
 			require.True(t, ok)
 			for _, dp := range sum.DataPoints {
-				lane, _ := dp.Attributes.Value(attribute.Key("lane"))
-				failMode, _ := dp.Attributes.Value(attr.RiskEnforcementFailModeKey)
+				lane, laneOK := dp.Attributes.Value(attribute.Key("lane"))
+				require.True(t, laneOK, "pubsub_degraded datapoint carries a lane")
+				failMode, failModeOK := dp.Attributes.Value(attr.RiskEnforcementFailModeKey)
+				require.True(t, failModeOK, "pubsub_degraded datapoint carries a fail mode")
 				counts[lane.AsString()+"/"+failMode.AsString()] += dp.Value
 			}
 		}
@@ -397,4 +410,80 @@ func TestScanner_LLMVariantMatchesBooleanFlag(t *testing.T) {
 	require.Equal(t, llmanalyzer.Source, result.Source)
 	require.Equal(t, llmanalyzer.RuleSecret, result.RuleID)
 	require.Equal(t, "realtime_streams", captured.Origins[captured.Lanes[0]].ExecutionPath)
+}
+
+// TestScanner_ShadowModeLegacyLaneUnavailableIsNotClean pins that a legacy
+// lane with no usable reply counts as legacy_unavailable, never as a clean
+// verdict the model happened to disagree with.
+func TestScanner_ShadowModeLegacyLaneUnavailableIsNotClean(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	secretsID := insertRealtimeEnforcingPolicy(t, ti, ctx, "secrets", []string{risk_analysis.SourceGitleaks}, nil, "block")
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+
+	// The LLM lane answers with a hit; the gitleaks lane never answers.
+	dispatcher := perLaneDispatcher(nil, func(lane enforcereply.Lane) *riskv1.EnforcementReply {
+		if lane.Scanner == riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER {
+			return okReply(lane, llmReplyFinding(llmanalyzer.RuleSecret, "secrets", "An AWS access key id appears in the message."))
+		}
+		return nil
+	})
+	scanner, reader := newMeteredScanner(t, ti, &instrumentedPIIScanner{}, &recordingPIEngine{}, shadowEngineFlags(ctx, true), dispatcher)
+
+	outcome, err := scanner.ScanForInferenceEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, shadowScanText, message.User, ""))
+	require.NoError(t, err)
+	require.Nil(t, outcome.Result, "a missing legacy lane fails open as in the off mode")
+	require.False(t, outcome.Complete, "a missing legacy lane still marks the scan incomplete")
+	require.Equal(t, map[string]int64{"legacy_unavailable": 1}, outcomeCounts(t, reader, "risk.llm.shadow_comparison", secretsID.String()))
+	require.Equal(t, map[string]int64{"matched": 1}, outcomeCounts(t, reader, "risk.llm.policy_evaluations", secretsID.String()))
+	require.Equal(t, map[string]int64{"ENFORCEMENT_SCANNER_GITLEAKS/open": 1}, degradedFailModes(t, reader))
+}
+
+// TestScanner_ShadowModeTruncatedDispatchIsNotCompared pins that a dispatch
+// the dispatcher size-limited records input_truncated rather than a
+// disagreement: the in-process engine read the whole message, the lane did
+// not, so their verdicts are not over the same input.
+func TestScanner_ShadowModeTruncatedDispatchIsNotCompared(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	piiID := insertRealtimeEnforcingPolicy(t, ti, ctx, "pii", []string{risk_analysis.SourcePresidio}, []string{"EMAIL_ADDRESS"}, "block")
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+
+	dispatcher := perLaneDispatcherTruncated(nil, true, func(lane enforcereply.Lane) *riskv1.EnforcementReply { return okReply(lane) })
+	pii := &instrumentedPIIScanner{findOnEntity: "EMAIL_ADDRESS"}
+	scanner, reader := newMeteredScanner(t, ti, pii, &recordingPIEngine{}, shadowEngineFlags(ctx, false), dispatcher)
+
+	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, shadowScanText, message.User, ""))
+	require.NoError(t, err)
+	require.NotNil(t, result, "the in-process presidio engine still enforces")
+	require.Equal(t, risk_analysis.SourcePresidio, result.Source)
+	require.Equal(t, map[string]int64{"input_truncated": 1}, outcomeCounts(t, reader, "risk.llm.shadow_comparison", piiID.String()))
+	require.Equal(t, map[string]int64{"clean": 1}, outcomeCounts(t, reader, "risk.llm.policy_evaluations", piiID.String()))
+}
+
+// TestScanner_ShadowModeDestructiveOnlyPolicyRecordsNoComparison pins that a
+// policy with no realtime legacy engine has nothing to compare: neither a
+// verdict nor the lane's outage is recorded against it, while the outage is
+// still counted once on the lane.
+func TestScanner_ShadowModeDestructiveOnlyPolicyRecordsNoComparison(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	destructiveID := insertRealtimeEnforcingPolicy(t, ti, ctx, "destructive", []string{shadowmcp.SourceDestructiveTool}, nil, "block")
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+
+	dispatcher := perLaneDispatcher(nil, func(lane enforcereply.Lane) *riskv1.EnforcementReply {
+		return riskv1.EnforcementReply_builder{
+			Scanner: new(lane.Scanner),
+			Status:  new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_DEAD_LETTER),
+			Reason:  new("disabled"),
+		}.Build()
+	})
+	scanner, reader := newMeteredScanner(t, ti, &instrumentedPIIScanner{}, &recordingPIEngine{}, shadowEngineFlags(ctx, false), dispatcher)
+
+	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, `{"command":"rm -rf /"}`, message.ToolRequest, "Bash"))
+	require.NoError(t, err)
+	require.Nil(t, result)
+	require.Empty(t, outcomeCounts(t, reader, "risk.llm.shadow_comparison", destructiveID.String()))
+	require.Empty(t, outcomeCounts(t, reader, "risk.llm.policy_evaluations", destructiveID.String()))
+	require.Equal(t, map[string]int64{"ENFORCEMENT_SCANNER_LLM_ANALYZER/shadow": 1}, degradedFailModes(t, reader))
 }

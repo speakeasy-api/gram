@@ -293,6 +293,19 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		scanSpan.SetStatus(codes.Error, presidioPublishErr.Error())
 		return nil, fmt.Errorf("presidio scan dispatch: %w", presidioPublishErr)
 	}
+	if llmPublishErr != nil && llmShadow {
+		// The shadow lane only compares: a dropped shadow request costs the
+		// comparison one message, while failing the activity would retry the
+		// legacy engines' inline scan and hold their findings back behind an
+		// LLM transport outage. Count the gap and keep the legacy results.
+		a.logger.WarnContext(ctx, "shadow LLM analyzer scan dispatch failed; keeping legacy engine results",
+			attr.SlogError(llmPublishErr),
+			attr.SlogOrganizationID(args.OrganizationID),
+			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+		)
+		a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), llmPolicyEvaluationShadowPublishError, 1)
+		llmPublishErr = nil
+	}
 	if llmPublishErr != nil {
 		scanSpan.SetStatus(codes.Error, llmPublishErr.Error())
 		return nil, fmt.Errorf("llm analyzer scan dispatch: %w", llmPublishErr)

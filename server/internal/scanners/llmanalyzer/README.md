@@ -65,10 +65,12 @@ PostHog); anything else — off, absent, unrecognized, provider error — is `of
   (`risk.async_scan.handler_messages{outcome=shadow_unpublished}`) until the
   findings store can mark shadow rows; that persistence (a `shadow` column on
   `risk_findings`, hidden from Risk Events and the overview by default) is a
-  follow-up migration PR. A shadow publish failure fails the activity like a
-  Presidio publish failure does, so an activity retry replays both engines
-  over the same batch and the comparison keeps identical coverage. Without a
-  configured analyzer the comparison lane is skipped
+  follow-up migration PR. A shadow publish failure never fails the activity:
+  the legacy engines' inline findings still land and the gap is counted
+  (`risk.llm.policy_evaluations{scan_mode=async,outcome=shadow_publish_error}`),
+  so an LLM transport outage costs the comparison lane messages rather than
+  holding enforcement back. Without a configured analyzer the comparison lane
+  is skipped
   (`risk.llm.policy_evaluations{scan_mode=async,outcome=shadow_skipped}`).
 - **Realtime** (`ScanForEnforcement`): one `enforcereply.DispatchRequest`
   carries the legacy lanes exactly as under `off` (gitleaks / Presidio lanes
@@ -80,10 +82,16 @@ PostHog); anything else — off, absent, unrecognized, provider error — is `of
   policy's sources — after the same scope, exclusion and disabled-rule
   filters — with the legacy outcome on
   `risk.llm.shadow_comparison{gram.risk.policy_id, gram.risk.scan_mode=sync, gram.outcome}`.
-  A degraded LLM lane under shadow never denies and never marks the scan
-  incomplete; it counts as `llm_unavailable` with
-  `risk.enforcement.pubsub_degraded{fail_mode=shadow}`. Nothing is persisted
-  from the realtime lane.
+  Only the policy's in-scope sources with a realtime legacy engine (gitleaks,
+  Presidio, prompt injection) are compared; a destructive-only policy records
+  nothing. A degraded LLM lane under shadow never denies and never marks the
+  scan incomplete; it counts as `llm_unavailable` with
+  `risk.enforcement.pubsub_degraded{fail_mode=shadow}`. A legacy engine that
+  produced no usable verdict (a missing or dead-lettered lane, an incomplete
+  in-process scan) counts as `legacy_unavailable` rather than clean, and a
+  dispatch the dispatcher size-limited counts as `input_truncated`, since the
+  remote lanes then judged less than the in-process engines. Nothing is
+  persisted from the realtime lane.
 - Shadow scans are metered like enforcing ones (`gram.risk.scan.llm_analyzer`
   readings carry the shadow execution path in their operation id).
 
@@ -133,15 +141,20 @@ with
 select
   coalesce(l.risk_policy_id, m.risk_policy_id) as risk_policy_id,
   countIf(l.n > 0 and m.n > 0) as agree_match,
-  countIf(l.n > 0 and m.n = 0) as legacy_only,
-  countIf(l.n = 0 and m.n > 0) as llm_only
+  countIf(l.n > 0 and m.n is null) as legacy_only,
+  countIf(l.n is null and m.n > 0) as llm_only
 from legacy l
 full outer join model m
   on l.risk_policy_id = m.risk_policy_id
  and l.chat_message_id = m.chat_message_id
  and l.content_part_id = m.content_part_id
-group by 1;
+group by 1
+settings join_algorithm = 'full_sorting_merge', join_use_nulls = 1;
 ```
+
+The unmatched side of the full join is `NULL` (with `join_use_nulls = 1`; the
+default would fill `0`, which the `is null` tests would miss), and ClickHouse
+only runs a `FULL OUTER JOIN` under the `full_sorting_merge` algorithm.
 
 `agree_clean` is not a row in this store (a clean message has no finding);
 read it from the realtime counter or from the batch's scanned-message count.
@@ -391,21 +404,21 @@ Metrics. `org`, `slug`, `mode`, `model` below stand for `gram.org.id`,
 the dispatcher's `lane`, which is scanner + policy) and
 `gram.risk.llm.model`.
 
-| Metric                                    | Kind      | Dimensions                                                                                                                                                                                                  | Where          |
-| ----------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| `risk.llm.requests`                       | counter   | org, slug, mode, model, `gram.outcome` ∈ `success` \| `failure` \| `timeout` \| `rate_limited`                                                                                                              | streams        |
-| `risk.llm.duration` (s)                   | histogram | same as requests; buckets 0.25, 0.5, 1, 2, 3, 5, 8, 10, 12, 15, 20                                                                                                                                          | streams        |
-| `risk.llm.tokens`                         | counter   | org, slug, mode, model, `gram.risk.llm.token_kind` ∈ `input` \| `output` (successful calls only)                                                                                                            | streams        |
-| `risk.llm.retries`                        | counter   | org, slug, mode, model (recorded only when > 0)                                                                                                                                                             | streams        |
-| `risk.llm.parse_failures`                 | counter   | org, slug, mode, model                                                                                                                                                                                      | streams        |
-| `risk.llm.policy_evaluations`             | counter   | org, `gram.risk.policy_id`, mode, `gram.outcome` ∈ `clean` \| `matched` \| `dead_letter` (sync, llm and shadow modes) or `published` \| `fallback_legacy` \| `shadow_published` \| `shadow_skipped` (async) | server, worker |
-| `risk.llm.shadow_comparison`              | counter   | org, `gram.risk.policy_id`, mode=`sync`, `gram.outcome` ∈ `agree_clean` \| `agree_match` \| `llm_only` \| `legacy_only` \| `llm_unavailable` \| `legacy_unavailable` (shadow mode only)                     | server         |
-| `risk.llm.policy_duration` (s)            | histogram | same as policy_evaluations, sync only; includes the wait for the reply                                                                                                                                      | server         |
-| `risk.enforcement.llm.requests`           | counter   | mode=`sync`, `gram.outcome` ∈ `ok` \| `error` \| `dead_letter` (reply status)                                                                                                                               | streams        |
-| `risk.enforcement.llm.stale_dropped`      | counter   | mode=`sync`                                                                                                                                                                                                 | streams        |
-| `risk.enforcement.llm.reply_write_errors` | counter   | mode=`sync`                                                                                                                                                                                                 | streams        |
-| `risk.enforcement.pubsub_degraded`        | counter   | `lane` = `ENFORCEMENT_SCANNER_LLM_ANALYZER`, `reason`, `gram.risk.enforcement.fail_mode` ∈ `closed` (llm) \| `shadow` (shared with legacy lanes, which use `open`)                                          | server         |
-| `risk.async_scan.handler_messages`        | counter   | org, `scanner` = `llm_analyzer`, `engine` = `real`, `gram.outcome` ∈ `ok` \| `scan_error` \| `publish_error` \| `disabled` \| `shadow_unpublished`, `gate_reason` = `not_gated` (shared)                    | streams        |
+| Metric                                    | Kind      | Dimensions                                                                                                                                                                                                                            | Where          |
+| ----------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `risk.llm.requests`                       | counter   | org, slug, mode, model, `gram.outcome` ∈ `success` \| `failure` \| `timeout` \| `rate_limited`                                                                                                                                        | streams        |
+| `risk.llm.duration` (s)                   | histogram | same as requests; buckets 0.25, 0.5, 1, 2, 3, 5, 8, 10, 12, 15, 20                                                                                                                                                                    | streams        |
+| `risk.llm.tokens`                         | counter   | org, slug, mode, model, `gram.risk.llm.token_kind` ∈ `input` \| `output` (successful calls only)                                                                                                                                      | streams        |
+| `risk.llm.retries`                        | counter   | org, slug, mode, model (recorded only when > 0)                                                                                                                                                                                       | streams        |
+| `risk.llm.parse_failures`                 | counter   | org, slug, mode, model                                                                                                                                                                                                                | streams        |
+| `risk.llm.policy_evaluations`             | counter   | org, `gram.risk.policy_id`, mode, `gram.outcome` ∈ `clean` \| `matched` \| `dead_letter` (sync, llm and shadow modes) or `published` \| `fallback_legacy` \| `shadow_published` \| `shadow_skipped` \| `shadow_publish_error` (async) | server, worker |
+| `risk.llm.shadow_comparison`              | counter   | org, `gram.risk.policy_id`, mode=`sync`, `gram.outcome` ∈ `agree_clean` \| `agree_match` \| `llm_only` \| `legacy_only` \| `llm_unavailable` \| `legacy_unavailable` \| `input_truncated` (shadow mode only)                          | server         |
+| `risk.llm.policy_duration` (s)            | histogram | same as policy_evaluations, sync only; includes the wait for the reply                                                                                                                                                                | server         |
+| `risk.enforcement.llm.requests`           | counter   | mode=`sync`, `gram.outcome` ∈ `ok` \| `error` \| `dead_letter` (reply status)                                                                                                                                                         | streams        |
+| `risk.enforcement.llm.stale_dropped`      | counter   | mode=`sync`                                                                                                                                                                                                                           | streams        |
+| `risk.enforcement.llm.reply_write_errors` | counter   | mode=`sync`                                                                                                                                                                                                                           | streams        |
+| `risk.enforcement.pubsub_degraded`        | counter   | `lane` = `ENFORCEMENT_SCANNER_LLM_ANALYZER`, `reason`, `gram.risk.enforcement.fail_mode` ∈ `closed` (llm) \| `shadow` (shared with legacy lanes, which use `open`)                                                                    | server         |
+| `risk.async_scan.handler_messages`        | counter   | org, `scanner` = `llm_analyzer`, `engine` = `real`, `gram.outcome` ∈ `ok` \| `scan_error` \| `publish_error` \| `disabled` \| `shadow_unpublished`, `gate_reason` = `not_gated` (shared)                                              | streams        |
 
 A parse failure counts as `success` on `risk.llm.requests` (the HTTP call
 succeeded) and increments `risk.llm.parse_failures`.

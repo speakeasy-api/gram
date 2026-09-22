@@ -482,21 +482,37 @@ func TestAnalyzeBatch_LLMAnalyzer_LLMVariantRoutesCoveredSources(t *testing.T) {
 	assert.Equal(t, int64(0), llmPolicyEvaluations(t, reader, "shadow_published"))
 }
 
-func TestAnalyzeBatch_LLMAnalyzer_ShadowPublishFailureFailsActivity(t *testing.T) {
+// TestAnalyzeBatch_LLMAnalyzer_ShadowPublishFailureKeepsLegacyResults pins
+// that the shadow lane never gates enforcement: an LLM transport outage costs
+// the comparison lane its messages, counted as shadow_publish_error, while
+// the legacy engines' inline findings still land and the activity succeeds.
+func TestAnalyzeBatch_LLMAnalyzer_ShadowPublishFailureKeepsLegacyResults(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
-	msgID := insertUserMessage(t, conn, td, "hello")
+	msgID := insertUserMessage(t, conn, td, "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd")
 
-	// A dropped shadow request would leave the comparison lane with less
-	// coverage than the legacy engines; the activity retry replays both.
 	flags := &feature.InMemory{}
 	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, td.orgID, feature.VariantRiskLLMShadow)
 	failing := gcp.NewMockPublisher[*riskv1.LLMAnalysis]()
 	failing.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewErrPublishResult(errors.New("topic unavailable")))
 
-	_, _, err := runLLMLaneBatch(t, conn, td, flags, true, &countingPIIScanner{}, failing, []uuid.UUID{msgID}, []string{risk_analysis.SourceGitleaks})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "llm analyzer scan dispatch")
-	assert.Contains(t, err.Error(), "topic unavailable")
+	meterProvider, reader := newManualMeter(t)
+	result, pubs, err := runLLMLaneBatchWithMeter(t, conn, td, flags, true, meterProvider, &countingPIIScanner{}, failing, []uuid.UUID{msgID}, []string{risk_analysis.SourceGitleaks})
+	require.NoError(t, err, "a shadow publish failure never fails the batch")
+	assert.Equal(t, 1, result.Processed)
+	assert.Equal(t, 1, result.Findings, "the inline gitleaks finding still enforces")
+	assert.Len(t, *pubs.gitleaks, 1, "the legacy gitleaks lane is still dispatched")
+	assert.Equal(t, int64(1), llmPolicyEvaluations(t, reader, "shadow_publish_error"))
+	assert.Equal(t, int64(0), llmPolicyEvaluations(t, reader, "shadow_published"))
+
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "the legacy gitleaks finding still lands in Postgres")
+	assert.Equal(t, risk_analysis.SourceGitleaks, rows[0].Source)
 }
