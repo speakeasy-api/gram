@@ -62,3 +62,8 @@ button.support-status:hover {
     var(--support-foreground) 10%
   );
 }
+
+/* Account icons sit directly on the striped row, without an inset surface. */
+button.support-status[data-support-status="accounts"] {
+  --support-background: transparent;
+}

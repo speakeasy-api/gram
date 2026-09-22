@@ -308,7 +308,7 @@ function FactCell({
           onClick={onClick}
           aria-label={`${label}: ${accounts ? accountTypes.map((account) => `${accountLabels[account]}: ${statusLabels[accounts[account].fact.status]}`).join(", ") : statusLabels[fact.status]}${fact.verify ? ", needs verification" : ""}`}
           data-support-status={accounts ? "accounts" : fact.status}
-          className="support-status focus-visible:ring-ring flex min-h-10 w-full items-center justify-center gap-1.5 rounded-sm px-1.5 py-1 text-xs focus-visible:ring-2 focus-visible:ring-inset"
+          className="support-status focus-visible:ring-ring flex min-h-10 w-full items-center justify-center gap-1.5 px-1.5 py-1 text-xs focus-visible:ring-2 focus-visible:ring-inset"
         >
           {accounts ? (
             <AccountIcons
@@ -735,7 +735,11 @@ export function MatrixExplorer({
               rows.map((row, index) => (
                 <TableRow
                   key={row.id}
-                  className={index % 2 === 0 ? "bg-background" : "bg-muted/50"}
+                  className={
+                    index % 2 === 0
+                      ? "bg-card hover:bg-card"
+                      : "bg-muted hover:bg-muted"
+                  }
                 >
                   <TableCell
                     data-vendor={headerIdentity(axes.rows, row).vendor}
@@ -757,7 +761,7 @@ export function MatrixExplorer({
                     </button>
                   </TableCell>
                   {columns.map((column) => (
-                    <TableCell key={column.id} className="border-r p-0.5">
+                    <TableCell key={column.id} className="border-r p-0">
                       <div
                         data-dimmed={
                           !isFocused(axes.rows, row.id) ||
