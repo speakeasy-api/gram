@@ -37,6 +37,7 @@ import {
   isDisplayableBucket,
 } from "@/pages/access/challengeHelpers";
 import { OrgWelcomeBanner } from "@/pages/org/OrgWelcomeBanner";
+import { MemberPlatformMCPCta } from "@/pages/org/MemberPlatformMCPCta";
 import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
@@ -292,6 +293,7 @@ function OrgHomeInner() {
   return (
     <>
       <OrgWelcomeBanner />
+      <MemberPlatformMCPCta />
 
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-8 pb-24">
         {/* `items-start` so each column is only as tall as its content — the

@@ -5,7 +5,9 @@ import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
 import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
-import { RequireScope } from "@/components/require-scope";
+import { useOrganization } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { useOrganizationPlatformMCPOnboarding } from "@/hooks/useOrganizationPlatformMCPOnboarding";
 import { useFetcher } from "@/contexts/Fetcher";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
@@ -40,7 +42,7 @@ import { Switch } from "@/components/ui/Switch";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Activity, Network } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { PlatformInstrumentationSheet } from "../setup/components/platform-instrumentation-sheet";
@@ -460,9 +462,7 @@ export default function Plugins(): JSX.Element {
                 void handleObservabilityDownload(platform);
               }}
             />
-            <RequireScope scope="org:admin" level="section">
-              <PlatformMCPPluginCard />
-            </RequireScope>
+            <PlatformMCPPluginCard />
           </div>
         </Stack>
       </ResourceListPage>
@@ -774,8 +774,33 @@ function observabilityInstallHint(
   return "Available as a direct download";
 }
 
-function PlatformMCPPluginCard(): JSX.Element {
+function PlatformMCPPluginCard(): JSX.Element | null {
   const [installOpen, setInstallOpen] = useState(false);
+  const { hasScope, isLoading, error } = useRBAC();
+  const organization = useOrganization();
+  const telemetry = useTelemetry();
+  const recordedImpression = useRef(false);
+  const isAdmin = hasScope("org:admin");
+  const onboarding = useOrganizationPlatformMCPOnboarding(organization.id, {
+    enabled: !isLoading && !error && !isAdmin,
+    throwOnError: false,
+  });
+  const memberVisible =
+    !isLoading && !error && !isAdmin && !!onboarding.data?.enabled;
+  useEffect(() => {
+    if (!memberVisible || recordedImpression.current) return;
+    recordedImpression.current = true;
+    telemetry.capture("platform_mcp_member_cta", {
+      action: "impression",
+      workflow: "plugins",
+    });
+  }, [memberVisible, telemetry]);
+  if (isLoading || error || (!isAdmin && !memberVisible)) return null;
+  const connected =
+    onboarding.data?.connectionAuthorized &&
+    onboarding.data.connectionAuthState === "active";
+  const reconnect =
+    onboarding.data?.connectionAuthState === "reauthorization_required";
 
   return (
     <Card.Entity
@@ -797,14 +822,38 @@ function PlatformMCPPluginCard(): JSX.Element {
       </div>
 
       <Text small muted className="mb-3 line-clamp-3">
-        Manage MCPs, Risk Policies and explore logs in your favorite agent.
+        {isAdmin
+          ? "Manage MCPs, Risk Policies and explore logs in your favorite agent."
+          : "Find MCP servers, investigate issues and work with skills from your agent."}
       </Text>
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
         <Text small muted>
-          Available from the public Speakeasy marketplace
+          {isAdmin
+            ? "Available from the public Speakeasy marketplace"
+            : "Use Platform MCP from your own agent"}
         </Text>
-        <PluginInstallButton size="sm" onClick={() => setInstallOpen(true)} />
+        {isAdmin ? (
+          <PluginInstallButton size="sm" onClick={() => setInstallOpen(true)} />
+        ) : connected ? (
+          <Text small muted>
+            Connected to your agent
+          </Text>
+        ) : (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              telemetry.capture("platform_mcp_member_cta", {
+                action: "selected",
+                workflow: "plugins",
+              });
+              setInstallOpen(true);
+            }}
+          >
+            {reconnect ? "Reconnect your agent" : "Connect your agent"}
+          </Button>
+        )}
       </div>
 
       <PlatformMCPOnboardingContent

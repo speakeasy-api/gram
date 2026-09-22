@@ -1,23 +1,26 @@
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
-import { RankedBarList } from "@/components/chart/RankedBarList";
-import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
-import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
-import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { Text } from "@/components/ui/Text";
-import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
-import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
-import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
-import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
-import { useGramContext } from "@gram/client/react-query/_context";
-import { unwrapAsync } from "@gram/client/types/fp";
-import { Stack } from "@/components/ui/Stack";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+
+import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
+import { MemberWorkflowCTA } from "@/components/platform-mcp/member-workflow-cta";
+import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
 import { PluginStatusBanner } from "./PluginStatusBanner";
+import { RankedBarList } from "@/components/chart/RankedBarList";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Stack } from "@/components/ui/Stack";
+import { Text } from "@/components/ui/Text";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { TopUsersTable } from "./TopUsersTable";
+import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { overviewScope } from "./overview-scope";
+import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
+import { unwrapAsync } from "@gram/client/types/fp";
+import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
+import { useGramContext } from "@gram/client/react-query/_context";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
+import { useProject } from "@/contexts/Auth";
 
 // Both variants share the dashboard, but overview telemetry must use the
 // variant's own scope: toolset slug or remote MCP server ID.
@@ -42,6 +45,7 @@ export function MCPOverviewTab({
   server: HostedServerRef;
 }): React.JSX.Element {
   const client = useGramContext();
+  const project = useProject();
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
   const {
@@ -118,6 +122,17 @@ export function MCPOverviewTab({
     // without narrowing the window, and `lg:`/`xl:` would not notice.
     <Stack gap={6} className="@container mb-4">
       <PluginStatusBanner server={server} />
+      {!isLoading && !isLogsDisabled && (
+        <MemberWorkflowCTA
+          workflow="mcp_diagnostics"
+          label="Troubleshoot in your agent"
+          description="Investigate this server's recent failures with Platform MCP."
+          scope="project:read"
+          resourceId={project.id}
+          projectSlug={project.slug}
+          prompt={`Using Platform MCP, investigate recent failures for the MCP server ${JSON.stringify(server.name)} in project ${JSON.stringify(project.slug)}. Start with the project overview, then inspect this server's diagnostics and recent call summaries. Explain what the evidence supports and suggest next steps. Do not change configuration.`}
+        />
+      )}
 
       <div className="flex justify-end">
         <TimeRangePicker

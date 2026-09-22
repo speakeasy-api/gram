@@ -40,6 +40,7 @@ vi.mock("@/components/ui/ContextMenu", () => ({
 vi.mock("@/components/auditlogs/feed", () => ({
   ActionIconTile: () => null,
 }));
+vi.mock("./MemberPlatformMCPCta", () => ({ MemberPlatformMCPCta: () => null }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
     id: "org-1",

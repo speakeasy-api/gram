@@ -1,17 +1,18 @@
-import { SettingsSection } from "@/components/detail/settings-section";
-import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
-import { Text } from "@/components/ui/Text";
-import { useProject } from "@/contexts/Auth";
-import { Markdown } from "@/elements/components/Markdown";
 import { HumanizeDateTime } from "@/lib/dates";
-import { useParams } from "react-router";
-import { useState } from "react";
-import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
+import { Markdown } from "@/elements/components/Markdown";
+import { MemberWorkflowCTA } from "@/components/platform-mcp/member-workflow-cta";
+import { RequireScope } from "@/components/require-scope";
+import { SettingsSection } from "@/components/detail/settings-section";
 import { SkillManifestDialog } from "./SkillManifestDialog";
 import { SkillValidationErrors } from "./SkillValidationErrors";
+import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
+import { Text } from "@/components/ui/Text";
 import { stripSkillFrontmatter } from "./skill-manifest";
+import { useParams } from "react-router";
+import { useProject } from "@/contexts/Auth";
 import { useSkillDetailContext } from "./SkillDetailContext";
+import { useState } from "react";
 
 export default function SkillContent(): JSX.Element {
   const project = useProject();
@@ -28,6 +29,17 @@ export default function SkillContent(): JSX.Element {
 
   return (
     <>
+      {latestVersion && (
+        <MemberWorkflowCTA
+          workflow="skill_improve"
+          label="Improve with your agent"
+          description="Prepare a new version of this skill with Platform MCP. Review it before saving."
+          scope="skill:write"
+          resourceId={project.id}
+          projectSlug={project.slug}
+          prompt={`Using Platform MCP, review skill ${JSON.stringify(skill.name)} in project ${JSON.stringify(project.slug)} and propose an improved SKILL.md. Show me the changes before saving a new version. Do not distribute the skill.`}
+        />
+      )}
       <SettingsSection>
         <SettingsSection.Header>
           <SettingsSection.Title>SKILL.md</SettingsSection.Title>
