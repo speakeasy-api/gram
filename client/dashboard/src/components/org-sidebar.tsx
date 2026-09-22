@@ -112,6 +112,7 @@ export function OrgSidebar({
     orgRoutes.platformAdminRbac,
     orgRoutes.platformAdminOnboarding,
     orgRoutes.platformAdminOpenRouterKeys,
+    orgRoutes.platformAdminSupportMatrix,
   ].some((r) => r.active);
 
   const groupActivations: Array<[string, boolean]> = [
@@ -145,6 +146,7 @@ export function OrgSidebar({
     orgRoutes.platformAdminRbac,
     orgRoutes.platformAdminOnboarding,
     orgRoutes.platformAdminOpenRouterKeys,
+    orgRoutes.platformAdminSupportMatrix,
   ];
   const activeRoute = allOrgNavRoutes.find((r) => r.active);
   const activeItem = activeRoute?.title;
@@ -271,6 +273,10 @@ export function OrgSidebar({
                         {
                           item: orgRoutes.platformAdminOnboarding,
                           label: "Onboarding",
+                        },
+                        {
+                          item: orgRoutes.platformAdminSupportMatrix,
+                          label: "Support Coverage",
                         },
                       ]
                     : []),
