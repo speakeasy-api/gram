@@ -30,10 +30,11 @@ const llmPolicyEvaluationShadowPublished = "shadow_published"
 const llmPolicyEvaluationShadowSkipped = "shadow_skipped"
 
 // llmPolicyEvaluationShadowPublishError is the policy_evaluations outcome
-// recorded when a shadow-mode batch's analysis requests could not be
-// published. The batch keeps the legacy engines' results and does not fail:
-// the comparison lane loses these messages, enforcement loses nothing.
-// Counted once per batch.
+// recorded for each shadow-mode analysis request the topic did not
+// acknowledge. The batch keeps the legacy engines' results and does not
+// fail: the comparison lane loses these messages, enforcement loses nothing.
+// Counted per unacknowledged message, alongside shadow_published for the
+// acknowledged ones of the same batch.
 const llmPolicyEvaluationShadowPublishError = "shadow_publish_error"
 
 // llmPolicyEvaluationFallbackLegacy is the policy_evaluations outcome recorded
@@ -78,10 +79,12 @@ func llmMessageSources(masks CategoryScopeMasks, i int, coveredSources []string)
 // evaluating the covered sources for the organization, so a dropped request
 // is a silently unscanned message and the publish must succeed for the
 // activity to succeed. In the shadow mode (shadow true, execution path
-// llm_shadow_stream) the lane only compares, so the caller counts a failed
-// publish as shadow_publish_error and keeps the legacy engines' results
-// rather than hold enforcement behind the LLM transport.
-func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, orgSlug string, coveredSources []string, masks CategoryScopeMasks, shadow bool) error {
+// llm_shadow_stream) the lane only compares, so the caller counts the
+// messages that were not acknowledged (failed) as shadow_publish_error and
+// keeps the legacy engines' results rather than hold enforcement behind the
+// LLM transport. The acknowledged messages are counted as published /
+// shadow_published either way, so a partial publish is not undercounted.
+func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, orgSlug string, coveredSources []string, masks CategoryScopeMasks, shadow bool) (failed int, err error) {
 	executionPath := llmAnalyzerStreamExecutionPath
 	outcome := llmPolicyEvaluationPublished
 	if shadow {
@@ -135,11 +138,11 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 			Shadow:           &shadow,
 		}.Build()))
 	}
-	if err := drainPublishAcks(ctx, "publish llm analysis requests", publishResults); err != nil {
-		return err
+	acked, err := countPublishAcks(ctx, "publish llm analysis requests", publishResults)
+	if acked > 0 {
+		a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), outcome, acked)
 	}
-	a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), outcome, len(publishResults))
-	return nil
+	return len(publishResults) - acked, err
 }
 
 // llmMessageInput renders the message the way the judge lane does: a tool

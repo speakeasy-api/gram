@@ -516,3 +516,28 @@ func TestAnalyzeBatch_LLMAnalyzer_ShadowPublishFailureKeepsLegacyResults(t *test
 	require.Len(t, rows, 1, "the legacy gitleaks finding still lands in Postgres")
 	assert.Equal(t, risk_analysis.SourceGitleaks, rows[0].Source)
 }
+
+// TestAnalyzeBatch_LLMAnalyzer_ShadowPartialPublishCountsBothOutcomes pins
+// that a partially acknowledged shadow publish counts the acknowledged
+// messages as shadow_published and only the rest as shadow_publish_error, so
+// the comparison lane's coverage denominator stays exact.
+func TestAnalyzeBatch_LLMAnalyzer_ShadowPartialPublishCountsBothOutcomes(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	first := insertUserMessage(t, conn, td, "hello one")
+	second := insertUserMessage(t, conn, td, "hello two")
+
+	flags := &feature.InMemory{}
+	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, td.orgID, feature.VariantRiskLLMShadow)
+	partial := gcp.NewMockPublisher[*riskv1.LLMAnalysis]()
+	partial.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewErrPublishResult(errors.New("topic unavailable"))).Once()
+	partial.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+
+	meterProvider, reader := newManualMeter(t)
+	result, _, err := runLLMLaneBatchWithMeter(t, conn, td, flags, true, meterProvider, &countingPIIScanner{}, partial, []uuid.UUID{first, second}, []string{risk_analysis.SourceGitleaks})
+	require.NoError(t, err, "a partial shadow publish never fails the batch")
+	assert.Equal(t, 2, result.Processed)
+	assert.Equal(t, int64(1), llmPolicyEvaluations(t, reader, "shadow_published"), "the acknowledged message is counted")
+	assert.Equal(t, int64(1), llmPolicyEvaluations(t, reader, "shadow_publish_error"), "only the unacknowledged message is counted as an error")
+}

@@ -88,10 +88,15 @@ PostHog); anything else — off, absent, unrecognized, provider error — is `of
   scan incomplete; it counts as `llm_unavailable` with
   `risk.enforcement.pubsub_degraded{fail_mode=shadow}`. A legacy engine that
   produced no usable verdict (a missing or dead-lettered lane, an incomplete
-  in-process scan) counts as `legacy_unavailable` rather than clean, and a
-  dispatch the dispatcher size-limited counts as `input_truncated`, since the
-  remote lanes then judged less than the in-process engines. Nothing is
-  persisted from the realtime lane.
+  in-process scan) counts as `legacy_unavailable` rather than clean. When the
+  dispatcher size-limits the content, the remote lanes judge a truncated copy
+  while the in-process engines read the whole message, so the comparison is
+  recorded as `input_truncated` instead of an agreement or a disagreement.
+  Nothing is persisted from the realtime lane.
+- In the `llm` mode a size-limited dispatch marks the scan incomplete and
+  counts `risk.enforcement.pubsub_degraded{reason=truncated,fail_mode=open}`:
+  the model's verdict on the prefix still enforces, the omitted tail was
+  never scanned.
 - Shadow scans are metered like enforcing ones (`gram.risk.scan.llm_analyzer`
   readings carry the shadow execution path in their operation id).
 

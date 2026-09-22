@@ -216,13 +216,14 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	var presidioPublishErr error
 	var presidioErr error
 	var llmPublishErr error
+	var llmPublishFailed int
 
 	var promptInjectionErr error
 	var customErr error
 
 	if llmMode || llmShadow {
 		wg.Go(func() {
-			llmPublishErr = a.publishLLMScanRequests(ctx, args, messages, llmOrgSlug, llmCoveredSources(sources), masks, llmShadow)
+			llmPublishFailed, llmPublishErr = a.publishLLMScanRequests(ctx, args, messages, llmOrgSlug, llmCoveredSources(sources), masks, llmShadow)
 		})
 	}
 
@@ -297,13 +298,16 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		// The shadow lane only compares: a dropped shadow request costs the
 		// comparison one message, while failing the activity would retry the
 		// legacy engines' inline scan and hold their findings back behind an
-		// LLM transport outage. Count the gap and keep the legacy results.
-		a.logger.WarnContext(ctx, "shadow LLM analyzer scan dispatch failed; keeping legacy engine results",
+		// LLM transport outage. Count the messages that did not reach the
+		// topic (the acknowledged ones were counted as shadow_published) and
+		// keep the legacy results.
+		a.logger.WarnContext(ctx, "shadow LLM analyzer scan dispatch failed for some messages; keeping legacy engine results",
 			attr.SlogError(llmPublishErr),
 			attr.SlogOrganizationID(args.OrganizationID),
 			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+			attr.SlogRiskLLMPublishFailedCount(llmPublishFailed),
 		)
-		a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), llmPolicyEvaluationShadowPublishError, 1)
+		a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), llmPolicyEvaluationShadowPublishError, llmPublishFailed)
 		llmPublishErr = nil
 	}
 	if llmPublishErr != nil {

@@ -1431,6 +1431,14 @@ func (s *Scanner) dispatchEnforcementLanes(ctx context.Context, request Realtime
 		if len(legacyLanes) > 0 {
 			incomplete.Store(true)
 		}
+		if llmRequested && plan.llmFailMode == failModeClosed {
+			// The enforcing LLM lane judged only the dispatcher's prefix. Its
+			// verdict on that prefix still applies (a hit still denies), but
+			// the omitted tail was never scanned, so the scan is incomplete
+			// and the lane counts as degraded, failing open for the tail.
+			incomplete.Store(true)
+			s.recordPubsubDegraded(ctx, llmLane, "truncated", nil, failModeOpen)
+		}
 		trace.SpanFromContext(ctx).SetAttributes(attr.RiskEnforcementTruncated(true))
 	}
 
