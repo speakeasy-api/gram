@@ -428,14 +428,24 @@ describe("Agent API keys", () => {
       /The key was created but its secret was not returned/,
     );
     expect(screen.queryByRole("button", { name: "Create key" })).toBeNull();
-    expect(
-      (
-        screen.getByRole("button", {
-          name: "Copy API key",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
+    // Without a secret there is nothing to copy, so the key row is absent
+    // rather than present and inert. The connect snippets still render, with a
+    // placeholder where the key goes.
+    expect(screen.queryByText("API key — shown once")).toBeNull();
+    expect(screen.getByText("Connect your agent")).toBeTruthy();
     expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers the gateway endpoint and the key once issuance succeeds", async () => {
+    mocks.create.mockResolvedValue({ ...key, key: "secret_example_once" });
+    setup();
+    await createWithGrant();
+
+    await screen.findByText("secret_example_once");
+    expect(screen.getByText("API key — shown once")).toBeTruthy();
+    // One endpoint for the whole agent: the snippet must carry the gateway
+    // path, not a per-server URL.
+    expect(screen.getByText(new RegExp(`/agent-mcp/${agent.id}`))).toBeTruthy();
   });
 
   it("requires authorize to list or issue credentials", () => {
