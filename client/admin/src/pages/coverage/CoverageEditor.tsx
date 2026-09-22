@@ -1,6 +1,7 @@
+import { accountFact, type AccountFilter } from "./accounts";
 import { useState, type JSX } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -23,6 +24,7 @@ import {
   type Method,
   type Product,
 } from "./model";
+import "./support-status.css";
 
 export function Choice({
   label,
@@ -71,8 +73,9 @@ export function FactEditor({
           onChange({ ...fact, status: status as Fact["status"] })
         }
       />
-      <Input
+      <Textarea
         aria-label="Coverage limitations"
+        rows={3}
         placeholder="Limitations, mechanism, or evidence…"
         value={fact.note}
         onChange={(event) => onChange({ ...fact, note: event.target.value })}
@@ -157,8 +160,8 @@ export function MethodEditor({
             value={mapping.applicability}
             options={[
               { value: "unknown", label: "Applicability unknown" },
-              { value: "applicable", label: "Applies to this product" },
-              { value: "na", label: "Does not apply" },
+              { value: "applicable", label: `Applies to ${product.family}` },
+              { value: "na", label: `Does not apply to ${product.family}` },
             ]}
             onChange={(value) =>
               updateMapping({
@@ -167,8 +170,9 @@ export function MethodEditor({
               })
             }
           />
-          <Input
+          <Textarea
             aria-label="OS and plan conditions"
+            rows={3}
             placeholder="OS / plan conditions, e.g. macOS, Enterprise only"
             value={mapping.conditions}
             onChange={(event) =>
@@ -219,30 +223,92 @@ export function MethodEditor({
   );
 }
 
-export function MethodSummary({
-  method,
+const supportOrder: Record<Fact["status"], number> = {
+  supported: 0,
+  partial: 1,
+  unknown: 2,
+  unimplemented: 3,
+  impossible: 4,
+  na: 5,
+};
+
+export function MethodList({
+  methods,
   product,
   capability,
   draft,
+  onSave,
+  account = "all",
 }: {
-  method: Method;
+  methods: Method[];
+  account?: AccountFilter;
   product: Product;
   capability: Capability;
   draft: Draft;
+  onSave: (draft: Draft) => Promise<boolean>;
 }): JSX.Element {
-  const mapping =
-    draft.mappings[mappingKey(method.id, product.id)] ?? emptyMapping;
-  const fact = getFact(
-    mapping,
-    capability.id,
-    methodReference(draft, method, capability.id),
-  );
+  const entries = methods
+    .map((method) => ({
+      method,
+      fact: accountFact(
+        method,
+        getFact(
+          draft.mappings[mappingKey(method.id, product.id)] ?? emptyMapping,
+          capability.id,
+          methodReference(draft, method, capability.id),
+        ),
+        account,
+        draft.mappings[mappingKey(method.id, product.id)]?.conditions,
+      ),
+    }))
+    .sort((a, b) => supportOrder[a.fact.status] - supportOrder[b.fact.status]);
   return (
-    <span className="flex w-full items-center justify-between gap-3">
-      <span>{method.name}</span>
-      <span className="text-muted-foreground text-xs">
-        {symbols[fact.status]} {statusLabels[fact.status]}
-      </span>
-    </span>
+    <div className="space-y-3">
+      <p className="text-muted-foreground text-xs">
+        Supported methods first, followed by partial coverage and other methods.
+      </p>
+      {entries.map(({ method, fact }) => {
+        const supported = fact.status === "supported";
+        const partial = fact.status === "partial";
+        return (
+          <details
+            key={`${method.id}/${product.id}/${capability.id}`}
+            className={
+              supported
+                ? "border-foreground/30 rounded-lg border"
+                : "border-border rounded-lg border"
+            }
+          >
+            <summary
+              className={`cursor-pointer rounded-lg px-4 py-3 ${supported || partial ? "text-foreground" : "text-muted-foreground bg-muted/40"}`}
+            >
+              <span className="inline-flex w-[calc(100%-1.25rem)] items-center justify-between gap-3 align-middle">
+                <span className={supported ? "font-semibold" : "font-normal"}>
+                  {method.name}
+                </span>
+                <span
+                  data-support-status={
+                    supported || partial ? fact.status : "unknown-method"
+                  }
+                  className="support-status shrink-0 rounded-sm px-2 py-1 text-xs"
+                >
+                  {symbols[fact.status]} {statusLabels[fact.status]}
+                  {fact.verify ? "*" : ""}
+                </span>
+              </span>
+            </summary>
+            <div className="p-2">
+              <MethodEditor
+                method={method}
+                product={product}
+                capability={capability}
+                draft={draft}
+                onSave={onSave}
+              />
+            </div>
+          </details>
+        );
+      })}
+    </div>
   );
 }

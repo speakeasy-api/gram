@@ -13,7 +13,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { MethodEditor, MethodSummary } from "./CoverageEditor";
+import { MethodEditor, MethodList } from "./CoverageEditor";
 import { MatrixExplorer, type Selection } from "./MatrixExplorer";
 import { ImportCsvDialog } from "./ImportCsvDialog";
 import { draftSchema, storageKey, type Draft, type Snapshot } from "./model";
@@ -237,29 +237,16 @@ function SupportMatrixPage({ snapshot }: { snapshot: Snapshot }): JSX.Element {
                   onSave={save}
                 />
               )}
-              {!selection.method &&
-                selection.product &&
-                methods.map((method) => (
-                  <details key={method.id} className="rounded-lg border">
-                    <summary className="cursor-pointer px-4 py-3">
-                      <MethodSummary
-                        method={method}
-                        product={selection.product!}
-                        capability={selection.capability}
-                        draft={draft}
-                      />
-                    </summary>
-                    <div className="p-2">
-                      <MethodEditor
-                        method={method}
-                        product={selection.product}
-                        capability={selection.capability}
-                        draft={draft}
-                        onSave={save}
-                      />
-                    </div>
-                  </details>
-                ))}
+              {!selection.method && selection.product && (
+                <MethodList
+                  methods={methods}
+                  account={selection.account}
+                  product={selection.product}
+                  capability={selection.capability}
+                  draft={draft}
+                  onSave={save}
+                />
+              )}
             </fieldset>
           )}
         </SheetContent>

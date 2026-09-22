@@ -55,10 +55,11 @@ export function resolveMatrixCell(
               methodReference(draft, item, capability.id),
             ),
             account,
+            draft.mappings[mappingKey(item.id, product.id)]?.conditions,
           ),
         ),
       );
   }
-  if (method) fact = accountFact(method, fact, account);
+  if (method) fact = accountFact(method, fact, account, mapping.conditions);
   return { method, product, capability, mapping, fact };
 }

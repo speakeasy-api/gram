@@ -15,26 +15,43 @@ export function accountFact(
   method: Method,
   fact: Fact,
   account: AccountFilter,
+  conditions = "",
 ): Fact {
   if (account === "all" || fact.status === "na") return fact;
-  const plans = method.plans.toLowerCase();
+  const accountPattern =
+    account === "personal"
+      ? /personal accounts?:/i
+      : /(?:team plans?|enterprise(?: accounts?| plans?)?):/i;
+  const source = accountPattern.test(conditions) ? conditions : method.plans;
+  const plans = source.toLowerCase();
   if (
     plans.includes("needs clarification") ||
     plans.includes("not applicable in source")
   )
-    return { ...unknown, note: method.plans, verify: true };
+    return { ...unknown, note: source, verify: true };
   // CSV imports preserve labelled source cells; the bundled catalog uses prose.
-  const labelled = /(?:team plans|personal accounts):/.test(plans);
+  const labelled =
+    /(?:team plans?|personal accounts?|enterprise(?: accounts?| plans?)?):/.test(
+      plans,
+    );
   let eligible: boolean | undefined;
   if (labelled) {
-    const label = account === "personal" ? "personal accounts" : "team plans";
-    const claim = plans
-      .split(";")
-      .find((part) => part.trim().startsWith(`${label}:`));
-    if (claim?.includes("enterprise only")) eligible = account === "enterprise";
-    else if (claim && /✅|✓/.test(claim)) eligible = true;
-    else if (claim && /☠|❌|×|not possible|not supported/.test(claim))
+    const claims = plans.split(/[;\n]/);
+    const patterns = {
+      personal: /^personal accounts?:/,
+      team: /^team plans?:/,
+      enterprise: /^enterprise(?: accounts?| plans?)?:/,
+    };
+    let claim = claims.find((part) => patterns[account].test(part.trim()));
+    if (!claim && account === "enterprise")
+      claim = claims.find((part) => patterns.team.test(part.trim()));
+    const value = claim?.split(":").slice(1).join(":").trim() ?? "";
+    if (value.includes("enterprise only")) eligible = account === "enterprise";
+    else if (
+      /☠|❌|×|not possible|not supported|unsupported|^no$|^false$/.test(value)
+    )
       eligible = false;
+    else if (/✅|✓|^supported$|^yes$|^true$/.test(value)) eligible = true;
   } else {
     const eligibility = plans.split(";")[0] ?? "";
     if (/\b(?:personal|team|enterprise)\b/.test(eligibility)) {
@@ -48,8 +65,7 @@ export function accountFact(
       eligible = accounts[account];
     }
   }
-  if (eligible === undefined)
-    return { ...unknown, note: method.plans, verify: true };
+  if (eligible === undefined) return { ...unknown, note: source, verify: true };
   if (!eligible)
     return {
       status: "impossible",

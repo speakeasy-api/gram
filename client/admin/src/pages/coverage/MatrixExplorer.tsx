@@ -51,6 +51,7 @@ import "./support-status.css";
 type Axis = "methods" | "platforms" | "capabilities";
 type Item = { id: string; name: string; group: string; platform?: Product };
 export type Selection = {
+  account?: AccountFilter;
   capability: Capability;
   method?: Method;
   product?: Product;
@@ -517,7 +518,7 @@ export function MatrixExplorer({
             : undefined
         }
         label={label}
-        onClick={() => onSelect({ method, product, capability })}
+        onClick={() => onSelect({ method, product, capability, account })}
       />
     );
   }

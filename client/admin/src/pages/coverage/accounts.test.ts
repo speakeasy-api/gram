@@ -4,6 +4,7 @@ import { accountFact, accountTypes } from "./accounts";
 import { catalogSchema, emptyMapping, type Draft, type Fact } from "./model";
 import { resolveMatrixCell } from "./matrixCell";
 import { integrationRequirements } from "./requirements";
+import { importCsvHeader, parseMatrixImport } from "./importCsv";
 
 const catalog = catalogSchema.parse(seed);
 const supported: Fact = { status: "supported", note: "", verify: false };
@@ -142,5 +143,61 @@ describe("imported plan eligibility", () => {
         (account) => accountFact(method, supported, account).status,
       ),
     ).toEqual([personal, team, enterprise]);
+  });
+});
+
+describe("CSV account coverage", () => {
+  it.each([
+    [
+      "Personal accounts: supported; Team plans: supported; Enterprise plans: supported",
+      ["supported", "supported", "supported"],
+    ],
+    [
+      "Personal accounts: unsupported; Team plans: unsupported; Enterprise plans: supported",
+      ["impossible", "impossible", "supported"],
+    ],
+    [
+      "Personal accounts: unknown; Team plans: supported; Enterprise plans: unsupported",
+      ["unknown", "supported", "impossible"],
+    ],
+    [
+      "Team plans: Enterprise only; Personal accounts: ☠️",
+      ["impossible", "impossible", "supported"],
+    ],
+    [
+      "Personal accounts: supported\nTeam plans: supported\nEnterprise plans: supported",
+      ["supported", "supported", "supported"],
+    ],
+  ])("uses imported eligibility: %s", (conditions, expected) => {
+    const imported = parseMatrixImport(
+      [
+        importCsvHeader,
+        `mapping,device,claude-code-cli,,,,,applicable,"${conditions}"`,
+      ].join("\n"),
+      catalog,
+      { mappings: {}, references: {} },
+    ).draft;
+    const scopedCatalog = { ...catalog, methods: [catalog.methods[0]!] };
+    const statuses = accountTypes.map(
+      (account) =>
+        resolveMatrixCell(
+          imported,
+          scopedCatalog,
+          { platforms: "claude-code-cli", capabilities: "session" },
+          account,
+        ).fact.status,
+    );
+    expect(statuses).toEqual(expected);
+    for (const [index, account] of accountTypes.entries()) {
+      const requirements = integrationRequirements(
+        imported,
+        [{ platformId: "claude-code-cli", capabilityId: "session" }],
+        scopedCatalog.methods,
+        account,
+      );
+      expect(requirements.combinations).toEqual(
+        expected[index] === "supported" ? [["device"]] : [],
+      );
+    }
   });
 });

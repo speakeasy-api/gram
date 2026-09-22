@@ -41,6 +41,7 @@ export function integrationRequirements(
             methodReference(draft, method, target.capabilityId),
           ),
           account,
+          mapping.conditions,
         ),
       };
     }),
