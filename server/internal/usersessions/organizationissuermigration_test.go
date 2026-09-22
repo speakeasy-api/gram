@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -620,4 +621,54 @@ func TestOrganizationUserSessionIssuerMigrateScopeAndRBAC(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.MoveIssuer(readCtx, &orggen.MoveIssuerPayload{ID: source.ID})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// A registration resolves its issuer before it inserts. The insert's foreign
+// key waits for a migration holding the issuer, but once that commits the
+// retired issuer still satisfies the key, so the insert has to re-read
+// liveness under its own lock and land nowhere rather than on the tombstone.
+func TestOrganizationUserSessionIssuerMigrateRejectsStaleClientRegistration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sourceID := seedIssuer(t, ctx, ti, "stale-registration-source")
+	target, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "stale-registration-target", AuthnChallengeMode: "chain", SessionDurationHours: 24})
+	require.NoError(t, err)
+	_, err = seedUserSessionClient(t, ctx, ti.conn, sourceID, "stale-registration-existing")
+	require.NoError(t, err)
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: target.ID})
+	require.NoError(t, err)
+	require.True(t, preflight.CanMigrate)
+
+	// Park the migration after it has locked the source issuer FOR UPDATE:
+	// it takes the source clients next, and this transaction holds them.
+	clientLock := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, usersessionsrepo.New(clientLock).LockUserSessionIssuerClientsForMigration(ctx, sourceID))
+	migrateErr := make(chan error, 1)
+	go func() {
+		_, migrateIssuerErr := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID, ConfirmedWarningsFingerprint: &preflight.WarningsFingerprint})
+		migrateErr <- migrateIssuerErr
+	}()
+	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
+
+	// The late registration already resolved the source issuer as live.
+	registerErr := make(chan error, 1)
+	go func() {
+		_, seedErr := seedUserSessionClient(t, ctx, ti.conn, sourceID, "stale-registration-late")
+		registerErr <- seedErr
+	}()
+	require.Never(t, func() bool { return len(registerErr) > 0 }, 250*time.Millisecond, 10*time.Millisecond, "registration must wait behind the migration's issuer lock")
+
+	require.NoError(t, clientLock.Commit(ctx))
+	require.Eventually(t, func() bool { return len(migrateErr) > 0 }, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, <-migrateErr)
+	require.Eventually(t, func() bool { return len(registerErr) > 0 }, 5*time.Second, 10*time.Millisecond)
+	require.ErrorIs(t, <-registerErr, pgx.ErrNoRows, "the registration re-reads the retired issuer and inserts nothing")
+
+	clients, err := usersessionsrepo.New(ti.conn).CountUserSessionIssuerClientsForMigration(ctx, usersessionsrepo.CountUserSessionIssuerClientsForMigrationParams{UserSessionIssuerID: sourceID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Zero(t, clients, "no live client may reference the retired source issuer")
 }

@@ -1251,6 +1251,19 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txQueries := remotesessions_repo.New(dbtx)
 
+	// Issuer first, before the client row, so this transaction and an issuer
+	// migration acquire locks in the same order. A login whose issuer was
+	// retired in the meantime is rejected here rather than stored against the
+	// tombstone.
+	if _, err := txQueries.LockLiveUserSessionIssuerForRemoteSessionWrite(ctx, remotesessions_repo.LockLiveUserSessionIssuerForRemoteSessionWriteParams{
+		ID: state.UserSessionIssuerID, ProjectID: state.ProjectID, OrganizationID: state.OrganizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return none, oops.E(oops.CodeUnauthorized, nil, "the identity provider this login was started from no longer exists").LogWarn(ctx, logger)
+		}
+		return none, oops.E(oops.CodeUnexpected, err, "lock user session issuer for remote session write").LogError(ctx, logger)
+	}
+
 	// No row means the client itself is gone, which the binding recheck below
 	// rejects on its own — there is nothing left to serialize against.
 	if _, err := txQueries.LockRemoteSessionClientForSessionWrite(ctx, state.RemoteSessionClientID); err != nil && !errors.Is(err, pgx.ErrNoRows) {

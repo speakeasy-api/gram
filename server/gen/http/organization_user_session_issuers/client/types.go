@@ -280,8 +280,9 @@ type GetIssuerMigratePreflightResponseBody struct {
 	// Whether a Platform MCP catalog registration owns either issuer. True blocks
 	// migration.
 	PlatformOwned *bool `form:"platform_owned,omitempty" json:"platform_owned,omitempty" xml:"platform_owned,omitempty"`
-	// Configuration differences that do not invalidate existing sessions but
-	// change future authorization behavior.
+	// Configuration differences that do not block the migration. The target's
+	// values become authoritative for future authorization; existing sessions and
+	// refresh tokens are unaffected.
 	Warnings []*UserSessionIssuerFieldMismatchResponseBody `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
 	// Stable fingerprint of the current warnings. Empty when there are no
 	// warnings; otherwise pass this exact value to migrateIssuer to confirm them.

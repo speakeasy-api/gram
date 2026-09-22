@@ -57,7 +57,7 @@ export type OrganizationUserSessionIssuerMigratePreflight = {
    */
   sessionCount: number;
   /**
-   * Configuration differences that do not invalidate existing sessions but change future authorization behavior.
+   * Configuration differences that do not block the migration. The target's values become authoritative for future authorization; existing sessions and refresh tokens are unaffected.
    */
   warnings: Array<UserSessionIssuerFieldMismatch>;
   /**

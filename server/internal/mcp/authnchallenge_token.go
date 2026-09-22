@@ -22,7 +22,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -704,6 +706,16 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 			return oops.E(oops.CodeUnavailable, err, "begin session admission")
 		}
 		admissionQueries = usersessions_repo.New(admissionTx)
+		// Issuer first, before any other row lock, so this transaction and an
+		// issuer migration acquire locks in the same order.
+		if _, err := admissionQueries.LockLiveUserSessionIssuerForChildWrite(ctx, usersessions_repo.LockLiveUserSessionIssuerForChildWriteParams{
+			ID: endpoint.UserSessionIssuerID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
+			}
+			return oops.E(oops.CodeUnavailable, err, "lock user session issuer for session admission")
+		}
 		if _, err := remotesessions_repo.New(admissionTx).LockPrincipalRemoteSessionBindings(ctx, remotesessions_repo.LockPrincipalRemoteSessionBindingsParams{
 			ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
 			PrincipalID: agentAuthorization.AgentID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
@@ -995,6 +1007,27 @@ func (s *Service) rotateRefreshToken(
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := usersessions_repo.New(dbtx)
+	// Issuer first, before the old session row, so rotation and an issuer
+	// migration acquire locks in the same order. An issuer retired since the
+	// endpoint resolved yields no rows here rather than a successor session
+	// stranded on its tombstone. Under REPEATABLE READ a locking read that
+	// waited on a commit reports a serialization failure instead of
+	// re-evaluating, so a migration that landed during the wait surfaces as a
+	// retryable outage: nothing was claimed, and the retry resolves the
+	// endpoint against the surviving issuer.
+	if _, err := txRepo.LockLiveUserSessionIssuerForChildWrite(ctx, usersessions_repo.LockLiveUserSessionIssuerForChildWriteParams{
+		ID: endpoint.UserSessionIssuerID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return true, oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.SerializationFailure {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request deferred", clientRow.ClientID, presentedAuthMethod, "refresh_token", "issuer_changed_during_rotation")
+			return true, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "the identity provider changed during rotation; retry")
+		}
+		return true, oops.E(oops.CodeUnexpected, err, "lock user session issuer for refresh token rotation").LogError(ctx, logger)
+	}
 	oldSession, err := txRepo.RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		RefreshTokenHash:    refreshTokenHash,
@@ -1551,6 +1584,9 @@ func (s *Service) mintSession(
 		ToolSelection:          params.ToolSelection,
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
 	}
 

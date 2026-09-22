@@ -316,7 +316,7 @@ var _ = Service("organizationUserSessionIssuers", func() {
 	})
 
 	Method("migrateIssuer", func() {
-		Description("Consolidate a source user_session_issuer onto a target issuer, preserving clients, sessions, attachments, and remote-session credentials before soft-deleting the source. The target must be in the same project or a broader organization scope. Requires org:admin.")
+		Description("Consolidate a source user_session_issuer onto a target issuer, preserving clients, sessions, attachments, and remote-session credentials before soft-deleting the source. The target must be in the same project or a broader organization scope. Access tokens issued through the authorization_code and refresh_token grants are audience-bound to the issuer, so once a repointed MCP server verifies bearers against the target, outstanding access tokens minted under the source are rejected until the client refreshes. Migrated sessions and refresh tokens keep working, so the refresh succeeds without re-authorization. Tokens from the jwt-bearer (ID-JAG) grant are bound to the resource URL and are unaffected. Requires org:admin.")
 		Payload(func() {
 			Attribute("source_id", String, "The user_session_issuer to migrate away from; soft-deleted on success.", func() { Format(FormatUUID) })
 			Attribute("target_id", String, "The surviving user_session_issuer.", func() { Format(FormatUUID) })
@@ -554,7 +554,7 @@ var OrganizationUserSessionIssuerMigratePreflight = Type("OrganizationUserSessio
 	Attribute("principal_binding_conflict_count", Int, "Active principal bindings that would violate target uniqueness. Non-zero blocks migration.")
 	Attribute("ema_binding_conflict_count", Int, "Enterprise-managed authorization bindings already present on the target. Non-zero blocks migration.")
 	Attribute("platform_owned", Boolean, "Whether a Platform MCP catalog registration owns either issuer. True blocks migration.")
-	Attribute("warnings", ArrayOf(UserSessionIssuerFieldMismatch), "Configuration differences that do not invalidate existing sessions but change future authorization behavior.")
+	Attribute("warnings", ArrayOf(UserSessionIssuerFieldMismatch), "Configuration differences that do not block the migration. The target's values become authoritative for future authorization; existing sessions and refresh tokens are unaffected.")
 	Attribute("warnings_fingerprint", String, "Stable fingerprint of the current warnings. Empty when there are no warnings; otherwise pass this exact value to migrateIssuer to confirm them.")
 	Attribute("can_migrate", Boolean, "True when no hard blocker is present.")
 	Required("client_count", "session_count", "consent_count", "cimd_client_count", "remote_session_count", "conflicting_client_ids", "principal_binding_conflict_count", "ema_binding_conflict_count", "platform_owned", "warnings", "warnings_fingerprint", "can_migrate")

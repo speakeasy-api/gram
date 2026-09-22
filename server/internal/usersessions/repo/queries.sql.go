@@ -622,6 +622,14 @@ func (q *Queries) CreateOrganizationUserSessionIssuerCimdClient(ctx context.Cont
 }
 
 const createUserSession = `-- name: CreateUserSession :one
+WITH issuer AS (
+    SELECT issuer.id, issuer.project_id, COALESCE(issuer.organization_id, project.organization_id) AS organization_id
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id = $11
+      AND issuer.deleted IS FALSE
+    FOR KEY SHARE OF issuer
+)
 INSERT INTO user_sessions (
     project_id,
     organization_id,
@@ -637,14 +645,10 @@ INSERT INTO user_sessions (
     expires_at,
     tool_selection
 )
-VALUES (
-    (SELECT project_id FROM user_session_issuers WHERE id = $1),
-    (
-        SELECT COALESCE(issuer.organization_id, project.organization_id)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id = $1
-    ),
+SELECT
+    issuer.project_id,
+    issuer.organization_id,
+    issuer.id,
     $1,
     $2,
     $3,
@@ -654,14 +658,12 @@ VALUES (
     $7,
     $8,
     $9,
-    $10,
-    $11
-)
+    $10
+FROM issuer
 RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionParams struct {
-	UserSessionIssuerID    uuid.UUID
 	UserSessionClientID    uuid.NullUUID
 	SubjectUrn             urn.SessionSubject
 	AuthorizerUserID       pgtype.Text
@@ -672,14 +674,22 @@ type CreateUserSessionParams struct {
 	RefreshExpiresAt       pgtype.Timestamptz
 	ExpiresAt              pgtype.Timestamptz
 	ToolSelection          []byte
+	UserSessionIssuerID    uuid.UUID
 }
 
 // user_session_client_id binds the session to the DCR client that minted it.
 // The /token refresh path requires the same client to refresh; see
 // HandleToken's refresh_token grant.
+//
+// The issuer is read under FOR KEY SHARE with the liveness predicate inside
+// the locking read, so a session minted while a migration or delete holds the
+// issuer waits for it and is then re-evaluated against the committed row: a
+// retired issuer yields no rows rather than a session stranded on a tombstone.
+// Transactions that lock other rows before minting take
+// LockLiveUserSessionIssuerForChildWrite first so this wait never sits behind
+// a lock the migration is queued on.
 func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionParams) (UserSession, error) {
 	row := q.db.QueryRow(ctx, createUserSession,
-		arg.UserSessionIssuerID,
 		arg.UserSessionClientID,
 		arg.SubjectUrn,
 		arg.AuthorizerUserID,
@@ -690,6 +700,7 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		arg.RefreshExpiresAt,
 		arg.ExpiresAt,
 		arg.ToolSelection,
+		arg.UserSessionIssuerID,
 	)
 	var i UserSession
 	err := row.Scan(
@@ -718,6 +729,13 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 
 const createUserSessionClient = `-- name: CreateUserSessionClient :one
 
+WITH issuer AS (
+    SELECT issuer.id, issuer.project_id, issuer.organization_id
+    FROM user_session_issuers AS issuer
+    WHERE issuer.id = $9
+      AND issuer.deleted IS FALSE
+    FOR KEY SHARE OF issuer
+)
 INSERT INTO user_session_clients (
     project_id,
     organization_id,
@@ -731,24 +749,23 @@ INSERT INTO user_session_clients (
     client_jwks,
     client_jwks_uri
 )
-VALUES (
-    (SELECT project_id FROM user_session_issuers WHERE id = $1),
-    (SELECT organization_id FROM user_session_issuers WHERE id = $1),
+SELECT
+    issuer.project_id,
+    issuer.organization_id,
+    issuer.id,
     $1,
     $2,
     $3,
     $4,
     $5,
-    $6,
-    $7::text,
-    $8::jsonb,
-    $9::text
-)
+    $6::text,
+    $7::jsonb,
+    $8::text
+FROM issuer
 RETURNING id, project_id, organization_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, token_endpoint_auth_method, client_jwks, client_jwks_uri, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionClientParams struct {
-	UserSessionIssuerID     uuid.UUID
 	ClientID                string
 	ClientSecretHash        pgtype.Text
 	ClientName              string
@@ -757,15 +774,23 @@ type CreateUserSessionClientParams struct {
 	TokenEndpointAuthMethod string
 	ClientJwks              []byte
 	ClientJwksUri           pgtype.Text
+	UserSessionIssuerID     uuid.UUID
 }
 
 // The Create* queries below are exercised by tests and by the OAuth surface
 // that lands in milestone #2 (DCR registration, /token exchange, /authorize
 // consent). They have no exposure on the management API.
 // Registers a client from an RFC 7591 request.
+//
+// The issuer is read under FOR KEY SHARE, the lock the row's foreign key
+// takes anyway, with the liveness predicate inside the locking read. A
+// migration or delete holding a conflicting lock makes this statement wait,
+// and once it commits the row is re-evaluated against its new version: a
+// retired issuer then yields no rows instead of a client that satisfies the
+// foreign key but belongs to a tombstone. The caller's earlier liveness
+// check cannot provide this, since it ran before the wait.
 func (q *Queries) CreateUserSessionClient(ctx context.Context, arg CreateUserSessionClientParams) (UserSessionClient, error) {
 	row := q.db.QueryRow(ctx, createUserSessionClient,
-		arg.UserSessionIssuerID,
 		arg.ClientID,
 		arg.ClientSecretHash,
 		arg.ClientName,
@@ -774,6 +799,7 @@ func (q *Queries) CreateUserSessionClient(ctx context.Context, arg CreateUserSes
 		arg.TokenEndpointAuthMethod,
 		arg.ClientJwks,
 		arg.ClientJwksUri,
+		arg.UserSessionIssuerID,
 	)
 	var i UserSessionClient
 	err := row.Scan(
@@ -803,6 +829,13 @@ func (q *Queries) CreateUserSessionClient(ctx context.Context, arg CreateUserSes
 }
 
 const createUserSessionConsent = `-- name: CreateUserSessionConsent :one
+WITH client AS (
+    SELECT client.id, client.project_id, client.organization_id
+    FROM user_session_clients AS client
+    WHERE client.id = $3
+      AND client.deleted IS FALSE
+    FOR KEY SHARE OF client
+)
 INSERT INTO user_session_consents (
     project_id,
     organization_id,
@@ -810,24 +843,28 @@ INSERT INTO user_session_consents (
     user_session_client_id,
     remote_set_hash
 )
-VALUES (
-    (SELECT project_id FROM user_session_clients WHERE id = $1),
-    (SELECT organization_id FROM user_session_clients WHERE id = $1),
-    $2,
+SELECT
+    client.project_id,
+    client.organization_id,
     $1,
-    $3
-)
+    client.id,
+    $2
+FROM client
 RETURNING id, project_id, organization_id, subject_urn, user_session_client_id, remote_set_hash, consented_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionConsentParams struct {
-	UserSessionClientID uuid.UUID
 	SubjectUrn          urn.SessionSubject
 	RemoteSetHash       string
+	UserSessionClientID uuid.UUID
 }
 
+// Tenancy is inherited from the client, read under FOR KEY SHARE with the
+// liveness predicate inside the locking read: a consent recorded while a
+// migration moves the client waits for it and then copies the client's
+// committed tenancy, and a revoked client yields no rows.
 func (q *Queries) CreateUserSessionConsent(ctx context.Context, arg CreateUserSessionConsentParams) (UserSessionConsent, error) {
-	row := q.db.QueryRow(ctx, createUserSessionConsent, arg.UserSessionClientID, arg.SubjectUrn, arg.RemoteSetHash)
+	row := q.db.QueryRow(ctx, createUserSessionConsent, arg.SubjectUrn, arg.RemoteSetHash, arg.UserSessionClientID)
 	var i UserSessionConsent
 	err := row.Scan(
 		&i.ID,
@@ -3174,6 +3211,39 @@ func (q *Queries) ListWorkloadSessionLabels(ctx context.Context, arg ListWorkloa
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockLiveUserSessionIssuerForChildWrite = `-- name: LockLiveUserSessionIssuerForChildWrite :one
+SELECT id
+FROM user_session_issuers
+WHERE id = $1
+  AND (project_id = $2::uuid OR (project_id IS NULL AND organization_id = $3::text))
+  AND deleted IS FALSE
+FOR KEY SHARE
+`
+
+type LockLiveUserSessionIssuerForChildWriteParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// First lock for a transaction that writes issuer children after locking
+// other rows, such as refresh rotation (old session row, then new session) or
+// agent admission (principal bindings, then session). Issuer migration holds
+// the issuer FOR UPDATE and then locks those same child rows, so a child write
+// that reached the issuer's foreign key only after taking its own row locks
+// would deadlock with it. Taking the key-share lock up front puts both sides
+// in issuer-first order, and the liveness predicate is re-evaluated once the
+// migration commits, so a retired issuer yields no rows. FOR KEY SHARE is the
+// mode the foreign key takes anyway: it does not conflict with the FOR NO KEY
+// UPDATE that issuer deletion holds, which keeps deletion's own cascade the
+// one that sweeps a write that raced it.
+func (q *Queries) LockLiveUserSessionIssuerForChildWrite(ctx context.Context, arg LockLiveUserSessionIssuerForChildWriteParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockLiveUserSessionIssuerForChildWrite, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockOrganizationUserSessionIssuer = `-- name: LockOrganizationUserSessionIssuer :one

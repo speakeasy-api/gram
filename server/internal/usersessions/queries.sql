@@ -170,6 +170,25 @@ WHERE id = @id
   AND deleted IS FALSE
 FOR NO KEY UPDATE;
 
+-- name: LockLiveUserSessionIssuerForChildWrite :one
+-- First lock for a transaction that writes issuer children after locking
+-- other rows, such as refresh rotation (old session row, then new session) or
+-- agent admission (principal bindings, then session). Issuer migration holds
+-- the issuer FOR UPDATE and then locks those same child rows, so a child write
+-- that reached the issuer's foreign key only after taking its own row locks
+-- would deadlock with it. Taking the key-share lock up front puts both sides
+-- in issuer-first order, and the liveness predicate is re-evaluated once the
+-- migration commits, so a retired issuer yields no rows. FOR KEY SHARE is the
+-- mode the foreign key takes anyway: it does not conflict with the FOR NO KEY
+-- UPDATE that issuer deletion holds, which keeps deletion's own cascade the
+-- one that sweeps a write that raced it.
+SELECT id
+FROM user_session_issuers
+WHERE id = @id
+  AND (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id = @organization_id::text))
+  AND deleted IS FALSE
+FOR KEY SHARE;
+
 -- name: GetOrganizationManagedUserSessionIssuerByID :one
 -- Organization administration spans organization-owned issuers and every
 -- project-owned issuer whose project belongs to the organization.
@@ -1453,6 +1472,21 @@ WHERE user_session_issuer_id = @user_session_issuer_id
 
 -- name: CreateUserSessionClient :one
 -- Registers a client from an RFC 7591 request.
+--
+-- The issuer is read under FOR KEY SHARE, the lock the row's foreign key
+-- takes anyway, with the liveness predicate inside the locking read. A
+-- migration or delete holding a conflicting lock makes this statement wait,
+-- and once it commits the row is re-evaluated against its new version: a
+-- retired issuer then yields no rows instead of a client that satisfies the
+-- foreign key but belongs to a tombstone. The caller's earlier liveness
+-- check cannot provide this, since it ran before the wait.
+WITH issuer AS (
+    SELECT issuer.id, issuer.project_id, issuer.organization_id
+    FROM user_session_issuers AS issuer
+    WHERE issuer.id = @user_session_issuer_id
+      AND issuer.deleted IS FALSE
+    FOR KEY SHARE OF issuer
+)
 INSERT INTO user_session_clients (
     project_id,
     organization_id,
@@ -1466,10 +1500,10 @@ INSERT INTO user_session_clients (
     client_jwks,
     client_jwks_uri
 )
-VALUES (
-    (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
-    (SELECT organization_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
-    @user_session_issuer_id,
+SELECT
+    issuer.project_id,
+    issuer.organization_id,
+    issuer.id,
     @client_id,
     @client_secret_hash,
     @client_name,
@@ -1478,7 +1512,7 @@ VALUES (
     @token_endpoint_auth_method::text,
     sqlc.narg('client_jwks')::jsonb,
     sqlc.narg('client_jwks_uri')::text
-)
+FROM issuer
 RETURNING *;
 
 -- name: UpsertUserSessionClientFromCIMD :one
@@ -1680,6 +1714,22 @@ RETURNING *;
 -- user_session_client_id binds the session to the DCR client that minted it.
 -- The /token refresh path requires the same client to refresh; see
 -- HandleToken's refresh_token grant.
+--
+-- The issuer is read under FOR KEY SHARE with the liveness predicate inside
+-- the locking read, so a session minted while a migration or delete holds the
+-- issuer waits for it and is then re-evaluated against the committed row: a
+-- retired issuer yields no rows rather than a session stranded on a tombstone.
+-- Transactions that lock other rows before minting take
+-- LockLiveUserSessionIssuerForChildWrite first so this wait never sits behind
+-- a lock the migration is queued on.
+WITH issuer AS (
+    SELECT issuer.id, issuer.project_id, COALESCE(issuer.organization_id, project.organization_id) AS organization_id
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id = @user_session_issuer_id
+      AND issuer.deleted IS FALSE
+    FOR KEY SHARE OF issuer
+)
 INSERT INTO user_sessions (
     project_id,
     organization_id,
@@ -1695,15 +1745,10 @@ INSERT INTO user_sessions (
     expires_at,
     tool_selection
 )
-VALUES (
-    (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
-    (
-        SELECT COALESCE(issuer.organization_id, project.organization_id)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id = @user_session_issuer_id
-    ),
-    @user_session_issuer_id,
+SELECT
+    issuer.project_id,
+    issuer.organization_id,
+    issuer.id,
     @user_session_client_id,
     @subject_urn,
     @authorizer_user_id,
@@ -1714,10 +1759,21 @@ VALUES (
     @refresh_expires_at,
     @expires_at,
     @tool_selection
-)
+FROM issuer
 RETURNING *;
 
 -- name: CreateUserSessionConsent :one
+-- Tenancy is inherited from the client, read under FOR KEY SHARE with the
+-- liveness predicate inside the locking read: a consent recorded while a
+-- migration moves the client waits for it and then copies the client's
+-- committed tenancy, and a revoked client yields no rows.
+WITH client AS (
+    SELECT client.id, client.project_id, client.organization_id
+    FROM user_session_clients AS client
+    WHERE client.id = @user_session_client_id
+      AND client.deleted IS FALSE
+    FOR KEY SHARE OF client
+)
 INSERT INTO user_session_consents (
     project_id,
     organization_id,
@@ -1725,13 +1781,13 @@ INSERT INTO user_session_consents (
     user_session_client_id,
     remote_set_hash
 )
-VALUES (
-    (SELECT project_id FROM user_session_clients WHERE id = @user_session_client_id),
-    (SELECT organization_id FROM user_session_clients WHERE id = @user_session_client_id),
+SELECT
+    client.project_id,
+    client.organization_id,
     @subject_urn,
-    @user_session_client_id,
+    client.id,
     @remote_set_hash
-)
+FROM client
 RETURNING *;
 
 -- name: ListUserSessionServerFacets :many

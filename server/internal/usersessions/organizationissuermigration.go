@@ -277,6 +277,11 @@ func (p userSessionMigrationPreflight) canMigrate() bool {
 	return len(p.conflictingClientIDs) == 0 && p.principalBindingConflictCount == 0 && p.emaBindingConflictCount == 0 && !p.platformOwned
 }
 
+// userSessionMigrationWarnings lists the configuration differences an
+// administrator must confirm before the target's values become authoritative.
+// Deterministic side effects of every migration, such as issuer-bound access
+// tokens being rejected until refreshed, are documented on the endpoint
+// instead of reported here: a warning that never varies carries no decision.
 func userSessionMigrationWarnings(source, target repo.UserSessionIssuer) []*orggen.UserSessionIssuerFieldMismatch {
 	sourceView, targetView := UserSessionIssuerView(source), UserSessionIssuerView(target)
 	settings := []struct{ field, source, target string }{
