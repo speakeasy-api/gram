@@ -59,7 +59,9 @@ export type DetectionRule = {
  *  (see `useDetectorMode`): `off` and `shadow` render `presidio` (under
  *  `shadow` the analyzer also scans server-side for comparison but never
  *  enforces, so the editor keeps the legacy controls); only `llm` renders
- *  `llm`. */
+ *  `llm`. Until the flag is converted to multivariate in PostHog it has no
+ *  variant, and its boolean-enabled read also renders `llm` (the transition
+ *  rule in `useDetectorMode`). */
 export type DetectorMode = "presidio" | "llm";
 
 export type RuleCategoryMeta = {

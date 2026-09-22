@@ -36,8 +36,8 @@ export const nullTelemetry: Telemetry = {
 // Variants the localhost provider reports for multivariate flags. Every
 // other flag reads as a plain enabled boolean (`isFeatureEnabled` is always
 // true, `getFeatureFlag` is undefined). The risk analyzer defaults to `shadow`
-// so the local dashboard shows the legacy policy editor unless the local
-// flags file says otherwise.
+// so the local dashboard shows the legacy policy editor. Change the entry
+// here to exercise another variant locally.
 const DEV_FEATURE_FLAG_VARIANTS: Partial<Record<string, string>> = {
   [FEATURE_FLAGS.riskLlmAnalyzer]: "shadow",
 };

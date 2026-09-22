@@ -12,46 +12,46 @@ vi.mock("@/hooks/useFeatureFlagVariant", () => ({
 }));
 
 describe("useDetectorMode", () => {
-  it.each<[string, FeatureFlagVariantResult, "llm" | "presidio"]>([
+  it.each<[string, "llm" | "presidio", FeatureFlagVariantResult]>([
     [
       "llm variant",
-      { status: "resolved", variant: "llm", enabled: true },
       "llm",
+      { status: "resolved", variant: "llm", enabled: true },
     ],
     [
       "shadow variant",
-      { status: "resolved", variant: "shadow", enabled: true },
       "presidio",
+      { status: "resolved", variant: "shadow", enabled: true },
     ],
     [
       "off variant, which PostHog still reports as enabled",
-      { status: "resolved", variant: "off", enabled: true },
       "presidio",
+      { status: "resolved", variant: "off", enabled: true },
     ],
     [
       "unknown variant",
-      { status: "resolved", variant: "canary", enabled: true },
       "presidio",
+      { status: "resolved", variant: "canary", enabled: true },
     ],
     [
       "boolean flag enabled (transition rule)",
-      { status: "resolved", variant: undefined, enabled: true },
       "llm",
+      { status: "resolved", variant: undefined, enabled: true },
     ],
     [
       "boolean flag reported as the string true",
-      { status: "resolved", variant: "true", enabled: true },
       "llm",
+      { status: "resolved", variant: "true", enabled: true },
     ],
     [
       "boolean flag disabled",
-      { status: "resolved", variant: undefined, enabled: false },
       "presidio",
+      { status: "resolved", variant: undefined, enabled: false },
     ],
-    ["loading", { status: "loading" }, "presidio"],
-    ["missing", { status: "missing" }, "presidio"],
-    ["error", { status: "error" }, "presidio"],
-  ])("%s => %s", (_name, flag, expected) => {
+    ["loading", "presidio", { status: "loading" }],
+    ["missing", "presidio", { status: "missing" }],
+    ["error", "presidio", { status: "error" }],
+  ])("%s => %s", (_name, expected, flag) => {
     mocks.flagResult.mockReturnValue(flag);
 
     const { result } = renderHook(() => useDetectorMode());
