@@ -19,6 +19,13 @@ import (
 
 // GetClientDelegationStatus only reads stored configuration and observations.
 // It must not load a live provider, decrypt a credential, or perform discovery.
+// GetClientDelegationStatus is a management-only diagnostic of historical
+// aggregate observations, not a per-human grant or live delegation-readiness
+// outcome. It is intentionally not registered with Platform MCP until an
+// outcome-oriented delegation workflow defines its organization-admin discovery,
+// audience, and fresh authorization checks. Existing provider authorization and
+// client admission tools manage project registrations, not organization-level
+// upstream credential observations.
 func (s *Service) GetClientDelegationStatus(ctx context.Context, payload *orgclientsgen.GetClientDelegationStatusPayload) (*orgclientsgen.OrganizationClientDelegationStatus, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {

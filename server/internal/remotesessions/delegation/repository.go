@@ -1,9 +1,11 @@
-package remotesessions
+package delegation
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -11,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"time"
 )
 
 type delegationRepository struct{ db *pgxpool.Pool }
@@ -42,14 +43,14 @@ func credentialFromRow(row repo.TrustedIssuerSession) delegationCredential {
 		requestConfig:   row.OfflineAccessRequestConfigHash.String,
 	}
 }
-func (r *delegationRepository) load(ctx context.Context, b DelegationBinding) (delegationCredential, error) {
+func (r *delegationRepository) load(ctx context.Context, b Binding) (delegationCredential, error) {
 	row, err := repo.New(r.db).GetTrustedDelegationCredential(ctx, repo.GetTrustedDelegationCredentialParams{OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String()})
 	if err != nil {
 		return delegationCredential{}, fmt.Errorf("load delegation credential: %w", err)
 	}
 	return credentialFromRow(row), nil
 }
-func (r *delegationRepository) save(ctx context.Context, b DelegationBinding, expected int64, c delegationCredential) (bool, error) {
+func (r *delegationRepository) save(ctx context.Context, b Binding, expected int64, c delegationCredential) (bool, error) {
 	_, err := repo.New(r.db).UpsertTrustedDelegationCredential(ctx, repo.UpsertTrustedDelegationCredentialParams{
 		OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String(), ExpectedGeneration: expected,
 		IdentityAssertionEncrypted:     conv.ToPGTextEmpty(c.assertion),
@@ -75,7 +76,7 @@ func (r *delegationRepository) save(ctx context.Context, b DelegationBinding, ex
 	}
 	return true, nil
 }
-func (r *delegationRepository) claim(ctx context.Context, b DelegationBinding, generation int64, claim uuid.UUID, _ time.Time) (bool, error) {
+func (r *delegationRepository) claim(ctx context.Context, b Binding, generation int64, claim uuid.UUID, _ time.Time) (bool, error) {
 	_, err := repo.New(r.db).ClaimTrustedDelegationRefresh(ctx, repo.ClaimTrustedDelegationRefreshParams{
 		OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String(), ExpectedGeneration: generation, RefreshClaimID: claim,
 	})
@@ -87,7 +88,7 @@ func (r *delegationRepository) claim(ctx context.Context, b DelegationBinding, g
 	}
 	return true, nil
 }
-func (r *delegationRepository) finish(ctx context.Context, b DelegationBinding, generation int64, claim uuid.UUID, c delegationCredential) (bool, error) {
+func (r *delegationRepository) finish(ctx context.Context, b Binding, generation int64, claim uuid.UUID, c delegationCredential) (bool, error) {
 	_, err := repo.New(r.db).CompleteTrustedDelegationRefresh(ctx, repo.CompleteTrustedDelegationRefreshParams{
 		OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String(), ExpectedGeneration: generation, RefreshClaimID: claim, NextRefreshClaimID: uuid.NullUUID{UUID: c.claim, Valid: c.claim != uuid.Nil},
 		IdentityAssertionEncrypted:     conv.ToPGTextEmpty(c.assertion),
@@ -113,7 +114,7 @@ func (r *delegationRepository) finish(ctx context.Context, b DelegationBinding, 
 	}
 	return true, nil
 }
-func (r *delegationRepository) clearExpired(ctx context.Context, b DelegationBinding, _ time.Time) error {
+func (r *delegationRepository) clearExpired(ctx context.Context, b Binding, _ time.Time) error {
 	_, err := repo.New(r.db).ClearExpiredTrustedDelegationAssertion(ctx, repo.ClearExpiredTrustedDelegationAssertionParams{OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String()})
 	if err != nil {
 		return fmt.Errorf("clear delegation credential: %w", err)
@@ -123,7 +124,7 @@ func (r *delegationRepository) clearExpired(ctx context.Context, b DelegationBin
 
 // revoke deliberately bypasses live trust checks: authorized erasure must still
 // work after trust removal. The update atomically invalidates pending refreshes.
-func (r *delegationRepository) revoke(ctx context.Context, b DelegationBinding) error {
+func (r *delegationRepository) revoke(ctx context.Context, b Binding) error {
 	_, err := repo.New(r.db).RevokeTrustedDelegationCredential(ctx, repo.RevokeTrustedDelegationCredentialParams{
 		OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String(),
 	})
@@ -133,7 +134,7 @@ func (r *delegationRepository) revoke(ctx context.Context, b DelegationBinding) 
 	return nil
 }
 
-func (r *delegationRepository) markRefreshAttempt(ctx context.Context, b DelegationBinding, generation int64, claim uuid.UUID, _ time.Time) (bool, error) {
+func (r *delegationRepository) markRefreshAttempt(ctx context.Context, b Binding, generation int64, claim uuid.UUID, _ time.Time) (bool, error) {
 	count, err := repo.New(r.db).MarkTrustedDelegationRefreshAttempt(ctx, repo.MarkTrustedDelegationRefreshAttemptParams{
 		OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String(), ExpectedGeneration: generation, RefreshClaimID: claim,
 	})
@@ -143,7 +144,7 @@ func (r *delegationRepository) markRefreshAttempt(ctx context.Context, b Delegat
 	return count == 1, nil
 }
 
-func (r *delegationRepository) release(ctx context.Context, b DelegationBinding, generation int64, claim uuid.UUID) (bool, error) {
+func (r *delegationRepository) release(ctx context.Context, b Binding, generation int64, claim uuid.UUID) (bool, error) {
 	count, err := repo.New(r.db).ReleaseTrustedDelegationRefresh(ctx, repo.ReleaseTrustedDelegationRefreshParams{
 		OrganizationID: b.OrganizationID, ClientID: b.ClientID, SubjectUrn: urn.NewUserSubject(b.HumanID).String(), ExpectedGeneration: generation, RefreshClaimID: claim,
 	})

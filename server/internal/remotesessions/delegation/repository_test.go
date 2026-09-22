@@ -1,4 +1,4 @@
-package remotesessions
+package delegation
 
 import (
 	"testing"

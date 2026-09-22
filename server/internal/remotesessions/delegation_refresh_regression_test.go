@@ -101,8 +101,45 @@ func TestDelegationRefreshLifetimeWithoutRotation(t *testing.T) {
 				if tc.reported {
 					want = s.now().Add(time.Duration(tc.seconds) * time.Second)
 				}
-				require.Equal(t, want, credential.refreshExpiry)
+				require.WithinDuration(t, want, credential.refreshExpiry, time.Microsecond)
 			}
 		})
 	}
+}
+
+func TestDelegationRateLimitAfterRotationNeverResubmits(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "submitted-refresh", 30*time.Second), true))
+	posts := 0
+	upstreamRotated := false
+	doer := federatedHTTPDoerFunc(func(*http.Request) (*http.Response, error) {
+		posts++
+		upstreamRotated = true // Issuer commits rotation, but gateway loses its response.
+		return &http.Response{StatusCode: http.StatusTooManyRequests, Body: io.NopCloser(strings.NewReader("rate limited"))}, nil
+	})
+	s.refreshIdentity = func(ctx context.Context, _ *FederatedProvider, token, _, _ string) (*FederatedRefreshResult, error) {
+		require.Equal(t, "submitted-refresh", token)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://idp.example.test/token", nil)
+		require.NoError(t, err)
+		_, _, err = postFederatedRefresh(doer, req)
+		return nil, err
+	}
+	assertion, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrDelegationTemporary)
+	require.Empty(t, assertion.Value())
+	require.True(t, upstreamRotated)
+	later := s.now().Add(24 * time.Hour)
+	s.now = func() time.Time { return later }
+	for range 3 {
+		assertion, err = s.Resolve(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrDelegationTemporary)
+		require.Empty(t, assertion.Value())
+	}
+	require.Equal(t, 1, posts)
+	credential, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, credential.claim)
+	require.Equal(t, "submitted-refresh", delegationPlain(t, s, credential.refresh))
+	require.True(t, credential.refusedAt.IsZero())
 }
