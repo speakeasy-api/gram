@@ -47,6 +47,8 @@ type unmaskFinding struct {
 	falsePositiveAt  *time.Time
 	// shadow marks an engine-comparison row (shadow = 1), hidden from reveal.
 	shadow bool
+	// exclusionID is the retro exclusion a held row is attributed to.
+	exclusionID *uuid.UUID
 }
 
 // insertUnmaskFinding writes the fixture straight into risk_findings. Raw SQL
@@ -74,6 +76,12 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 		}
 		return *v
 	}
+	nullableUUID := func(v *uuid.UUID) any {
+		if v == nil {
+			return nil
+		}
+		return *v
+	}
 
 	require.NoError(t, ti.chConn.Exec(t.Context(), `
 		INSERT INTO risk_findings (
@@ -83,8 +91,8 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 			start_pos, end_pos, dead_letter_reason,
 			match_len, match_redacted,
 			excluded_at, false_positive_at, message_created_at,
-			surface, field, path, tool_call_id, shadow
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			surface, field, path, tool_call_id, shadow, exclusion_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		f.id, createdAt, f.orgID, f.projectID,
 		f.chatMessageID, f.contentPartID, f.chatID,
@@ -92,7 +100,7 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 		f.startPos, f.endPos, f.deadLetterReason,
 		f.matchLen, f.matchRedacted,
 		nullableTime(f.excludedAt), nullableTime(f.falsePositiveAt), createdAt,
-		f.surface, f.field, f.path, f.toolCallID, f.shadow,
+		f.surface, f.field, f.path, f.toolCallID, f.shadow, nullableUUID(f.exclusionID),
 	))
 	return f.id
 }

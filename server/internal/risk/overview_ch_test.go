@@ -190,6 +190,7 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 	require.Equal(t, int64(1), users["bob@example.com"])
 	require.Equal(t, int64(1), users["Unknown user"])
 	require.NotContains(t, users, "opaque-user-id")
+	require.NotContains(t, users, "carol@example.com", "the shadow row never reaches the per-user counts")
 
 	require.Len(t, result.TimeSeriesFindings, 504)
 	timeSeries := map[string]int64{}

@@ -228,6 +228,49 @@ func TestStartPublishFindingsStampsShadow(t *testing.T) {
 	require.True(t, pub.messages[2].GetShadow())
 }
 
+// TestStartPublishFindingsShadowChangesDeterministicID pins that the shadow
+// marker is part of the finding identity: the same finding published under
+// enforcing and shadow metadata (an organization moving between the llm and
+// shadow modes, or a redelivery across that switch) lands under two ids, so
+// the read-time per-id dedup can never collapse a shadow = 1 copy with a
+// shadow = 0 one. The enforcing id stays the historical one.
+func TestStartPublishFindingsShadowChangesDeterministicID(t *testing.T) {
+	t.Parallel()
+
+	pub := &recordingFindingPublisher{results: nil, messages: nil}
+	finding := testFinding()
+
+	enforcing := testFindingMetadata()
+	shadow := testFindingMetadata()
+	shadow.Shadow = true
+
+	_, _ = scanners.StartPublishFindings(t.Context(), pub, enforcing, []scanners.Finding{finding})
+	_, _ = scanners.StartPublishFindings(t.Context(), pub, shadow, []scanners.Finding{finding})
+	_, _ = scanners.StartPublishFindings(t.Context(), pub, shadow, []scanners.Finding{finding})
+	require.Len(t, pub.messages, 3)
+
+	require.NotEqual(t, pub.messages[0].GetId(), pub.messages[1].GetId(), "shadow and enforcing copies never share an id")
+	require.Equal(t, pub.messages[1].GetId(), pub.messages[2].GetId(), "the shadow id is deterministic")
+
+	enforcingParts := []string{
+		enforcing.RequestID,
+		enforcing.ChatMessageID,
+		enforcing.ProjectID,
+		enforcing.OrganizationID,
+		enforcing.RiskPolicyID,
+		strconv.FormatInt(enforcing.RiskPolicyVersion, 10),
+		finding.Source,
+		finding.RuleID,
+		strconv.Itoa(finding.StartPos),
+		strconv.Itoa(finding.EndPos),
+		finding.Match,
+	}
+	expectedEnforcing := uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:finding:"+strings.Join(enforcingParts, "\x00")))
+	require.Equal(t, expectedEnforcing.String(), pub.messages[0].GetId(), "enforcing ids keep the historical formula")
+	expectedShadow := uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:finding:"+strings.Join(append(enforcingParts, "shadow"), "\x00")))
+	require.Equal(t, expectedShadow.String(), pub.messages[1].GetId())
+}
+
 // The span-level arms must stay byte-identical with the offline backfill's
 // spanSurface (server/cmd/tools/migrations/riskfindings); the field=="" arms
 // are the live per-source defaults.

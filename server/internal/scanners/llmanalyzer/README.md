@@ -485,9 +485,11 @@ Log lines worth grepping: `risk llm completion failed`,
 ## Known POC limits
 
 - **Postgres-backed surfaces are blind.** Async findings exist only in
-  ClickHouse. Chat-transcript badges, watchdog, retroactive exclusions and the
-  skills / platform-MCP risk status read `risk_results` and will not show LLM
-  findings until they move to ClickHouse.
+  ClickHouse. Chat-transcript badges and the skills / platform-MCP risk
+  status read `risk_results` and will not show LLM findings until they move
+  to ClickHouse. The Watchdog reads `risk_findings`, and the retroactive
+  exclusion reconcile walks both stores, so those two see LLM findings
+  (and hide shadow rows) already.
 - **Reasoning may quote content.** `Finding.Description` is the model's
   rationale and can paraphrase the secret or personal data it flagged. It is
   stored with the same care as the judge rationale (500 rune cap, treated

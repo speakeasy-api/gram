@@ -60,7 +60,15 @@ func TestListRiskResults_ClickHouseShadowRowsHidden(t *testing.T) {
 	shadowSuppressed.ExclusionID = &exclusionID
 	shadowSuppressed.ExcludedReason = chrepo.ExcludedReasonRule
 
-	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{legacy, shadow, shadowSuppressed}))
+	// A legacy row dismissed by hand: the one row the Dismissed listing must
+	// still serve, so the assertion distinguishes "shadow rows are hidden"
+	// from "the listing returned nothing at all".
+	legacyDismissed := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, base.Add(time.Hour), base, "gitleaks", "secret.slack_token", "alice@example.com", "xoxb****ab", "fp-legacy-dismissed", "")
+	legacyDismissed.ExcludedAt = &excludedAt
+	legacyDismissed.ExcludedReason = chrepo.ExcludedReasonManual
+	legacyDismissed.FalsePositiveAt = &excludedAt
+
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{legacy, shadow, shadowSuppressed, legacyDismissed}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// Stored: every row landed, and only the model's carry the marker. Raw
@@ -83,6 +91,7 @@ func TestListRiskResults_ClickHouseShadowRowsHidden(t *testing.T) {
 		legacy.ID:           0,
 		shadow.ID:           1,
 		shadowSuppressed.ID: 1,
+		legacyDismissed.ID:  0,
 	}, stored)
 
 	// Risk Events: only the legacy row, and the count agrees.
@@ -92,9 +101,11 @@ func TestListRiskResults_ClickHouseShadowRowsHidden(t *testing.T) {
 	require.Equal(t, legacy.ID.String(), page.Results[0].ID)
 	require.Equal(t, int64(1), page.TotalCount)
 
-	// Dismissed: the suppressed shadow row never surfaces either.
+	// Dismissed: only the hand-dismissed legacy row; the suppressed shadow row
+	// never surfaces.
 	dismissed, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
 	require.NoError(t, err)
-	require.Empty(t, dismissed.Results)
-	require.Zero(t, dismissed.TotalCount)
+	require.Len(t, dismissed.Results, 1)
+	require.Equal(t, legacyDismissed.ID.String(), dismissed.Results[0].ID)
+	require.Equal(t, int64(1), dismissed.TotalCount)
 }
