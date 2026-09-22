@@ -514,7 +514,9 @@ func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
 			}
 			return rows, nil
 		}},
-		{name: "foreign project provenance", wantConstraint: "principal_remote_session_bindings_issuer_scope_fkey", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+		// Issuer scope changes cascade into the binding, so the tenant check
+		// rejects a provenance issuer that moved to a foreign project or organization.
+		{name: "foreign project provenance", wantConstraint: "principal_remote_session_bindings_issuer_scope_check", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
 			rows, err := q.MutateAttachmentForeignProjectProvenanceFixture(ctx, testrepo.MutateAttachmentForeignProjectProvenanceFixtureParams{ForeignProject: uuid.NullUUID{UUID: args.ForeignProject, Valid: true}, Provenance: args.Provenance, Project: uuid.NullUUID{UUID: args.Project, Valid: true}})
 			if err != nil {
 				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
@@ -528,7 +530,7 @@ func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
 			}
 			return rows, nil
 		}},
-		{name: "foreign organization provenance", wantConstraint: "principal_remote_session_bindings_issuer_scope_fkey", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+		{name: "foreign organization provenance", wantConstraint: "principal_remote_session_bindings_issuer_scope_check", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
 			rows, err := q.MutateAttachmentForeignOrganizationProvenanceFixture(ctx, testrepo.MutateAttachmentForeignOrganizationProvenanceFixtureParams{Provenance: args.Provenance, Project: uuid.NullUUID{UUID: args.Project, Valid: true}})
 			if err != nil {
 				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
