@@ -9,7 +9,6 @@ import (
 	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
-	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
@@ -24,18 +23,14 @@ import (
 // the empty check guards invalid persisted data rather than an unstorable row.
 //
 // A plain-http jwks_uri is refused here, before anything is fetched, with an
-// error wrapping workloadidentity.ErrJWKSURINotHTTPS. The table does not
-// constrain the scheme, so the stored value is not trusted to be https.
+// error wrapping jwks.ErrURINotHTTPS. The table does not constrain the scheme,
+// so the stored value is not trusted to be https.
 //
 // Errors name the issuer by name; a workload issuer has no slug, its URL being
 // its canonical name.
 func workloadIssuerKeySource(endpoint *ResolvedMcpEndpoint, issuer *workloadidentity_repo.WorkloadIssuer) (jwks.Source, error) {
 	if issuer.JwksUri == "" {
 		return jwks.Source{}, fmt.Errorf("workload issuer %q records no jwks_uri", issuer.Name)
-	}
-
-	if err := workloadidentity.ValidateJWKSURI(issuer.JwksUri); err != nil {
-		return jwks.Source{}, fmt.Errorf("workload issuer %q jwks_uri: %w", issuer.Name, err)
 	}
 
 	source, err := jwks.NewRemoteSource(issuer.JwksUri)
