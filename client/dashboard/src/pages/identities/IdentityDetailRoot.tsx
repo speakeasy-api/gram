@@ -26,7 +26,7 @@ import { registeredAgentHref } from "./identityRoster";
 import { Button } from "@/components/ui/Button";
 import { Link, Navigate, Outlet, useLocation, useParams } from "react-router";
 import type { IdentityOutletContext } from "./identityRoute";
-import { useIdentityIsKnown } from "./useIdentityQueries";
+import { useCanReadRisk, useIdentityIsKnown } from "./useIdentityQueries";
 
 /** How each resolved subject kind reads in the header chip. */
 /**
@@ -101,6 +101,7 @@ function IdentityDetailContent(): JSX.Element {
   // corrupt an identifier that legitimately contains a percent escape.
   const { identityUrn: urn = "" } = useParams<{ identityUrn: string }>();
   const encodedUrn = urn ? encodeIdentityUrn(urn) : undefined;
+  const canReadRisk = useCanReadRisk();
   const routes = useRoutes();
   const location = useLocation();
 
@@ -188,7 +189,12 @@ function IdentityDetailContent(): JSX.Element {
             of the viewport with nothing under it. */}
         <div className="bg-background flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 pb-16 lg:flex-row lg:gap-8">
           <IdentityRail
-            items={identityRailItems(routes, encodedUrn ?? "", location.search)}
+            items={identityRailItems(
+              routes,
+              encodedUrn ?? "",
+              location.search,
+              canReadRisk,
+            )}
             // Narrow, the rail is a scrollable row above the content: hiding
             // it left the other sub-pages reachable only by editing the URL.
             className="border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-8 lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0"

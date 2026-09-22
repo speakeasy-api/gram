@@ -280,33 +280,43 @@ export function MaskedMatch({
       )}
     >
       <SimpleTooltip tooltip={value}>
+        {/* Clicking the value masks it again, the same gesture that revealed
+            it, unless the click ended a text selection for copying. */}
         <span
           className={cn(
-            "min-w-0 font-mono text-xs",
+            "min-w-0 cursor-pointer font-mono text-xs",
             wrap
               ? "break-all whitespace-pre-wrap"
               : "overflow-x-auto whitespace-nowrap",
             contrast && "text-background",
           )}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (window.getSelection()?.toString()) return;
+            setRevealed(false);
+          }}
         >
           {value}
         </span>
       </SimpleTooltip>
-      <button
-        type="button"
-        className={cn(
-          "shrink-0",
-          contrast
-            ? "text-background/60 hover:text-background"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-        onClick={(e) => {
-          e.stopPropagation();
-          setRevealed(false);
-        }}
-      >
-        <Eye className="h-3 w-3" />
-      </button>
+      <SimpleTooltip tooltip="Hide">
+        <button
+          type="button"
+          aria-label="Hide match"
+          className={cn(
+            "shrink-0",
+            contrast
+              ? "text-background/60 hover:text-background"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={(e) => {
+            e.stopPropagation();
+            setRevealed(false);
+          }}
+        >
+          <Eye className="h-3 w-3" />
+        </button>
+      </SimpleTooltip>
     </span>
   );
 }
@@ -319,9 +329,10 @@ function prettyJSON(s: string): string {
   }
 }
 
-// Static fingerprint for callers who lack chat:read. The lock explains why
-// the plaintext stays withheld; the fingerprint itself is the reviewable
-// token the list endpoints already ship as match_redacted.
+// What callers who lack chat:read see in place of a match: the permission they
+// need, rather than a fingerprint that reads like a bug. The fingerprint (the
+// match_redacted token the list endpoints ship) moves to the tooltip, where a
+// reviewer can still compare two findings before suppressing them.
 function LockedRedactedMatch({
   matchRedacted,
   contrast = false,
@@ -332,7 +343,14 @@ function LockedRedactedMatch({
   wrap?: boolean;
 }): JSX.Element {
   return (
-    <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+    <SimpleTooltip
+      tooltip={
+        <span className="flex flex-col gap-1">
+          <span>{REVEAL_DENIED_REASON}</span>
+          <span className="font-mono opacity-70">{matchRedacted}</span>
+        </span>
+      }
+    >
       <span
         className={cn(
           "inline-flex max-w-full min-w-0 gap-1 text-xs",
@@ -345,15 +363,8 @@ function LockedRedactedMatch({
           aria-label={REVEAL_DENIED_REASON}
           className="h-3 w-3 shrink-0"
         />
-        <span
-          className={cn(
-            "min-w-0 font-mono",
-            wrap
-              ? "break-all whitespace-pre-wrap"
-              : "overflow-x-auto whitespace-nowrap",
-          )}
-        >
-          {matchRedacted}
+        <span className="min-w-0 truncate">
+          Requires <span className="font-mono">{REVEAL_SCOPE}</span>
         </span>
       </span>
     </SimpleTooltip>

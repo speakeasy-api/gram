@@ -1,5 +1,5 @@
 import { HumanizeDateTime } from "@/lib/dates";
-import { useLocation } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   RULE_CATEGORY_META,
@@ -12,6 +12,11 @@ import {
   IdentityPanelRow,
 } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
+import {
+  type FindingsFilter,
+  identityFindingsHref,
+  RISK_UNAVAILABLE,
+} from "./identityFindingsLink";
 import { EmployeeShadowAISection } from "@/components/observe/EmployeeShadowAISection";
 import { useIdentityOutlet } from "./identityRoute";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -34,14 +39,6 @@ import {
 const TOP_RULES = 5;
 const DENIED_ROWS = 8;
 
-/**
- * Risk and the shadow inventory are org:admin surfaces and their queries are
- * held back without it. Said outright, because the alternative rendering — the
- * panel's own empty state — reads as "we looked and there is nothing".
- */
-const RISK_UNAVAILABLE =
-  "Risk and shadow MCP findings need the org:admin permission.";
-
 export default function IdentitySecurity(): JSX.Element {
   const canReadRisk = useCanReadRisk();
   // Employee detections are a project read on the server (the email pins
@@ -55,7 +52,7 @@ export default function IdentitySecurity(): JSX.Element {
     ["project:read", "project:write"],
     project.id,
   );
-  const { identity } = useIdentityOutlet();
+  const { identity, urn } = useIdentityOutlet();
   // Only an enrolled person has device scans behind them; an API key or an
   // external identity has nothing to show.
   const isEmployee = identity.kind === "user" && identity.userIds.length > 0;
@@ -76,6 +73,11 @@ export default function IdentitySecurity(): JSX.Element {
   );
 
   const riskQuery = useIdentityRisk(identity, from, to);
+  const navigate = useNavigate();
+  const findingsHref = (filter: FindingsFilter) =>
+    identityFindingsHref(routes, urn, location.search, filter);
+  const showFindings = (filter: FindingsFilter) =>
+    void navigate(findingsHref(filter));
   // Asked for as a denied-only slice so the count below is the API's total for
   // exactly what the panel claims, rather than however many denials happened
   // to fall inside one capped page of mixed outcomes.
@@ -118,8 +120,10 @@ export default function IdentitySecurity(): JSX.Element {
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <IdentityPanel
           title="Risk findings"
-          handoffLabel="Risk Events"
-          handoffHref={handoffs.riskEvents}
+          // Findings is admin-only; everyone else keeps the link this panel
+          // had before it existed.
+          handoffLabel={canReadRisk ? "Findings" : "Risk Events"}
+          handoffHref={canReadRisk ? findingsHref({}) : handoffs.riskEvents}
           loading={riskQuery.isLoading}
           loadingVariant="block"
           error={riskQuery.isError && categories.length === 0}
@@ -153,6 +157,7 @@ export default function IdentitySecurity(): JSX.Element {
                   valueLabel: Number(category.findings).toLocaleString(),
                 }))}
                 ariaLabel="Findings by category"
+                onSelect={(category) => showFindings({ category })}
               />
             </div>
           )}
@@ -189,6 +194,9 @@ export default function IdentitySecurity(): JSX.Element {
                     : "(no rule_id)",
                   value: Number(rule.findings),
                 }))}
+                onSelect={(key) => {
+                  if (!key.startsWith("__none_")) showFindings({ ruleId: key });
+                }}
               />
             </div>
           )}

@@ -26,8 +26,14 @@ export type RankedBarListItem = {
  */
 export function RankedBarList({
   items,
+  onSelect,
 }: {
   items: RankedBarListItem[];
+  /**
+   * Makes each label a button that reports its item key. Items that link to a
+   * person keep the link.
+   */
+  onSelect?: (key: string) => void;
 }): JSX.Element {
   // Bar widths are normalized against the largest value across all items so
   // they stay bounded even if callers pass unsorted input.
@@ -50,6 +56,14 @@ export function RankedBarList({
               <IdentityLink identifier={item.identifier}>
                 {item.label}
               </IdentityLink>
+            ) : onSelect ? (
+              <button
+                type="button"
+                className="max-w-full truncate text-left hover:underline"
+                onClick={() => onSelect(item.key)}
+              >
+                {item.label}
+              </button>
             ) : (
               item.label
             )}

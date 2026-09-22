@@ -83,11 +83,13 @@ describe("EventMatchDialog", () => {
     expect(screen.getByRole("img", { name: /chat:read/ })).toBeTruthy();
   });
 
-  it("falls back to the redacted match without chat:read and no rationale", () => {
+  it("names the missing permission without chat:read and no rationale", () => {
     hasScope.mockReturnValue(false);
     renderCell(undefined);
 
-    expect(screen.getByText("<redacted len=42 sha=deadbeef>")).toBeTruthy();
+    expect(screen.getByText("chat:read")).toBeTruthy();
+    // The fingerprint moves to the tooltip, off the page until hovered.
+    expect(screen.queryByText("<redacted len=42 sha=deadbeef>")).toBeNull();
     expect(screen.queryByText("Hidden")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.getByRole("img", { name: /chat:read/ })).toBeTruthy();
@@ -120,11 +122,12 @@ function renderMasked(matchRedacted = "<redacted len=42 sha=deadbeef>") {
 }
 
 describe("MaskedMatch", () => {
-  it("shows the redacted match without chat:read, and offers no reveal", () => {
+  it("names the missing permission without chat:read, and offers no reveal", () => {
     hasScope.mockReturnValue(false);
     renderMasked();
 
-    expect(screen.getByText("<redacted len=42 sha=deadbeef>")).toBeTruthy();
+    expect(screen.getByText("chat:read")).toBeTruthy();
+    expect(screen.queryByText("<redacted len=42 sha=deadbeef>")).toBeNull();
     expect(screen.queryByText("Hidden")).toBeNull();
     expect(screen.queryByText("Click to reveal")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();

@@ -68,6 +68,7 @@ import IdentityOverview from "./pages/identities/IdentityOverview";
 import IdentityAccess from "./pages/identities/IdentityAccess";
 import IdentityUsage from "./pages/identities/IdentityUsage";
 import IdentitySecurity from "./pages/identities/IdentitySecurity";
+import IdentityFindingsPage from "./pages/identities/IdentityFindings";
 import IdentityCost from "./pages/identities/IdentityCost";
 import IdentityDevices from "./pages/identities/IdentityDevices";
 import IdentityConnections from "./pages/identities/IdentityConnections";
@@ -743,6 +744,11 @@ const ROUTE_STRUCTURE = {
             title: "Identity Security",
             url: "security",
             component: IdentitySecurity,
+          },
+          findings: {
+            title: "Identity Findings",
+            url: "findings",
+            component: IdentityFindingsPage,
           },
           cost: {
             title: "Identity Cost",

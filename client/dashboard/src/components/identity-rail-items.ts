@@ -18,6 +18,8 @@ export function identityRailItems(
    * resets the filters the reader just set.
    */
   search = "",
+  /** Whether the viewer may open Findings; the entry is left out otherwise. */
+  showFindings = false,
 ): IdentityRailItem[] {
   const detail = routes.identities.detail;
   return [
@@ -45,6 +47,17 @@ export function identityRailItems(
       href: `${detail.security.href(encodedUrn)}${search}`,
       active: detail.security.active,
     },
+    ...(showFindings
+      ? [
+          {
+            key: "findings",
+            title: "Findings",
+            href: `${detail.findings.href(encodedUrn)}${search}`,
+            active: detail.findings.active,
+            nested: true,
+          },
+        ]
+      : []),
     {
       key: "cost",
       title: "Cost",

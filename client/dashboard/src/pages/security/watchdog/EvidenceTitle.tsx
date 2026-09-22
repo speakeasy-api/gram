@@ -130,42 +130,98 @@ export function EvidenceTitle({
           )}
         </div>
         {/* Outside the title button so the text can be selected. */}
-        {expanded && flaggedMessage.content && (
-          <div className="text-muted-foreground font-mono text-xs break-words whitespace-pre-wrap">
-            {flaggedMessage.content}
-          </div>
-        )}
-        {expanded && flaggedMessage.problem && (
-          <p
-            role="alert"
-            className={cn(
-              "text-xs",
-              flaggedMessage.problem.failed
-                ? "text-destructive"
-                : "text-warning",
-            )}
-          >
-            {flaggedMessage.problem.text}
-            {flaggedMessage.problem.linkToSession && chatId && (
-              <>
-                {" "}
-                <Link
-                  to={agentSessionHref(routes.agentSessions.href(), chatId)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline underline-offset-2"
-                >
-                  View the full session
-                </Link>
-              </>
-            )}
-          </p>
+        {expanded && (
+          <FlaggedMessageBody message={flaggedMessage} chatId={chatId} />
         )}
       </div>
       <span className="text-muted-foreground shrink-0 font-mono text-xs">
         {formatDistanceToNow(createdAt, { addSuffix: true })}
       </span>
     </div>
+  );
+}
+
+/**
+ * The flagged message for one finding, loaded while `enabled`. For surfaces
+ * that open the message themselves, like an expandable table row. Says why
+ * when the message can't be shown.
+ */
+export function FlaggedMessage({
+  chatId: findingChatId,
+  chatMessageId,
+  enabled,
+}: {
+  chatId: string | undefined;
+  chatMessageId: string | undefined;
+  enabled: boolean;
+}): JSX.Element {
+  const { hasScope } = useRBAC();
+  // Same check as the header: chat:read on this chat, or no request at all.
+  const chatId =
+    findingChatId && hasScope(REVEAL_SCOPE, findingChatId)
+      ? findingChatId
+      : undefined;
+  const message = useFlaggedMessage(chatId, chatMessageId, enabled);
+  if (!findingChatId || !chatMessageId) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        This finding isn&apos;t tied to a single message.
+      </p>
+    );
+  }
+  if (!chatId) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Viewing the flagged message needs chat:read on this session.
+      </p>
+    );
+  }
+  if (message.loading) {
+    return <Loader2 className="text-muted-foreground size-4 animate-spin" />;
+  }
+  return <FlaggedMessageBody message={message} chatId={chatId} />;
+}
+
+function FlaggedMessageBody({
+  message,
+  chatId,
+}: {
+  message: ReturnType<typeof useFlaggedMessage>;
+  chatId: string | undefined;
+}): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <>
+      {message.content && (
+        <div className="text-muted-foreground font-mono text-xs break-words whitespace-pre-wrap">
+          {message.content}
+        </div>
+      )}
+      {message.problem && (
+        <p
+          role="alert"
+          className={cn(
+            "text-xs",
+            message.problem.failed ? "text-destructive" : "text-warning",
+          )}
+        >
+          {message.problem.text}
+          {message.problem.linkToSession && chatId && (
+            <>
+              {" "}
+              <Link
+                to={agentSessionHref(routes.agentSessions.href(), chatId)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2"
+              >
+                View the full session
+              </Link>
+            </>
+          )}
+        </p>
+      )}
+    </>
   );
 }
 

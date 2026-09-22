@@ -24,9 +24,15 @@ export type ShareBarSegment = {
 export function ShareBar({
   segments,
   ariaLabel,
+  onSelect,
 }: {
   segments: ShareBarSegment[];
   ariaLabel: string;
+  /**
+   * Makes each legend entry a button that reports its segment key. The folded
+   * "N more" entry stays inert, since it stands for several segments.
+   */
+  onSelect?: (key: string) => void;
 }): JSX.Element | null {
   const colors = useSeriesColors();
   const otherColor = useOtherSeriesColor();
@@ -104,27 +110,44 @@ export function ShareBar({
         ))}
       </div>
       <ul className="mt-3.5 grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-x-5 gap-y-2">
-        {shares.map((share) => (
-          <li key={share.key} className="flex items-center gap-2">
-            <span
-              aria-hidden
-              className="size-2.5 shrink-0"
-              style={{ backgroundColor: share.color }}
-            />
-            <span
-              className="min-w-0 flex-1 truncate text-sm"
-              title={share.label}
-            >
-              {share.label}
-            </span>
-            <span className="text-muted-foreground shrink-0 font-mono text-xs tabular-nums">
-              {share.valueLabel ??
-                // Rounding a real share to "0%" reads as absent rather than
-                // small; the bar still shows its hairline.
-                (share.percent < 1 ? "<1%" : `${Math.round(share.percent)}%`)}
-            </span>
-          </li>
-        ))}
+        {shares.map((share) => {
+          const entry = (
+            <>
+              <span
+                aria-hidden
+                className="size-2.5 shrink-0"
+                style={{ backgroundColor: share.color }}
+              />
+              <span
+                className="min-w-0 flex-1 truncate text-sm group-hover:underline"
+                title={share.label}
+              >
+                {share.label}
+              </span>
+              <span className="text-muted-foreground shrink-0 font-mono text-xs tabular-nums">
+                {share.valueLabel ??
+                  // Rounding a real share to "0%" reads as absent rather than
+                  // small; the bar still shows its hairline.
+                  (share.percent < 1 ? "<1%" : `${Math.round(share.percent)}%`)}
+              </span>
+            </>
+          );
+          return (
+            <li key={share.key} className="flex items-center gap-2">
+              {onSelect && share.key !== "__other__" ? (
+                <button
+                  type="button"
+                  className="group flex min-w-0 flex-1 items-center gap-2 text-left"
+                  onClick={() => onSelect(share.key)}
+                >
+                  {entry}
+                </button>
+              ) : (
+                entry
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
