@@ -277,6 +277,13 @@ function CreateAgent({
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) return;
+    // useProject yields an empty id before a project resolves. Sending that
+    // would read as "omitted" and quietly create an organization-wide agent
+    // after the user asked for a project one.
+    if (scope === "project" && !project.id) {
+      setError("Select a project before scoping an agent to one.");
+      return;
+    }
     const policyGrants = agentPolicyGrantsFromDraft(draft);
     setError(null);
     create.mutate({
@@ -341,9 +348,11 @@ function CreateAgent({
                 Belongs to {organization.name}, not to any one project.
               </Text>
             </RadioCard>
-            <RadioCard value="project" title="Project">
+            <RadioCard value="project" title="Project" disabled={!project.id}>
               <Text muted small>
-                Belongs to {project.name}.
+                {project.id
+                  ? `Belongs to ${project.name}.`
+                  : "Select a project first."}
               </Text>
             </RadioCard>
           </RadioCardGroup>

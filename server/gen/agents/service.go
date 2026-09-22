@@ -148,8 +148,9 @@ type AgentSession struct {
 type CreatePayload struct {
 	SessionToken *string
 	Name         string
-	// Optional project binding. Omit for an organization-wide agent; independent
-	// of policy grants and the Gram-Project header.
+	// Optional project binding. Omit or send an empty string for an
+	// organization-wide agent; independent of policy grants and the Gram-Project
+	// header.
 	ProjectID *string
 	// Eligible same-organization human owner; defaults to the caller
 	OwnerUserID *string

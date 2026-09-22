@@ -26,8 +26,9 @@ type RevokeSessionRequestBody struct {
 // request body.
 type CreateRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Optional project binding. Omit for an organization-wide agent; independent
-	// of policy grants and the Gram-Project header.
+	// Optional project binding. Omit or send an empty string for an
+	// organization-wide agent; independent of policy grants and the Gram-Project
+	// header.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Eligible same-organization human owner; defaults to the caller
 	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
@@ -6505,9 +6506,6 @@ func ValidateCreateRequestBody(body *CreateRequestBody) (err error) {
 		if utf8.RuneCountInString(*body.Name) > 120 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 120, false))
 		}
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	for _, e := range body.PolicyGrants {
 		if e != nil {

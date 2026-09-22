@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -117,6 +118,10 @@ func TestCreateAgentRejectsProjectFromAnotherOrganization(t *testing.T) {
 	ctx := validatedHumanContext(t, "org-agent-tenant-a", "owner")
 	_, err := service.Create(ctx, &gen.CreatePayload{Name: "Cross tenant agent", ProjectID: &foreignID})
 	require.Error(t, err)
+
+	// Naming a project the caller's organization does not own is the client
+	// being wrong, not a fault, so it must not read as an internal error.
+	requireOopsCode(t, err, oops.CodeNotFound)
 
 	// Naming the constraint is the point: a bare require.Error would still pass
 	// if the composite key stopped enforcing and something else happened to

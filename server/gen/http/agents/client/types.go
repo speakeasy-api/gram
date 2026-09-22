@@ -26,8 +26,9 @@ type RevokeSessionRequestBody struct {
 // request body.
 type CreateRequestBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
-	// Optional project binding. Omit for an organization-wide agent; independent
-	// of policy grants and the Gram-Project header.
+	// Optional project binding. Omit or send an empty string for an
+	// organization-wide agent; independent of policy grants and the Gram-Project
+	// header.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Eligible same-organization human owner; defaults to the caller
 	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`

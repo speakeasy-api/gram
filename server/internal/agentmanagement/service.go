@@ -459,6 +459,14 @@ func mapWriteError(err error, conflictMessage string) error {
 	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 		return oops.E(oops.CodeConflict, err, "%s", conflictMessage)
 	}
+	// A project binding the caller's organization does not own trips the
+	// composite key. That is the client naming a project that does not exist
+	// for them, not a fault, so it must not surface as an internal error.
+	if errors.As(err, &pgErr) &&
+		pgErr.Code == pgerrcode.ForeignKeyViolation &&
+		pgErr.ConstraintName == "agents_organization_id_project_id_fkey" {
+		return oops.E(oops.CodeNotFound, err, "project not found")
+	}
 	return err
 }
 

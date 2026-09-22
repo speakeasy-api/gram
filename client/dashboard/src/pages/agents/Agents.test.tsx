@@ -209,6 +209,7 @@ beforeEach(() => {
   mocks.params = new URLSearchParams();
   mocks.unsupported = false;
   mocks.organizationId = "org_example";
+  mocks.projectId = "00000000-0000-4000-8000-000000000001";
   mocks.impersonatorEmail = undefined;
   mocks.scopeOverride = null;
   mocks.agents[0]!.ownerUserId = "user_owner";
@@ -464,5 +465,28 @@ describe("Agent scope", () => {
     expect(mocks.createMutate).toHaveBeenCalledTimes(1);
     const form = mocks.createMutate.mock.calls[0]![0].request.createAgentForm;
     expect(form.projectId).toBe(mocks.projectId);
+  });
+});
+
+describe("Agent scope without an active project", () => {
+  // useProject yields an empty id before a project resolves. Sending it would
+  // read as "omitted" server-side, silently creating an organization-wide
+  // agent after the user asked for a project one.
+  it("cannot choose project scope until a project resolves", () => {
+    mocks.projectId = "";
+    mocks.params = new URLSearchParams("create=true");
+    setup();
+    fireEvent.change(screen.getByLabelText("Agent name"), {
+      target: { value: "Unresolved project agent" },
+    });
+
+    const projectOption = screen.getByRole("radio", { name: /Project/ });
+    expect(projectOption.getAttribute("data-disabled")).not.toBeNull();
+
+    fireEvent.click(projectOption);
+    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+
+    const form = mocks.createMutate.mock.calls[0]?.[0].request.createAgentForm;
+    expect(form?.projectId).toBeUndefined();
   });
 });

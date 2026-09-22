@@ -21,7 +21,7 @@ export type CreateAgentForm = {
    */
   policyGrants?: Array<AgentPolicyGrantForm> | undefined;
   /**
-   * Optional project binding. Omit for an organization-wide agent; independent of policy grants and the Gram-Project header.
+   * Optional project binding. Omit or send an empty string for an organization-wide agent; independent of policy grants and the Gram-Project header.
    */
   projectId?: string | undefined;
 };
