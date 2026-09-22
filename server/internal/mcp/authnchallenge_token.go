@@ -140,8 +140,9 @@ func (r userSessionRefreshReplay) CacheKey() string { return r.Key }
 func (r userSessionRefreshReplay) TTL() time.Duration { return refreshTokenReplayGracePeriod }
 
 // HandleToken implements the OAuth 2.1 token endpoint (RFC 6749 §4.1.3 /
-// §6). Mounted at `POST /mcp/{mcpSlug}/token`. Loads the endpoint and hands
-// the request to ServeToken.
+// §6). Mounted at `POST /mcp/{mcpSlug}/token` on the MCP host and, when one is
+// configured, on the authentication host (AuthenticationHost). Loads the
+// endpoint and hands the request to ServeToken.
 func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
@@ -230,6 +231,12 @@ func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds present
 		return tokenGrant{clientAuth: tokenClientAuthRequired, resolveMode: lookupClientOnly, authenticated: s.handleTokenRefreshTokenGrant, clientless: nil}, true
 	case oauthwire.GrantTypeJWTBearer:
 		if creds.presented() || r.Header.Get("Authorization") != "" {
+			// Of the jwt-bearer requests, only the clientless branch is
+			// dispatched on the authentication host; the ID-JAG exchange is
+			// refused there.
+			if OnAuthenticationHost(r.Context()) {
+				return tokenGrant{clientAuth: tokenClientAuthUndeclared, resolveMode: "", authenticated: nil, clientless: nil}, false
+			}
 			// An assertion grant starts a new authorization at the token
 			// endpoint, so it applies current CIMD admission and resolves
 			// current client metadata before authenticating the client.
@@ -280,10 +287,11 @@ func (s *Service) serveTokenGrant(
 	creds presentedClientCredentials,
 	grant tokenGrant,
 ) error {
-	// Base URL the AS metadata advertises — equals the JWT `iss` claim so
-	// the two sides of the contract stay aligned across custom domains.
-	// Computed before client authentication because an assertion's aud is
-	// checked against URLs derived from it.
+	// Origin of the endpoint's resource, from which the issuer (the AS
+	// metadata issuer and the JWT `iss` claim) derives, so the two sides of
+	// the contract stay aligned across custom domains. Computed before client
+	// authentication because an assertion's aud is checked against URLs
+	// derived from it.
 	baseURL := s.BaseURLForRequest(r)
 
 	switch {
@@ -1210,7 +1218,7 @@ func (s *Service) writeRefreshTokenReplay(
 		}
 	}
 
-	endpointIssuer, err := endpoint.RootURL(baseURL)
+	endpointIssuer, err := s.issuerURL(endpoint, baseURL)
 	if err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_resign_error")
 		return oops.E(oops.CodeUnexpected, err, "build replay endpoint issuer URL").LogError(ctx, logger)
@@ -1450,7 +1458,7 @@ func (s *Service) mintSession(
 	}
 	accessLifetime := accessExpiresAt.Sub(now)
 
-	issuerURL, err := endpoint.RootURL(params.BaseURL)
+	issuerURL, err := s.issuerURL(endpoint, params.BaseURL)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
 	}

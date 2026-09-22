@@ -2,8 +2,10 @@ package mcp_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -11,12 +13,14 @@ import (
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
@@ -119,18 +123,19 @@ func newLiveWorkloadProject(t *testing.T, conn *pgxpool.Pool, organizationID str
 	return project.ID
 }
 
-// seedIssuer registers the dev-idp in a tenancy, with the issuer identifier
-// and jwks_uri its discovery document advertises.
-func (f liveWorkloadFixture) seedIssuer(t *testing.T, organizationID string, projectID uuid.NullUUID) uuid.UUID {
+// seedIssuer writes an issuer row with the given identifier and jwks_uri.
+// It stores them as given, so tests can store values validation would refuse;
+// the dev-idp's own are f.issuer.OAuth21URL and f.jwksURI.
+func (f liveWorkloadFixture) seedIssuer(t *testing.T, organizationID string, projectID uuid.NullUUID, issuerURL, jwksURI string) uuid.UUID {
 	t.Helper()
 
-	var id uuid.UUID
-	err := f.conn.QueryRow( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		t.Context(), `
-		INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
-	`, organizationID, projectID, "live-issuer", f.issuer.OAuth21URL, f.jwksURI).Scan(&id)
+	id, err := testrepo.New(f.conn).CreateWorkloadIssuerFixture(t.Context(), testrepo.CreateWorkloadIssuerFixtureParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		Name:           "live-issuer",
+		Issuer:         issuerURL,
+		JwksUri:        jwksURI,
+	})
 	require.NoError(t, err)
 
 	return id
@@ -139,20 +144,23 @@ func (f liveWorkloadFixture) seedIssuer(t *testing.T, organizationID string, pro
 func (f liveWorkloadFixture) seedAdmission(t *testing.T, organizationID string, projectID uuid.NullUUID, issuerID uuid.UUID) {
 	t.Helper()
 
-	_, err := f.conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		t.Context(), `
-		INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject)
-		VALUES ($1, $2, $3, $4)
-	`, organizationID, projectID, issuerID, liveWorkloadSubject)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(f.conn).CreateWorkloadIdentityAdmissionFixture(t.Context(), testrepo.CreateWorkloadIdentityAdmissionFixtureParams{
+		OrganizationID:   organizationID,
+		ProjectID:        projectID,
+		WorkloadIssuerID: issuerID,
+		Subject:          liveWorkloadSubject,
+	}))
 }
 
-func (f liveWorkloadFixture) softDeleteIssuer(t *testing.T, id uuid.UUID) {
+func (f liveWorkloadFixture) softDeleteIssuer(t *testing.T, organizationID string, id uuid.UUID) {
 	t.Helper()
 
-	_, err := f.conn.Exec( //nolint:glint // notestingrawsql: no delete query exists yet; writes belong to the management API milestone
-		t.Context(), `UPDATE workload_issuers SET deleted_at = clock_timestamp() WHERE id = $1`, id)
+	deleted, err := testrepo.New(f.conn).SoftDeleteWorkloadIssuerFixture(t.Context(), testrepo.SoftDeleteWorkloadIssuerFixtureParams{
+		ID:             id,
+		OrganizationID: organizationID,
+	})
 	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted)
 }
 
 // endpoint is an MCP server in the given tenancy. Its own authorization server
@@ -165,12 +173,13 @@ func (f liveWorkloadFixture) endpoint(organizationID string, projectID uuid.UUID
 	}
 }
 
-// present mints a fresh assertion for the admitted subject and runs it through
-// every admission stage. Fresh each call, so it is never refused as a replay.
-func (f liveWorkloadFixture) present(t *testing.T, endpoint *mcp.ResolvedMcpEndpoint) error {
+// present signs the given claims with the issuer's key and runs them through
+// every admission stage. oauthtest.WorkloadClaims mints a fresh jti each call,
+// so claims built from it are never refused as a replay.
+func (f liveWorkloadFixture) present(t *testing.T, endpoint *mcp.ResolvedMcpEndpoint, claims jwt.Claims) error {
 	t.Helper()
 
-	raw := oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience))
+	raw := oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", claims)
 
 	err := mcp.AdmitWorkloadAssertion(t.Context(), f.conn, f.verifier, endpoint, []string{
 		liveWorkloadAudience,
@@ -188,10 +197,10 @@ func TestWorkloadAssertionPipeline_AdmittedWorkloadFromALiveIssuerPasses(t *test
 	t.Parallel()
 
 	f := newLiveWorkloadFixture(t)
-	issuerID := f.seedIssuer(t, f.organizationID, uuid.NullUUID{})
+	issuerID := f.seedIssuer(t, f.organizationID, uuid.NullUUID{}, f.issuer.OAuth21URL, f.jwksURI)
 	f.seedAdmission(t, f.organizationID, uuid.NullUUID{UUID: f.projectID, Valid: true}, issuerID)
 
-	err := f.present(t, f.endpoint(f.organizationID, f.projectID))
+	err := f.present(t, f.endpoint(f.organizationID, f.projectID), oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience))
 
 	require.NoError(t, err)
 	require.Greater(t, f.issuer.Connections(), f.connectionsAtSetup, "an admitted assertion must have fetched the key set, or the no-egress tests assert against a counter that never moves")
@@ -205,10 +214,10 @@ func TestWorkloadAssertionPipeline_IssuerOutsideTheTenancyMakesNoOutboundRequest
 
 	f := newLiveWorkloadFixture(t)
 	other := newLiveWorkloadOrganization(t, f.conn)
-	otherIssuerID := f.seedIssuer(t, other, uuid.NullUUID{})
+	otherIssuerID := f.seedIssuer(t, other, uuid.NullUUID{}, f.issuer.OAuth21URL, f.jwksURI)
 	f.seedAdmission(t, other, uuid.NullUUID{}, otherIssuerID)
 
-	err := f.present(t, f.endpoint(f.organizationID, f.projectID))
+	err := f.present(t, f.endpoint(f.organizationID, f.projectID), oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience))
 
 	require.ErrorIs(t, err, mcp.ErrWorkloadIssuerUntrusted)
 	require.Equal(t, f.connectionsAtSetup, f.issuer.Connections(), "an untrusted issuer must be refused before any connection to it is attempted")
@@ -220,11 +229,11 @@ func TestWorkloadAssertionPipeline_SoftDeletedIssuerIsUntrusted(t *testing.T) {
 	t.Parallel()
 
 	f := newLiveWorkloadFixture(t)
-	issuerID := f.seedIssuer(t, f.organizationID, uuid.NullUUID{})
+	issuerID := f.seedIssuer(t, f.organizationID, uuid.NullUUID{}, f.issuer.OAuth21URL, f.jwksURI)
 	f.seedAdmission(t, f.organizationID, uuid.NullUUID{}, issuerID)
-	f.softDeleteIssuer(t, issuerID)
+	f.softDeleteIssuer(t, f.organizationID, issuerID)
 
-	err := f.present(t, f.endpoint(f.organizationID, f.projectID))
+	err := f.present(t, f.endpoint(f.organizationID, f.projectID), oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience))
 
 	require.ErrorIs(t, err, mcp.ErrWorkloadIssuerUntrusted)
 	require.Equal(t, f.connectionsAtSetup, f.issuer.Connections(), "a withdrawn issuer must be refused before any connection to it is attempted")
@@ -237,13 +246,13 @@ func TestWorkloadAssertionPipeline_ASiblingProjectsAdmissionDoesNotAdmit(t *test
 
 	f := newLiveWorkloadFixture(t)
 	sibling := newLiveWorkloadProject(t, f.conn, f.organizationID)
-	issuerID := f.seedIssuer(t, f.organizationID, uuid.NullUUID{})
+	issuerID := f.seedIssuer(t, f.organizationID, uuid.NullUUID{}, f.issuer.OAuth21URL, f.jwksURI)
 	f.seedAdmission(t, f.organizationID, uuid.NullUUID{UUID: sibling, Valid: true}, issuerID)
 
-	err := f.present(t, f.endpoint(f.organizationID, f.projectID))
+	err := f.present(t, f.endpoint(f.organizationID, f.projectID), oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience))
 	require.ErrorIs(t, err, mcp.ErrWorkloadNotAdmitted)
 
-	err = f.present(t, f.endpoint(f.organizationID, sibling))
+	err = f.present(t, f.endpoint(f.organizationID, sibling), oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience))
 	require.NoError(t, err, "the admission must admit its own project, or the refusal above proves nothing")
 }
 
@@ -254,9 +263,47 @@ func TestWorkloadAssertionPipeline_OrganizationTierAdmissionAdmitsEveryProject(t
 
 	f := newLiveWorkloadFixture(t)
 	other := newLiveWorkloadProject(t, f.conn, f.organizationID)
-	issuerID := f.seedIssuer(t, f.organizationID, uuid.NullUUID{})
+	issuerID := f.seedIssuer(t, f.organizationID, uuid.NullUUID{}, f.issuer.OAuth21URL, f.jwksURI)
 	f.seedAdmission(t, f.organizationID, uuid.NullUUID{}, issuerID)
 
-	require.NoError(t, f.present(t, f.endpoint(f.organizationID, f.projectID)))
-	require.NoError(t, f.present(t, f.endpoint(f.organizationID, other)))
+	require.NoError(t, f.present(t, f.endpoint(f.organizationID, f.projectID), oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience)))
+	require.NoError(t, f.present(t, f.endpoint(f.organizationID, other), oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience)))
+}
+
+// A row whose jwks_uri is plain http is refused at key source construction,
+// by name and before any connection, even though the issuer itself is https
+// and the workload is admitted.
+func TestWorkloadAssertionPipeline_PlainHTTPJwksURIIsRefusedWithoutFetching(t *testing.T) {
+	t.Parallel()
+
+	f := newLiveWorkloadFixture(t)
+	plainJWKSURI := "http://" + strings.TrimPrefix(f.jwksURI, "https://")
+	require.True(t, strings.HasPrefix(f.jwksURI, "https://"), "the fixture's jwks_uri must be https for this downgrade to mean anything")
+	issuerID := f.seedIssuer(t, f.organizationID, uuid.NullUUID{}, f.issuer.OAuth21URL, plainJWKSURI)
+	f.seedAdmission(t, f.organizationID, uuid.NullUUID{}, issuerID)
+
+	err := f.present(t, f.endpoint(f.organizationID, f.projectID), oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience))
+
+	require.ErrorIs(t, err, jwks.ErrURINotHTTPS)
+	require.Equal(t, f.connectionsAtSetup, f.issuer.Connections(), "a plain-http jwks_uri must be refused before any connection is attempted")
+}
+
+// An assertion naming a plain-http issuer is untrusted even when a row for
+// that exact http issuer exists and admits the subject.
+func TestWorkloadAssertionPipeline_PlainHTTPIssuerIsUntrusted(t *testing.T) {
+	t.Parallel()
+
+	f := newLiveWorkloadFixture(t)
+	plainIssuer := "http://" + strings.TrimPrefix(f.issuer.OAuth21URL, "https://")
+	require.True(t, strings.HasPrefix(f.issuer.OAuth21URL, "https://"), "the fixture's issuer must be https for this downgrade to mean anything")
+	issuerID := f.seedIssuer(t, f.organizationID, uuid.NullUUID{}, plainIssuer, f.jwksURI)
+	f.seedAdmission(t, f.organizationID, uuid.NullUUID{}, issuerID)
+
+	claims := oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience)
+	claims.Issuer = plainIssuer
+	err := f.present(t, f.endpoint(f.organizationID, f.projectID), claims)
+
+	require.ErrorIs(t, err, mcp.ErrWorkloadIssuerUntrusted)
+	require.ErrorIs(t, err, issuerurl.ErrNotHTTPS)
+	require.Equal(t, f.connectionsAtSetup, f.issuer.Connections(), "a plain-http issuer must be refused before any connection is attempted")
 }

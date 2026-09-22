@@ -164,3 +164,42 @@ func TestCanonicalIssuerURL_MatchCandidatesDeduplicates(t *testing.T) {
 		seen[candidate] = struct{}{}
 	}
 }
+
+func TestParseHTTPSOnly_AcceptsHTTPS(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{
+		"https://token.actions.githubusercontent.com",
+		"HTTPS://Token.Actions.GitHubUserContent.com/",
+		"https://oidc.example.com:8443/tenant",
+	} {
+		canonical, err := ParseHTTPSOnly(raw)
+		require.NoError(t, err, raw)
+		require.Equal(t, "https", canonical.Scheme(), raw)
+	}
+}
+
+func TestParseHTTPSOnly_RefusesPlainHTTP(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{
+		"http://token.actions.githubusercontent.com",
+		"HTTP://token.actions.githubusercontent.com",
+		"http://localhost:35291/oauth2-1",
+	} {
+		_, err := ParseHTTPSOnly(raw)
+		require.ErrorIs(t, err, ErrNotHTTPS, raw)
+	}
+}
+
+// A value that is not an issuer identifier at all is Parse's failure, not a
+// scheme refusal.
+func TestParseHTTPSOnly_MalformedIsNotReportedAsPlainHTTP(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{"", "not-a-url", "ftp://issuer.example.com", "https://issuer.example.com#frag"} {
+		_, err := ParseHTTPSOnly(raw)
+		require.Error(t, err, raw)
+		require.NotErrorIs(t, err, ErrNotHTTPS, raw)
+	}
+}
