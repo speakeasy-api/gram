@@ -41,6 +41,29 @@ func decodeKeys(t *testing.T, value any) []string {
 	return jsonKeys(decoded)
 }
 
+func TestDelegatedDiagnosticsToolsRequireProjectReadDiscovery(t *testing.T) {
+	t.Parallel()
+
+	registrars := []*Registrar{}
+	_, unavailable := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	registrars = append(registrars, unavailable)
+	live := newRegistrar(newTestMCPServer())
+	registerDiagnosticsTools(live, nil)
+	registerRecentToolCallTools(live, nil)
+	registrars = append(registrars, live)
+
+	for _, registrar := range registrars {
+		for _, name := range []string{"get_project_overview", "get_mcp_diagnostics", "list_recent_tool_calls"} {
+			descriptor := descriptorByName(t, registrar, name)
+			require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
+			require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
+			require.Equal(t, discoveryProjectRead, descriptor.Meta.DiscoveryScopes)
+			require.NotNil(t, descriptor.Annotations)
+			require.True(t, descriptor.Annotations.ReadOnlyHint)
+		}
+	}
+}
+
 // TestGetProjectOverviewOutput_ProjectsOnlyAllowlistedFields pins the overview's
 // serialized shape. The projection is positive: a field that is not listed here
 // is not served, so a future addition has to be made deliberately in this test
@@ -133,6 +156,14 @@ func (diagnosticsProjectReader) FindMCP(context.Context, Principal, FindMCPInput
 }
 
 func (diagnosticsProjectReader) GetMCP(context.Context, Principal, GetMCPInput) (MCP, error) {
+	return MCP{}, nil
+}
+
+func (diagnosticsProjectReader) ResolveProjectRead(context.Context, Principal, FindMCPInput) (ResolvedProject, error) {
+	return ResolvedProject{}, nil
+}
+
+func (diagnosticsProjectReader) GetMCPForDiagnostics(context.Context, Principal, GetMCPInput) (MCP, error) {
 	return MCP{}, nil
 }
 

@@ -806,3 +806,21 @@ describe("a name write never replaces an annotation rule", () => {
     );
   });
 });
+
+it("removing an agent with broader role access writes server-local exclusions", () => {
+  const entries = [
+    entry({ principalUrn: "agent:a1", kind: "agent", displayName: "Releaser" }),
+    role({ level: "manage", agentIds: ["a1"] }),
+  ];
+  const { direct, rows } = state(entries);
+  const row = rows.find((row) => row.principalUrn === "agent:a1")!;
+  const write = revokeRowWrite(direct, row, "Selected server");
+  expect(
+    write.entries.map(({ principalUrn, level }) => ({ principalUrn, level })),
+  ).toEqual([
+    { principalUrn: "agent:a1", level: "blocked" },
+    { principalUrn: "agent:a1", level: "blocked_view" },
+    { principalUrn: "agent:a1", level: "blocked_manage" },
+  ]);
+  expect(write.message).toContain("Other servers are unchanged");
+});

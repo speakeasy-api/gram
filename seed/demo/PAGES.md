@@ -23,6 +23,8 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | Cost dashboard, all pivots                                        | CH `attribute_metrics_summaries` via provenance rows carrying `user.attributes.*`, roles/groups, hostname, skill/agent/mcp attribution                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `[~]`  |
 | Costs Efficiency dataset                                          | CH `chat_analysis:work_units:score` rows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `[~]`  |
 | Billing usage explorer                                            | CH raw `billing_meter_readings_by_time`: usage-only dashboard/API data across all nine meters, 864 ordinary facts over 12 days, 9 intentional duplicate physical deliveries, and project/agent/directory/server/scanner facets; inserts incrementally populate UTC-day `billing_meter_daily_summaries`, where all 873 physical deliveries count                                                                                                                                                                                                                                                                                                                                                | `[x]`  |
+| Billing spend by product                                          | The enterprise demo intentionally hides the spend section: the API returns `unsupported_plan`, empty products, and a `"0"` total, while ordinary usage stays visible. Existing meter fixtures also support local PAYG checks for storage, per-scanner risk, and egress-only costs.                                                                                                                                                                                                                                                                                                                                                                                                             | `[~]`  |
+| Admin billing spend by product                                    | Existing ordinary `billing_meter_daily_summaries` fixtures produce storage, per-scanner risk, and egress-only estimates for the enterprise demo without changing its tier or requiring a Stripe subscription. The admin API prices every account type at the same current PAYG list prices for usage comparison, not invoicing.                                                                                                                                                                                                                                                                                                                                                                | `[x]`  |
 | Sessions list (telemetry.listSessions)                            | CH `chat_session_summaries` (via MV)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `[x]`  |
 | Project overview metric cards                                     | CH `metrics_summaries` (via MV)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `[x]`  |
 | External OAuth settings                                           | Route `/mcp/acme-oauth-discovery/authentication`; PG `external_oauth_server_metadata` attached to the dedicated Acme OAuth Discovery toolset; Gram-hosted metadata with an `example.com` issuer drives the provider-hosted recommendation without live discovery                                                                                                                                                                                                                                                                                                                                                                                                                               | `[~]`  |
@@ -47,6 +49,7 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | Workload sessions (project MCP Sessions, revoke dialogs)          | PG `workload_issuers` ×1 (reserved-domain URL) + `workload_identity_admissions` ×3 (project and organization tier; the payments workload is admitted at both) + `workload_agent_assignments` ×2 (active and suspended managed agent) + inert `workload:` `user_sessions` ×2 on the gateway issuer                                                                                                                                                                                                                                                                                                                                                                                              | `[~]`  |
 | Organization setup board                                          | PG `organization_setup_tasks` overrides for member-owned In Progress, email-owned Awaiting Support, Done, and Hidden; catalog defaults supply To Do and blocked states                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `[~]`  |
 | Network Access                                                    | Deliberately no `network_ingress` entitlement, ingress row, or credential; every reseed removes active and tombstoned private-ingress state before asserting absence, so the temporary PostHog rollout cannot expose retained setup or server-mode controls to the demo organization                                                                                                                                                                                                                                                                                                                                                                                                           | `[~]`  |
+| Explore (analytics.query over agent_events)                       | CH `agent_events`: 144 sessions over the trailing 12 days for the six users, dealt across claude-code and codex, 2-5 turns each with prompt/api_request/api_response rows and 0-3 tool calls (tool_decision + tool_call_result on Claude, results alone on Codex); Codex rows state tokens but no cost                                                                                                                                                                                                                                                                                                                                                                                         | `[x]`  |
 
 The ordinary MCP connection inventory totals 11 sessions: five on Acme Partner
 Gateway and six across Linear, Slack, and Acme Agent Gateway. The project-scoped
@@ -63,7 +66,7 @@ behavior is covered by editor tests; browser verification remains pending.
 
 ### Managed agents
 
-The Identities roster also reads these three existing registered-agent fixtures
+The Identities roster also reads these four existing registered-agent fixtures
 in an ordinary local session. Agent names open the shared identity overview at
 `/:orgSlug/projects/:projectSlug/identities/agent%3A<AGENT_ID>/overview`, with an
 "Edit Agent Identity" link to the agent-management screen. Owners without
@@ -83,17 +86,55 @@ agent identifier and must show unavailable, never human-owner activity or zeros.
 Verify in the local rewritten seed with an ordinary human session: shared demo
 impersonation remains intentionally restricted by agent management authorization.
 `agent-management` enables inventory; `agent-identity-credentials` enables API key
-management. PG `agents` ×3 covers active, suspended,
-and revoked identities with three existing fictional owners (display names and
+management. PG `agents` ×4 includes Release assistant, Support triage, Retired
+documentation bot, and the active Release notes assistant, covering active,
+suspended, and revoked identities with three existing fictional owners (display names and
 avatar initials fallback). One inert agent-subject `user_sessions` row shows the
 credential relationship and approving human; its refresh hash is invalid and its
-delegation is empty. API keys deliberately remain empty in the shared demo: the
+delegation is empty. Release notes assistant adds an attachment-backed session
+and a scoped connect policy. On MCP sessions, readable agents resolve to their name and
+link to `agent-management?id=<AGENT_ID>` with a dotted underline and a muted bot
+icon in the avatar slot (users retain solid underlines and initials/photos). If agent reads
+are denied (including shared demo impersonation), keep the session visible with
+its raw subject URN and no profile link. API keys deliberately remain empty in the shared demo: the
 seed deletes visitor-created keys and asserts none survive. Local-only usable
 keys belong in `RunLocalFixtures`. Reseeding also clears agent-principal policy
-grants only in the target organization, without removing human grants — so
-delegable-grant discovery starts empty and its editor is exercised by adding
-synthetic grants to the agent, its owner and the calling user locally. Follow
+grants only in the target organization, without removing human grants, then
+recreates two `mcp:connect` grants for the active release agents, narrowed to
+the demo project and Linear MCP server. The wizard intersects these with
+owner/caller permissions; seeded policy does not prove fresh UI creation. Follow
 check 17 in `verify.md`. Browser verification: `[~]` (not yet verified).
+
+### Audit session target resolution
+
+Project Activity Timeline, organization Recent activity, and View all / Audit
+logs must distinguish the human revoker from the affected session owner. The
+current local audit history includes user- and agent-owned session revocations.
+For these rows, `subject_id` is the session ID, not a user or agent ID; resolve
+`metadata.subject_urn` when present, otherwise the raw `subject_display_name`
+URN. Users link to their identity page. Readable agents show their authorized
+name, muted bot icon, and dotted link to agent management. Deleted, unreadable,
+or failed-to-load agents remain raw `agent:<AGENT_ID>` text without a link or
+cached name. Direct agent subjects and agent actors follow the same rule.
+
+These are expectations for existing local history, not additional deterministic
+seed rows. No reseed is required to inspect that history; reseeding may remove
+locally generated revoke events. Keep raw metadata and snapshot diffs available
+in the audit feed. Shared-demo agent access remains restricted as above.
+
+### Exact remote-session attachments
+
+PG `remote_sessions` ×1 and `principal_remote_session_bindings` ×2 show one
+fictional user-owned upstream account shared by **Release assistant** and
+**Release notes assistant** (both active, same human owner). Linear MCP session
+6 is the requesting human session; its issuer is explicitly linked to the
+upstream client. Both bindings retain the same exact session ID, not a copy of
+its credential. The original three agent lifecycle fixtures remain unchanged.
+The account has invalid ciphertext, no refresh token, auto-refresh disabled,
+and reserved `.invalid` issuer metadata. It is display-only, not a live OAuth
+integration. All IDs reuse `Spec.NameSeed` and retarget with the tenant.
+Reseeding deletes bindings before sessions, issuers, agents and projects.
+Browser verification: `[~]` (not yet verified); see check 18 in `verify.md`.
 
 ## Local only (RunLocalFixtures, never the demo org)
 

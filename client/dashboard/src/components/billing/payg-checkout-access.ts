@@ -15,8 +15,13 @@ import {
  *   where checkout converts a running trial.
  * - `"gated"`: the dashboard lockout pages, where checkout is the way out of
  *   the gate for an organization that is walled off entirely.
+ * - `"unsubscribed-payg"`: billing has confirmed there is no Stripe subscription,
+ *   so a PAYG organization can finish or restart checkout without an active trial.
  */
-export type PaygCheckoutEligibility = "active-trial" | "gated";
+export type PaygCheckoutEligibility =
+  | "active-trial"
+  | "gated"
+  | "unsubscribed-payg";
 
 /**
  * Whether this viewer may start a self-serve checkout, plus the organization
@@ -35,18 +40,26 @@ export function usePaygCheckoutAccess(eligibility: PaygCheckoutEligibility): {
 } {
   const flag = useFeatureFlag(FEATURE_FLAGS.paygSelfServeBilling);
   const { hasScope } = useRBAC();
-  const { trial, activeOrganizationId, whitelisted } = useSession();
+  const { trial, activeOrganizationId, whitelisted, rawGramAccountType } =
+    useSession();
   // A trial that ends while the page is open has to take the CTA with it, so
   // the lifecycle below reads a clock that re-renders on the trial's own
   // boundaries instead of whenever a parent happens to re-render.
   const now = useTrialNow(trial);
   const trialLifecycle = getTrialLifecycleFromDates(trial, now);
 
-  // A gated organization is one the dashboard has walled off, so the trial is
-  // beside the point: never trialed and trial expired both belong here. An
-  // organization that is not walled off keeps the booking-only gate it had.
-  const eligibleForSurface =
-    eligibility === "gated" ? !whitelisted : trialLifecycle === "active";
+  let eligibleForSurface: boolean;
+  switch (eligibility) {
+    case "active-trial":
+      eligibleForSurface = trialLifecycle === "active";
+      break;
+    case "gated":
+      eligibleForSurface = !whitelisted;
+      break;
+    case "unsubscribed-payg":
+      eligibleForSurface = rawGramAccountType === "payg";
+      break;
+  }
 
   return {
     eligible:

@@ -3909,7 +3909,7 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		RemoteSessionIssuerID:           *v.RemoteSessionIssuerID,
 		ClientID:                        *v.ClientID,
 		ClientIDMetadataURI:             v.ClientIDMetadataURI,
-		ClientIDIssuedAt:                *v.ClientIDIssuedAt,
+		ClientIDIssuedAt:                v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           v.ClientSecretExpiresAt,
 		UpstreamRejectedAt:              v.UpstreamRejectedAt,
 		TokenEndpointAuthMethod:         v.TokenEndpointAuthMethod,

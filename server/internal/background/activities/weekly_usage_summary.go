@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"math/big"
 	"net/url"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -18,9 +19,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
-	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/usage"
-	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
+)
+
+const (
+	weeklyStorageProductID  = "agent_session_storage"
+	weeklyScanningProductID = "risk_content_scans"
+	weeklyEgressProductID   = "mcp_egress"
 )
 
 // WeeklyUsageSummaryTarget is one organization due a weekly usage summary
@@ -42,30 +48,27 @@ type SendWeeklyUsageSummaryArgs struct {
 	RunTime time.Time
 }
 
-// WeeklyUsageSummary emails each organization's billing alert contact a
-// weekly digest of tokens-under-management usage so far in the active
-// billing cycle, compared against the same elapsed point of the previous
-// cycle. The reported total is computed by the same registry-driven measure
-// that billing uses (billing.TumComponents via GetTumWindowTotal), so
-// changes to the TUM definition show up in the email without any change
-// here.
+// WeeklyUsageSummary emails each organization's billing alert contact a weekly
+// digest of storage tokens, scanning tokens, and MCP egress for completed UTC
+// days in the active billing cycle, compared with the same number of completed
+// days in the previous cycle.
 type WeeklyUsageSummary struct {
-	logger        *slog.Logger
-	db            *pgxpool.Pool
-	telemetryRepo *telemetryrepo.Queries
-	repo          *repo.Queries
-	emails        *email.Service
-	siteURL       *url.URL
+	logger    *slog.Logger
+	db        *pgxpool.Pool
+	spendRepo *chrepo.Queries
+	repo      *repo.Queries
+	emails    *email.Service
+	siteURL   *url.URL
 }
 
-func NewWeeklyUsageSummary(logger *slog.Logger, db *pgxpool.Pool, chConn clickhouse.Conn, emails *email.Service, siteURL *url.URL) *WeeklyUsageSummary {
+func NewWeeklyUsageSummary(logger *slog.Logger, db *pgxpool.Pool, meterReadConn clickhouse.Conn, emails *email.Service, siteURL *url.URL) *WeeklyUsageSummary {
 	return &WeeklyUsageSummary{
-		logger:        logger.With(attr.SlogComponent("weekly_usage_summary")),
-		db:            db,
-		telemetryRepo: telemetryrepo.New(chConn),
-		repo:          repo.New(db),
-		emails:        emails,
-		siteURL:       siteURL,
+		logger:    logger.With(attr.SlogComponent("weekly_usage_summary")),
+		db:        db,
+		spendRepo: chrepo.New(meterReadConn),
+		repo:      repo.New(db),
+		emails:    emails,
+		siteURL:   siteURL,
 	}
 }
 
@@ -92,58 +95,54 @@ func (a *WeeklyUsageSummary) ListTargets(ctx context.Context) ([]WeeklyUsageSumm
 }
 
 // Send computes one organization's cycle-to-date usage and dispatches the
-// summary email. Organizations with no usage in either compared window are
-// skipped. Retries are safe: the Loops idempotency key is derived from the
-// organization and the sweep's run date.
+// summary email. Organizations on their first cycle day, or with no usage in
+// either compared window, are skipped. Retries are safe: the Loops idempotency
+// key is derived from the organization and the sweep's run date.
 func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSummaryArgs) error {
 	target := args.Target
 	now := args.RunTime.UTC()
+	reportingDay := utcMidnight(now)
 	logger := a.logger.With(attr.SlogOrganizationID(target.OrganizationID))
-
-	queries := usagerepo.New(a.db)
-	projectIDs, err := queries.ListBillingProjectIDsByOrganization(ctx, target.OrganizationID)
-	if err != nil {
-		return fmt.Errorf("list organization projects: %w", err)
-	}
-	if len(projectIDs) == 0 {
-		return nil
-	}
-	ids := make([]string, 0, len(projectIDs))
-	for _, id := range projectIDs {
-		ids = append(ids, id.String())
-	}
 
 	cycles := usage.BillingCycles(now, target.AnchorDay, 2)
 	previous, current := cycles[0], cycles[1]
-
-	// "Previous cycle at this point" is the prior cycle truncated to the same
-	// elapsed duration, clamped for anchored cycles of unequal length.
-	elapsed := now.Sub(current.Start)
-	previousPoint := previous.Start.Add(elapsed)
-	if previousPoint.After(previous.End) {
-		previousPoint = previous.End
+	if !reportingDay.After(current.Start) {
+		logger.InfoContext(ctx, "skipping weekly usage summary on first billing cycle day")
+		return nil
 	}
 
-	currentTotal, err := a.telemetryRepo.GetTumWindowTotal(ctx, telemetryrepo.GetTokensUnderManagementParams{
-		ProjectIDs:          ids,
-		StartUnixNano:       current.Start.UnixNano(),
-		EndUnixNano:         now.UnixNano(),
-		ExcludedHookSources: billing.GramHostedHookSourceStrings(),
+	completedDays := int(reportingDay.Sub(current.Start) / (24 * time.Hour))
+	previousTo := previous.Start.AddDate(0, 0, completedDays)
+	if previousTo.After(previous.End) {
+		previousTo = previous.End
+	}
+
+	currentRows, err := a.spendRepo.GetSpend(ctx, chrepo.SpendParams{
+		OrganizationID: target.OrganizationID,
+		From:           current.Start,
+		To:             reportingDay,
 	})
 	if err != nil {
-		return fmt.Errorf("compute current cycle usage: %w", err)
+		return fmt.Errorf("query current cycle meter usage: %w", err)
 	}
-	previousTotal, err := a.telemetryRepo.GetTumWindowTotal(ctx, telemetryrepo.GetTokensUnderManagementParams{
-		ProjectIDs:          ids,
-		StartUnixNano:       previous.Start.UnixNano(),
-		EndUnixNano:         previousPoint.UnixNano(),
-		ExcludedHookSources: billing.GramHostedHookSourceStrings(),
+	previousRows, err := a.spendRepo.GetSpend(ctx, chrepo.SpendParams{
+		OrganizationID: target.OrganizationID,
+		From:           previous.Start,
+		To:             previousTo,
 	})
 	if err != nil {
-		return fmt.Errorf("compute previous cycle usage: %w", err)
+		return fmt.Errorf("query previous cycle meter usage: %w", err)
 	}
 
-	if currentTotal == 0 && previousTotal == 0 {
+	currentTotals, err := weeklySpendTotalsFromRows(currentRows, target.AccountType == string(billing.TierPayg))
+	if err != nil {
+		return fmt.Errorf("total current cycle meter usage: %w", err)
+	}
+	previousTotals, err := weeklySpendTotalsFromRows(previousRows, false)
+	if err != nil {
+		return fmt.Errorf("total previous cycle meter usage: %w", err)
+	}
+	if currentTotals.empty() && previousTotals.empty() {
 		logger.InfoContext(ctx, "skipping weekly usage summary for org without usage")
 		return nil
 	}
@@ -165,16 +164,30 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 		viewUsageURL = a.siteURL.JoinPath(target.OrganizationSlug, "billing").String()
 	}
 
+	showEstimatedSpend := accountType == string(billing.TierPayg)
 	tmpl := email.WeeklyUsageSummary{
-		OrganizationName: conv.Default(target.OrganizationName, "your organization"),
-		// Cycle ends are exclusive; the email shows the last covered day.
-		CycleEndDate:        current.End.AddDate(0, 0, -1).Format("January 2, 2006"),
-		DaysRemaining:       formatDaysRemaining(daysUntil(now, current.End)),
-		CycleElapsedPercent: strconv.Itoa(elapsedPercent(current, now)),
-		TotalTokens:         formatTokenCount(currentTotal),
-		PreviousTotalTokens: formatTokenCount(previousTotal),
-		TotalChangePercent:  usageChangePercent(currentTotal, previousTotal),
-		ViewUsageURL:        viewUsageURL,
+		OrganizationName:      conv.Default(target.OrganizationName, "your organization"),
+		CycleEndDate:          current.End.AddDate(0, 0, -1).Format("January 2, 2006"),
+		DaysRemaining:         formatDaysRemaining(daysUntil(now, current.End)),
+		UsageThroughDate:      reportingDay.AddDate(0, 0, -1).Format("January 2, 2006"),
+		StorageTokens:         formatExactInteger(currentTotals.storage),
+		StorageChangePercent:  usageChangePercent(currentTotals.storage, previousTotals.storage),
+		ScanningTokens:        formatExactInteger(currentTotals.scanning),
+		ScanningChangePercent: usageChangePercent(currentTotals.scanning, previousTotals.scanning),
+		EgressGib:             formatGiB(currentTotals.egress),
+		EgressChangePercent:   usageChangePercent(currentTotals.egress, previousTotals.egress),
+		ShowEstimatedSpend:    fmt.Sprintf("%t", showEstimatedSpend),
+		StorageCostUSD:        "",
+		ScanningCostUSD:       "",
+		EgressCostUSD:         "",
+		TotalCostUSD:          "",
+		ViewUsageURL:          viewUsageURL,
+	}
+	if showEstimatedSpend {
+		tmpl.StorageCostUSD = formatUSD(currentTotals.storageCost)
+		tmpl.ScanningCostUSD = formatUSD(currentTotals.scanningCost)
+		tmpl.EgressCostUSD = formatUSD(currentTotals.egressCost)
+		tmpl.TotalCostUSD = formatUSD(currentTotals.totalCost())
 	}
 
 	deliveryErrors := []error{resolutionErr}
@@ -192,6 +205,82 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 	return nil
 }
 
+type weeklySpendTotals struct {
+	storage      *big.Int
+	scanning     *big.Int
+	egress       *big.Int
+	storageCost  *big.Rat
+	scanningCost *big.Rat
+	egressCost   *big.Rat
+}
+
+func weeklySpendTotalsFromRows(rows []chrepo.SpendRow, calculateCosts bool) (weeklySpendTotals, error) {
+	totals := weeklySpendTotals{
+		storage:      new(big.Int),
+		scanning:     new(big.Int),
+		egress:       new(big.Int),
+		storageCost:  nil,
+		scanningCost: nil,
+		egressCost:   nil,
+	}
+	for _, row := range rows {
+		quantity, ok := new(big.Int).SetString(row.Quantity, 10)
+		if !ok {
+			return weeklySpendTotals{}, fmt.Errorf("invalid exact spend quantity %q", row.Quantity)
+		}
+		switch row.ProductID {
+		case weeklyStorageProductID:
+			totals.storage.Add(totals.storage, quantity)
+		case weeklyScanningProductID:
+			totals.scanning.Add(totals.scanning, quantity)
+		case weeklyEgressProductID:
+			totals.egress.Add(totals.egress, quantity)
+		default:
+			return weeklySpendTotals{}, fmt.Errorf("unknown spend product %q", row.ProductID)
+		}
+	}
+	if !calculateCosts {
+		return totals, nil
+	}
+	totals.storageCost = new(big.Rat)
+	totals.scanningCost = new(big.Rat)
+	totals.egressCost = new(big.Rat)
+
+	for _, spec := range usage.SpendProductSpecs() {
+		var quantity *big.Int
+		var destination *big.Rat
+		switch spec.ID {
+		case weeklyStorageProductID:
+			quantity, destination = totals.storage, totals.storageCost
+		case weeklyScanningProductID:
+			quantity, destination = totals.scanning, totals.scanningCost
+		case weeklyEgressProductID:
+			quantity, destination = totals.egress, totals.egressCost
+		default:
+			return weeklySpendTotals{}, fmt.Errorf("unknown priced spend product %q", spec.ID)
+		}
+		cost, err := usage.PriceSpendQuantity(quantity, spec)
+		if err != nil {
+			return weeklySpendTotals{}, fmt.Errorf("price weekly usage for %s: %w", spec.ID, err)
+		}
+		destination.Set(cost)
+	}
+	return totals, nil
+}
+
+func (t weeklySpendTotals) empty() bool {
+	return t.storage.Sign() == 0 && t.scanning.Sign() == 0 && t.egress.Sign() == 0
+}
+
+func (t weeklySpendTotals) totalCost() *big.Rat {
+	return new(big.Rat).Add(new(big.Rat).Add(t.storageCost, t.scanningCost), t.egressCost)
+}
+
+func utcMidnight(value time.Time) time.Time {
+	value = value.UTC()
+	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
+}
+
 // daysUntil counts the whole days between now and the cycle end, rounding
 // partial days up so "ends tomorrow morning" reads as 1, never 0.
 func daysUntil(now, end time.Time) int {
@@ -202,8 +291,7 @@ func daysUntil(now, end time.Time) int {
 }
 
 // formatDaysRemaining renders a day count with its unit ("1 day", "5 days")
-// so the email copy pluralizes correctly; the Loops template inserts the
-// phrase as-is.
+// so the email copy pluralizes correctly.
 func formatDaysRemaining(days int) string {
 	if days == 1 {
 		return "1 day"
@@ -211,28 +299,58 @@ func formatDaysRemaining(days int) string {
 	return fmt.Sprintf("%d days", days)
 }
 
-// elapsedPercent is how far through the billing cycle now sits, clamped to
-// [0, 100].
-func elapsedPercent(cycle usage.BillingCyclePeriod, now time.Time) int {
-	length := cycle.End.Sub(cycle.Start)
-	if length <= 0 {
-		return 100
+func formatExactInteger(value *big.Int) string {
+	digits := value.String()
+	start := 0
+	if strings.HasPrefix(digits, "-") {
+		start = 1
 	}
-	pct := int(math.Round(float64(now.Sub(cycle.Start)) / float64(length) * 100))
-	return min(max(pct, 0), 100)
+	for i := len(digits) - 3; i > start; i -= 3 {
+		digits = digits[:i] + "," + digits[i:]
+	}
+	return digits
 }
 
-// usageChangePercent renders the signed percent change between the current
-// and previous window totals, e.g. "+19%". A previous total of zero has no
-// meaningful ratio: it renders as "New" when usage appeared and "0%" when
-// both windows are empty.
-func usageChangePercent(current, previous int64) string {
-	if previous == 0 {
-		if current == 0 {
+func formatGiB(bytes *big.Int) string {
+	gib := new(big.Rat).SetFrac(new(big.Int).Set(bytes), big.NewInt(1_073_741_824))
+	if gib.Sign() > 0 && gib.Cmp(big.NewRat(1, 100)) < 0 {
+		return "<0.01"
+	}
+	return gib.FloatString(2)
+}
+
+func formatUSD(cost *big.Rat) string {
+	if cost.Sign() > 0 && cost.Cmp(big.NewRat(1, 100)) < 0 {
+		return "<$0.01"
+	}
+	if cost.Sign() < 0 {
+		return "-$" + new(big.Rat).Abs(cost).FloatString(2)
+	}
+	return "$" + cost.FloatString(2)
+}
+
+// usageChangePercent renders the exact signed percent change between current
+// and previous quantities, rounded to the nearest whole percent.
+func usageChangePercent(current, previous *big.Int) string {
+	if previous.Sign() == 0 {
+		if current.Sign() == 0 {
 			return "0%"
 		}
 		return "New"
 	}
-	pct := int(math.Round(float64(current-previous) / float64(previous) * 100))
-	return fmt.Sprintf("%+d%%", pct)
+
+	numerator := new(big.Int).Mul(new(big.Int).Sub(current, previous), big.NewInt(100))
+	quotient, remainder := new(big.Int), new(big.Int)
+	quotient.QuoRem(numerator, previous, remainder)
+	if new(big.Int).Mul(new(big.Int).Abs(remainder), big.NewInt(2)).Cmp(new(big.Int).Abs(previous)) >= 0 {
+		if numerator.Sign() < 0 {
+			quotient.Sub(quotient, big.NewInt(1))
+		} else {
+			quotient.Add(quotient, big.NewInt(1))
+		}
+	}
+	if quotient.Sign() >= 0 {
+		return "+" + quotient.String() + "%"
+	}
+	return quotient.String() + "%"
 }

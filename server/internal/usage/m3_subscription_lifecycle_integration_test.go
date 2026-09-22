@@ -43,7 +43,7 @@ func (*m3StripeWebhookClient) GetCustomer(context.Context, string) (*stripeclien
 }
 
 func (*m3StripeWebhookClient) UpdateCustomer(context.Context, stripeclient.UpdateCustomerInput) error {
-	return errors.New("not implemented")
+	return nil
 }
 
 func (*m3StripeWebhookClient) CreateCheckoutSession(context.Context, stripeclient.CreateCheckoutSessionInput) (*stripeclient.CheckoutSession, error) {
@@ -93,7 +93,7 @@ func (c *m3StripeWebhookClient) VerifyWebhook([]byte, string) (*stripeclient.Web
 }
 
 func (*m3StripeWebhookClient) Catalog() stripeclient.Catalog {
-	return stripeclient.Catalog{PriceIDTUM: "", PortalConfigurationID: ""}
+	return stripeclient.Catalog{PriceIDMCPEgress: "", PriceIDRiskScans: "", PriceIDTUM: "", PortalConfigurationID: ""}
 }
 
 func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {

@@ -649,51 +649,6 @@ func (q *Queries) GCPublishOutboxDeadLetters(ctx context.Context, arg GCPublishO
 	return result.RowsAffected(), nil
 }
 
-const getAllOrganizationsWithToolsets = `-- name: GetAllOrganizationsWithToolsets :many
-SELECT
-    organization_metadata.id,
-    organization_metadata.name,
-    organization_metadata.slug,
-    gram_account_type
-FROM organization_metadata
-JOIN toolsets ON organization_metadata.id = toolsets.organization_id
-WHERE toolsets.deleted = false
-GROUP BY organization_metadata.id
-HAVING COUNT(toolsets.id) > 0
-`
-
-type GetAllOrganizationsWithToolsetsRow struct {
-	ID              string
-	Name            string
-	Slug            string
-	GramAccountType string
-}
-
-func (q *Queries) GetAllOrganizationsWithToolsets(ctx context.Context) ([]GetAllOrganizationsWithToolsetsRow, error) {
-	rows, err := q.db.Query(ctx, getAllOrganizationsWithToolsets)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetAllOrganizationsWithToolsetsRow
-	for rows.Next() {
-		var i GetAllOrganizationsWithToolsetsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Slug,
-			&i.GramAccountType,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getOpenRouterCreditsAlertRecipients = `-- name: GetOpenRouterCreditsAlertRecipients :many
 SELECT
     om.id AS organization_id,
@@ -2125,11 +2080,11 @@ type ListWeeklyUsageSummaryTargetsRow struct {
 	BillingCycleAnchorDay int32
 }
 
-// Organizations that receive the weekly tokens-under-management usage
-// summary email: enabled enterprise organizations with an explicit billing
-// alert email and enabled PAYG organizations (whose fallback audience is
-// resolved by the activity). The anchor day determines the billing cycle
-// window; the slug builds the billing page link.
+// Organizations that receive the weekly metered usage summary email: enabled
+// enterprise organizations with an explicit billing alert email and enabled
+// PAYG organizations (whose fallback audience is resolved by the activity).
+// The anchor day determines the billing-cycle windows; the slug builds the
+// billing page link.
 func (q *Queries) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]ListWeeklyUsageSummaryTargetsRow, error) {
 	rows, err := q.db.Query(ctx, listWeeklyUsageSummaryTargets)
 	if err != nil {

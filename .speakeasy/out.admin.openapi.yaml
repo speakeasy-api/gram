@@ -2025,6 +2025,106 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: setStripeCustomer
+  /admin/organization.spendBreakdown:
+    get:
+      description: Returns exact current PAYG list-price estimates for an organization's three metered products over a maximum of three calendar months. Available for every organization regardless of account type or subscription state.
+      operationId: adminGetSpendBreakdown
+      parameters:
+        - allowEmptyValue: true
+          description: Organization ID or canonical slug.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Organization ID or canonical slug.
+            type: string
+        - allowEmptyValue: true
+          description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+          in: query
+          name: from
+          schema:
+            description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+          in: query
+          name: to
+          schema:
+            description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+            format: date-time
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSpendBreakdownResponse'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: getSpendBreakdown admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getSpendBreakdown
   /admin/organization.stripeCustomer:
     get:
       tags:
@@ -4855,6 +4955,44 @@ components:
           type: string
       required:
         - email
+    AdminSpendBreakdownResponse:
+      type: object
+      properties:
+        billing_cycles:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeterUsageWindow'
+          description: Trailing twelve billing-cycle date windows
+        currency:
+          type: string
+          enum:
+            - USD
+        pricing_basis:
+          type: string
+          enum:
+            - current_payg_list_price
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpendProduct'
+          description: The three metered products in stable display order
+        queried_at:
+          type: string
+          description: Retrieval timestamp used to distinguish current and future buckets
+          format: date-time
+        total_cost_usd:
+          type: string
+          description: Exact estimated total at current PAYG list prices
+        window:
+          $ref: '#/components/schemas/MeterUsageWindow'
+      required:
+        - window
+        - billing_cycles
+        - currency
+        - pricing_basis
+        - queried_at
+        - total_cost_usd
+        - products
     AdminStripeCustomer:
       type: object
       properties:
@@ -5051,12 +5189,16 @@ components:
     CreateOrganizationRequestBody:
       type: object
       properties:
-        name:
+        ownership_confirmed:
+          type: boolean
+          description: The operator confirms that domain ownership was established outside this form.
+        url:
           type: string
-          description: Display name for the new organization.
+          description: Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.
           minLength: 1
       required:
-        - name
+        - url
+        - ownership_confirmed
     CreateRemoteSessionIssuerForm:
       type: object
       properties:
@@ -6004,6 +6146,70 @@ components:
       required:
         - organization_id
         - stripe_customer_id
+    SpendBucket:
+      type: object
+      properties:
+        cost_usd:
+          type: string
+          description: Exact estimated cost at current PAYG list prices
+        from:
+          type: string
+          description: Inclusive bucket boundary
+          format: date-time
+        quantity:
+          type: string
+          description: Exact integer ordinary usage quantity as a decimal string
+        to:
+          type: string
+          description: Exclusive bucket boundary
+          format: date-time
+      required:
+        - from
+        - to
+        - quantity
+        - cost_usd
+    SpendProduct:
+      type: object
+      properties:
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpendBucket'
+          description: Dense UTC daily product buckets, including in-progress and future days
+        cost_usd:
+          type: string
+          description: Exact estimated product cost at current PAYG list prices
+        id:
+          type: string
+          enum:
+            - agent_session_storage
+            - risk_content_scans
+            - mcp_egress
+        label:
+          type: string
+        quantity:
+          type: string
+          description: Exact integer ordinary usage quantity as a decimal string
+        rate_quantity:
+          type: string
+          description: Exact integer quantity to which rate_usd applies
+        rate_usd:
+          type: string
+          description: Exact current PAYG USD list price
+        unit:
+          type: string
+          enum:
+            - stokens
+            - bytes
+      required:
+        - id
+        - label
+        - unit
+        - quantity
+        - rate_quantity
+        - rate_usd
+        - cost_usd
+        - buckets
     StartTrialRequestBody:
       type: object
       properties:

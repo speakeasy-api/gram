@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	identityproviderconnections "github.com/speakeasy-api/gram/server/gen/identity_provider_connections"
 	goa "goa.design/goa/v3/pkg"
@@ -190,6 +191,70 @@ func BuildRevokePayload(identityProviderConnectionsRevokeBody string, identityPr
 	v := &identityproviderconnections.RevokePayload{
 		ID: body.ID,
 	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSyncApplicationsPayload builds the payload for the
+// identityProviderConnections syncApplications endpoint from CLI flags.
+func BuildSyncApplicationsPayload(identityProviderConnectionsSyncApplicationsBody string, identityProviderConnectionsSyncApplicationsSessionToken string) (*identityproviderconnections.SyncApplicationsPayload, error) {
+	var err error
+	var body SyncApplicationsRequestBody
+	{
+		err = json.Unmarshal([]byte(identityProviderConnectionsSyncApplicationsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if identityProviderConnectionsSyncApplicationsSessionToken != "" {
+			sessionToken = &identityProviderConnectionsSyncApplicationsSessionToken
+		}
+	}
+	v := &identityproviderconnections.SyncApplicationsPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListApplicationsPayload builds the payload for the
+// identityProviderConnections listApplications endpoint from CLI flags.
+func BuildListApplicationsPayload(identityProviderConnectionsListApplicationsID string, identityProviderConnectionsListApplicationsIncludeRemoved string, identityProviderConnectionsListApplicationsSessionToken string) (*identityproviderconnections.ListApplicationsPayload, error) {
+	var err error
+	var id string
+	{
+		id = identityProviderConnectionsListApplicationsID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var includeRemoved bool
+	{
+		if identityProviderConnectionsListApplicationsIncludeRemoved != "" {
+			includeRemoved, err = strconv.ParseBool(identityProviderConnectionsListApplicationsIncludeRemoved)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeRemoved, must be BOOL")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if identityProviderConnectionsListApplicationsSessionToken != "" {
+			sessionToken = &identityProviderConnectionsListApplicationsSessionToken
+		}
+	}
+	v := &identityproviderconnections.ListApplicationsPayload{}
+	v.ID = id
+	v.IncludeRemoved = includeRemoved
 	v.SessionToken = sessionToken
 
 	return v, nil

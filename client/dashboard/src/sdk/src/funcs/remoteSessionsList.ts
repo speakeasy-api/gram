@@ -46,7 +46,7 @@ import {
  * listRemoteSessions remoteSessions
  *
  * @remarks
- * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
+ * List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
  */
 export function remoteSessionsList(
   client: GramCore,
@@ -120,8 +120,10 @@ async function $do(
   const query = encodeFormQuery({
     "cursor": payload?.cursor,
     "limit": payload?.limit,
+    "principal_id": payload?.principal_id,
     "remote_session_client_id": payload?.remote_session_client_id,
     "subject_urn": payload?.subject_urn,
+    "user_session_issuer_id": payload?.user_session_issuer_id,
   });
 
   const headers = new Headers(compactMap({

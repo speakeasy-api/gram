@@ -56,6 +56,13 @@ type RevokeRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 }
 
+// SyncApplicationsRequestBody is the type of the "identityProviderConnections"
+// service "syncApplications" endpoint HTTP request body.
+type SyncApplicationsRequestBody struct {
+	// Connection ID.
+	ID string `form:"id" json:"id" xml:"id"`
+}
+
 // CreateResponseBody is the type of the "identityProviderConnections" service
 // "create" endpoint HTTP response body.
 type CreateResponseBody struct {
@@ -107,9 +114,10 @@ type CreateResponseBody struct {
 	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
 	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
 	// Console steps for the connection's listing mode, in order.
-	Checklist []*IdentityProviderConnectionChecklistItemResponseBody `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
-	CreatedAt *string                                                `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string                                                `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync,omitempty" json:"applications_sync,omitempty" xml:"applications_sync,omitempty"`
+	CreatedAt        *string                                                 `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt        *string                                                 `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // SubmitClientIDResponseBody is the type of the "identityProviderConnections"
@@ -163,9 +171,10 @@ type SubmitClientIDResponseBody struct {
 	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
 	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
 	// Console steps for the connection's listing mode, in order.
-	Checklist []*IdentityProviderConnectionChecklistItemResponseBody `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
-	CreatedAt *string                                                `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string                                                `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync,omitempty" json:"applications_sync,omitempty" xml:"applications_sync,omitempty"`
+	CreatedAt        *string                                                 `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt        *string                                                 `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // VerifyResponseBody is the type of the "identityProviderConnections" service
@@ -219,9 +228,10 @@ type VerifyResponseBody struct {
 	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
 	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
 	// Console steps for the connection's listing mode, in order.
-	Checklist []*IdentityProviderConnectionChecklistItemResponseBody `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
-	CreatedAt *string                                                `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string                                                `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync,omitempty" json:"applications_sync,omitempty" xml:"applications_sync,omitempty"`
+	CreatedAt        *string                                                 `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt        *string                                                 `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetResponseBody is the type of the "identityProviderConnections" service
@@ -282,9 +292,10 @@ type RecordAgentResponseBody struct {
 	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
 	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
 	// Console steps for the connection's listing mode, in order.
-	Checklist []*IdentityProviderConnectionChecklistItemResponseBody `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
-	CreatedAt *string                                                `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string                                                `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync,omitempty" json:"applications_sync,omitempty" xml:"applications_sync,omitempty"`
+	CreatedAt        *string                                                 `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt        *string                                                 `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // RevokeResponseBody is the type of the "identityProviderConnections" service
@@ -338,9 +349,80 @@ type RevokeResponseBody struct {
 	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
 	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
 	// Console steps for the connection's listing mode, in order.
-	Checklist []*IdentityProviderConnectionChecklistItemResponseBody `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
-	CreatedAt *string                                                `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string                                                `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync,omitempty" json:"applications_sync,omitempty" xml:"applications_sync,omitempty"`
+	CreatedAt        *string                                                 `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt        *string                                                 `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// SyncApplicationsResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body.
+type SyncApplicationsResponseBody struct {
+	// Connection ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Organization the connection belongs to.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Identity provider; always okta.
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// Connection state. pending until the client ID is submitted and verified;
+	// verified when every required scope is granted over DPoP; degraded when
+	// verification found gaps (see verification_reasons); revoked once the
+	// credential was withdrawn.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Okta org URL, for example https://example.okta.com.
+	OrgURL *string `form:"org_url,omitempty" json:"org_url,omitempty" xml:"org_url,omitempty"`
+	// Discovered authorization server issuer. Equal to org_url by construction.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// Which checklist template applies: custom_app when the admin creates the API
+	// Services app by hand, oin when the Speakeasy OIN listing is added from the
+	// catalog.
+	ListingMode *string `form:"listing_mode,omitempty" json:"listing_mode,omitempty" xml:"listing_mode,omitempty"`
+	// Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+	JwksURL *string `form:"jwks_url,omitempty" json:"jwks_url,omitempty" xml:"jwks_url,omitempty"`
+	// Okta application client ID. Omitted until submitted.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Whether the real Okta client ID has replaced the provisioning placeholder.
+	ClientIDSubmitted *bool `form:"client_id_submitted,omitempty" json:"client_id_submitted,omitempty" xml:"client_id_submitted,omitempty"`
+	// Whether Okta issued a DPoP-bound token at the last verification.
+	DpopRequired *bool `form:"dpop_required,omitempty" json:"dpop_required,omitempty" xml:"dpop_required,omitempty"`
+	// Okta API scopes the integration needs.
+	RequiredScopes []string `form:"required_scopes,omitempty" json:"required_scopes,omitempty" xml:"required_scopes,omitempty"`
+	// Scopes Okta granted at the last verification.
+	GrantedScopes []string `form:"granted_scopes,omitempty" json:"granted_scopes,omitempty" xml:"granted_scopes,omitempty"`
+	// Required scopes Okta did not grant at the last verification.
+	MissingScopes []string `form:"missing_scopes,omitempty" json:"missing_scopes,omitempty" xml:"missing_scopes,omitempty"`
+	// Typed reasons recorded by the last verification; empty when verified or not
+	// yet verified. missing_role is reserved for a later release.
+	VerificationReasons []string `form:"verification_reasons,omitempty" json:"verification_reasons,omitempty" xml:"verification_reasons,omitempty"`
+	// ISO 8601 timestamp of the last verification that found every required scope
+	// granted. Omitted until then.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// Why the last verification did not complete: Okta rejected the credential, or
+	// could not be reached. Omitted when it completed.
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// Admin-entered Okta AI agent ID. Display only.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Admin-entered Okta application ID the AI agent is bound to. Display only.
+	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
+	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
+	// Console steps for the connection's listing mode, in order.
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync,omitempty" json:"applications_sync,omitempty" xml:"applications_sync,omitempty"`
+	CreatedAt        *string                                                 `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt        *string                                                 `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ListApplicationsResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body.
+type ListApplicationsResponseBody struct {
+	// Applications ordered by label, live rows first. Capped at 2000 rows, the
+	// same cap a run applies.
+	Applications []*IdentityProviderConnectionApplicationResponseBody    `form:"applications,omitempty" json:"applications,omitempty" xml:"applications,omitempty"`
+	Sync         *IdentityProviderConnectionApplicationsSyncResponseBody `form:"sync,omitempty" json:"sync,omitempty" xml:"sync,omitempty"`
+	// Omitted before the first run.
+	LastRun *IdentityProviderConnectionReconcileRunResponseBody `form:"last_run,omitempty" json:"last_run,omitempty" xml:"last_run,omitempty"`
 }
 
 // CreateFailedPreconditionResponseBody is the type of the
@@ -1690,6 +1772,481 @@ type RevokeUnavailableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SyncApplicationsFailedPreconditionResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "failed_precondition" error.
+type SyncApplicationsFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SyncApplicationsRateLimitExceededResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "rate_limit_exceeded" error.
+type SyncApplicationsRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SyncApplicationsUnauthorizedResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "unauthorized" error.
+type SyncApplicationsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SyncApplicationsForbiddenResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "forbidden" error.
+type SyncApplicationsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SyncApplicationsBadRequestResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "bad_request" error.
+type SyncApplicationsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SyncApplicationsNotFoundResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "not_found" error.
+type SyncApplicationsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SyncApplicationsConflictResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "conflict" error.
+type SyncApplicationsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SyncApplicationsUnsupportedMediaResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "unsupported_media" error.
+type SyncApplicationsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SyncApplicationsInvalidResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "invalid" error.
+type SyncApplicationsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SyncApplicationsInvariantViolationResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "invariant_violation" error.
+type SyncApplicationsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SyncApplicationsUnexpectedResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "unexpected" error.
+type SyncApplicationsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SyncApplicationsGatewayErrorResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "gateway_error" error.
+type SyncApplicationsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SyncApplicationsUnavailableResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "unavailable" error.
+type SyncApplicationsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListApplicationsFailedPreconditionResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "failed_precondition" error.
+type ListApplicationsFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListApplicationsUnauthorizedResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListApplicationsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListApplicationsForbiddenResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "forbidden" error.
+type ListApplicationsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListApplicationsBadRequestResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "bad_request" error.
+type ListApplicationsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListApplicationsNotFoundResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "not_found" error.
+type ListApplicationsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListApplicationsConflictResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "conflict" error.
+type ListApplicationsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListApplicationsUnsupportedMediaResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListApplicationsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListApplicationsInvalidResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "invalid" error.
+type ListApplicationsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListApplicationsInvariantViolationResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListApplicationsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListApplicationsUnexpectedResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "unexpected" error.
+type ListApplicationsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListApplicationsGatewayErrorResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListApplicationsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListApplicationsUnavailableResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "unavailable" error.
+type ListApplicationsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // IdentityProviderConnectionActiveKeyResponseBody is used to define fields on
 // response body types.
 type IdentityProviderConnectionActiveKeyResponseBody struct {
@@ -1706,10 +2263,29 @@ type IdentityProviderConnectionActiveKeyResponseBody struct {
 type IdentityProviderConnectionChecklistItemResponseBody struct {
 	// Stable step identifier.
 	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// Which phase the step belongs to: connect (the service app the connection
+	// authenticates with) or cross_app_access (the AI agent).
+	Group *string `form:"group,omitempty" json:"group,omitempty" xml:"group,omitempty"`
 	// Short step title.
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// What to do in the console, including any value copied from this connection.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Sub-steps, in order. Empty when the description says it all.
+	Details []string `form:"details,omitempty" json:"details,omitempty" xml:"details,omitempty"`
+	// Whether the last verification observed this step done. Omitted for steps the
+	// server cannot observe; the administrator tracks those.
+	Completed *bool `form:"completed,omitempty" json:"completed,omitempty" xml:"completed,omitempty"`
+}
+
+// IdentityProviderConnectionApplicationsSyncResponseBody is used to define
+// fields on response body types.
+type IdentityProviderConnectionApplicationsSyncResponseBody struct {
+	// ISO 8601 timestamp when the last completed run started. Omitted until the
+	// first run.
+	SyncedAt *string `form:"synced_at,omitempty" json:"synced_at,omitempty" xml:"synced_at,omitempty"`
+	// ISO 8601 timestamp of the last syncApplications call; a request newer than
+	// synced_at runs on the next coordinator pass.
+	RequestedAt *string `form:"requested_at,omitempty" json:"requested_at,omitempty" xml:"requested_at,omitempty"`
 }
 
 // OktaIdentityProviderConnectionResponseBody is used to define fields on
@@ -1763,9 +2339,62 @@ type OktaIdentityProviderConnectionResponseBody struct {
 	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
 	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
 	// Console steps for the connection's listing mode, in order.
-	Checklist []*IdentityProviderConnectionChecklistItemResponseBody `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
-	CreatedAt *string                                                `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string                                                `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync,omitempty" json:"applications_sync,omitempty" xml:"applications_sync,omitempty"`
+	CreatedAt        *string                                                 `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt        *string                                                 `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// IdentityProviderConnectionApplicationResponseBody is used to define fields
+// on response body types.
+type IdentityProviderConnectionApplicationResponseBody struct {
+	// Okta application id.
+	OktaAppID *string `form:"okta_app_id,omitempty" json:"okta_app_id,omitempty" xml:"okta_app_id,omitempty"`
+	// Admin-facing label. Admin-editable; never a key.
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// Okta application template name.
+	Name       *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	SignOnMode *string `form:"sign_on_mode,omitempty" json:"sign_on_mode,omitempty" xml:"sign_on_mode,omitempty"`
+	// ACTIVE or INACTIVE.
+	Status   *string  `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	Features []string `form:"features,omitempty" json:"features,omitempty" xml:"features,omitempty"`
+	// Live direct and group-derived user assignments.
+	UserAssignments *int `form:"user_assignments,omitempty" json:"user_assignments,omitempty" xml:"user_assignments,omitempty"`
+	// Live group assignments.
+	GroupAssignments *int    `form:"group_assignments,omitempty" json:"group_assignments,omitempty" xml:"group_assignments,omitempty"`
+	FirstSeenAt      *string `form:"first_seen_at,omitempty" json:"first_seen_at,omitempty" xml:"first_seen_at,omitempty"`
+	LastSeenAt       *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
+	// Set when the application disappeared from a run; only returned with
+	// include_removed.
+	RemovedAt *string `form:"removed_at,omitempty" json:"removed_at,omitempty" xml:"removed_at,omitempty"`
+}
+
+// IdentityProviderConnectionReconcileRunResponseBody is used to define fields
+// on response body types.
+type IdentityProviderConnectionReconcileRunResponseBody struct {
+	// Run ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// running, succeeded, or failed.
+	Status    *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	// Omitted while running.
+	FinishedAt *string `form:"finished_at,omitempty" json:"finished_at,omitempty" xml:"finished_at,omitempty"`
+	// Applications in the snapshot after skipping Okta-internal ones.
+	ApplicationsSeen    *int `form:"applications_seen,omitempty" json:"applications_seen,omitempty" xml:"applications_seen,omitempty"`
+	ApplicationsAdded   *int `form:"applications_added,omitempty" json:"applications_added,omitempty" xml:"applications_added,omitempty"`
+	ApplicationsRemoved *int `form:"applications_removed,omitempty" json:"applications_removed,omitempty" xml:"applications_removed,omitempty"`
+	AssignmentsAdded    *int `form:"assignments_added,omitempty" json:"assignments_added,omitempty" xml:"assignments_added,omitempty"`
+	AssignmentsRemoved  *int `form:"assignments_removed,omitempty" json:"assignments_removed,omitempty" xml:"assignments_removed,omitempty"`
+	// Okta-internal application ids left out of the snapshot.
+	SkippedAppIds []string `form:"skipped_app_ids,omitempty" json:"skipped_app_ids,omitempty" xml:"skipped_app_ids,omitempty"`
+	// Whether a listing hit the page or application cap; nothing missing from a
+	// truncated listing is removed.
+	Truncated *bool `form:"truncated,omitempty" json:"truncated,omitempty" xml:"truncated,omitempty"`
+	// Typed reason when the run failed. rate_limited and okta_unreachable are
+	// retried before being recorded; superseded means a newer run applied first;
+	// discarded means the connection stopped being verified during the run;
+	// interrupted means the worker died.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
 }
 
 // NewCreateRequestBody builds the HTTP request body from the payload of the
@@ -1813,6 +2442,16 @@ func NewRecordAgentRequestBody(p *identityproviderconnections.RecordAgentPayload
 // "revoke" endpoint of the "identityProviderConnections" service.
 func NewRevokeRequestBody(p *identityproviderconnections.RevokePayload) *RevokeRequestBody {
 	body := &RevokeRequestBody{
+		ID: p.ID,
+	}
+	return body
+}
+
+// NewSyncApplicationsRequestBody builds the HTTP request body from the payload
+// of the "syncApplications" endpoint of the "identityProviderConnections"
+// service.
+func NewSyncApplicationsRequestBody(p *identityproviderconnections.SyncApplicationsPayload) *SyncApplicationsRequestBody {
+	body := &SyncApplicationsRequestBody{
 		ID: p.ID,
 	}
 	return body
@@ -1868,6 +2507,7 @@ func NewCreateOktaIdentityProviderConnectionOK(body *CreateResponseBody) *identi
 		}
 		v.Checklist[i] = unmarshalIdentityProviderConnectionChecklistItemResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionChecklistItem(val)
 	}
+	v.ApplicationsSync = unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplicationsSync(body.ApplicationsSync)
 
 	return v
 }
@@ -2117,6 +2757,7 @@ func NewSubmitClientIDOktaIdentityProviderConnectionOK(body *SubmitClientIDRespo
 		}
 		v.Checklist[i] = unmarshalIdentityProviderConnectionChecklistItemResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionChecklistItem(val)
 	}
+	v.ApplicationsSync = unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplicationsSync(body.ApplicationsSync)
 
 	return v
 }
@@ -2366,6 +3007,7 @@ func NewVerifyOktaIdentityProviderConnectionOK(body *VerifyResponseBody) *identi
 		}
 		v.Checklist[i] = unmarshalIdentityProviderConnectionChecklistItemResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionChecklistItem(val)
 	}
+	v.ApplicationsSync = unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplicationsSync(body.ApplicationsSync)
 
 	return v
 }
@@ -2792,6 +3434,7 @@ func NewRecordAgentOktaIdentityProviderConnectionOK(body *RecordAgentResponseBod
 		}
 		v.Checklist[i] = unmarshalIdentityProviderConnectionChecklistItemResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionChecklistItem(val)
 	}
+	v.ApplicationsSync = unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplicationsSync(body.ApplicationsSync)
 
 	return v
 }
@@ -3011,6 +3654,7 @@ func NewRevokeOktaIdentityProviderConnectionOK(body *RevokeResponseBody) *identi
 		}
 		v.Checklist[i] = unmarshalIdentityProviderConnectionChecklistItemResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionChecklistItem(val)
 	}
+	v.ApplicationsSync = unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplicationsSync(body.ApplicationsSync)
 
 	return v
 }
@@ -3180,6 +3824,457 @@ func NewRevokeUnavailable(body *RevokeUnavailableResponseBody) *goa.ServiceError
 	return v
 }
 
+// NewSyncApplicationsOktaIdentityProviderConnectionOK builds a
+// "identityProviderConnections" service "syncApplications" endpoint result
+// from a HTTP "OK" response.
+func NewSyncApplicationsOktaIdentityProviderConnectionOK(body *SyncApplicationsResponseBody) *identityproviderconnections.OktaIdentityProviderConnection {
+	v := &identityproviderconnections.OktaIdentityProviderConnection{
+		ID:                *body.ID,
+		OrganizationID:    *body.OrganizationID,
+		Provider:          *body.Provider,
+		Status:            *body.Status,
+		OrgURL:            *body.OrgURL,
+		IssuerURL:         *body.IssuerURL,
+		ListingMode:       *body.ListingMode,
+		JwksURL:           *body.JwksURL,
+		ClientID:          body.ClientID,
+		ClientIDSubmitted: *body.ClientIDSubmitted,
+		DpopRequired:      *body.DpopRequired,
+		LastVerifiedAt:    body.LastVerifiedAt,
+		LastError:         body.LastError,
+		AgentID:           body.AgentID,
+		AgentAppID:        body.AgentAppID,
+		CreatedAt:         *body.CreatedAt,
+		UpdatedAt:         *body.UpdatedAt,
+	}
+	v.RequiredScopes = make([]string, len(body.RequiredScopes))
+	for i, val := range body.RequiredScopes {
+		v.RequiredScopes[i] = val
+	}
+	v.GrantedScopes = make([]string, len(body.GrantedScopes))
+	for i, val := range body.GrantedScopes {
+		v.GrantedScopes[i] = val
+	}
+	v.MissingScopes = make([]string, len(body.MissingScopes))
+	for i, val := range body.MissingScopes {
+		v.MissingScopes[i] = val
+	}
+	v.VerificationReasons = make([]string, len(body.VerificationReasons))
+	for i, val := range body.VerificationReasons {
+		v.VerificationReasons[i] = val
+	}
+	if body.ActiveKey != nil {
+		v.ActiveKey = unmarshalIdentityProviderConnectionActiveKeyResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionActiveKey(body.ActiveKey)
+	}
+	v.Checklist = make([]*identityproviderconnections.IdentityProviderConnectionChecklistItem, len(body.Checklist))
+	for i, val := range body.Checklist {
+		if val == nil {
+			v.Checklist[i] = nil
+			continue
+		}
+		v.Checklist[i] = unmarshalIdentityProviderConnectionChecklistItemResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionChecklistItem(val)
+	}
+	v.ApplicationsSync = unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplicationsSync(body.ApplicationsSync)
+
+	return v
+}
+
+// NewSyncApplicationsFailedPrecondition builds a identityProviderConnections
+// service syncApplications endpoint failed_precondition error.
+func NewSyncApplicationsFailedPrecondition(body *SyncApplicationsFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSyncApplicationsRateLimitExceeded builds a identityProviderConnections
+// service syncApplications endpoint rate_limit_exceeded error.
+func NewSyncApplicationsRateLimitExceeded(body *SyncApplicationsRateLimitExceededResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSyncApplicationsUnauthorized builds a identityProviderConnections service
+// syncApplications endpoint unauthorized error.
+func NewSyncApplicationsUnauthorized(body *SyncApplicationsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSyncApplicationsForbidden builds a identityProviderConnections service
+// syncApplications endpoint forbidden error.
+func NewSyncApplicationsForbidden(body *SyncApplicationsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSyncApplicationsBadRequest builds a identityProviderConnections service
+// syncApplications endpoint bad_request error.
+func NewSyncApplicationsBadRequest(body *SyncApplicationsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSyncApplicationsNotFound builds a identityProviderConnections service
+// syncApplications endpoint not_found error.
+func NewSyncApplicationsNotFound(body *SyncApplicationsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSyncApplicationsConflict builds a identityProviderConnections service
+// syncApplications endpoint conflict error.
+func NewSyncApplicationsConflict(body *SyncApplicationsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSyncApplicationsUnsupportedMedia builds a identityProviderConnections
+// service syncApplications endpoint unsupported_media error.
+func NewSyncApplicationsUnsupportedMedia(body *SyncApplicationsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSyncApplicationsInvalid builds a identityProviderConnections service
+// syncApplications endpoint invalid error.
+func NewSyncApplicationsInvalid(body *SyncApplicationsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSyncApplicationsInvariantViolation builds a identityProviderConnections
+// service syncApplications endpoint invariant_violation error.
+func NewSyncApplicationsInvariantViolation(body *SyncApplicationsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSyncApplicationsUnexpected builds a identityProviderConnections service
+// syncApplications endpoint unexpected error.
+func NewSyncApplicationsUnexpected(body *SyncApplicationsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSyncApplicationsGatewayError builds a identityProviderConnections service
+// syncApplications endpoint gateway_error error.
+func NewSyncApplicationsGatewayError(body *SyncApplicationsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSyncApplicationsUnavailable builds a identityProviderConnections service
+// syncApplications endpoint unavailable error.
+func NewSyncApplicationsUnavailable(body *SyncApplicationsUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListApplicationsListIdentityProviderConnectionApplicationsResultOK builds
+// a "identityProviderConnections" service "listApplications" endpoint result
+// from a HTTP "OK" response.
+func NewListApplicationsListIdentityProviderConnectionApplicationsResultOK(body *ListApplicationsResponseBody) *identityproviderconnections.ListIdentityProviderConnectionApplicationsResult {
+	v := &identityproviderconnections.ListIdentityProviderConnectionApplicationsResult{}
+	v.Applications = make([]*identityproviderconnections.IdentityProviderConnectionApplication, len(body.Applications))
+	for i, val := range body.Applications {
+		if val == nil {
+			v.Applications[i] = nil
+			continue
+		}
+		v.Applications[i] = unmarshalIdentityProviderConnectionApplicationResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplication(val)
+	}
+	v.Sync = unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplicationsSync(body.Sync)
+	if body.LastRun != nil {
+		v.LastRun = unmarshalIdentityProviderConnectionReconcileRunResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionReconcileRun(body.LastRun)
+	}
+
+	return v
+}
+
+// NewListApplicationsFailedPrecondition builds a identityProviderConnections
+// service listApplications endpoint failed_precondition error.
+func NewListApplicationsFailedPrecondition(body *ListApplicationsFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListApplicationsUnauthorized builds a identityProviderConnections service
+// listApplications endpoint unauthorized error.
+func NewListApplicationsUnauthorized(body *ListApplicationsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListApplicationsForbidden builds a identityProviderConnections service
+// listApplications endpoint forbidden error.
+func NewListApplicationsForbidden(body *ListApplicationsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListApplicationsBadRequest builds a identityProviderConnections service
+// listApplications endpoint bad_request error.
+func NewListApplicationsBadRequest(body *ListApplicationsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListApplicationsNotFound builds a identityProviderConnections service
+// listApplications endpoint not_found error.
+func NewListApplicationsNotFound(body *ListApplicationsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListApplicationsConflict builds a identityProviderConnections service
+// listApplications endpoint conflict error.
+func NewListApplicationsConflict(body *ListApplicationsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListApplicationsUnsupportedMedia builds a identityProviderConnections
+// service listApplications endpoint unsupported_media error.
+func NewListApplicationsUnsupportedMedia(body *ListApplicationsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListApplicationsInvalid builds a identityProviderConnections service
+// listApplications endpoint invalid error.
+func NewListApplicationsInvalid(body *ListApplicationsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListApplicationsInvariantViolation builds a identityProviderConnections
+// service listApplications endpoint invariant_violation error.
+func NewListApplicationsInvariantViolation(body *ListApplicationsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListApplicationsUnexpected builds a identityProviderConnections service
+// listApplications endpoint unexpected error.
+func NewListApplicationsUnexpected(body *ListApplicationsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListApplicationsGatewayError builds a identityProviderConnections service
+// listApplications endpoint gateway_error error.
+func NewListApplicationsGatewayError(body *ListApplicationsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListApplicationsUnavailable builds a identityProviderConnections service
+// listApplications endpoint unavailable error.
+func NewListApplicationsUnavailable(body *ListApplicationsUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateCreateResponseBody runs the validations defined on CreateResponseBody
 func ValidateCreateResponseBody(body *CreateResponseBody) (err error) {
 	if body.ID == nil {
@@ -3226,6 +4321,9 @@ func ValidateCreateResponseBody(body *CreateResponseBody) (err error) {
 	}
 	if body.Checklist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("checklist", "body"))
+	}
+	if body.ApplicationsSync == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applications_sync", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -3274,6 +4372,11 @@ func ValidateCreateResponseBody(body *CreateResponseBody) (err error) {
 			if err2 := ValidateIdentityProviderConnectionChecklistItemResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.ApplicationsSync != nil {
+		if err2 := ValidateIdentityProviderConnectionApplicationsSyncResponseBody(body.ApplicationsSync); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3333,6 +4436,9 @@ func ValidateSubmitClientIDResponseBody(body *SubmitClientIDResponseBody) (err e
 	if body.Checklist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("checklist", "body"))
 	}
+	if body.ApplicationsSync == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applications_sync", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3380,6 +4486,11 @@ func ValidateSubmitClientIDResponseBody(body *SubmitClientIDResponseBody) (err e
 			if err2 := ValidateIdentityProviderConnectionChecklistItemResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.ApplicationsSync != nil {
+		if err2 := ValidateIdentityProviderConnectionApplicationsSyncResponseBody(body.ApplicationsSync); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3438,6 +4549,9 @@ func ValidateVerifyResponseBody(body *VerifyResponseBody) (err error) {
 	if body.Checklist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("checklist", "body"))
 	}
+	if body.ApplicationsSync == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applications_sync", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3485,6 +4599,11 @@ func ValidateVerifyResponseBody(body *VerifyResponseBody) (err error) {
 			if err2 := ValidateIdentityProviderConnectionChecklistItemResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.ApplicationsSync != nil {
+		if err2 := ValidateIdentityProviderConnectionApplicationsSyncResponseBody(body.ApplicationsSync); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3554,6 +4673,9 @@ func ValidateRecordAgentResponseBody(body *RecordAgentResponseBody) (err error) 
 	if body.Checklist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("checklist", "body"))
 	}
+	if body.ApplicationsSync == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applications_sync", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3601,6 +4723,11 @@ func ValidateRecordAgentResponseBody(body *RecordAgentResponseBody) (err error) 
 			if err2 := ValidateIdentityProviderConnectionChecklistItemResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.ApplicationsSync != nil {
+		if err2 := ValidateIdentityProviderConnectionApplicationsSyncResponseBody(body.ApplicationsSync); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3659,6 +4786,9 @@ func ValidateRevokeResponseBody(body *RevokeResponseBody) (err error) {
 	if body.Checklist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("checklist", "body"))
 	}
+	if body.ApplicationsSync == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applications_sync", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3708,11 +4838,159 @@ func ValidateRevokeResponseBody(body *RevokeResponseBody) (err error) {
 			}
 		}
 	}
+	if body.ApplicationsSync != nil {
+		if err2 := ValidateIdentityProviderConnectionApplicationsSyncResponseBody(body.ApplicationsSync); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateSyncApplicationsResponseBody runs the validations defined on
+// SyncApplicationsResponseBody
+func ValidateSyncApplicationsResponseBody(body *SyncApplicationsResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Provider == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.OrgURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("org_url", "body"))
+	}
+	if body.IssuerURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url", "body"))
+	}
+	if body.ListingMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("listing_mode", "body"))
+	}
+	if body.JwksURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("jwks_url", "body"))
+	}
+	if body.ClientIDSubmitted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_submitted", "body"))
+	}
+	if body.DpopRequired == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dpop_required", "body"))
+	}
+	if body.RequiredScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_scopes", "body"))
+	}
+	if body.GrantedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("granted_scopes", "body"))
+	}
+	if body.MissingScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("missing_scopes", "body"))
+	}
+	if body.VerificationReasons == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("verification_reasons", "body"))
+	}
+	if body.Checklist == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("checklist", "body"))
+	}
+	if body.ApplicationsSync == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applications_sync", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Provider != nil {
+		if !(*body.Provider == "okta") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"okta"}))
+		}
+	}
+	if body.Status != nil {
+		if !(*body.Status == "pending" || *body.Status == "verified" || *body.Status == "degraded" || *body.Status == "revoked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "verified", "degraded", "revoked"}))
+		}
+	}
+	if body.ListingMode != nil {
+		if !(*body.ListingMode == "custom_app" || *body.ListingMode == "oin") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.listing_mode", *body.ListingMode, []any{"custom_app", "oin"}))
+		}
+	}
+	for _, e := range body.VerificationReasons {
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		}
+	}
+	if body.LastVerifiedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_verified_at", *body.LastVerifiedAt, goa.FormatDateTime))
+	}
+	if body.LastError != nil {
+		if !(*body.LastError == "credential_rejected" || *body.LastError == "okta_unreachable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.last_error", *body.LastError, []any{"credential_rejected", "okta_unreachable"}))
+		}
+	}
+	if body.ActiveKey != nil {
+		if err2 := ValidateIdentityProviderConnectionActiveKeyResponseBody(body.ActiveKey); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Checklist {
+		if e != nil {
+			if err2 := ValidateIdentityProviderConnectionChecklistItemResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.ApplicationsSync != nil {
+		if err2 := ValidateIdentityProviderConnectionApplicationsSyncResponseBody(body.ApplicationsSync); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListApplicationsResponseBody runs the validations defined on
+// ListApplicationsResponseBody
+func ValidateListApplicationsResponseBody(body *ListApplicationsResponseBody) (err error) {
+	if body.Applications == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applications", "body"))
+	}
+	if body.Sync == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sync", "body"))
+	}
+	for _, e := range body.Applications {
+		if e != nil {
+			if err2 := ValidateIdentityProviderConnectionApplicationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Sync != nil {
+		if err2 := ValidateIdentityProviderConnectionApplicationsSyncResponseBody(body.Sync); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.LastRun != nil {
+		if err2 := ValidateIdentityProviderConnectionReconcileRunResponseBody(body.LastRun); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
@@ -5445,6 +6723,606 @@ func ValidateRevokeUnavailableResponseBody(body *RevokeUnavailableResponseBody) 
 	return
 }
 
+// ValidateSyncApplicationsFailedPreconditionResponseBody runs the validations
+// defined on syncApplications_failed_precondition_response_body
+func ValidateSyncApplicationsFailedPreconditionResponseBody(body *SyncApplicationsFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSyncApplicationsRateLimitExceededResponseBody runs the validations
+// defined on syncApplications_rate_limit_exceeded_response_body
+func ValidateSyncApplicationsRateLimitExceededResponseBody(body *SyncApplicationsRateLimitExceededResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSyncApplicationsUnauthorizedResponseBody runs the validations
+// defined on syncApplications_unauthorized_response_body
+func ValidateSyncApplicationsUnauthorizedResponseBody(body *SyncApplicationsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSyncApplicationsForbiddenResponseBody runs the validations defined
+// on syncApplications_forbidden_response_body
+func ValidateSyncApplicationsForbiddenResponseBody(body *SyncApplicationsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSyncApplicationsBadRequestResponseBody runs the validations defined
+// on syncApplications_bad_request_response_body
+func ValidateSyncApplicationsBadRequestResponseBody(body *SyncApplicationsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSyncApplicationsNotFoundResponseBody runs the validations defined on
+// syncApplications_not_found_response_body
+func ValidateSyncApplicationsNotFoundResponseBody(body *SyncApplicationsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSyncApplicationsConflictResponseBody runs the validations defined on
+// syncApplications_conflict_response_body
+func ValidateSyncApplicationsConflictResponseBody(body *SyncApplicationsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSyncApplicationsUnsupportedMediaResponseBody runs the validations
+// defined on syncApplications_unsupported_media_response_body
+func ValidateSyncApplicationsUnsupportedMediaResponseBody(body *SyncApplicationsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSyncApplicationsInvalidResponseBody runs the validations defined on
+// syncApplications_invalid_response_body
+func ValidateSyncApplicationsInvalidResponseBody(body *SyncApplicationsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSyncApplicationsInvariantViolationResponseBody runs the validations
+// defined on syncApplications_invariant_violation_response_body
+func ValidateSyncApplicationsInvariantViolationResponseBody(body *SyncApplicationsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSyncApplicationsUnexpectedResponseBody runs the validations defined
+// on syncApplications_unexpected_response_body
+func ValidateSyncApplicationsUnexpectedResponseBody(body *SyncApplicationsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSyncApplicationsGatewayErrorResponseBody runs the validations
+// defined on syncApplications_gateway_error_response_body
+func ValidateSyncApplicationsGatewayErrorResponseBody(body *SyncApplicationsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSyncApplicationsUnavailableResponseBody runs the validations defined
+// on syncApplications_unavailable_response_body
+func ValidateSyncApplicationsUnavailableResponseBody(body *SyncApplicationsUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListApplicationsFailedPreconditionResponseBody runs the validations
+// defined on listApplications_failed_precondition_response_body
+func ValidateListApplicationsFailedPreconditionResponseBody(body *ListApplicationsFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListApplicationsUnauthorizedResponseBody runs the validations
+// defined on listApplications_unauthorized_response_body
+func ValidateListApplicationsUnauthorizedResponseBody(body *ListApplicationsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListApplicationsForbiddenResponseBody runs the validations defined
+// on listApplications_forbidden_response_body
+func ValidateListApplicationsForbiddenResponseBody(body *ListApplicationsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListApplicationsBadRequestResponseBody runs the validations defined
+// on listApplications_bad_request_response_body
+func ValidateListApplicationsBadRequestResponseBody(body *ListApplicationsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListApplicationsNotFoundResponseBody runs the validations defined on
+// listApplications_not_found_response_body
+func ValidateListApplicationsNotFoundResponseBody(body *ListApplicationsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListApplicationsConflictResponseBody runs the validations defined on
+// listApplications_conflict_response_body
+func ValidateListApplicationsConflictResponseBody(body *ListApplicationsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListApplicationsUnsupportedMediaResponseBody runs the validations
+// defined on listApplications_unsupported_media_response_body
+func ValidateListApplicationsUnsupportedMediaResponseBody(body *ListApplicationsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListApplicationsInvalidResponseBody runs the validations defined on
+// listApplications_invalid_response_body
+func ValidateListApplicationsInvalidResponseBody(body *ListApplicationsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListApplicationsInvariantViolationResponseBody runs the validations
+// defined on listApplications_invariant_violation_response_body
+func ValidateListApplicationsInvariantViolationResponseBody(body *ListApplicationsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListApplicationsUnexpectedResponseBody runs the validations defined
+// on listApplications_unexpected_response_body
+func ValidateListApplicationsUnexpectedResponseBody(body *ListApplicationsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListApplicationsGatewayErrorResponseBody runs the validations
+// defined on listApplications_gateway_error_response_body
+func ValidateListApplicationsGatewayErrorResponseBody(body *ListApplicationsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListApplicationsUnavailableResponseBody runs the validations defined
+// on listApplications_unavailable_response_body
+func ValidateListApplicationsUnavailableResponseBody(body *ListApplicationsUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateIdentityProviderConnectionActiveKeyResponseBody runs the validations
 // defined on IdentityProviderConnectionActiveKeyResponseBody
 func ValidateIdentityProviderConnectionActiveKeyResponseBody(body *IdentityProviderConnectionActiveKeyResponseBody) (err error) {
@@ -5472,11 +7350,39 @@ func ValidateIdentityProviderConnectionChecklistItemResponseBody(body *IdentityP
 	if body.Key == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
 	}
+	if body.Group == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group", "body"))
+	}
 	if body.Title == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Details == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("details", "body"))
+	}
+	if body.Key != nil {
+		if !(*body.Key == "add_oin_app" || *body.Key == "create_api_services_app" || *body.Key == "public_key_auth" || *body.Key == "dpop" || *body.Key == "grant_scopes" || *body.Key == "assign_admin_roles" || *body.Key == "submit_client_id" || *body.Key == "register_ai_agent" || *body.Key == "link_agent_app" || *body.Key == "activate_agent_app" || *body.Key == "record_ai_agent" || *body.Key == "first_resource_connection") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key", *body.Key, []any{"add_oin_app", "create_api_services_app", "public_key_auth", "dpop", "grant_scopes", "assign_admin_roles", "submit_client_id", "register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection"}))
+		}
+	}
+	if body.Group != nil {
+		if !(*body.Group == "connect" || *body.Group == "cross_app_access") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.group", *body.Group, []any{"connect", "cross_app_access"}))
+		}
+	}
+	return
+}
+
+// ValidateIdentityProviderConnectionApplicationsSyncResponseBody runs the
+// validations defined on IdentityProviderConnectionApplicationsSyncResponseBody
+func ValidateIdentityProviderConnectionApplicationsSyncResponseBody(body *IdentityProviderConnectionApplicationsSyncResponseBody) (err error) {
+	if body.SyncedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.synced_at", *body.SyncedAt, goa.FormatDateTime))
+	}
+	if body.RequestedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_at", *body.RequestedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -5529,6 +7435,9 @@ func ValidateOktaIdentityProviderConnectionResponseBody(body *OktaIdentityProvid
 	if body.Checklist == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("checklist", "body"))
 	}
+	if body.ApplicationsSync == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applications_sync", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5578,11 +7487,116 @@ func ValidateOktaIdentityProviderConnectionResponseBody(body *OktaIdentityProvid
 			}
 		}
 	}
+	if body.ApplicationsSync != nil {
+		if err2 := ValidateIdentityProviderConnectionApplicationsSyncResponseBody(body.ApplicationsSync); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateIdentityProviderConnectionApplicationResponseBody runs the
+// validations defined on IdentityProviderConnectionApplicationResponseBody
+func ValidateIdentityProviderConnectionApplicationResponseBody(body *IdentityProviderConnectionApplicationResponseBody) (err error) {
+	if body.OktaAppID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("okta_app_id", "body"))
+	}
+	if body.Label == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.SignOnMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sign_on_mode", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Features == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("features", "body"))
+	}
+	if body.UserAssignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_assignments", "body"))
+	}
+	if body.GroupAssignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group_assignments", "body"))
+	}
+	if body.FirstSeenAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("first_seen_at", "body"))
+	}
+	if body.LastSeenAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_seen_at", "body"))
+	}
+	if body.FirstSeenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_seen_at", *body.FirstSeenAt, goa.FormatDateTime))
+	}
+	if body.LastSeenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
+	}
+	if body.RemovedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.removed_at", *body.RemovedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateIdentityProviderConnectionReconcileRunResponseBody runs the
+// validations defined on IdentityProviderConnectionReconcileRunResponseBody
+func ValidateIdentityProviderConnectionReconcileRunResponseBody(body *IdentityProviderConnectionReconcileRunResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.StartedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("started_at", "body"))
+	}
+	if body.ApplicationsSeen == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applications_seen", "body"))
+	}
+	if body.ApplicationsAdded == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applications_added", "body"))
+	}
+	if body.ApplicationsRemoved == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applications_removed", "body"))
+	}
+	if body.AssignmentsAdded == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments_added", "body"))
+	}
+	if body.AssignmentsRemoved == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments_removed", "body"))
+	}
+	if body.SkippedAppIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skipped_app_ids", "body"))
+	}
+	if body.Truncated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("truncated", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "running" || *body.Status == "succeeded" || *body.Status == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"running", "succeeded", "failed"}))
+		}
+	}
+	if body.StartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *body.StartedAt, goa.FormatDateTime))
+	}
+	if body.FinishedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.finished_at", *body.FinishedAt, goa.FormatDateTime))
+	}
+	if body.Error != nil {
+		if !(*body.Error == "rate_limited" || *body.Error == "credential_rejected" || *body.Error == "okta_unreachable" || *body.Error == "client_unavailable" || *body.Error == "superseded" || *body.Error == "discarded" || *body.Error == "interrupted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.error", *body.Error, []any{"rate_limited", "credential_rejected", "okta_unreachable", "client_unavailable", "superseded", "discarded", "interrupted"}))
+		}
 	}
 	return
 }

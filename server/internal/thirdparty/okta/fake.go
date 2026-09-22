@@ -40,6 +40,7 @@ type Fake struct {
 	calls      []string
 	err        error
 	methodErrs map[string]error
+	appErrs    map[string]map[string]error
 }
 
 var _ Client = (*Fake)(nil)
@@ -51,7 +52,44 @@ func NewFake(fixtures Fixtures) *Fake {
 	if fixtures.AppGroups == nil {
 		fixtures.AppGroups = map[string][]AppGroup{}
 	}
-	return &Fake{mu: sync.Mutex{}, fixtures: fixtures, calls: nil, err: nil, methodErrs: map[string]error{}}
+	return &Fake{mu: sync.Mutex{}, fixtures: fixtures, calls: nil, err: nil, methodErrs: map[string]error{}, appErrs: map[string]map[string]error{}}
+}
+
+// SetFixtures replaces the in-memory data for subsequent calls.
+func (f *Fake) SetFixtures(fixtures Fixtures) {
+	if fixtures.AppUsers == nil {
+		fixtures.AppUsers = map[string][]AppUser{}
+	}
+	if fixtures.AppGroups == nil {
+		fixtures.AppGroups = map[string][]AppGroup{}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fixtures = fixtures
+}
+
+// SetAppError makes one per-app method ("ListAppUsers" or "ListAppGroups")
+// fail with err for appID only, until cleared with nil.
+func (f *Fake) SetAppError(name, appID string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.appErrs == nil {
+		f.appErrs = map[string]map[string]error{}
+	}
+	if err == nil {
+		delete(f.appErrs[name], appID)
+		return
+	}
+	if f.appErrs[name] == nil {
+		f.appErrs[name] = map[string]error{}
+	}
+	f.appErrs[name][appID] = err
+}
+
+func (f *Fake) appError(name, appID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.appErrs[name][appID]
 }
 
 // SetError makes every subsequent call fail with err until cleared with nil.
@@ -143,6 +181,9 @@ func (f *Fake) ListAppUsers(_ context.Context, req ListAppUsersRequest) ([]AppUs
 	if err := validateAppID(req.AppID); err != nil {
 		return nil, err
 	}
+	if err := f.appError("ListAppUsers", req.AppID); err != nil {
+		return nil, err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return slices.Clone(f.fixtures.AppUsers[req.AppID]), nil
@@ -153,6 +194,9 @@ func (f *Fake) ListAppGroups(_ context.Context, req ListAppGroupsRequest) ([]App
 		return nil, err
 	}
 	if err := validateAppID(req.AppID); err != nil {
+		return nil, err
+	}
+	if err := f.appError("ListAppGroups", req.AppID); err != nil {
 		return nil, err
 	}
 	f.mu.Lock()

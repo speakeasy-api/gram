@@ -2,6 +2,7 @@ package remotesessions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -39,7 +40,7 @@ type TokenEndpointAssertionSigner interface {
 type unavailableTokenEndpointAssertionSigner struct{}
 
 func (unavailableTokenEndpointAssertionSigner) SignClientAssertion(context.Context, ClientAssertionRequest) (string, error) {
-	return "", fmt.Errorf("private_key_jwt signing is unavailable")
+	return "", errTokenEndpointSigningUnavailable
 }
 
 type KMSClientAssertionSigner struct {
@@ -151,4 +152,24 @@ func serializeClientAssertion(ctx context.Context, kmsClient gcpkms.SigningClien
 		return "", fmt.Errorf("sign client assertion: %w", err)
 	}
 	return assertion, nil
+}
+
+var errTokenEndpointSigningUnavailable = errors.New("private_key_jwt signing is unavailable")
+
+// tokenEndpointSigningError preserves shared error text and causes while giving
+// federation a safe classification boundary.
+type tokenEndpointSigningError struct{ err error }
+
+func (e *tokenEndpointSigningError) Error() string { return e.err.Error() }
+func (e *tokenEndpointSigningError) Unwrap() error { return e.err }
+
+func tokenEndpointSignerAvailable(signer TokenEndpointAssertionSigner) bool {
+	switch s := signer.(type) {
+	case nil, unavailableTokenEndpointAssertionSigner, *unavailableTokenEndpointAssertionSigner:
+		return false
+	case *KMSClientAssertionSigner:
+		return s != nil
+	default:
+		return true
+	}
 }

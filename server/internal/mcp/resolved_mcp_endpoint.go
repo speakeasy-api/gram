@@ -50,7 +50,7 @@ type ResolvedMcpEndpoint struct {
 	// CIMDAdmissionModeRaw is the issuer's stored
 	// client_id_metadata_admission_mode, carried verbatim so that
 	// admission.ResolveMode stays the single place deciding what it means:
-	// NULL resolves to "presets", and a value outside the enum fails closed
+	// NULL resolves to "open", and a value outside the enum fails closed
 	// to "disabled".
 	//
 	// Raw rather than a resolved admission.Mode so that resolution stays in
@@ -58,10 +58,10 @@ type ResolvedMcpEndpoint struct {
 	// stamping site, which is exactly what admission.ResolveMode exists to
 	// prevent.
 	//
-	// The cost is that an unstamped endpoint reads as NULL and therefore as
-	// "presets" — the default, not a denial. Callers must ensure this is
-	// populated before enforcement; RequireUserSessionIssuer is the one
-	// place that does so.
+	// The cost is that an unstamped endpoint reads as NULL and therefore uses
+	// the permissive "open" default. Callers must populate this before
+	// enforcement so an explicit issuer policy is not lost;
+	// RequireUserSessionIssuer is the one place that does so.
 	CIMDAdmissionModeRaw pgtype.Text
 
 	// CustomDomainID, when valid, scopes the endpoint to a custom domain.

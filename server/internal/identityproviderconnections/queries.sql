@@ -326,3 +326,14 @@ SELECT EXISTS (
     AND id <> @exclude_id
     AND deleted IS FALSE
 );
+
+-- A request newer than the watermark keeps the connection due even when a
+-- run was in flight when it arrived.
+-- name: RequestOktaApplicationsSync :one
+UPDATE okta_identity_provider_connections
+SET applications_sync_requested_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE identity_provider_connection_id = @identity_provider_connection_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+RETURNING *;

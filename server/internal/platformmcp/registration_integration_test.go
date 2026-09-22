@@ -265,6 +265,49 @@ func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
 	}
 }
 
+func TestDelegatedDiagnosticsProjectReadAllowsCustomRoleAndDeniesOtherProjects(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_delegated_diagnostics_authorization")
+	require.NoError(t, err)
+	principal, allowedProject := seedRegistrationLifecycle(t, ctx, conn)
+	seedPlatformMCPAuthorizationMember(t, ctx, conn, principal.OrganizationID, principal.UserID, authz.SystemRoleMember)
+	deniedProject, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Denied diagnostics project", Slug: "denied-diagnostics-" + uuid.NewString()[:8], OrganizationID: principal.OrganizationID,
+	})
+	require.NoError(t, err)
+
+	role := seedAccessRole(t, ctx, conn, principal.OrganizationID, "diagnostics-reader", "Diagnostics Reader")
+	_, err = accessrepo.New(conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID: principal.OrganizationID, WorkosUserID: "workos-" + principal.UserID, WorkosRoleSlug: "diagnostics-reader",
+		UserID: conv.ToPGText(principal.UserID), WorkosMembershipID: conv.ToPGText("membership-" + principal.UserID), WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()), WorkosLastEventID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	selector := authz.NewSelector(authz.ScopeProjectRead, allowedProject.ID.String())
+	encoded, err := selector.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: principal.OrganizationID,
+		PrincipalUrn:   role,
+		Scope:          string(authz.ScopeProjectRead),
+		Selectors:      encoded,
+	})
+	require.NoError(t, err)
+
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
+	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
+	require.NoError(t, err)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
+
+	resolved, err := reader.ResolveProjectRead(prepared, principal, FindMCPInput{ProjectID: allowedProject.ID.String()})
+	require.NoError(t, err)
+	require.Equal(t, allowedProject.ID, resolved.ID)
+
+	_, err = reader.ResolveProjectRead(prepared, principal, FindMCPInput{ProjectID: deniedProject.ID.String()})
+	require.ErrorIs(t, err, ErrForbidden)
+}
+
 func TestLiveOrganizationSelectorAdmitsMembersWithoutOrgAdmin(t *testing.T) {
 	t.Parallel()
 

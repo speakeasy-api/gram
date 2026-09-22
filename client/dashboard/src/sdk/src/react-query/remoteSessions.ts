@@ -77,7 +77,7 @@ export type RemoteSessionsQueryError =
  * listRemoteSessions remoteSessions
  *
  * @remarks
- * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
+ * List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
  */
 export function useRemoteSessions(
   request?: ListRemoteSessionsRequest | undefined,
@@ -100,7 +100,7 @@ export function useRemoteSessions(
  * listRemoteSessions remoteSessions
  *
  * @remarks
- * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
+ * List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
  */
 export function useRemoteSessionsSuspense(
   request?: ListRemoteSessionsRequest | undefined,
@@ -126,7 +126,7 @@ export function useRemoteSessionsSuspense(
  * listRemoteSessions remoteSessions
  *
  * @remarks
- * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
+ * List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
  */
 export function useRemoteSessionsInfinite(
   request?: ListRemoteSessionsRequest | undefined,
@@ -163,7 +163,7 @@ export function useRemoteSessionsInfinite(
  * listRemoteSessions remoteSessions
  *
  * @remarks
- * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
+ * List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
  */
 export function useRemoteSessionsInfiniteSuspense(
   request?: ListRemoteSessionsRequest | undefined,
@@ -200,6 +200,8 @@ export function setRemoteSessionsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
+      principalId?: string | undefined;
+      userSessionIssuerId?: string | undefined;
       subjectUrn?: string | undefined;
       remoteSessionClientId?: string | undefined;
       cursor?: string | undefined;
@@ -220,6 +222,8 @@ export function invalidateRemoteSessions(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
+      principalId?: string | undefined;
+      userSessionIssuerId?: string | undefined;
       subjectUrn?: string | undefined;
       remoteSessionClientId?: string | undefined;
       cursor?: string | undefined;

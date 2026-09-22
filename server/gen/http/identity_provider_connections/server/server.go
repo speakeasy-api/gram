@@ -18,13 +18,15 @@ import (
 
 // Server lists the identityProviderConnections service endpoint HTTP handlers.
 type Server struct {
-	Mounts         []*MountPoint
-	Create         http.Handler
-	SubmitClientID http.Handler
-	Verify         http.Handler
-	Get            http.Handler
-	RecordAgent    http.Handler
-	Revoke         http.Handler
+	Mounts           []*MountPoint
+	Create           http.Handler
+	SubmitClientID   http.Handler
+	Verify           http.Handler
+	Get              http.Handler
+	RecordAgent      http.Handler
+	Revoke           http.Handler
+	SyncApplications http.Handler
+	ListApplications http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -60,13 +62,17 @@ func New(
 			{"Get", "GET", "/rpc/identityProviderConnections.get"},
 			{"RecordAgent", "POST", "/rpc/identityProviderConnections.recordAgent"},
 			{"Revoke", "POST", "/rpc/identityProviderConnections.revoke"},
+			{"SyncApplications", "POST", "/rpc/identityProviderConnections.syncApplications"},
+			{"ListApplications", "GET", "/rpc/identityProviderConnections.listApplications"},
 		},
-		Create:         NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
-		SubmitClientID: NewSubmitClientIDHandler(e.SubmitClientID, mux, decoder, encoder, errhandler, formatter),
-		Verify:         NewVerifyHandler(e.Verify, mux, decoder, encoder, errhandler, formatter),
-		Get:            NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
-		RecordAgent:    NewRecordAgentHandler(e.RecordAgent, mux, decoder, encoder, errhandler, formatter),
-		Revoke:         NewRevokeHandler(e.Revoke, mux, decoder, encoder, errhandler, formatter),
+		Create:           NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
+		SubmitClientID:   NewSubmitClientIDHandler(e.SubmitClientID, mux, decoder, encoder, errhandler, formatter),
+		Verify:           NewVerifyHandler(e.Verify, mux, decoder, encoder, errhandler, formatter),
+		Get:              NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
+		RecordAgent:      NewRecordAgentHandler(e.RecordAgent, mux, decoder, encoder, errhandler, formatter),
+		Revoke:           NewRevokeHandler(e.Revoke, mux, decoder, encoder, errhandler, formatter),
+		SyncApplications: NewSyncApplicationsHandler(e.SyncApplications, mux, decoder, encoder, errhandler, formatter),
+		ListApplications: NewListApplicationsHandler(e.ListApplications, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -81,6 +87,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Get = m(s.Get)
 	s.RecordAgent = m(s.RecordAgent)
 	s.Revoke = m(s.Revoke)
+	s.SyncApplications = m(s.SyncApplications)
+	s.ListApplications = m(s.ListApplications)
 }
 
 // MethodNames returns the methods served.
@@ -94,6 +102,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetHandler(mux, h.Get)
 	MountRecordAgentHandler(mux, h.RecordAgent)
 	MountRevokeHandler(mux, h.Revoke)
+	MountSyncApplicationsHandler(mux, h.SyncApplications)
+	MountListApplicationsHandler(mux, h.ListApplications)
 }
 
 // Mount configures the mux to serve the identityProviderConnections endpoints.
@@ -397,6 +407,114 @@ func NewRevokeHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "revoke")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identityProviderConnections")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSyncApplicationsHandler configures the mux to serve the
+// "identityProviderConnections" service "syncApplications" endpoint.
+func MountSyncApplicationsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/identityProviderConnections.syncApplications", f)
+}
+
+// NewSyncApplicationsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "identityProviderConnections" service
+// "syncApplications" endpoint.
+func NewSyncApplicationsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSyncApplicationsRequest(mux, decoder)
+		encodeResponse = EncodeSyncApplicationsResponse(encoder)
+		encodeError    = EncodeSyncApplicationsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "syncApplications")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identityProviderConnections")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListApplicationsHandler configures the mux to serve the
+// "identityProviderConnections" service "listApplications" endpoint.
+func MountListApplicationsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/identityProviderConnections.listApplications", f)
+}
+
+// NewListApplicationsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "identityProviderConnections" service
+// "listApplications" endpoint.
+func NewListApplicationsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListApplicationsRequest(mux, decoder)
+		encodeResponse = EncodeListApplicationsResponse(encoder)
+		encodeError    = EncodeListApplicationsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listApplications")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "identityProviderConnections")
 		payload, err := decodeRequest(r)
 		if err != nil {

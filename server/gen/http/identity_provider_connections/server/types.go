@@ -56,6 +56,13 @@ type RevokeRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
+// SyncApplicationsRequestBody is the type of the "identityProviderConnections"
+// service "syncApplications" endpoint HTTP request body.
+type SyncApplicationsRequestBody struct {
+	// Connection ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // CreateResponseBody is the type of the "identityProviderConnections" service
 // "create" endpoint HTTP response body.
 type CreateResponseBody struct {
@@ -107,9 +114,10 @@ type CreateResponseBody struct {
 	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
 	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
 	// Console steps for the connection's listing mode, in order.
-	Checklist []*IdentityProviderConnectionChecklistItemResponseBody `form:"checklist" json:"checklist" xml:"checklist"`
-	CreatedAt string                                                 `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string                                                 `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist" json:"checklist" xml:"checklist"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync" json:"applications_sync" xml:"applications_sync"`
+	CreatedAt        string                                                  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt        string                                                  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // SubmitClientIDResponseBody is the type of the "identityProviderConnections"
@@ -163,9 +171,10 @@ type SubmitClientIDResponseBody struct {
 	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
 	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
 	// Console steps for the connection's listing mode, in order.
-	Checklist []*IdentityProviderConnectionChecklistItemResponseBody `form:"checklist" json:"checklist" xml:"checklist"`
-	CreatedAt string                                                 `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string                                                 `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist" json:"checklist" xml:"checklist"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync" json:"applications_sync" xml:"applications_sync"`
+	CreatedAt        string                                                  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt        string                                                  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // VerifyResponseBody is the type of the "identityProviderConnections" service
@@ -219,9 +228,10 @@ type VerifyResponseBody struct {
 	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
 	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
 	// Console steps for the connection's listing mode, in order.
-	Checklist []*IdentityProviderConnectionChecklistItemResponseBody `form:"checklist" json:"checklist" xml:"checklist"`
-	CreatedAt string                                                 `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string                                                 `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist" json:"checklist" xml:"checklist"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync" json:"applications_sync" xml:"applications_sync"`
+	CreatedAt        string                                                  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt        string                                                  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetResponseBody is the type of the "identityProviderConnections" service
@@ -282,9 +292,10 @@ type RecordAgentResponseBody struct {
 	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
 	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
 	// Console steps for the connection's listing mode, in order.
-	Checklist []*IdentityProviderConnectionChecklistItemResponseBody `form:"checklist" json:"checklist" xml:"checklist"`
-	CreatedAt string                                                 `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string                                                 `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist" json:"checklist" xml:"checklist"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync" json:"applications_sync" xml:"applications_sync"`
+	CreatedAt        string                                                  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt        string                                                  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RevokeResponseBody is the type of the "identityProviderConnections" service
@@ -338,9 +349,80 @@ type RevokeResponseBody struct {
 	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
 	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
 	// Console steps for the connection's listing mode, in order.
-	Checklist []*IdentityProviderConnectionChecklistItemResponseBody `form:"checklist" json:"checklist" xml:"checklist"`
-	CreatedAt string                                                 `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string                                                 `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist" json:"checklist" xml:"checklist"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync" json:"applications_sync" xml:"applications_sync"`
+	CreatedAt        string                                                  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt        string                                                  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// SyncApplicationsResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body.
+type SyncApplicationsResponseBody struct {
+	// Connection ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Organization the connection belongs to.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Identity provider; always okta.
+	Provider string `form:"provider" json:"provider" xml:"provider"`
+	// Connection state. pending until the client ID is submitted and verified;
+	// verified when every required scope is granted over DPoP; degraded when
+	// verification found gaps (see verification_reasons); revoked once the
+	// credential was withdrawn.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Okta org URL, for example https://example.okta.com.
+	OrgURL string `form:"org_url" json:"org_url" xml:"org_url"`
+	// Discovered authorization server issuer. Equal to org_url by construction.
+	IssuerURL string `form:"issuer_url" json:"issuer_url" xml:"issuer_url"`
+	// Which checklist template applies: custom_app when the admin creates the API
+	// Services app by hand, oin when the Speakeasy OIN listing is added from the
+	// catalog.
+	ListingMode string `form:"listing_mode" json:"listing_mode" xml:"listing_mode"`
+	// Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+	JwksURL string `form:"jwks_url" json:"jwks_url" xml:"jwks_url"`
+	// Okta application client ID. Omitted until submitted.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Whether the real Okta client ID has replaced the provisioning placeholder.
+	ClientIDSubmitted bool `form:"client_id_submitted" json:"client_id_submitted" xml:"client_id_submitted"`
+	// Whether Okta issued a DPoP-bound token at the last verification.
+	DpopRequired bool `form:"dpop_required" json:"dpop_required" xml:"dpop_required"`
+	// Okta API scopes the integration needs.
+	RequiredScopes []string `form:"required_scopes" json:"required_scopes" xml:"required_scopes"`
+	// Scopes Okta granted at the last verification.
+	GrantedScopes []string `form:"granted_scopes" json:"granted_scopes" xml:"granted_scopes"`
+	// Required scopes Okta did not grant at the last verification.
+	MissingScopes []string `form:"missing_scopes" json:"missing_scopes" xml:"missing_scopes"`
+	// Typed reasons recorded by the last verification; empty when verified or not
+	// yet verified. missing_role is reserved for a later release.
+	VerificationReasons []string `form:"verification_reasons" json:"verification_reasons" xml:"verification_reasons"`
+	// ISO 8601 timestamp of the last verification that found every required scope
+	// granted. Omitted until then.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// Why the last verification did not complete: Okta rejected the credential, or
+	// could not be reached. Omitted when it completed.
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// Admin-entered Okta AI agent ID. Display only.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Admin-entered Okta application ID the AI agent is bound to. Display only.
+	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
+	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
+	// Console steps for the connection's listing mode, in order.
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist" json:"checklist" xml:"checklist"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync" json:"applications_sync" xml:"applications_sync"`
+	CreatedAt        string                                                  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt        string                                                  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListApplicationsResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body.
+type ListApplicationsResponseBody struct {
+	// Applications ordered by label, live rows first. Capped at 2000 rows, the
+	// same cap a run applies.
+	Applications []*IdentityProviderConnectionApplicationResponseBody    `form:"applications" json:"applications" xml:"applications"`
+	Sync         *IdentityProviderConnectionApplicationsSyncResponseBody `form:"sync" json:"sync" xml:"sync"`
+	// Omitted before the first run.
+	LastRun *IdentityProviderConnectionReconcileRunResponseBody `form:"last_run,omitempty" json:"last_run,omitempty" xml:"last_run,omitempty"`
 }
 
 // CreateFailedPreconditionResponseBody is the type of the
@@ -1690,6 +1772,481 @@ type RevokeUnavailableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SyncApplicationsFailedPreconditionResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "failed_precondition" error.
+type SyncApplicationsFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncApplicationsRateLimitExceededResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "rate_limit_exceeded" error.
+type SyncApplicationsRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncApplicationsUnauthorizedResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "unauthorized" error.
+type SyncApplicationsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncApplicationsForbiddenResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "forbidden" error.
+type SyncApplicationsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncApplicationsBadRequestResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "bad_request" error.
+type SyncApplicationsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncApplicationsNotFoundResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "not_found" error.
+type SyncApplicationsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncApplicationsConflictResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "conflict" error.
+type SyncApplicationsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncApplicationsUnsupportedMediaResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "unsupported_media" error.
+type SyncApplicationsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncApplicationsInvalidResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "invalid" error.
+type SyncApplicationsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncApplicationsInvariantViolationResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "invariant_violation" error.
+type SyncApplicationsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncApplicationsUnexpectedResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "unexpected" error.
+type SyncApplicationsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncApplicationsGatewayErrorResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "gateway_error" error.
+type SyncApplicationsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SyncApplicationsUnavailableResponseBody is the type of the
+// "identityProviderConnections" service "syncApplications" endpoint HTTP
+// response body for the "unavailable" error.
+type SyncApplicationsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListApplicationsFailedPreconditionResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "failed_precondition" error.
+type ListApplicationsFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListApplicationsUnauthorizedResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListApplicationsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListApplicationsForbiddenResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "forbidden" error.
+type ListApplicationsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListApplicationsBadRequestResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "bad_request" error.
+type ListApplicationsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListApplicationsNotFoundResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "not_found" error.
+type ListApplicationsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListApplicationsConflictResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "conflict" error.
+type ListApplicationsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListApplicationsUnsupportedMediaResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListApplicationsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListApplicationsInvalidResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "invalid" error.
+type ListApplicationsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListApplicationsInvariantViolationResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListApplicationsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListApplicationsUnexpectedResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "unexpected" error.
+type ListApplicationsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListApplicationsGatewayErrorResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListApplicationsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListApplicationsUnavailableResponseBody is the type of the
+// "identityProviderConnections" service "listApplications" endpoint HTTP
+// response body for the "unavailable" error.
+type ListApplicationsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // IdentityProviderConnectionActiveKeyResponseBody is used to define fields on
 // response body types.
 type IdentityProviderConnectionActiveKeyResponseBody struct {
@@ -1706,10 +2263,29 @@ type IdentityProviderConnectionActiveKeyResponseBody struct {
 type IdentityProviderConnectionChecklistItemResponseBody struct {
 	// Stable step identifier.
 	Key string `form:"key" json:"key" xml:"key"`
+	// Which phase the step belongs to: connect (the service app the connection
+	// authenticates with) or cross_app_access (the AI agent).
+	Group string `form:"group" json:"group" xml:"group"`
 	// Short step title.
 	Title string `form:"title" json:"title" xml:"title"`
 	// What to do in the console, including any value copied from this connection.
 	Description string `form:"description" json:"description" xml:"description"`
+	// Sub-steps, in order. Empty when the description says it all.
+	Details []string `form:"details" json:"details" xml:"details"`
+	// Whether the last verification observed this step done. Omitted for steps the
+	// server cannot observe; the administrator tracks those.
+	Completed *bool `form:"completed,omitempty" json:"completed,omitempty" xml:"completed,omitempty"`
+}
+
+// IdentityProviderConnectionApplicationsSyncResponseBody is used to define
+// fields on response body types.
+type IdentityProviderConnectionApplicationsSyncResponseBody struct {
+	// ISO 8601 timestamp when the last completed run started. Omitted until the
+	// first run.
+	SyncedAt *string `form:"synced_at,omitempty" json:"synced_at,omitempty" xml:"synced_at,omitempty"`
+	// ISO 8601 timestamp of the last syncApplications call; a request newer than
+	// synced_at runs on the next coordinator pass.
+	RequestedAt *string `form:"requested_at,omitempty" json:"requested_at,omitempty" xml:"requested_at,omitempty"`
 }
 
 // OktaIdentityProviderConnectionResponseBody is used to define fields on
@@ -1763,9 +2339,62 @@ type OktaIdentityProviderConnectionResponseBody struct {
 	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
 	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
 	// Console steps for the connection's listing mode, in order.
-	Checklist []*IdentityProviderConnectionChecklistItemResponseBody `form:"checklist" json:"checklist" xml:"checklist"`
-	CreatedAt string                                                 `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string                                                 `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist" json:"checklist" xml:"checklist"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync" json:"applications_sync" xml:"applications_sync"`
+	CreatedAt        string                                                  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt        string                                                  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// IdentityProviderConnectionApplicationResponseBody is used to define fields
+// on response body types.
+type IdentityProviderConnectionApplicationResponseBody struct {
+	// Okta application id.
+	OktaAppID string `form:"okta_app_id" json:"okta_app_id" xml:"okta_app_id"`
+	// Admin-facing label. Admin-editable; never a key.
+	Label string `form:"label" json:"label" xml:"label"`
+	// Okta application template name.
+	Name       string `form:"name" json:"name" xml:"name"`
+	SignOnMode string `form:"sign_on_mode" json:"sign_on_mode" xml:"sign_on_mode"`
+	// ACTIVE or INACTIVE.
+	Status   string   `form:"status" json:"status" xml:"status"`
+	Features []string `form:"features" json:"features" xml:"features"`
+	// Live direct and group-derived user assignments.
+	UserAssignments int `form:"user_assignments" json:"user_assignments" xml:"user_assignments"`
+	// Live group assignments.
+	GroupAssignments int    `form:"group_assignments" json:"group_assignments" xml:"group_assignments"`
+	FirstSeenAt      string `form:"first_seen_at" json:"first_seen_at" xml:"first_seen_at"`
+	LastSeenAt       string `form:"last_seen_at" json:"last_seen_at" xml:"last_seen_at"`
+	// Set when the application disappeared from a run; only returned with
+	// include_removed.
+	RemovedAt *string `form:"removed_at,omitempty" json:"removed_at,omitempty" xml:"removed_at,omitempty"`
+}
+
+// IdentityProviderConnectionReconcileRunResponseBody is used to define fields
+// on response body types.
+type IdentityProviderConnectionReconcileRunResponseBody struct {
+	// Run ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// running, succeeded, or failed.
+	Status    string `form:"status" json:"status" xml:"status"`
+	StartedAt string `form:"started_at" json:"started_at" xml:"started_at"`
+	// Omitted while running.
+	FinishedAt *string `form:"finished_at,omitempty" json:"finished_at,omitempty" xml:"finished_at,omitempty"`
+	// Applications in the snapshot after skipping Okta-internal ones.
+	ApplicationsSeen    int `form:"applications_seen" json:"applications_seen" xml:"applications_seen"`
+	ApplicationsAdded   int `form:"applications_added" json:"applications_added" xml:"applications_added"`
+	ApplicationsRemoved int `form:"applications_removed" json:"applications_removed" xml:"applications_removed"`
+	AssignmentsAdded    int `form:"assignments_added" json:"assignments_added" xml:"assignments_added"`
+	AssignmentsRemoved  int `form:"assignments_removed" json:"assignments_removed" xml:"assignments_removed"`
+	// Okta-internal application ids left out of the snapshot.
+	SkippedAppIds []string `form:"skipped_app_ids" json:"skipped_app_ids" xml:"skipped_app_ids"`
+	// Whether a listing hit the page or application cap; nothing missing from a
+	// truncated listing is removed.
+	Truncated bool `form:"truncated" json:"truncated" xml:"truncated"`
+	// Typed reason when the run failed. rate_limited and okta_unreachable are
+	// retried before being recorded; superseded means a newer run applied first;
+	// discarded means the connection stopped being verified during the run;
+	// interrupted means the worker died.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
 }
 
 // NewCreateResponseBody builds the HTTP response body from the result of the
@@ -1836,6 +2465,9 @@ func NewCreateResponseBody(res *identityproviderconnections.OktaIdentityProvider
 		}
 	} else {
 		body.Checklist = []*IdentityProviderConnectionChecklistItemResponseBody{}
+	}
+	if res.ApplicationsSync != nil {
+		body.ApplicationsSync = marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationsSyncToIdentityProviderConnectionApplicationsSyncResponseBody(res.ApplicationsSync)
 	}
 	return body
 }
@@ -1910,6 +2542,9 @@ func NewSubmitClientIDResponseBody(res *identityproviderconnections.OktaIdentity
 	} else {
 		body.Checklist = []*IdentityProviderConnectionChecklistItemResponseBody{}
 	}
+	if res.ApplicationsSync != nil {
+		body.ApplicationsSync = marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationsSyncToIdentityProviderConnectionApplicationsSyncResponseBody(res.ApplicationsSync)
+	}
 	return body
 }
 
@@ -1981,6 +2616,9 @@ func NewVerifyResponseBody(res *identityproviderconnections.OktaIdentityProvider
 		}
 	} else {
 		body.Checklist = []*IdentityProviderConnectionChecklistItemResponseBody{}
+	}
+	if res.ApplicationsSync != nil {
+		body.ApplicationsSync = marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationsSyncToIdentityProviderConnectionApplicationsSyncResponseBody(res.ApplicationsSync)
 	}
 	return body
 }
@@ -2064,6 +2702,9 @@ func NewRecordAgentResponseBody(res *identityproviderconnections.OktaIdentityPro
 	} else {
 		body.Checklist = []*IdentityProviderConnectionChecklistItemResponseBody{}
 	}
+	if res.ApplicationsSync != nil {
+		body.ApplicationsSync = marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationsSyncToIdentityProviderConnectionApplicationsSyncResponseBody(res.ApplicationsSync)
+	}
 	return body
 }
 
@@ -2135,6 +2776,111 @@ func NewRevokeResponseBody(res *identityproviderconnections.OktaIdentityProvider
 		}
 	} else {
 		body.Checklist = []*IdentityProviderConnectionChecklistItemResponseBody{}
+	}
+	if res.ApplicationsSync != nil {
+		body.ApplicationsSync = marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationsSyncToIdentityProviderConnectionApplicationsSyncResponseBody(res.ApplicationsSync)
+	}
+	return body
+}
+
+// NewSyncApplicationsResponseBody builds the HTTP response body from the
+// result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsResponseBody(res *identityproviderconnections.OktaIdentityProviderConnection) *SyncApplicationsResponseBody {
+	body := &SyncApplicationsResponseBody{
+		ID:                res.ID,
+		OrganizationID:    res.OrganizationID,
+		Provider:          res.Provider,
+		Status:            res.Status,
+		OrgURL:            res.OrgURL,
+		IssuerURL:         res.IssuerURL,
+		ListingMode:       res.ListingMode,
+		JwksURL:           res.JwksURL,
+		ClientID:          res.ClientID,
+		ClientIDSubmitted: res.ClientIDSubmitted,
+		DpopRequired:      res.DpopRequired,
+		LastVerifiedAt:    res.LastVerifiedAt,
+		LastError:         res.LastError,
+		AgentID:           res.AgentID,
+		AgentAppID:        res.AgentAppID,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+	}
+	if res.RequiredScopes != nil {
+		body.RequiredScopes = make([]string, len(res.RequiredScopes))
+		for i, val := range res.RequiredScopes {
+			body.RequiredScopes[i] = val
+		}
+	} else {
+		body.RequiredScopes = []string{}
+	}
+	if res.GrantedScopes != nil {
+		body.GrantedScopes = make([]string, len(res.GrantedScopes))
+		for i, val := range res.GrantedScopes {
+			body.GrantedScopes[i] = val
+		}
+	} else {
+		body.GrantedScopes = []string{}
+	}
+	if res.MissingScopes != nil {
+		body.MissingScopes = make([]string, len(res.MissingScopes))
+		for i, val := range res.MissingScopes {
+			body.MissingScopes[i] = val
+		}
+	} else {
+		body.MissingScopes = []string{}
+	}
+	if res.VerificationReasons != nil {
+		body.VerificationReasons = make([]string, len(res.VerificationReasons))
+		for i, val := range res.VerificationReasons {
+			body.VerificationReasons[i] = val
+		}
+	} else {
+		body.VerificationReasons = []string{}
+	}
+	if res.ActiveKey != nil {
+		body.ActiveKey = marshalIdentityproviderconnectionsIdentityProviderConnectionActiveKeyToIdentityProviderConnectionActiveKeyResponseBody(res.ActiveKey)
+	}
+	if res.Checklist != nil {
+		body.Checklist = make([]*IdentityProviderConnectionChecklistItemResponseBody, len(res.Checklist))
+		for i, val := range res.Checklist {
+			if val == nil {
+				body.Checklist[i] = nil
+				continue
+			}
+			body.Checklist[i] = marshalIdentityproviderconnectionsIdentityProviderConnectionChecklistItemToIdentityProviderConnectionChecklistItemResponseBody(val)
+		}
+	} else {
+		body.Checklist = []*IdentityProviderConnectionChecklistItemResponseBody{}
+	}
+	if res.ApplicationsSync != nil {
+		body.ApplicationsSync = marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationsSyncToIdentityProviderConnectionApplicationsSyncResponseBody(res.ApplicationsSync)
+	}
+	return body
+}
+
+// NewListApplicationsResponseBody builds the HTTP response body from the
+// result of the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewListApplicationsResponseBody(res *identityproviderconnections.ListIdentityProviderConnectionApplicationsResult) *ListApplicationsResponseBody {
+	body := &ListApplicationsResponseBody{}
+	if res.Applications != nil {
+		body.Applications = make([]*IdentityProviderConnectionApplicationResponseBody, len(res.Applications))
+		for i, val := range res.Applications {
+			if val == nil {
+				body.Applications[i] = nil
+				continue
+			}
+			body.Applications[i] = marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationToIdentityProviderConnectionApplicationResponseBody(val)
+		}
+	} else {
+		body.Applications = []*IdentityProviderConnectionApplicationResponseBody{}
+	}
+	if res.Sync != nil {
+		body.Sync = marshalIdentityproviderconnectionsIdentityProviderConnectionApplicationsSyncToIdentityProviderConnectionApplicationsSyncResponseBody(res.Sync)
+	}
+	if res.LastRun != nil {
+		body.LastRun = marshalIdentityproviderconnectionsIdentityProviderConnectionReconcileRunToIdentityProviderConnectionReconcileRunResponseBody(res.LastRun)
 	}
 	return body
 }
@@ -3178,6 +3924,381 @@ func NewRevokeUnavailableResponseBody(res *goa.ServiceError) *RevokeUnavailableR
 	return body
 }
 
+// NewSyncApplicationsFailedPreconditionResponseBody builds the HTTP response
+// body from the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsFailedPreconditionResponseBody(res *goa.ServiceError) *SyncApplicationsFailedPreconditionResponseBody {
+	body := &SyncApplicationsFailedPreconditionResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncApplicationsRateLimitExceededResponseBody builds the HTTP response
+// body from the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsRateLimitExceededResponseBody(res *goa.ServiceError) *SyncApplicationsRateLimitExceededResponseBody {
+	body := &SyncApplicationsRateLimitExceededResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncApplicationsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsUnauthorizedResponseBody(res *goa.ServiceError) *SyncApplicationsUnauthorizedResponseBody {
+	body := &SyncApplicationsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncApplicationsForbiddenResponseBody builds the HTTP response body from
+// the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsForbiddenResponseBody(res *goa.ServiceError) *SyncApplicationsForbiddenResponseBody {
+	body := &SyncApplicationsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncApplicationsBadRequestResponseBody builds the HTTP response body from
+// the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsBadRequestResponseBody(res *goa.ServiceError) *SyncApplicationsBadRequestResponseBody {
+	body := &SyncApplicationsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncApplicationsNotFoundResponseBody builds the HTTP response body from
+// the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsNotFoundResponseBody(res *goa.ServiceError) *SyncApplicationsNotFoundResponseBody {
+	body := &SyncApplicationsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncApplicationsConflictResponseBody builds the HTTP response body from
+// the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsConflictResponseBody(res *goa.ServiceError) *SyncApplicationsConflictResponseBody {
+	body := &SyncApplicationsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncApplicationsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsUnsupportedMediaResponseBody(res *goa.ServiceError) *SyncApplicationsUnsupportedMediaResponseBody {
+	body := &SyncApplicationsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncApplicationsInvalidResponseBody builds the HTTP response body from
+// the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsInvalidResponseBody(res *goa.ServiceError) *SyncApplicationsInvalidResponseBody {
+	body := &SyncApplicationsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncApplicationsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsInvariantViolationResponseBody(res *goa.ServiceError) *SyncApplicationsInvariantViolationResponseBody {
+	body := &SyncApplicationsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncApplicationsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsUnexpectedResponseBody(res *goa.ServiceError) *SyncApplicationsUnexpectedResponseBody {
+	body := &SyncApplicationsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncApplicationsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsGatewayErrorResponseBody(res *goa.ServiceError) *SyncApplicationsGatewayErrorResponseBody {
+	body := &SyncApplicationsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSyncApplicationsUnavailableResponseBody builds the HTTP response body
+// from the result of the "syncApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewSyncApplicationsUnavailableResponseBody(res *goa.ServiceError) *SyncApplicationsUnavailableResponseBody {
+	body := &SyncApplicationsUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListApplicationsFailedPreconditionResponseBody builds the HTTP response
+// body from the result of the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewListApplicationsFailedPreconditionResponseBody(res *goa.ServiceError) *ListApplicationsFailedPreconditionResponseBody {
+	body := &ListApplicationsFailedPreconditionResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListApplicationsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewListApplicationsUnauthorizedResponseBody(res *goa.ServiceError) *ListApplicationsUnauthorizedResponseBody {
+	body := &ListApplicationsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListApplicationsForbiddenResponseBody builds the HTTP response body from
+// the result of the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewListApplicationsForbiddenResponseBody(res *goa.ServiceError) *ListApplicationsForbiddenResponseBody {
+	body := &ListApplicationsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListApplicationsBadRequestResponseBody builds the HTTP response body from
+// the result of the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewListApplicationsBadRequestResponseBody(res *goa.ServiceError) *ListApplicationsBadRequestResponseBody {
+	body := &ListApplicationsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListApplicationsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewListApplicationsNotFoundResponseBody(res *goa.ServiceError) *ListApplicationsNotFoundResponseBody {
+	body := &ListApplicationsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListApplicationsConflictResponseBody builds the HTTP response body from
+// the result of the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewListApplicationsConflictResponseBody(res *goa.ServiceError) *ListApplicationsConflictResponseBody {
+	body := &ListApplicationsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListApplicationsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewListApplicationsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListApplicationsUnsupportedMediaResponseBody {
+	body := &ListApplicationsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListApplicationsInvalidResponseBody builds the HTTP response body from
+// the result of the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewListApplicationsInvalidResponseBody(res *goa.ServiceError) *ListApplicationsInvalidResponseBody {
+	body := &ListApplicationsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListApplicationsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewListApplicationsInvariantViolationResponseBody(res *goa.ServiceError) *ListApplicationsInvariantViolationResponseBody {
+	body := &ListApplicationsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListApplicationsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewListApplicationsUnexpectedResponseBody(res *goa.ServiceError) *ListApplicationsUnexpectedResponseBody {
+	body := &ListApplicationsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListApplicationsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewListApplicationsGatewayErrorResponseBody(res *goa.ServiceError) *ListApplicationsGatewayErrorResponseBody {
+	body := &ListApplicationsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListApplicationsUnavailableResponseBody builds the HTTP response body
+// from the result of the "listApplications" endpoint of the
+// "identityProviderConnections" service.
+func NewListApplicationsUnavailableResponseBody(res *goa.ServiceError) *ListApplicationsUnavailableResponseBody {
+	body := &ListApplicationsUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreatePayload builds a identityProviderConnections service create
 // endpoint payload.
 func NewCreatePayload(body *CreateRequestBody, sessionToken *string) *identityproviderconnections.CreatePayload {
@@ -3247,6 +4368,28 @@ func NewRevokePayload(body *RevokeRequestBody, sessionToken *string) *identitypr
 	return v
 }
 
+// NewSyncApplicationsPayload builds a identityProviderConnections service
+// syncApplications endpoint payload.
+func NewSyncApplicationsPayload(body *SyncApplicationsRequestBody, sessionToken *string) *identityproviderconnections.SyncApplicationsPayload {
+	v := &identityproviderconnections.SyncApplicationsPayload{
+		ID: *body.ID,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListApplicationsPayload builds a identityProviderConnections service
+// listApplications endpoint payload.
+func NewListApplicationsPayload(id string, includeRemoved bool, sessionToken *string) *identityproviderconnections.ListApplicationsPayload {
+	v := &identityproviderconnections.ListApplicationsPayload{}
+	v.ID = id
+	v.IncludeRemoved = includeRemoved
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // ValidateCreateRequestBody runs the validations defined on CreateRequestBody
 func ValidateCreateRequestBody(body *CreateRequestBody) (err error) {
 	if body.OrgURL == nil {
@@ -3300,6 +4443,18 @@ func ValidateRecordAgentRequestBody(body *RecordAgentRequestBody) (err error) {
 
 // ValidateRevokeRequestBody runs the validations defined on RevokeRequestBody
 func ValidateRevokeRequestBody(body *RevokeRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSyncApplicationsRequestBody runs the validations defined on
+// SyncApplicationsRequestBody
+func ValidateSyncApplicationsRequestBody(body *SyncApplicationsRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

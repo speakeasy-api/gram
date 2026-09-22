@@ -226,6 +226,12 @@ func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, 
 		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, runtimepolicy.ErrInvalidDelegatedPolicy, "unsupported delegated grants version")
 	}
 
+	// New credentials need explicit permissions; live policy remains only a ceiling.
+	// Keep this issuance-only so existing credential and OAuth policy decoding is unchanged.
+	if len(requestedForms) == 0 {
+		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, runtimepolicy.ErrInvalidDelegatedPolicy, "agent keys require at least one requested grant")
+	}
+
 	requested := make([]authz.Grant, 0, len(requestedForms))
 	for _, form := range requestedForms {
 		if form == nil || form.Selector == nil {

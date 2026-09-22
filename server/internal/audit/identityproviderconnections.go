@@ -13,11 +13,12 @@ import (
 )
 
 const (
-	ActionIdentityProviderConnectionCreate         Action = "identity-provider-connection:create"
-	ActionIdentityProviderConnectionSubmitClientID Action = "identity-provider-connection:submit-client-id"
-	ActionIdentityProviderConnectionVerify         Action = "identity-provider-connection:verify"
-	ActionIdentityProviderConnectionRecordAgent    Action = "identity-provider-connection:record-agent"
-	ActionIdentityProviderConnectionRevoke         Action = "identity-provider-connection:revoke"
+	ActionIdentityProviderConnectionCreate           Action = "identity-provider-connection:create"
+	ActionIdentityProviderConnectionSubmitClientID   Action = "identity-provider-connection:submit-client-id"
+	ActionIdentityProviderConnectionVerify           Action = "identity-provider-connection:verify"
+	ActionIdentityProviderConnectionRecordAgent      Action = "identity-provider-connection:record-agent"
+	ActionIdentityProviderConnectionRevoke           Action = "identity-provider-connection:revoke"
+	ActionIdentityProviderConnectionSyncApplications Action = "identity-provider-connection:sync-applications"
 )
 
 // IdentityProviderConnectionSnapshot is the connection state an audit entry
@@ -68,6 +69,10 @@ func (l *Logger) LogIdentityProviderConnectionRecordAgent(ctx context.Context, d
 
 func (l *Logger) LogIdentityProviderConnectionRevoke(ctx context.Context, dbtx repo.DBTX, event LogIdentityProviderConnectionEvent) error {
 	return l.logIdentityProviderConnection(ctx, dbtx, ActionIdentityProviderConnectionRevoke, event)
+}
+
+func (l *Logger) LogIdentityProviderConnectionSyncApplications(ctx context.Context, dbtx repo.DBTX, event LogIdentityProviderConnectionEvent) error {
+	return l.logIdentityProviderConnection(ctx, dbtx, ActionIdentityProviderConnectionSyncApplications, event)
 }
 
 func (l *Logger) logIdentityProviderConnection(ctx context.Context, dbtx repo.DBTX, action Action, event LogIdentityProviderConnectionEvent) error {

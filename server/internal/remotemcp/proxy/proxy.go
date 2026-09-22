@@ -916,6 +916,13 @@ func (p *Proxy) forwardRequest(
 		forwardCancel()
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "build upstream request").LogError(ctx, p.Logger)
 	}
+	if p.Identity.RemoteMCPServerID != "" {
+		if _, err := validateRemoteMCPTransportURL(upstreamReq.URL.String()); err != nil {
+			phaseTimer.Stop()
+			forwardCancel()
+			return nil, nil, p.classifyForwardError(ctx, fmt.Errorf("validate remote MCP target: %w", err), false)
+		}
+	}
 
 	if err := p.applyRequestHeaders(ctx, r, upstreamReq); err != nil {
 		phaseTimer.Stop()
@@ -934,6 +941,32 @@ func (p *Proxy) forwardRequest(
 	if p.DisableRedirects {
 		client.CheckRedirect = func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
+		}
+	} else if p.Identity.RemoteMCPServerID != "" {
+		configuredOrigin := upstreamReq.URL
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			// Setting CheckRedirect replaces net/http's default policy, hop
+			// limit included, so the limit has to be restored here. Without
+			// it an upstream redirect loop runs until the phase timeout
+			// instead of stopping after a bounded number of hops.
+			if len(via) > maxRemoteMCPRedirects {
+				return fmt.Errorf("stopped after %d redirects", maxRemoteMCPRedirects)
+			}
+			if _, err := validateRemoteMCPTransportURL(req.URL.String()); err != nil {
+				return fmt.Errorf("validate remote MCP redirect: %w", err)
+			}
+			// A 307 or 308 off-origin would hand the JSON-RPC request — tool
+			// arguments included — to a host the upstream chose. Stripping
+			// credentials does not cover that, so refuse.
+			if CrossOriginBodyReplay(configuredOrigin, req) {
+				return fmt.Errorf("remote MCP redirect to %s: %w", req.URL.Host, ErrCrossOriginRemoteMCPRedirect)
+			}
+			// Other redirects are still followed, but a hop off the
+			// configured origin travels without the project's credentials.
+			if !sameRemoteMCPOrigin(configuredOrigin, req.URL) {
+				p.stripConfiguredCredentials(req.Header)
+			}
+			return nil
 		}
 	}
 	resp, err := client.Do(upstreamReq)
@@ -1591,6 +1624,11 @@ func (p *Proxy) dispatchInterceptorError(
 // echoed back in the synthesized error's "data" field. Enough to show the
 // upstream's actual response shape for debugging without relaying an
 // unbounded payload into a JSON-RPC error envelope.
+// maxRemoteMCPRedirects bounds redirect hops for hosted Remote MCP requests.
+// It matches the limit net/http applies by default, which this proxy's own
+// CheckRedirect would otherwise remove.
+const maxRemoteMCPRedirects = 10
+
 const maxNonJSONRPCEchoBytes = 2048
 
 // nonJSONRPCUpstreamData builds the JSON-RPC error "data" payload for a

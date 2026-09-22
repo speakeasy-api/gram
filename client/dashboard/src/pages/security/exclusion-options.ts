@@ -1,6 +1,7 @@
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { ExclusionFields } from "./exclusion-expression";
-import { getRuleTitleFallback } from "./risk-utils";
+import { RULE_CATEGORY_META, type DetectorMode } from "./policy-data";
+import { getCategoryForFinding, getRuleTitleFallback } from "./risk-utils";
 
 // The ready-made rules offered for a finding-originated exclusion. Each option
 // carries a complete rule in `fields`, which goes straight to the mutation,
@@ -47,6 +48,34 @@ const CUSTOM_OPTION: ExclusionOption = {
   hint: "Regex, entity types, and rule/source filters.",
 };
 
+// Entity-type exclusions are a Presidio concept; the LLM analyzer does not
+// apply them, so the DSL box is not advertised as offering them.
+const LLM_CUSTOM_OPTION: ExclusionOption = {
+  value: "custom",
+  title: "Write it myself",
+  hint: "Regex and rule/source filters.",
+};
+
+// How the source option names a detector. The option's value stays the raw
+// source (that is what the rule is written against), but scanner and engine
+// names are implementation detail the policy author never sees elsewhere, so
+// the title says what the detector looks for instead. Sources without an
+// entry fall back to their category's label, then to the source itself.
+const SOURCE_TITLE: Record<string, string> = {
+  gitleaks: "secret scanning",
+  presidio: "personal data detection",
+  prompt_injection: "prompt injection detection",
+  llm_judge: "prompt policies",
+  llm_analyzer: "the risk model",
+};
+
+function sourceTitle(source: string): string {
+  const named = SOURCE_TITLE[source];
+  if (named) return named;
+  const category = getCategoryForFinding(source);
+  return category ? RULE_CATEGORY_META[category].label : source;
+}
+
 function fields(
   matchType: ExclusionFields["matchType"],
   matchValue: string,
@@ -74,6 +103,7 @@ export function exclusionOptions(
   results: RiskResult[],
   exact?: ExactCandidate,
   presetRuleId?: string,
+  mode: DetectorMode = "presidio",
 ): ExclusionOption[] {
   const options: ExclusionOption[] = [];
 
@@ -107,12 +137,12 @@ export function exclusionOptions(
   if (source) {
     options.push({
       value: "source",
-      title: `Anything detected by ${source}`,
+      title: `Anything detected by ${sourceTitle(source)}`,
       hint: "Every finding from this detector stops being flagged.",
       fields: fields("source", source),
     });
   }
 
-  options.push(CUSTOM_OPTION);
+  options.push(mode === "llm" ? LLM_CUSTOM_OPTION : CUSTOM_OPTION);
   return options;
 }

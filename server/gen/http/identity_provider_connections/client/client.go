@@ -37,6 +37,14 @@ type Client struct {
 	// Revoke Doer is the HTTP client used to make requests to the revoke endpoint.
 	RevokeDoer goahttp.Doer
 
+	// SyncApplications Doer is the HTTP client used to make requests to the
+	// syncApplications endpoint.
+	SyncApplicationsDoer goahttp.Doer
+
+	// ListApplications Doer is the HTTP client used to make requests to the
+	// listApplications endpoint.
+	ListApplicationsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -58,17 +66,19 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateDoer:          doer,
-		SubmitClientIDDoer:  doer,
-		VerifyDoer:          doer,
-		GetDoer:             doer,
-		RecordAgentDoer:     doer,
-		RevokeDoer:          doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CreateDoer:           doer,
+		SubmitClientIDDoer:   doer,
+		VerifyDoer:           doer,
+		GetDoer:              doer,
+		RecordAgentDoer:      doer,
+		RevokeDoer:           doer,
+		SyncApplicationsDoer: doer,
+		ListApplicationsDoer: doer,
+		RestoreResponseBody:  restoreBody,
+		scheme:               scheme,
+		host:                 host,
+		decoder:              dec,
+		encoder:              enc,
 	}
 }
 
@@ -211,6 +221,54 @@ func (c *Client) Revoke() goa.Endpoint {
 		resp, err := c.RevokeDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("identityProviderConnections", "revoke", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SyncApplications returns an endpoint that makes HTTP requests to the
+// identityProviderConnections service syncApplications server.
+func (c *Client) SyncApplications() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSyncApplicationsRequest(c.encoder)
+		decodeResponse = DecodeSyncApplicationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSyncApplicationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SyncApplicationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identityProviderConnections", "syncApplications", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListApplications returns an endpoint that makes HTTP requests to the
+// identityProviderConnections service listApplications server.
+func (c *Client) ListApplications() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListApplicationsRequest(c.encoder)
+		decodeResponse = DecodeListApplicationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListApplicationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListApplicationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identityProviderConnections", "listApplications", err)
 		}
 		return decodeResponse(resp)
 	}

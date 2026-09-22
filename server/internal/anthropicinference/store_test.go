@@ -93,7 +93,7 @@ func TestSignedWebhookPersistsTranscriptAndEnforcesPolicy(t *testing.T) {
 	result := new(risk.ScanResult)
 	result.Action = "block"
 	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
-	service := &Service{store: store, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
 	key := []byte("EXAMPLE-signing-secret")
 	config.SigningSecrets = []string{"whsec_" + base64.StdEncoding.EncodeToString(key)}
 	mux := goahttp.NewMuxer()
@@ -401,17 +401,17 @@ func TestStoreAppendsAfterRollingCompaction(t *testing.T) {
 	}
 }
 
-func TestStoreKeepsRepeatedIdenticalMessages(t *testing.T) {
+func TestStoreSkipsRepeatedIdenticalAnchor(t *testing.T) {
 	t.Parallel()
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
 	frame.Messages = []Message{textMessage("user", "start"), textMessage("user", "continue"), textMessage("user", "continue")}
 	require.Equal(t, 0, saveFrame(t, store, config, frame, ""))
 	frame.Messages = append(frame.Messages, textMessage("user", "continue"))
-	require.Equal(t, 3, saveFrame(t, store, config, frame, ""))
+	require.Equal(t, 4, saveFrame(t, store, config, frame, ""))
 	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
 	require.NoError(t, err)
-	require.Len(t, messages, 4)
+	require.Len(t, messages, 3)
 }
 
 func TestStoreContinuesHistoryStoredByCount(t *testing.T) {

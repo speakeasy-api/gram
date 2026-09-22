@@ -56,6 +56,43 @@ WHERE r.project_id = @project_id
   AND r.target_key = @target_key
   AND r.deleted IS FALSE;
 
+-- name: GetPlatformRequesterApprovalRequest :one
+-- Returns one request only when the calling user is attached as a requester.
+-- The organization, project, request, and user pins make cross-tenant and
+-- other-requester reads indistinguishable from a missing request.
+SELECT
+  r.id
+  , r.target_kind
+  , r.target_raw
+  , r.status
+  , CASE
+      WHEN r.status = 'superseded' THEN ''
+      ELSE COALESCE((
+        SELECT d.decision
+        FROM mcp_approval_decisions d
+        WHERE d.mcp_approval_request_id = r.id
+          AND d.project_id = r.project_id
+          AND d.deleted IS FALSE
+          AND d.decision IN ('approved', 'denied')
+        ORDER BY d.decided_at DESC, d.id DESC
+        LIMIT 1
+      ), '')
+    END::text AS standing_decision
+  , req.requested_at
+  , r.created_at
+  , r.updated_at
+FROM mcp_approval_requests r
+JOIN mcp_approval_request_requesters req
+  ON req.mcp_approval_request_id = r.id
+  AND req.organization_id = r.organization_id
+  AND req.project_id = r.project_id
+  AND req.deleted IS FALSE
+WHERE r.id = @id
+  AND r.organization_id = @organization_id
+  AND r.project_id = @project_id
+  AND req.user_id = @user_id
+  AND r.deleted IS FALSE;
+
 -- name: ListApprovalRequestsByTargetKeys :many
 -- Resolves the approval request tracking each of a set of canonical server
 -- URLs, so the Shadow MCP inventory can join approval state onto its rows.

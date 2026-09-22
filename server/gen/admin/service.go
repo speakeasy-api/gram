@@ -197,6 +197,10 @@ type Service interface {
 	// Returns totals-only ordinary meter usage for an organization over a bounded
 	// UTC-day window.
 	GetMeterUsage(context.Context, *GetMeterUsagePayload) (res *AdminMeterUsageResponse, err error)
+	// Returns exact current PAYG list-price estimates for an organization's three
+	// metered products over a maximum of three calendar months. Available for
+	// every organization regardless of account type or subscription state.
+	GetSpendBreakdown(context.Context, *GetSpendBreakdownPayload) (res *AdminSpendBreakdownResponse, err error)
 	// Read the shared support catalog and product coverage.
 	GetSupportMatrix(context.Context, *GetSupportMatrixPayload) (res *SupportMatrix, err error)
 	// Save coverage against the last read revision; rejects concurrent changes.
@@ -223,7 +227,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [52]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSupportMatrix", "updateSupportMatrix"}
+var MethodNames = [53]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -489,6 +493,22 @@ type AdminSession struct {
 	Name  *string
 }
 
+// AdminSpendBreakdownResponse is the result type of the admin service
+// getSpendBreakdown method.
+type AdminSpendBreakdownResponse struct {
+	Window *MeterUsageWindow
+	// Trailing twelve billing-cycle date windows
+	BillingCycles []*MeterUsageWindow
+	Currency      string
+	PricingBasis  string
+	// Retrieval timestamp used to distinguish current and future buckets
+	QueriedAt string
+	// Exact estimated total at current PAYG list prices
+	TotalCostUsd string
+	// The three metered products in stable display order
+	Products []*SpendProduct
+}
+
 // AdminStripeCustomer is the result type of the admin service
 // getStripeCustomer method.
 type AdminStripeCustomer struct {
@@ -707,8 +727,12 @@ type CreateGlobalIssuerPayload struct {
 // createOrganization method.
 type CreateOrganizationPayload struct {
 	AdminSessionToken *string
-	// Display name for the new organization.
-	Name string
+	// Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes
+	// the name and verified email domain.
+	URL string
+	// The operator confirms that domain ownership was established outside this
+	// form.
+	OwnershipConfirmed bool
 }
 
 // DeleteGlobalIssuerPayload is the payload type of the admin service
@@ -858,6 +882,20 @@ type GetProjectPayload struct {
 // GetSessionPayload is the payload type of the admin service getSession method.
 type GetSessionPayload struct {
 	AdminSessionToken *string
+}
+
+// GetSpendBreakdownPayload is the payload type of the admin service
+// getSpendBreakdown method.
+type GetSpendBreakdownPayload struct {
+	AdminSessionToken *string
+	// Organization ID or canonical slug.
+	OrganizationID string
+	// Inclusive UTC midnight reporting boundary. Must be paired with to.
+	From *string
+	// Exclusive UTC midnight reporting boundary. Must be paired with from and no
+	// later than three calendar months after from, clamped to the target month's
+	// last day.
+	To *string
 }
 
 // GetStripeCustomerPayload is the payload type of the admin service
@@ -1295,6 +1333,33 @@ type SetStripeCustomerPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
 	StripeCustomerID  string
+}
+
+type SpendBucket struct {
+	// Inclusive bucket boundary
+	From string
+	// Exclusive bucket boundary
+	To string
+	// Exact integer ordinary usage quantity as a decimal string
+	Quantity string
+	// Exact estimated cost at current PAYG list prices
+	CostUsd string
+}
+
+type SpendProduct struct {
+	ID    string
+	Label string
+	Unit  string
+	// Exact integer ordinary usage quantity as a decimal string
+	Quantity string
+	// Exact integer quantity to which rate_usd applies
+	RateQuantity string
+	// Exact current PAYG USD list price
+	RateUsd string
+	// Exact estimated product cost at current PAYG list prices
+	CostUsd string
+	// Dense UTC daily product buckets, including in-progress and future days
+	Buckets []*SpendBucket
 }
 
 // StartTrialPayload is the payload type of the admin service startTrial method.

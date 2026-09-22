@@ -644,6 +644,8 @@ func newStripeClient(
 
 	catalog := stripeclient.Catalog{
 		PriceIDTUM:            c.String("stripe-price-id-tum"),
+		PriceIDMCPEgress:      c.String("stripe-price-id-mcp-egress"),
+		PriceIDRiskScans:      c.String("stripe-price-id-risk-scans"),
 		PortalConfigurationID: c.String("stripe-portal-configuration-id"),
 	}
 	if err := catalog.Validate(); err != nil {
@@ -814,7 +816,7 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 // server down over it would take login, the organizations list, the detail page
 // and every update endpoint with it. The condition is logged at Error on
 // startup, which is what makes it visible before an operator goes looking.
-func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) orgprovision.WorkOSOrganizationCreator {
+func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) orgprovision.WorkOSVerifiedDomainCreator {
 	apiKey := c.String("workos-api-key")
 	haveRealKey := apiKey != "" && apiKey != "unset"
 	opts := workosClientOpts(c)

@@ -40,6 +40,8 @@ import (
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
+	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -69,6 +71,12 @@ const (
 
 	// verifyMaxPages caps the confirmation reads at one page each.
 	verifyMaxPages = 1
+
+	// syncRatePerMinute caps manual applications syncs per organization.
+	syncRatePerMinute = 1
+
+	// listApplicationsLimit bounds one snapshot listing.
+	listApplicationsLimit = 2000
 )
 
 // oktaClientIDPattern matches Okta application client ids.
@@ -76,6 +84,11 @@ var oktaClientIDPattern = regexp.MustCompile(`^0oa[A-Za-z0-9]{17,}$`)
 
 // oktaObjectIDPattern bounds the admin-entered agent and app ids.
 var oktaObjectIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+
+// ApplicationSyncTrigger runs the applications snapshot coordinator promptly.
+type ApplicationSyncTrigger interface {
+	TriggerApplicationSync(ctx context.Context) error
+}
 
 // Discoverer fetches an issuer's authorization server metadata.
 type Discoverer func(ctx context.Context, issuerURL string) (remotesessions.DiscoveredIssuerMetadata, error)
@@ -100,6 +113,8 @@ type Service struct {
 	discover      Discoverer
 	verifyLimiter *ratelimit.Limiter
 	createLimiter *ratelimit.Limiter
+	syncLimiter   *ratelimit.Limiter
+	syncTrigger   ApplicationSyncTrigger
 	createSlots   chan struct{}
 	metrics       *serviceMetrics
 }
@@ -145,6 +160,7 @@ func NewService(
 	oktaClients okta.ClientFactory,
 	discover Discoverer,
 	limitStore ratelimit.Store,
+	syncTrigger ApplicationSyncTrigger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("identityproviderconnections.api"))
 	return &Service{
@@ -164,6 +180,10 @@ func NewService(
 		createLimiter: ratelimit.New(limitStore, "identity-provider-connection-create",
 			ratelimit.PerMinute(createRatePerMinute).WithBurst(createRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
+		syncLimiter: ratelimit.New(limitStore, "identity-provider-connection-sync-applications",
+			ratelimit.PerMinute(syncRatePerMinute),
+			ratelimit.WithMetrics(meterProvider)),
+		syncTrigger: syncTrigger,
 		createSlots: createAdmission(db),
 		metrics:     newServiceMetrics(logger, meterProvider),
 	}
@@ -235,6 +255,39 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 		return nil, oops.E(oops.CodeUnexpected, err, "load connection").LogError(ctx, logger)
 	}
 	return s.withManagedClient(ctx, logger, s.db, row.IdentityProviderConnection, row.OktaIdentityProviderConnection)
+}
+
+// view renders the connection with what Speakeasy's records say about the
+// agent steps. Callers have already committed and the checklist is advisory,
+// so a failed read leaves those steps unchecked instead of failing the call.
+func (s *Service) view(ctx context.Context, logger *slog.Logger, dbtx repo.DBTX, rows connectionRows) *gen.OktaIdentityProviderConnection {
+	agent := AgentObservation{App: nil, ConnectionRecorded: false}
+	// Revoke deletes the snapshot and the recorded resource connections.
+	if rows.Connection.Status == StatusRevoked {
+		return buildConnectionView(rows, agent)
+	}
+	orgID, id := rows.Connection.OrganizationID, rows.Connection.ID
+
+	recorded, err := oktaresourceconnections.ExistForConnection(ctx, dbtx, orgID, id)
+	if err != nil {
+		logger.WarnContext(ctx, "resource connections unreadable, leaving step unchecked", attr.SlogError(err))
+	}
+	agent.ConnectionRecorded = recorded
+
+	appID := rows.Okta.AgentAppID.String
+	if appID == "" || !rows.Okta.ApplicationsSyncedAt.Valid {
+		return buildConnectionView(rows, agent)
+	}
+	state, err := oktaapplications.GetAppState(ctx, dbtx, orgID, id, appID)
+	switch {
+	case err != nil:
+		logger.WarnContext(ctx, "agent app state unreadable, leaving steps unchecked", attr.SlogError(err))
+	case state == nil:
+		agent.App = &AgentAppSignal{Found: false, Active: false, Assigned: false}
+	default:
+		agent.App = &AgentAppSignal{Found: true, Active: state.Active, Assigned: state.Assigned}
+	}
+	return buildConnectionView(rows, agent)
 }
 
 // withManagedClient reads on dbtx so a caller holding a transaction never waits on a second pool connection.
@@ -404,7 +457,7 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 	}
 
 	s.metrics.recordCreate(ctx, ProviderOkta, createOutcomeCreated)
-	return buildConnectionView(*rows), nil
+	return s.view(ctx, logger, s.db, *rows), nil
 }
 
 // requireNoLiveConnection conflicts on a live connection; a parent whose create never wrote its Okta details is abandoned instead.
@@ -732,7 +785,7 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 		return nil, oops.E(oops.CodeUnexpected, err, "commit client id submission").LogError(ctx, logger)
 	}
 	s.metrics.recordVerify(ctx, ProviderOkta, outcome.Status)
-	return buildConnectionView(*after), nil
+	return s.view(ctx, logger, s.db, *after), nil
 }
 
 func (s *Service) Verify(ctx context.Context, payload *gen.VerifyPayload) (*gen.OktaIdentityProviderConnection, error) {
@@ -785,7 +838,7 @@ func (s *Service) Verify(ctx context.Context, payload *gen.VerifyPayload) (*gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "commit connection verification").LogError(ctx, logger)
 	}
 	s.metrics.recordVerify(ctx, ProviderOkta, outcome.Status)
-	return buildConnectionView(*after), nil
+	return s.view(ctx, logger, s.db, *after), nil
 }
 
 // runVerification verifies the connection's current credential; any failure forgets the memoized client.
@@ -929,7 +982,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetIde
 	case err != nil:
 		return nil, err
 	}
-	return &gen.GetIdentityProviderConnectionResult{Connection: buildConnectionView(*rows)}, nil
+	return &gen.GetIdentityProviderConnectionResult{Connection: s.view(ctx, logger, s.db, *rows)}, nil
 }
 
 func (s *Service) RecordAgent(ctx context.Context, payload *gen.RecordAgentPayload) (*gen.OktaIdentityProviderConnection, error) {
@@ -963,7 +1016,7 @@ func (s *Service) RecordAgent(ctx context.Context, payload *gen.RecordAgentPaylo
 		return nil, err
 	}
 	if before.Okta.AgentID.String == agentID && before.Okta.AgentAppID.String == agentAppID {
-		return buildConnectionView(*before), nil
+		return s.view(ctx, logger, dbtx, *before), nil
 	}
 	oktaRow, err := q.UpdateOktaIdentityProviderConnectionAgent(ctx, repo.UpdateOktaIdentityProviderConnectionAgentParams{
 		AgentID:                      conv.ToPGTextEmpty(agentID),
@@ -974,6 +1027,10 @@ func (s *Service) RecordAgent(ctx context.Context, payload *gen.RecordAgentPaylo
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record agent").LogError(ctx, logger)
 	}
+	// Resource confirmations belong to the recorded agent, not its replacement.
+	if err := oktaresourceconnections.DeleteForConnection(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "delete resource connections").LogError(ctx, logger)
+	}
 	after := connectionRows{Connection: before.Connection, Okta: oktaRow, Managed: before.Managed}
 	if err := s.audit.LogIdentityProviderConnectionRecordAgent(ctx, dbtx, s.auditEvent(authCtx, id, snapshot(*before), snapshot(after))); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log agent record").LogError(ctx, logger)
@@ -981,7 +1038,7 @@ func (s *Service) RecordAgent(ctx context.Context, payload *gen.RecordAgentPaylo
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit agent record").LogError(ctx, logger)
 	}
-	return buildConnectionView(after), nil
+	return s.view(ctx, logger, s.db, after), nil
 }
 
 func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.OktaIdentityProviderConnection, error) {
@@ -1045,6 +1102,13 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "tombstone okta connection details").LogError(ctx, logger)
 	}
+	// Resource connections reference snapshot rows, so they go first.
+	if err := oktaresourceconnections.DeleteForConnection(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "delete resource connections").LogError(ctx, logger)
+	}
+	if err := oktaapplications.DeleteConnectionSnapshot(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "delete applications snapshot").LogError(ctx, logger)
+	}
 	after := connectionRows{Connection: connection, Okta: oktaRow, Managed: before.Managed}
 	if err := s.audit.LogIdentityProviderConnectionRevoke(ctx, dbtx, s.auditEvent(authCtx, id, snapshot(*before), snapshot(after))); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log connection revocation").LogError(ctx, logger)
@@ -1058,7 +1122,7 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 	if err != nil {
 		return nil, err
 	}
-	return buildConnectionView(*rows), nil
+	return s.view(ctx, logger, s.db, *rows), nil
 }
 
 // loadRevocable reads through the tombstone; only a revoked tombstone is visible.
@@ -1084,7 +1148,7 @@ func (s *Service) revokedView(ctx context.Context, logger *slog.Logger, dbtx rep
 	if err != nil {
 		return nil, err
 	}
-	return buildConnectionView(*rows), nil
+	return s.view(ctx, logger, dbtx, *rows), nil
 }
 
 func orEmpty(values []string) []string {

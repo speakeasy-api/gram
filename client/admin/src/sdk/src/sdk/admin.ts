@@ -25,6 +25,7 @@ import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js
 import { adminGetPaygBillingSummary } from "../funcs/adminGetPaygBillingSummary.js";
 import { adminGetProject } from "../funcs/adminGetProject.js";
 import { adminGetSession } from "../funcs/adminGetSession.js";
+import { adminGetSpendBreakdown } from "../funcs/adminGetSpendBreakdown.js";
 import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
 import { adminGetStripeSubscription } from "../funcs/adminGetStripeSubscription.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
@@ -66,6 +67,7 @@ import { AdminOrganizationStats } from "../models/components/adminorganizationst
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
 import { AdminProjectDetail } from "../models/components/adminprojectdetail.js";
 import { AdminSession } from "../models/components/adminsession.js";
+import { AdminSpendBreakdownResponse } from "../models/components/adminspendbreakdownresponse.js";
 import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js";
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
@@ -114,6 +116,7 @@ import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/opera
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
 import { AdminGetProjectRequest } from "../models/operations/admingetproject.js";
+import { AdminGetSpendBreakdownRequest } from "../models/operations/admingetspendbreakdown.js";
 import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
 import {
@@ -492,6 +495,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminSetStripeCustomer(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getSpendBreakdown admin
+   *
+   * @remarks
+   * Returns exact current PAYG list-price estimates for an organization's three metered products over a maximum of three calendar months. Available for every organization regardless of account type or subscription state.
+   */
+  async getSpendBreakdown(
+    request: AdminGetSpendBreakdownRequest,
+    options?: RequestOptions,
+  ): Promise<AdminSpendBreakdownResponse> {
+    return unwrapAsync(adminGetSpendBreakdown(
       this,
       request,
       options,
