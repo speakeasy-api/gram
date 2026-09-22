@@ -29,6 +29,17 @@ const overview = vi.hoisted(() => ({
 }));
 const platformMcpEnabled = vi.hoisted(() => ({ current: true }));
 const recordCta = vi.hoisted(() => ({ mutate: vi.fn() }));
+const member = vi.hoisted(() => ({
+  enabled: false,
+  connectionAuthorized: false,
+  connectionAuthState: "unauthorized",
+  isError: false,
+  grantLoading: false,
+  grantError: false,
+  allowed: true,
+  queryEnabled: false,
+  capture: vi.fn(),
+}));
 
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => true,
@@ -40,6 +51,25 @@ vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ trial: trial.current }),
   useUser: () => ({ id: "user1" }),
 }));
+vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetry: () => ({ capture: member.capture }),
+}));
+vi.mock("@/hooks/useOrganizationPlatformMCPOnboarding", () => ({
+  useOrganizationPlatformMCPOnboarding: (
+    _id: string,
+    options: { enabled: boolean },
+  ) => {
+    member.queryEnabled = options.enabled;
+    return {
+      data: {
+        enabled: member.enabled,
+        connectionAuthorized: member.connectionAuthorized,
+        connectionAuthState: member.connectionAuthState,
+      },
+      isError: member.isError,
+    };
+  },
+}));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme" }),
 }));
@@ -49,7 +79,9 @@ vi.mock("@/hooks/useProductTier", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: (scope: string) =>
-      scope === "org:admin" ? isAdmin.current : true,
+      scope === "org:admin" ? isAdmin.current : member.allowed,
+    isLoading: member.grantLoading,
+    error: member.grantError ? new Error("grants unavailable") : null,
   }),
 }));
 vi.mock("@/hooks/useOrgWelcomeBanner", () => ({
@@ -164,6 +196,15 @@ afterEach(() => {
   overview.isPending = false;
   platformMcpEnabled.current = true;
   recordCta.mutate.mockReset();
+  member.capture.mockReset();
+  member.enabled = false;
+  member.connectionAuthorized = false;
+  member.connectionAuthState = "unauthorized";
+  member.isError = false;
+  member.grantLoading = false;
+  member.grantError = false;
+  member.allowed = true;
+  member.queryEnabled = false;
   announcementOn.current = false;
 });
 
@@ -232,6 +273,59 @@ describe("OrgWelcomeBanner", () => {
 
     expect(screen.queryByText("Set up Platform MCP")).toBeNull();
     expect(hrefFor("Open the guide")).toBe("/guide");
+  });
+
+  it("shows the member connection as a dismissible hero card without a second banner", () => {
+    isAdmin.current = false;
+    setupEligible.current = false;
+    member.enabled = true;
+    const { rerender } = render(<OrgWelcomeBanner />);
+
+    expect(hrefFor("Connect your agent")).toBe(
+      "/acme/headless?entrySource=organization_home",
+    );
+    expect(screen.getByText("Use Speakeasy from your agent")).toBeTruthy();
+    expect(member.queryEnabled).toBe(true);
+    expect(member.capture).toHaveBeenCalledWith("platform_mcp_member_cta", {
+      action: "impression",
+      workflow: "organization_home",
+    });
+    rerender(<OrgWelcomeBanner />);
+    expect(member.capture).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByText("Connect your agent"));
+    expect(member.capture).toHaveBeenCalledWith("platform_mcp_member_cta", {
+      action: "selected",
+      workflow: "organization_home",
+    });
+    fireEvent.click(screen.getByLabelText("Dismiss Platform MCP suggestion"));
+    expect(screen.queryByText("Use Speakeasy from your agent")).toBeNull();
+    expect(hrefFor("Open the guide")).toBe("/guide");
+    expect(member.capture).toHaveBeenCalledWith("platform_mcp_member_cta", {
+      action: "dismissed",
+      workflow: "organization_home",
+    });
+  });
+
+  it("does not show the member card when connected, unauthorized, or setup fails", () => {
+    isAdmin.current = false;
+    setupEligible.current = false;
+    member.enabled = true;
+    member.allowed = false;
+    const { rerender } = render(<OrgWelcomeBanner />);
+    expect(member.queryEnabled).toBe(false);
+    expect(screen.queryByText("Use Speakeasy from your agent")).toBeNull();
+
+    member.allowed = true;
+    member.connectionAuthorized = true;
+    member.connectionAuthState = "active";
+    rerender(<OrgWelcomeBanner />);
+    expect(screen.queryByText("Use Speakeasy from your agent")).toBeNull();
+
+    member.connectionAuthorized = false;
+    member.isError = true;
+    rerender(<OrgWelcomeBanner />);
+    expect(screen.queryByText("Use Speakeasy from your agent")).toBeNull();
   });
 
   it("non-trial member, zero data: guide only", () => {

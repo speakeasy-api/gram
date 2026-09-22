@@ -40,7 +40,7 @@ vi.mock("@/components/ui/ContextMenu", () => ({
 vi.mock("@/components/auditlogs/feed", () => ({
   ActionIconTile: () => null,
 }));
-vi.mock("./MemberPlatformMCPCta", () => ({ MemberPlatformMCPCta: () => null }));
+
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
     id: "org-1",
@@ -48,6 +48,7 @@ vi.mock("@/contexts/Auth", () => ({
     slug: "acme",
     projects: [{ id: "project-1", name: "Project One", slug: "project-one" }],
   }),
+  useUser: () => ({ id: "user-1" }),
   useSession: () => ({
     user: { id: "user-1", email: "viewer@example.test", isAdmin: false },
     rawGramAccountType: "enterprise",
@@ -60,7 +61,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme" }),
 }));
 vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({ isFeatureEnabled: () => false }),
+  useTelemetry: () => ({ isFeatureEnabled: () => false, capture: vi.fn() }),
 }));
 vi.mock("@/hooks/useLocalStorageState", () => ({
   useLocalStorageState: () => ["list", vi.fn()],
@@ -70,6 +71,12 @@ vi.mock("@/hooks/useProjectFavorites", () => ({
     favoriteSet: new Set<string>(),
     isFavorite: () => false,
     toggleFavorite: vi.fn(),
+  }),
+}));
+vi.mock("@/hooks/useOrganizationPlatformMCPOnboarding", () => ({
+  useOrganizationPlatformMCPOnboarding: () => ({
+    data: { enabled: false },
+    isError: false,
   }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
