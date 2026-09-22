@@ -730,7 +730,7 @@ func TestDispatchRejectsLLMLaneWithPolicyID(t *testing.T) {
 	require.Empty(t, llmPub.messages)
 }
 
-func TestDispatchHonorsFlagLimitForContentAndBody(t *testing.T) {
+func TestDispatchHonorsFlagLimitForContentBodyAndToolCalls(t *testing.T) {
 	t.Parallel()
 
 	te := setupInboxTest(t, "replica-dispatch-request-limit")
@@ -744,6 +744,8 @@ func TestDispatchHonorsFlagLimitForContentAndBody(t *testing.T) {
 	request := llmDispatchRequest([]Lane{llmLane}, testOrigins(llmLane))
 	request.Content = expectedContent + "tail"
 	request.Body = expectedBody + "€tail"
+	expectedArguments := strings.Repeat("a", limit)
+	request.ToolCalls = []ToolCall{{ID: "toolu_1", Name: "bash", Arguments: expectedArguments + "tail"}}
 
 	outcome, err := dispatcher.Dispatch(t.Context(), request)
 	require.NoError(t, err)
@@ -754,6 +756,8 @@ func TestDispatchHonorsFlagLimitForContentAndBody(t *testing.T) {
 	require.Equal(t, expectedContent, message.GetContent())
 	require.Equal(t, expectedBody, message.GetBody())
 	require.True(t, utf8.ValidString(message.GetBody()))
+	require.Len(t, message.GetToolCalls(), 1)
+	require.Equal(t, expectedArguments, message.GetToolCalls()[0].GetArguments())
 	require.True(t, message.GetContentTruncated())
 	var metrics metricdata.ResourceMetrics
 	require.NoError(t, te.reader.Collect(t.Context(), &metrics))
