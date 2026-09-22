@@ -482,18 +482,27 @@ async function resolveMeteredPrice(
   );
   log.info(`Resolved price "${lookupKey}": ${price.id}`);
   // Existing prices retain their rates, billing schemes and actual event names.
-  const meter =
+  let meter =
     resolvedMeter ??
     (await stripe<StripeMeter>(
       key,
       "GET",
       `/billing/meters/${price.recurring!.meter}`,
     ));
-  assertMeterConfiguration(meter, "active");
   assertConfiguration(`Meter for "${lookupKey}"`, [
     ["id", meter.id, price.recurring!.meter],
     ["event_name configured", Boolean(meter.event_name?.trim()), true],
   ]);
+  if (meter.status === "inactive") {
+    assertMeterConfiguration(meter, "inactive");
+    meter = await stripe<StripeMeter>(
+      key,
+      "POST",
+      `/billing/meters/${meter.id}/reactivate`,
+    );
+    log.success(`Reactivated meter "${meter.event_name}": ${meter.id}`);
+  }
+  assertMeterConfiguration(meter, "active");
   return { price, meter };
 }
 

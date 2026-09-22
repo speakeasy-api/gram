@@ -295,54 +295,79 @@ test("orchestration shares credentials and preflights before remote writes", asy
   }
 });
 
-test("compatible existing catalog is write-free", async (t) => {
-  t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
-    assert.equal(init.method, "GET");
-    const path = new URL(url).pathname;
-    const foundMeter = catalogMeters.find((item) =>
-      path.endsWith(`/meters/${item.id}`),
+for (const inactive of [false, true]) {
+  test(`compatible existing catalog only reactivates inactive meters (${inactive})`, async (t) => {
+    const meters = catalogMeters.map((item) => ({
+      ...item,
+      status: inactive && item.id !== meter.id ? "inactive" : "active",
+    }));
+    let reactivations = 0;
+    t.mock.method(
+      globalThis,
+      "fetch",
+      async (url: string, init: RequestInit) => {
+        const path = new URL(url).pathname;
+        if (init.method === "POST") {
+          const target = meters.find((item) =>
+            path.endsWith(`/meters/${item.id}/reactivate`),
+          );
+          assert.ok(target, "only meter reactivation is allowed");
+          assert.equal(target.status, "inactive");
+          target.status = "active";
+          reactivations++;
+          return Response.json(target);
+        }
+        assert.equal(init.method, "GET");
+        const foundMeter = meters.find((item) =>
+          path.endsWith(`/meters/${item.id}`),
+        );
+        if (foundMeter) return Response.json(foundMeter);
+        if (path.endsWith("/account"))
+          return Response.json({ livemode: false });
+        if (path.endsWith("/meters"))
+          return Response.json({ data: [meter], has_more: false });
+        if (path.endsWith("/prices")) {
+          const lookupKey = new URL(url).searchParams.get("lookup_keys[]");
+          assert.equal(new URL(url).searchParams.get("active"), "true");
+          const prices = {
+            "payg-tum": price,
+            "payg-mcp-egress": {
+              ...mcpEgressPrice,
+              billing_scheme: "tiered",
+              unit_amount_decimal: "0.123",
+            },
+            "payg-risk-scans": riskScansPrice,
+          };
+          assert.ok(lookupKey && lookupKey in prices);
+          return Response.json({
+            data: [prices[lookupKey as keyof typeof prices]],
+            has_more: false,
+          });
+        }
+        if (path.endsWith("/prod_synthetic"))
+          return Response.json({
+            id: "prod_synthetic",
+            active: true,
+            name: "Legacy name",
+            metadata: { speakeasy_product: "aicp" },
+          });
+        if (path.endsWith("/configurations"))
+          return Response.json({ data: [portal], has_more: false });
+        throw new Error("Unexpected request");
+      },
     );
-    if (foundMeter) return Response.json(foundMeter);
-    if (path.endsWith("/account")) return Response.json({ livemode: false });
-    if (path.endsWith("/meters"))
-      return Response.json({ data: [meter], has_more: false });
-    if (path.endsWith("/prices")) {
-      const lookupKey = new URL(url).searchParams.get("lookup_keys[]");
-      assert.equal(new URL(url).searchParams.get("active"), "true");
-      const prices = {
-        "payg-tum": price,
-        "payg-mcp-egress": {
-          ...mcpEgressPrice,
-          billing_scheme: "tiered",
-          unit_amount_decimal: "0.123",
-        },
-        "payg-risk-scans": riskScansPrice,
-      };
-      assert.ok(lookupKey && lookupKey in prices);
-      return Response.json({
-        data: [prices[lookupKey as keyof typeof prices]],
-        has_more: false,
-      });
-    }
-    if (path.endsWith("/prod_synthetic"))
-      return Response.json({
-        id: "prod_synthetic",
-        active: true,
-        name: "Legacy name",
-        metadata: { speakeasy_product: "aicp" },
-      });
-    if (path.endsWith("/configurations"))
-      return Response.json({ data: [portal], has_more: false });
-    throw new Error("Unexpected request");
+    const result = await provisionCatalog("sk_test_synthetic");
+    assert.equal(result.mcpEgressPrice.id, mcpEgressPrice.id);
+    assert.equal(result.riskScansPrice.id, riskScansPrice.id);
+    assert.equal(result.mcpEgressPrice.billing_scheme, "tiered");
+    assert.equal(result.mcpEgressPrice.unit_amount_decimal, "0.123");
+    assert.equal(result.mcpEgressMeter.event_name, "existing_egress");
+    assert.equal(result.riskScansMeter.event_name, "existing_risk");
+    assert.equal(reactivations, inactive ? 2 : 0);
+    await provisionCatalog("sk_test_synthetic");
+    assert.equal(reactivations, inactive ? 2 : 0, "rerun must be write-free");
   });
-  const result = await provisionCatalog("sk_test_synthetic");
-  assert.equal(result.mcpEgressPrice.id, mcpEgressPrice.id);
-  assert.equal(result.riskScansPrice.id, riskScansPrice.id);
-  assert.equal(result.mcpEgressPrice.billing_scheme, "tiered");
-  assert.equal(result.mcpEgressPrice.unit_amount_decimal, "0.123");
-  assert.equal(result.mcpEgressMeter.event_name, "existing_egress");
-  assert.equal(result.riskScansMeter.event_name, "existing_risk");
-});
+}
 
 test("licensed risk scans price fails before catalog writes", async (t) => {
   t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
@@ -603,7 +628,7 @@ for (const inactiveMeters of [false, true]) {
 for (const invalid of [
   { event_time_window: "hour" },
   { event_time_window: "day" },
-  { status: "inactive" },
+  { status: "inactive", event_time_window: "hour" },
   { livemode: true },
   { default_aggregation: { formula: "count" } },
   { value_settings: { event_payload_key: "bytes" } },
