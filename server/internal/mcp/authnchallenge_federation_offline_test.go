@@ -74,9 +74,9 @@ func TestFederatedOptionalOfflineConsent(t *testing.T) {
 			}
 			first, err := callback(url.Values{"state": {id}, "code": {"minimal"}, "iss": {f.provider.URL}}, cookie)
 			if scenario == "membership_denied" {
-				if err == nil {
-					require.Contains(t, first.Header().Get("Location"), "error=")
-				}
+				require.NoError(t, err)
+				require.Equal(t, http.StatusFound, first.Code)
+				require.Contains(t, first.Header().Get("Location"), "error=")
 				require.Empty(t, logins)
 				require.Zero(t, lookups)
 				return
@@ -128,9 +128,9 @@ func TestFederatedOptionalOfflineConsent(t *testing.T) {
 				// Third-party failures can be encoded in the client redirect instead of
 				// returning a handler error. Neither may reach the credential consumer.
 				require.Len(t, logins, 1)
-				if err == nil {
-					require.Contains(t, second.Header().Get("Location"), "error=")
-				}
+				require.NoError(t, err)
+				require.Equal(t, http.StatusFound, second.Code)
+				require.Contains(t, second.Header().Get("Location"), "error=")
 			} else {
 				require.NoError(t, err)
 				require.Len(t, logins, 2)

@@ -273,7 +273,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 			}
 			defer verified.DiscardCredentials()
 		}
-		if federation.OfflineRequested && (federation.ValidatedIdentity == nil || verified == nil || verified.Issuer != federation.ValidatedIdentity.Issuer || verified.Subject != federation.ValidatedIdentity.Subject) {
+		if (federation.OfflineRequested || federation.ExplicitRetry) && (federation.ValidatedIdentity == nil || verified == nil || verified.Issuer != federation.ValidatedIdentity.Issuer || verified.Subject != federation.ValidatedIdentity.Subject) {
 			return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "The offline consent account must match the login account", false)
 		}
 		federatedIdentity = verified
@@ -402,7 +402,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	challengeState.Subject = &subject
 	challengeState.AuthorizerUserID = gramUserID
 	if federation := challengeState.Federation; federation != nil {
-		challengeState.FederatedBinding = &FederatedConsentBinding{IssuerID: federation.IssuerID, ClientID: federation.ClientID}
+		challengeState.FederatedBinding = &FederatedConsentBinding{IssuerID: federation.IssuerID, ClientID: federation.ClientID, Issuer: federatedIdentity.Issuer, Subject: federatedIdentity.Subject}
 	}
 	challengeState.Federation = nil // Drop nonce and PKCE; Browser must survive consent and remote linking.
 	challengeState.AuthorizerImpersonated = &impersonated

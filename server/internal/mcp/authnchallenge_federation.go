@@ -44,10 +44,12 @@ type FederatedChallenge struct {
 type FederatedConsentBinding struct {
 	IssuerID uuid.UUID `json:"issuer_id"`
 	ClientID uuid.UUID `json:"client_id"`
+	Issuer   string    `json:"issuer"`
+	Subject  string    `json:"subject"`
 }
 
 func (b *FederatedConsentBinding) matches(issuerID, clientID uuid.UUID) bool {
-	return b != nil && b.IssuerID != uuid.Nil && b.ClientID != uuid.Nil && b.IssuerID == issuerID && b.ClientID == clientID
+	return b != nil && b.IssuerID != uuid.Nil && b.ClientID != uuid.Nil && b.IssuerID == issuerID && b.ClientID == clientID && b.Issuer != "" && b.Subject != ""
 }
 
 func (s *Service) federatedProvider(ctx context.Context, endpoint *ResolvedMcpEndpoint) (*remotesessions.FederatedProvider, uuid.UUID, uuid.UUID, string, error) {
@@ -127,6 +129,9 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 		state.Browser.CallbackHash = callbackHash
 	}
 	state.Federation = &FederatedChallenge{OfflineRequested: false, ConfigurationHash: "", ValidatedIdentity: nil, StartPhase: phase, OrganizationID: endpoint.OrganizationID, IssuerID: issuerID, ClientID: clientID, Configuration: version, CallbackURL: callback, Nonce: nonce, Verifier: verifier, BrowserHash: callbackHash, ExplicitRetry: retryHuman != "", ValidatedUserID: retryHuman}
+	if retryHuman != "" {
+		state.Federation.ValidatedIdentity = &remotesessions.FederatedIdentity{Issuer: state.FederatedBinding.Issuer, Subject: state.FederatedBinding.Subject, ExpiresAt: time.Time{}, Nonce: "", Email: "", EmailVerified: nil}
+	}
 	if err := s.authnChallengeCache.Store(ctx, *state); err != nil {
 		return nil, fmt.Errorf("store federated login challenge: %w", err)
 	}
@@ -394,7 +399,11 @@ func (s *Service) retryFederatedDelegation(w http.ResponseWriter, r *http.Reques
 		return oops.E(oops.CodeForbidden, nil, "Your account is not provisioned for this organization")
 	}
 	provider, issuerID, clientID, _, err := s.federatedProvider(ctx, endpoint)
-	if err != nil || provider == nil {
+	if err != nil {
+		code, cause := federatedFailure(err)
+		return oops.E(code, cause, "Trusted login configuration is unavailable")
+	}
+	if provider == nil {
 		return oops.E(oops.CodeFailedPrecondition, nil, "Trusted login configuration is unavailable")
 	}
 	if !state.FederatedBinding.matches(issuerID, clientID) {
@@ -415,7 +424,11 @@ func (s *Service) retryFederatedDelegation(w http.ResponseWriter, r *http.Reques
 	consumed.AuthorizerUserID = ""
 	consumed.DelegationRetryUsed = true
 	target, err := s.prepareBoundFederatedLogin(w, r, endpoint, &consumed, humanID)
-	if err != nil || target == nil {
+	if err != nil {
+		code, cause := federatedFailure(err)
+		return oops.E(code, cause, "Trusted login configuration is unavailable")
+	}
+	if target == nil {
 		return oops.E(oops.CodeFailedPrecondition, nil, "Trusted login configuration is unavailable")
 	}
 	w.Header().Set("Cache-Control", "no-store")

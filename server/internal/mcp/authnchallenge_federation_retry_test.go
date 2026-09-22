@@ -13,6 +13,7 @@ import (
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/require"
@@ -20,7 +21,7 @@ import (
 
 func TestFederatedExplicitDelegationRetry(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"success", "cancel", "csrf", "tenant", "unresolved", "authorizer_mismatch", "membership", "account_switch", "impersonated", "missing_provenance", "missing_binding", "issuer_drift", "client_drift", "retry_used", "unsupported_action"} {
+	for _, scenario := range []string{"success", "cancel", "csrf", "tenant", "unresolved", "authorizer_mismatch", "membership", "account_switch", "subject_switch", "impersonated", "missing_provenance", "missing_binding", "missing_subject", "provider_unavailable", "issuer_drift", "client_drift", "retry_used", "unsupported_action"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			ctx, f := newFederationLoginFixture(t, true, true)
@@ -72,6 +73,11 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 				state.AuthorizerImpersonated = &impersonated
 			case "missing_provenance":
 				state.AuthorizerImpersonated = nil
+			case "missing_subject":
+				state.FederatedBinding.Subject = ""
+			case "provider_unavailable":
+				// Fail the provider lookup without changing the trusted configuration.
+				f.ti.conn.Close()
 			case "missing_binding":
 				state.FederatedBinding = nil
 			case "issuer_drift":
@@ -107,8 +113,13 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 			}
 			actionResponse, err := action()
 			switch scenario {
-			case "csrf", "tenant", "unresolved", "authorizer_mismatch", "membership", "impersonated", "missing_provenance", "missing_binding", "issuer_drift", "client_drift", "retry_used", "unsupported_action":
+			case "csrf", "tenant", "unresolved", "authorizer_mismatch", "membership", "impersonated", "missing_provenance", "missing_binding", "missing_subject", "provider_unavailable", "issuer_drift", "client_drift", "retry_used", "unsupported_action":
 				require.Error(t, err)
+				if scenario == "provider_unavailable" {
+					var failure *oops.ShareableError
+					require.ErrorAs(t, err, &failure)
+					require.Equal(t, oops.CodeUnavailable, failure.Code)
+				}
 				if scenario == "unsupported_action" {
 					require.ErrorContains(t, err, "retry_delegation")
 				}
@@ -138,6 +149,8 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 			require.Equal(t, initial.CreatedAt, renewed.CreatedAt, "explicit retry does not extend challenge lifetime")
 			require.Equal(t, mockidp.MockUserID, renewed.Federation.ValidatedUserID)
 			require.True(t, renewed.Federation.ExplicitRetry)
+			require.Equal(t, f.provider.URL, renewed.Federation.ValidatedIdentity.Issuer)
+			require.Equal(t, "upstream-human", renewed.Federation.ValidatedIdentity.Subject)
 			require.True(t, renewed.DelegationRetryUsed)
 			require.NotNil(t, renewed.AuthorizerImpersonated)
 			require.False(t, *renewed.AuthorizerImpersonated)
@@ -150,14 +163,18 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, q.SetOrganizationUserEmailFixture(ctx, usersrepo.SetOrganizationUserEmailFixtureParams{Email: "original-human-renamed@example.test", UserID: mockidp.MockUserID, OrganizationID: f.organizationID}))
 			}
-			f.provider.issueCode(t, "renewed", federationToken{nonce: target.Query().Get("nonce"), challenge: target.Query().Get("code_challenge"), email: mockidp.MockUserEmail, issuer: f.provider.URL, secret: "selected-secret", verified: true})
+			subject := "upstream-human"
+			if scenario == "subject_switch" {
+				subject = "another-upstream-human"
+			}
+			f.provider.issueCode(t, "renewed", federationToken{subject: subject, nonce: target.Query().Get("nonce"), challenge: target.Query().Get("code_challenge"), email: mockidp.MockUserEmail, issuer: f.provider.URL, secret: "selected-secret", verified: true})
 			renewedResponse, err := callback(url.Values{"state": {renewed.ID}, "code": {"renewed"}, "iss": {f.provider.URL}}, retryCookies[0])
-			if scenario == "account_switch" {
+			if scenario == "account_switch" || scenario == "subject_switch" {
 				require.Len(t, handoffs, 1, "different provisioned human must be rejected before retention")
 				require.Len(t, lookups, 1, "different human cannot reset refusal")
-				if err == nil {
-					require.Contains(t, renewedResponse.Header().Get("Location"), "error=")
-				}
+				require.NoError(t, err)
+				require.Equal(t, http.StatusFound, renewedResponse.Code)
+				require.Contains(t, renewedResponse.Header().Get("Location"), "error=")
 				return
 			}
 			require.NoError(t, err)
