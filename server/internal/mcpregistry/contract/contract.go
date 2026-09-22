@@ -16,7 +16,13 @@ import (
 //go:embed record.schema.json
 var Schema []byte
 
-func decode(raw []byte) (any, error) { return jsonschema.UnmarshalJSON(bytes.NewReader(raw)) }
+func decode(raw []byte) (any, error) {
+	value, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
+	if err != nil {
+		return nil, fmt.Errorf("decode registry contract JSON: %w", err)
+	}
+	return value, nil
+}
 
 // Compile rejects unknown formats instead of silently treating them as annotations.
 func Compile(raw []byte) (*jsonschema.Schema, error) {
@@ -55,9 +61,13 @@ func Compile(raw []byte) (*jsonschema.Schema, error) {
 		c.RegisterFormat(&jsonschema.Format{Name: name, Validate: validate})
 	}
 	if err := c.AddResource("record.schema.json", value); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("add registry contract resource: %w", err)
 	}
-	return c.Compile("record.schema.json")
+	schema, err := c.Compile("record.schema.json")
+	if err != nil {
+		return nil, fmt.Errorf("compile registry contract schema: %w", err)
+	}
+	return schema, nil
 }
 
 var literalPattern = regexp.MustCompile(`^[^:]+://(?:[^@/?#]*@)?(\[[^\]]+\])`)

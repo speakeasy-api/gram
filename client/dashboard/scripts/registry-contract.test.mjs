@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { test } from "node:test";
+import { test } from "vitest";
 import { compile } from "../../../server/internal/mcpregistry/contract/formats.mjs";
 import { Validator, format } from "@cfworker/json-schema";
 const read = (name) =>

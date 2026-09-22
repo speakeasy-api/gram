@@ -45,6 +45,7 @@ func TestRejectUnknownFormat(t *testing.T) {
 }
 
 func TestStarterBaseline(t *testing.T) {
+	t.Parallel()
 	raw, err := os.ReadFile("../baseline/manifest.json")
 	if err != nil {
 		t.Fatal(err)
