@@ -590,6 +590,8 @@ const (
 	RiskScanModeKey                = attribute.Key("gram.risk.scan_mode")
 	RiskLLMTokenKindKey            = attribute.Key("gram.risk.llm.token_kind")
 	RiskLLMModelKey                = attribute.Key("gram.risk.llm.model")
+	RiskLLMFindingCountKey         = attribute.Key("gram.risk.llm.finding_count")
+	RiskLLMPublishFailedCountKey   = attribute.Key("gram.risk.llm.publish_failed_count")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -2484,6 +2486,17 @@ func SlogRiskLLMTokenKind(v string) slog.Attr      { return slog.String(string(R
 // RiskLLMModel is the served model name the risk analyzer called.
 func RiskLLMModel(v string) attribute.KeyValue { return RiskLLMModelKey.String(v) }
 func SlogRiskLLMModel(v string) slog.Attr      { return slog.String(string(RiskLLMModelKey), v) }
+
+// RiskLLMFindingCount is the number of findings one risk analyzer verdict
+// produced for the requesting policy's sources.
+func RiskLLMFindingCount(v int) attribute.KeyValue { return RiskLLMFindingCountKey.Int(v) }
+func SlogRiskLLMFindingCount(v int) slog.Attr      { return slog.Int(string(RiskLLMFindingCountKey), v) }
+
+// SlogRiskLLMPublishFailedCount is the number of a batch's LLM analysis
+// requests the topic did not acknowledge.
+func SlogRiskLLMPublishFailedCount(v int) slog.Attr {
+	return slog.Int(string(RiskLLMPublishFailedCountKey), v)
+}
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }

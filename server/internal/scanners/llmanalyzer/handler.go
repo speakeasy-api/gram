@@ -30,11 +30,15 @@ const asyncExecutionPath = "async"
 // Handler consumes LLMAnalysis requests from the batch flag lane, evaluates
 // each message with the fine-tuned risk model and publishes one Finding per
 // positive risk into the shared Finding topic. It bypasses the async shadow
-// gate: requests only reach this lane for organizations on
-// feature.FlagRiskLLMAnalyzer, where the model is the real engine.
+// gate: requests only reach this lane for organizations whose
+// feature.FlagRiskLLMAnalyzer mode is llm, where the model is the real
+// engine, or shadow, where the legacy engines enforce the same batch and the
+// model's verdict is recorded for comparison only.
 //
 // Findings are ClickHouse-only: nothing writes them to the Postgres
-// risk_results table.
+// risk_results table. Shadow requests are evaluated and metered like every
+// other request but their findings are withheld from the Finding topic until
+// the findings store can mark shadow rows and hide them by default.
 type Handler struct {
 	logger       *slog.Logger
 	findingsPub  gcp.Publisher[*riskv1.Finding]
@@ -118,17 +122,27 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 		result.Findings = FindingsForSources(result.Findings, sources)
 	}
 
-	_, _, err := scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
-		RequestID:         m.GetRequestId(),
-		ChatMessageID:     m.GetChatMessageId(),
-		ContentPartID:     m.GetContentPartId(),
-		ProjectID:         m.GetProjectId(),
-		OrganizationID:    m.GetOrganizationId(),
-		RiskPolicyID:      m.GetRiskPolicyId(),
-		RiskPolicyVersion: m.GetRiskPolicyVersion(),
-	}, result.Findings, "llm analyzer")
-	if err != nil {
-		err = fmt.Errorf("publish llm analyzer findings: %w", err)
+	var err error
+	if m.GetShadow() {
+		h.logger.DebugContext(ctx, "llm analyzer shadow findings withheld from the finding topic",
+			attr.SlogRiskScanRequestID(m.GetRequestId()),
+			attr.SlogOrganizationID(m.GetOrganizationId()),
+			attr.SlogRiskPolicyID(m.GetRiskPolicyId()),
+			attr.SlogRiskLLMFindingCount(len(result.Findings)),
+		)
+	} else {
+		_, _, err = scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
+			RequestID:         m.GetRequestId(),
+			ChatMessageID:     m.GetChatMessageId(),
+			ContentPartID:     m.GetContentPartId(),
+			ProjectID:         m.GetProjectId(),
+			OrganizationID:    m.GetOrganizationId(),
+			RiskPolicyID:      m.GetRiskPolicyId(),
+			RiskPolicyVersion: m.GetRiskPolicyVersion(),
+		}, result.Findings, "llm analyzer")
+		if err != nil {
+			err = fmt.Errorf("publish llm analyzer findings: %w", err)
+		}
 	}
 
 	if result.Completed {
@@ -148,7 +162,11 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 		return err
 	}
 
-	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, scanners.AsyncScanOutcomeOK, scanners.AsyncShadowGateReasonNotGated)
+	outcome := scanners.AsyncScanOutcomeOK
+	if m.GetShadow() {
+		outcome = scanners.AsyncScanOutcomeShadowUnpublished
+	}
+	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, outcome, scanners.AsyncShadowGateReasonNotGated)
 	return nil
 }
 
