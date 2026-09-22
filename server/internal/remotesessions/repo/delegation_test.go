@@ -120,6 +120,44 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.Equal(t, "rotated-refresh", completed.RefreshTokenEncrypted.String)
 	require.False(t, completed.RefreshClaimID.Valid)
 	require.False(t, completed.IdentityAssertionEncrypted.Valid)
+
+	// Release remains possible after live trust removal and changes only its own claim.
+	claimID = uuid.New()
+	claimed, err = q.ClaimTrustedDelegationRefresh(ctx, repo.ClaimTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: completed.CredentialGeneration.Int64, RefreshClaimID: claimID})
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, `UPDATE user_session_issuers SET deleted_at=clock_timestamp() WHERE organization_id=$1`, org)
+	require.NoError(t, err)
+	release := repo.ReleaseTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, SubjectUrn: subject, ExpectedGeneration: claimed.CredentialGeneration.Int64, RefreshClaimID: claimID}
+	for _, wrong := range []string{"organization", "client", "subject", "generation", "claim"} {
+		bad := release
+		switch wrong {
+		case "organization":
+			bad.OrganizationID = "org_other"
+		case "client":
+			bad.ClientID = uuid.New()
+		case "subject":
+			bad.SubjectUrn = "user:other"
+		case "generation":
+			bad.ExpectedGeneration--
+		case "claim":
+			bad.RefreshClaimID = uuid.New()
+		}
+		n, err := q.ReleaseTrustedDelegationRefresh(ctx, bad)
+		require.NoError(t, err)
+		require.Zero(t, n, wrong)
+	}
+	released, err := q.ReleaseTrustedDelegationRefresh(ctx, release)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), released)
+	released, err = q.ReleaseTrustedDelegationRefresh(ctx, release)
+	require.NoError(t, err)
+	require.Zero(t, released)
+	_, err = conn.Exec(ctx, `UPDATE user_session_issuers SET deleted_at=NULL WHERE organization_id=$1`, org)
+	require.NoError(t, err)
+	completed, err = q.GetTrustedDelegationCredential(ctx, get)
+	require.NoError(t, err)
+	require.Equal(t, "rotated-refresh", completed.RefreshTokenEncrypted.String)
+	require.False(t, completed.RefreshClaimID.Valid)
 	get.OrganizationID = "org_another_test"
 	_, err = q.GetTrustedDelegationCredential(ctx, get)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
@@ -127,7 +165,11 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	// Expiry clears assertion and refresh, plus identity-only residue, even when inactive.
 	_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET identity_assertion_expires_at=clock_timestamp()-interval '1 hour',refresh_expires_at=clock_timestamp()-interval '1 hour' WHERE id=$1`, row.ID)
 	require.NoError(t, err)
-	count, err := q.CleanupTrustedDelegationCredentialsBatch(ctx, 1)
+	// A tenant cleanup must not consume another tenant's expiration budget.
+	foreignCount, err := q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: text("org_other"), BatchSize: 500})
+	require.NoError(t, err)
+	require.Zero(t, foreignCount)
+	count, err := q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: text(org), BatchSize: 1})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
 	read, err = q.GetTrustedDelegationCredential(ctx, get)
@@ -136,7 +178,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.False(t, read.RefreshTokenEncrypted.Valid)
 	require.False(t, read.UpstreamSubjectEncrypted.Valid)
 	require.False(t, read.NonceEncrypted.Valid)
-	count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, 1)
+	count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: text(org), BatchSize: 1})
 	require.NoError(t, err)
 	require.Zero(t, count)
 	params.ExpectedGeneration = read.CredentialGeneration.Int64
@@ -163,7 +205,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.Len(t, counts, 1)
 	require.Equal(t, "reauthentication_required", counts[0].ObservationStatus)
 	observed := counts[0].LastObservedAt
-	count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, 1)
+	count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: text(org), BatchSize: 1})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
 	read, err = q.GetTrustedDelegationCredential(ctx, get)
@@ -174,7 +216,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	// Stale expiry metadata without its secret must not starve later batches.
 	_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET identity_assertion_encrypted='valid-assertion', identity_assertion_expires_at=clock_timestamp()+interval '1 day', upstream_subject_encrypted='subject', refresh_expires_at=clock_timestamp()-interval '1 day' WHERE id=$1`, row.ID)
 	require.NoError(t, err)
-	count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, 1)
+	count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: text(org), BatchSize: 1})
 	require.NoError(t, err)
 	require.Zero(t, count)
 	// An invalid project-scoped row is maintenance-orphaned, not skipped forever.
@@ -183,7 +225,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.NoError(t, err)
 	_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET project_id=$2 WHERE id=$1`, row.ID, project)
 	require.NoError(t, err)
-	count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, 1)
+	count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: text(org), BatchSize: 1})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
 	var projectHasSecrets bool
@@ -214,7 +256,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.NoError(t, err)
 	_, err = q.GetTrustedDelegationCredential(ctx, get)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, 1)
+	count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: text(org), BatchSize: 1})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
 	var hasSecrets bool
@@ -238,12 +280,16 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 				_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET identity_assertion_encrypted=NULL, refresh_token_encrypted=NULL, upstream_subject_encrypted=NULL, nonce_encrypted=NULL, deleted_at=CASE WHEN $2='secret-free-deleted' THEN clock_timestamp() ELSE NULL END, organization_id=CASE WHEN $2='secret-free-org-orphan' THEN NULL ELSE organization_id END WHERE id=$1`, id, lifecycle)
 				require.NoError(t, err)
 			}
-			count, err := q.CleanupTrustedDelegationCredentialsBatch(ctx, 1)
+			cleanupOrg := text(org)
+			if lifecycle == "orphaned" || lifecycle == "secret-free-org-orphan" {
+				cleanupOrg = pgtype.Text{}
+			}
+			count, err := q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: cleanupOrg, BatchSize: 1})
 			require.NoError(t, err)
 			require.Equal(t, int64(1), count)
 			err = conn.QueryRow(ctx, `SELECT identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL FROM trusted_issuer_sessions WHERE id=$1`, id).Scan(&hasSecrets)
 			require.ErrorIs(t, err, pgx.ErrNoRows)
-			count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, 1)
+			count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: text(org), BatchSize: 1})
 			require.NoError(t, err)
 			require.Zero(t, count)
 		}

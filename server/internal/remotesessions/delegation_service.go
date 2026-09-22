@@ -79,6 +79,7 @@ func (c delegationCredential) GoString() string             { return c.String() 
 func (c delegationCredential) MarshalJSON() ([]byte, error) { return []byte("{}"), nil }
 
 type delegationStore interface {
+	release(context.Context, DelegationBinding, int64, uuid.UUID) (bool, error)
 	revoke(context.Context, DelegationBinding) error
 	markRefreshAttempt(context.Context, DelegationBinding, int64, uuid.UUID, time.Time) (bool, error)
 	load(context.Context, DelegationBinding) (delegationCredential, error)
@@ -393,15 +394,13 @@ func (s *DelegationService) Resolve(ctx context.Context, b DelegationBinding, au
 	claimed := c
 	claimed.generation++
 	// Until the POST starts, releasing our own claim cannot replay a spent token.
-	// A callback or revocation that supersedes us is protected by finish's CAS.
+	// A callback or revocation that supersedes us is protected by release's CAS.
 	refreshStarted := false
 	defer func() {
 		if !refreshStarted {
 			releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			next := eraseExpiredDelegationSecrets(claimed, s.now())
-			next.claim = uuid.Nil
-			_, _ = s.store.finish(releaseCtx, b, claimed.generation, claim, next)
+			_, _ = s.store.release(releaseCtx, b, claimed.generation, claim)
 		}
 	}()
 	// Re-read after durable ownership. A concurrent callback can supersede us.

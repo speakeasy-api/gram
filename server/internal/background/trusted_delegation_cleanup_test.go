@@ -3,6 +3,8 @@ package background
 import (
 	"context"
 	"errors"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"testing"
 	"time"
 
@@ -195,4 +197,28 @@ func TestTrustedDelegationCleanupSchedule(t *testing.T) {
 			handle.AssertExpectations(t)
 		})
 	}
+}
+
+func TestCleanupTrustedDelegationOrganizations(t *testing.T) {
+	t.Parallel()
+	organizations := []pgtype.Text{{}, {String: "org_first", Valid: true}, {String: "org_second", Valid: true}}
+	var calls []repo.CleanupTrustedDelegationCredentialsBatchParams
+	err := cleanupTrustedDelegationOrganizations(t.Context(), organizations, func(_ context.Context, p repo.CleanupTrustedDelegationCredentialsBatchParams) (int64, error) {
+		calls = append(calls, p)
+		switch len(calls) {
+		case 1:
+			return 2, nil
+		case 2:
+			return 498, nil
+		default:
+			return 0, nil
+		}
+	})
+	require.NoError(t, err)
+	require.Equal(t, []repo.CleanupTrustedDelegationCredentialsBatchParams{
+		{OrganizationID: organizations[0], BatchSize: 500},
+		{OrganizationID: organizations[1], BatchSize: 498},
+		{OrganizationID: organizations[1], BatchSize: 500},
+		{OrganizationID: organizations[2], BatchSize: 500},
+	}, calls)
 }

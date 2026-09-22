@@ -511,16 +511,19 @@ WITH cleanup_budget AS (
 ), expired_ids AS MATERIALIZED (
   -- Bound each indexed scan before combining it with lifecycle cleanup.
   (SELECT s.id FROM trusted_issuer_sessions AS s
-   WHERE s.identity_assertion_encrypted IS NOT NULL
+   WHERE s.organization_id IS NOT DISTINCT FROM $2::text
+     AND s.identity_assertion_encrypted IS NOT NULL
      AND (s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp())
    ORDER BY s.identity_assertion_expires_at NULLS FIRST, s.id LIMIT (SELECT batch_size FROM cleanup_budget))
   UNION
   (SELECT s.id FROM trusted_issuer_sessions AS s
-   WHERE s.refresh_token_encrypted IS NOT NULL AND s.refresh_expires_at <= statement_timestamp()
+   WHERE s.organization_id IS NOT DISTINCT FROM $2::text
+     AND s.refresh_token_encrypted IS NOT NULL AND s.refresh_expires_at <= statement_timestamp()
    ORDER BY s.refresh_expires_at, s.id LIMIT (SELECT batch_size FROM cleanup_budget))
   UNION
   (SELECT s.id FROM trusted_issuer_sessions AS s
-   WHERE s.identity_assertion_encrypted IS NULL AND s.refresh_token_encrypted IS NULL
+   WHERE s.organization_id IS NOT DISTINCT FROM $2::text
+     AND s.identity_assertion_encrypted IS NULL AND s.refresh_token_encrypted IS NULL
      AND (s.upstream_subject_encrypted IS NOT NULL OR s.nonce_encrypted IS NOT NULL)
    ORDER BY s.id LIMIT (SELECT batch_size FROM cleanup_budget))
 ), expired_candidates AS MATERIALIZED (
@@ -551,7 +554,8 @@ WITH cleanup_budget AS (
   -- Do not rescan active lifecycles while a full expiration batch is available.
   SELECT s.id, true AS orphaned
   FROM trusted_issuer_sessions AS s
-  WHERE (s.project_id IS NOT NULL OR s.deleted OR NOT EXISTS (
+  WHERE s.organization_id IS NOT DISTINCT FROM $2::text
+    AND (s.project_id IS NOT NULL OR s.deleted OR NOT EXISTS (
     SELECT 1 FROM organization_metadata AS o
     JOIN remote_session_clients AS c ON c.organization_id = o.id
     JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
@@ -597,11 +601,17 @@ RETURNING s.id
 SELECT ((SELECT count(*) FROM erased) + (SELECT count(*) FROM expired))::bigint AS affected_rows
 `
 
-// Maintenance-only cross-tenant erasure. Include inactive rows and use bounded
+type CleanupTrustedDelegationCredentialsBatchParams struct {
+	BatchSize      int32
+	OrganizationID pgtype.Text
+}
+
+// Tenant-scoped erasure, including a NULL tenant for detached orphan rows.
+// Include inactive rows and use bounded
 // row locking. Orphans are deleted even without ciphertext: subject_urn is personal
 // data. Live expired credentials are erased without releasing refresh claims.
-func (q *Queries) CleanupTrustedDelegationCredentialsBatch(ctx context.Context, batchSize int32) (int64, error) {
-	row := q.db.QueryRow(ctx, cleanupTrustedDelegationCredentialsBatch, batchSize)
+func (q *Queries) CleanupTrustedDelegationCredentialsBatch(ctx context.Context, arg CleanupTrustedDelegationCredentialsBatchParams) (int64, error) {
+	row := q.db.QueryRow(ctx, cleanupTrustedDelegationCredentialsBatch, arg.BatchSize, arg.OrganizationID)
 	var affected_rows int64
 	err := row.Scan(&affected_rows)
 	return affected_rows, err
@@ -7457,6 +7467,32 @@ func (q *Queries) ListTenantRemoteSessionIssuersByIssuerURL(ctx context.Context,
 	return items, nil
 }
 
+const listTrustedDelegationCleanupOrganizations = `-- name: ListTrustedDelegationCleanupOrganizations :many
+SELECT DISTINCT organization_id FROM trusted_issuer_sessions
+ORDER BY organization_id NULLS FIRST
+`
+
+// Read-only enumeration for the privileged maintenance activity.
+func (q *Queries) ListTrustedDelegationCleanupOrganizations(ctx context.Context) ([]pgtype.Text, error) {
+	rows, err := q.db.Query(ctx, listTrustedDelegationCleanupOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Text
+	for rows.Next() {
+		var organization_id pgtype.Text
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTrustedRemoteSessionClientsByIssuerID = `-- name: ListTrustedRemoteSessionClientsByIssuerID :many
 SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.created_at, c.updated_at, c.deleted_at, c.deleted
 FROM remote_session_clients AS c
@@ -8426,6 +8462,42 @@ func (q *Queries) RecordRemoteSessionIssuerMetadataReprojectionFailure(ctx conte
 	return result.RowsAffected(), nil
 }
 
+const releaseTrustedDelegationRefresh = `-- name: ReleaseTrustedDelegationRefresh :execrows
+UPDATE trusted_issuer_sessions AS s
+SET refresh_claim_id = NULL,
+    credential_generation = COALESCE(s.credential_generation, 1) + 1,
+    updated_at = clock_timestamp()
+WHERE s.organization_id = $1::text
+  AND s.remote_session_client_id = $2::uuid
+  AND s.subject_urn = $3::text AND s.project_id IS NULL
+  AND COALESCE(s.credential_generation, 1) = $4::bigint
+  AND s.refresh_claim_id = $5::uuid
+`
+
+type ReleaseTrustedDelegationRefreshParams struct {
+	OrganizationID     string
+	ClientID           uuid.UUID
+	SubjectUrn         string
+	ExpectedGeneration int64
+	RefreshClaimID     uuid.UUID
+}
+
+// No provider request started. Release only this claim, even after trust or
+// membership removal; never restore credentials from a stale snapshot.
+func (q *Queries) ReleaseTrustedDelegationRefresh(ctx context.Context, arg ReleaseTrustedDelegationRefreshParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseTrustedDelegationRefresh,
+		arg.OrganizationID,
+		arg.ClientID,
+		arg.SubjectUrn,
+		arg.ExpectedGeneration,
+		arg.RefreshClaimID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const replaceRemoteSessionClientRegistration = `-- name: ReplaceRemoteSessionClientRegistration :one
 UPDATE remote_session_clients
 SET client_id = $1,
@@ -9245,9 +9317,10 @@ func (q *Queries) SetRemoteSessionIssuerMetadataTracking(ctx context.Context, ar
 	return err
 }
 
-const setRemoteSessionIssuerOrganizationFixture = `-- name: SetRemoteSessionIssuerOrganizationFixture :exec
+const setRemoteSessionIssuerOrganizationFixture = `-- name: SetRemoteSessionIssuerOrganizationFixture :execrows
 UPDATE remote_session_issuers SET organization_id = $1
-WHERE id = $2
+WHERE id = $2 AND project_id IS NULL
+  AND (organization_id IS NULL OR organization_id = $1)
 `
 
 type SetRemoteSessionIssuerOrganizationFixtureParams struct {
@@ -9256,9 +9329,12 @@ type SetRemoteSessionIssuerOrganizationFixtureParams struct {
 }
 
 // Test-only fixture for a platform issuer subsequently owned by a tenant.
-func (q *Queries) SetRemoteSessionIssuerOrganizationFixture(ctx context.Context, arg SetRemoteSessionIssuerOrganizationFixtureParams) error {
-	_, err := q.db.Exec(ctx, setRemoteSessionIssuerOrganizationFixture, arg.OrganizationID, arg.ID)
-	return err
+func (q *Queries) SetRemoteSessionIssuerOrganizationFixture(ctx context.Context, arg SetRemoteSessionIssuerOrganizationFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionIssuerOrganizationFixture, arg.OrganizationID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setRemoteSessionRefreshExpiresAtIfUnknown = `-- name: SetRemoteSessionRefreshExpiresAtIfUnknown :execrows

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgtype"
 	"time"
 
 	"go.temporal.io/api/enums/v1"
@@ -50,7 +51,30 @@ func TrustedDelegationCleanupWorkflow(ctx workflow.Context) error {
 // Each retry starts a fresh batch budget; exhaustion remains retryable.
 // SQL only selects rows still eligible for cleanup, making retries idempotent.
 func (a *Activities) CleanupTrustedDelegationCredentials(ctx context.Context) error {
-	return cleanupTrustedDelegationBatches(ctx, repo.New(a.db).CleanupTrustedDelegationCredentialsBatch)
+	q := repo.New(a.db)
+	organizations, err := q.ListTrustedDelegationCleanupOrganizations(ctx)
+	if err != nil {
+		return fmt.Errorf("list delegation cleanup organizations: %w", err)
+	}
+	return cleanupTrustedDelegationOrganizations(ctx, organizations, q.CleanupTrustedDelegationCredentialsBatch)
+}
+
+func cleanupTrustedDelegationOrganizations(ctx context.Context, organizations []pgtype.Text, cleanup func(context.Context, repo.CleanupTrustedDelegationCredentialsBatchParams) (int64, error)) error {
+	return cleanupTrustedDelegationBatches(ctx, func(ctx context.Context, limit int32) (int64, error) {
+		var total int64
+		for len(organizations) > 0 && total < int64(limit) {
+			remaining := limit - int32(total)
+			n, err := cleanup(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: organizations[0], BatchSize: remaining})
+			if err != nil {
+				return total, err
+			}
+			total += n
+			if n < int64(remaining) {
+				organizations = organizations[1:]
+			}
+		}
+		return total, nil
+	})
 }
 
 func cleanupTrustedDelegationBatches(ctx context.Context, cleanup func(context.Context, int32) (int64, error)) error {

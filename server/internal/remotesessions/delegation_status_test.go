@@ -67,8 +67,12 @@ func TestGetClientDelegationStatusUnknownAndTenantIsolated(t *testing.T) {
 	// retained delegation data must still require ownership of the client.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	err = repo.New(ti.conn).SetRemoteSessionIssuerOrganizationFixture(ctx, repo.SetRemoteSessionIssuerOrganizationFixtureParams{ID: platformID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
+	affected, err := repo.New(ti.conn).SetRemoteSessionIssuerOrganizationFixture(ctx, repo.SetRemoteSessionIssuerOrganizationFixtureParams{ID: platformID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
 	require.NoError(t, err)
+	require.Equal(t, int64(1), affected)
+	affected, err = repo.New(ti.conn).SetRemoteSessionIssuerOrganizationFixture(ctx, repo.SetRemoteSessionIssuerOrganizationFixtureParams{ID: platformID, OrganizationID: conv.ToPGText(otherOrg)})
+	require.NoError(t, err)
+	require.Zero(t, affected, "cannot reassign another organization issuer")
 	_, err = ti.service.GetClientDelegationStatus(ctx, &orgclientsgen.GetClientDelegationStatusPayload{ID: otherClient.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }

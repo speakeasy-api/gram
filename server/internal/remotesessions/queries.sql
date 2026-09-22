@@ -4035,6 +4035,19 @@ WHERE s.organization_id = @organization_id::text
     WHERE c.id = s.remote_session_client_id AND c.organization_id = s.organization_id
       AND c.project_id IS NULL AND c.remote_session_issuer_id = @issuer_id::uuid);
 
+-- name: ReleaseTrustedDelegationRefresh :execrows
+-- No provider request started. Release only this claim, even after trust or
+-- membership removal; never restore credentials from a stale snapshot.
+UPDATE trusted_issuer_sessions AS s
+SET refresh_claim_id = NULL,
+    credential_generation = COALESCE(s.credential_generation, 1) + 1,
+    updated_at = clock_timestamp()
+WHERE s.organization_id = @organization_id::text
+  AND s.remote_session_client_id = @client_id::uuid
+  AND s.subject_urn = @subject_urn::text AND s.project_id IS NULL
+  AND COALESCE(s.credential_generation, 1) = @expected_generation::bigint
+  AND s.refresh_claim_id = @refresh_claim_id::uuid;
+
 -- name: CompleteTrustedDelegationRefresh :one
 -- Retain the claim for ambiguous outcomes; only definitive completion releases
 -- it. Explicit fields allow rotation without inventing an assertion.
@@ -4119,7 +4132,8 @@ WHERE s.organization_id = @organization_id::text
       AND c.project_id IS NULL AND c.remote_session_issuer_id = @issuer_id::uuid);
 
 -- name: CleanupTrustedDelegationCredentialsBatch :one
--- Maintenance-only cross-tenant erasure. Include inactive rows and use bounded
+-- Tenant-scoped erasure, including a NULL tenant for detached orphan rows.
+-- Include inactive rows and use bounded
 -- row locking. Orphans are deleted even without ciphertext: subject_urn is personal
 -- data. Live expired credentials are erased without releasing refresh claims.
 WITH cleanup_budget AS (
@@ -4127,16 +4141,19 @@ WITH cleanup_budget AS (
 ), expired_ids AS MATERIALIZED (
   -- Bound each indexed scan before combining it with lifecycle cleanup.
   (SELECT s.id FROM trusted_issuer_sessions AS s
-   WHERE s.identity_assertion_encrypted IS NOT NULL
+   WHERE s.organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
+     AND s.identity_assertion_encrypted IS NOT NULL
      AND (s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp())
    ORDER BY s.identity_assertion_expires_at NULLS FIRST, s.id LIMIT (SELECT batch_size FROM cleanup_budget))
   UNION
   (SELECT s.id FROM trusted_issuer_sessions AS s
-   WHERE s.refresh_token_encrypted IS NOT NULL AND s.refresh_expires_at <= statement_timestamp()
+   WHERE s.organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
+     AND s.refresh_token_encrypted IS NOT NULL AND s.refresh_expires_at <= statement_timestamp()
    ORDER BY s.refresh_expires_at, s.id LIMIT (SELECT batch_size FROM cleanup_budget))
   UNION
   (SELECT s.id FROM trusted_issuer_sessions AS s
-   WHERE s.identity_assertion_encrypted IS NULL AND s.refresh_token_encrypted IS NULL
+   WHERE s.organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
+     AND s.identity_assertion_encrypted IS NULL AND s.refresh_token_encrypted IS NULL
      AND (s.upstream_subject_encrypted IS NOT NULL OR s.nonce_encrypted IS NOT NULL)
    ORDER BY s.id LIMIT (SELECT batch_size FROM cleanup_budget))
 ), expired_candidates AS MATERIALIZED (
@@ -4167,7 +4184,8 @@ WITH cleanup_budget AS (
   -- Do not rescan active lifecycles while a full expiration batch is available.
   SELECT s.id, true AS orphaned
   FROM trusted_issuer_sessions AS s
-  WHERE (s.project_id IS NOT NULL OR s.deleted OR NOT EXISTS (
+  WHERE s.organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
+    AND (s.project_id IS NOT NULL OR s.deleted OR NOT EXISTS (
     SELECT 1 FROM organization_metadata AS o
     JOIN remote_session_clients AS c ON c.organization_id = o.id
     JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
@@ -4252,10 +4270,11 @@ WHERE s.organization_id = @organization_id::text
 GROUP BY 1;
 
 
--- name: SetRemoteSessionIssuerOrganizationFixture :exec
+-- name: SetRemoteSessionIssuerOrganizationFixture :execrows
 -- Test-only fixture for a platform issuer subsequently owned by a tenant.
 UPDATE remote_session_issuers SET organization_id = @organization_id
-WHERE id = @id;
+WHERE id = @id AND project_id IS NULL
+  AND (organization_id IS NULL OR organization_id = @organization_id);
 
 -- name: InsertTrustedDelegationObservationFixture :exec
 -- Test-only observation with deliberately invalid ciphertext: status must never decrypt it.
@@ -4268,3 +4287,8 @@ INSERT INTO trusted_issuer_sessions (
     'durable_credential_present', @observed_at, @obtained_at, @refreshed_at,
     'must-not-decrypt'
 );
+
+-- name: ListTrustedDelegationCleanupOrganizations :many
+-- Read-only enumeration for the privileged maintenance activity.
+SELECT DISTINCT organization_id FROM trusted_issuer_sessions
+ORDER BY organization_id NULLS FIRST;

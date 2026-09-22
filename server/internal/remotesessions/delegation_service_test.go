@@ -94,6 +94,18 @@ func (s *delegationMemoryStore) revoke(_ context.Context, b DelegationBinding) e
 	s.rows[b] = c
 	return nil
 }
+func (s *delegationMemoryStore) release(_ context.Context, b DelegationBinding, g int64, id uuid.UUID) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.rows[b]
+	if !ok || c.generation != g || c.claim != id {
+		return false, nil
+	}
+	c.claim = uuid.Nil
+	c.generation++
+	s.rows[b] = c
+	return true, nil
+}
 func (s *delegationMemoryStore) finish(_ context.Context, b DelegationBinding, g int64, id uuid.UUID, next delegationCredential) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1038,9 +1050,9 @@ func (s *delegationAttemptHookStore) markRefreshAttempt(ctx context.Context, b D
 	return s.delegationStore.markRefreshAttempt(ctx, b, generation, claim, now)
 }
 
-func (s *delegationAttemptHookStore) finish(ctx context.Context, b DelegationBinding, generation int64, claim uuid.UUID, next delegationCredential) (bool, error) {
+func (s *delegationAttemptHookStore) release(ctx context.Context, b DelegationBinding, generation int64, claim uuid.UUID) (bool, error) {
 	s.finishContextErr = ctx.Err()
-	return s.delegationStore.finish(ctx, b, generation, claim, next)
+	return s.delegationStore.release(ctx, b, generation, claim)
 }
 
 func TestDelegationServiceAttemptFailureReleaseSafety(t *testing.T) {
@@ -1103,11 +1115,11 @@ func (s *delegationRereadHookStore) load(ctx context.Context, b DelegationBindin
 	return s.delegationStore.load(ctx, b)
 }
 
-func (s *delegationRereadHookStore) finish(ctx context.Context, b DelegationBinding, generation int64, claim uuid.UUID, next delegationCredential) (bool, error) {
+func (s *delegationRereadHookStore) release(ctx context.Context, b DelegationBinding, generation int64, claim uuid.UUID) (bool, error) {
 	s.finishCalls++
 	s.finishContextErr = ctx.Err()
 	s.finishDeadline, _ = ctx.Deadline()
-	return s.delegationStore.finish(ctx, b, generation, claim, next)
+	return s.delegationStore.release(ctx, b, generation, claim)
 }
 
 func TestDelegationServicePostClaimRereadReleaseSafety(t *testing.T) {
