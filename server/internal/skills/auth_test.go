@@ -95,6 +95,9 @@ func TestSkillsAPIKeyAuthCollectionProjectResources(t *testing.T) {
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					t.Parallel()
+					// Project authentication mutates request-local auth state.
+					authContext := *ti.authContext
+					ctx := contextvalues.SetAuthContext(ctx, &authContext)
 					grant := authz.NewGrant(authz.ScopeSkillWrite, tc.allowProject)
 					grants := []authz.Grant{grant}
 					if method == "create" {
@@ -155,6 +158,9 @@ func TestSkillsAuthoringAPIKeyAuthRetainsProjectRead(t *testing.T) {
 	for _, method := range []string{"create", "addVersion", "restoreVersion", "update", "triggerSuggestion", "approveSuggestion", "dismissSuggestion", "approveAllSuggestions", "archive", "share", "unshare"} {
 		t.Run(method, func(t *testing.T) {
 			t.Parallel()
+			// Project authentication mutates request-local auth state.
+			authContext := *ti.authContext
+			ctx := contextvalues.SetAuthContext(ctx, &authContext)
 			scoped := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillWrite, ti.projectID.String()))
 			_, err := ti.service.APIKeyAuth(context.WithValue(scoped, goa.MethodKey, method), *ti.authContext.ProjectSlug, &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema})
 			requireOopsCode(t, err, oops.CodeForbidden)
