@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,8 +53,21 @@ func (t *tokenResponse) UnmarshalJSON(data []byte) error {
 		}
 	}
 	var decoded wire
-	if err := json.Unmarshal(data, &decoded); err != nil {
+	// Some providers return expires_in as a quoted number. Accept either form,
+	// but still require an integer that fits the field rather than truncating it.
+	response := struct {
+		*wire
+		ExpiresIn json.Number `json:"expires_in"`
+	}{wire: &decoded}
+	if err := json.Unmarshal(data, &response); err != nil {
 		return fmt.Errorf("decode token response: %w", err)
+	}
+	if response.ExpiresIn != "" {
+		seconds, err := strconv.Atoi(string(response.ExpiresIn))
+		if err != nil {
+			return errors.New("token response expires_in must be an integer within range")
+		}
+		decoded.ExpiresIn = seconds
 	}
 	*t = tokenResponse(decoded)
 	t.scopePresent = scopePresent

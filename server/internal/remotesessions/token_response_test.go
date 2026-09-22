@@ -9,6 +9,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestTokenResponseExpiresIn(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
+	for _, value := range []string{`3600`, `"3600"`, `0`, `"0"`, `null`} {
+		t.Run(value, func(t *testing.T) {
+			var response tokenResponse
+			require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","scope":"read","expires_in":`+value+`}`), &response))
+			require.Equal(t, "a", response.AccessToken)
+			require.True(t, response.ScopeReported())
+			if value == `3600` || value == `"3600"` {
+				require.Equal(t, 3600, response.ExpiresIn)
+				require.Equal(t, now.Add(time.Hour), *response.AccessExpiresAt(now))
+			} else {
+				require.Zero(t, response.ExpiresIn)
+				require.Nil(t, response.AccessExpiresAt(now))
+			}
+		})
+	}
+	var omitted tokenResponse
+	require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a"}`), &omitted))
+	require.Zero(t, omitted.ExpiresIn)
+	for _, value := range []string{`""`, `"never"`, `1.5`, `"1.5"`, `true`, `{}`, `[]`, `"999999999999999999999999"`} {
+		t.Run("invalid_"+value, func(t *testing.T) {
+			var response tokenResponse
+			require.Error(t, json.Unmarshal([]byte(`{"expires_in":`+value+`}`), &response))
+		})
+	}
+}
+
 func TestTokenResponseRejectsMalformedScope(t *testing.T) {
 	t.Parallel()
 	for _, raw := range []string{`{"access_token":"a","scope":["read"]}`, `{"access_token":"a","scope":1}`, `{"access_token":"a","scope":{}}`} {
