@@ -220,7 +220,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	var hasSecrets bool
 	err = conn.QueryRow(ctx, `SELECT identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL FROM trusted_issuer_sessions WHERE id=$1`, row.ID).Scan(&hasSecrets)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	for _, lifecycle := range []string{"deleted", "orphaned", "secret-free-orphan"} {
+	for _, lifecycle := range []string{"deleted", "orphaned", "secret-free-orphan", "secret-free-deleted", "secret-free-org-orphan"} {
 		{
 			t.Logf("cleanup lifecycle: %s", lifecycle)
 			id := uuid.New()
@@ -232,6 +232,10 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 			}
 			if lifecycle == "secret-free-orphan" {
 				_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET remote_session_client_id=NULL, identity_assertion_encrypted=NULL, refresh_token_encrypted=NULL, upstream_subject_encrypted=NULL, nonce_encrypted=NULL WHERE id=$1`, id)
+				require.NoError(t, err)
+			}
+			if lifecycle == "secret-free-deleted" || lifecycle == "secret-free-org-orphan" {
+				_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET identity_assertion_encrypted=NULL, refresh_token_encrypted=NULL, upstream_subject_encrypted=NULL, nonce_encrypted=NULL, deleted_at=CASE WHEN $2='secret-free-deleted' THEN clock_timestamp() ELSE NULL END, organization_id=CASE WHEN $2='secret-free-org-orphan' THEN NULL ELSE organization_id END WHERE id=$1`, id, lifecycle)
 				require.NoError(t, err)
 			}
 			count, err := q.CleanupTrustedDelegationCredentialsBatch(ctx, 1)
