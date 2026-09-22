@@ -382,6 +382,12 @@ func proxyRegistrationError(err error) *oops.ShareableError {
 		}
 		return oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration")
 	}
+	// A provider that answers 2xx with a body we cannot use has refused just as
+	// finally as one that answered 4xx: retrying returns the same response. A
+	// gateway error would tell the caller to try again.
+	if _, ok := errors.AsType[*registration.InvalidSuccessResponseError](err); ok {
+		return oops.E(oops.CodeBadRequest, err, "identity provider returned an unusable registration response")
+	}
 	return oops.E(oops.CodeGatewayError, err, "failed to register client with identity provider")
 }
 

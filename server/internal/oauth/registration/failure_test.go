@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -51,6 +52,18 @@ func TestClassifyDCRTransportAndInvalidResponseFailures(t *testing.T) {
 
 	dnsTimeoutFailure := ClassifyDCR(&net.DNSError{Err: "i/o timeout", Name: "provider.example", IsTimeout: true})
 	require.Equal(t, Failure{Outcome: OutcomeUnreachable, Reason: ReasonTimeout, Retryable: true, HTTPStatus: nil, ProviderMessage: nil}, dnsTimeoutFailure)
+
+	// http.Client wraps every transport failure in *url.Error, so the classifier
+	// only ever sees the wrapped shape in production. Pin that the unwrap still
+	// reaches the specific cause rather than falling back to a network error.
+	wrappedDNSFailure := ClassifyDCR(&url.Error{Op: "Post", URL: "https://provider.example/register", Err: &net.DNSError{Err: "no such host", Name: "provider.example"}})
+	require.Equal(t, Failure{Outcome: OutcomeUnreachable, Reason: ReasonDNSError, Retryable: true, HTTPStatus: nil, ProviderMessage: nil}, wrappedDNSFailure)
+
+	wrappedTLSFailure := ClassifyDCR(&url.Error{Op: "Post", URL: "https://provider.example/register", Err: x509.UnknownAuthorityError{}})
+	require.Equal(t, Failure{Outcome: OutcomeUnreachable, Reason: ReasonTLSError, Retryable: true, HTTPStatus: nil, ProviderMessage: nil}, wrappedTLSFailure)
+
+	wrappedNetworkFailure := ClassifyDCR(&url.Error{Op: "Post", URL: "https://provider.example/register", Err: errors.New("connection reset by peer")})
+	require.Equal(t, Failure{Outcome: OutcomeUnreachable, Reason: ReasonNetworkError, Retryable: true, HTTPStatus: nil, ProviderMessage: nil}, wrappedNetworkFailure)
 
 	tlsFailure := ClassifyDCR(x509.UnknownAuthorityError{})
 	require.Equal(t, Failure{Outcome: OutcomeUnreachable, Reason: ReasonTLSError, Retryable: true, HTTPStatus: nil, ProviderMessage: nil}, tlsFailure)

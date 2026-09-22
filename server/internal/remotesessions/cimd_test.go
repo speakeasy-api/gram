@@ -422,6 +422,29 @@ func TestCIMD_CallbackAccessDeniedDoesNotRecordRegistrationFailure(t *testing.T)
 	require.Empty(t, registrationFailurePoints(t, reader))
 }
 
+// A provider that answers temporarily_unavailable has not refused; it is the
+// retryable half of the completed CIMD outcomes, and it reaches the counter
+// through the same callback path as a refusal.
+func TestCIMD_CallbackUpstreamUnavailableRecordsRetryableFailure(t *testing.T) {
+	t.Parallel()
+
+	mgr, reader, state := newCIMDCallbackFailureFixture(t)
+	callback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=temporarily_unavailable&state="+url.QueryEscape(state), nil)
+
+	err := mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callback)
+	require.Error(t, err)
+
+	points := registrationFailurePoints(t, reader)
+	require.Len(t, points, 1)
+	require.EqualValues(t, 1, points[0].Value)
+	require.Equal(t, attribute.NewSet(
+		attr.OAuthRegistrationMethod(registration.MethodCIMD),
+		attr.OAuthRegistrationOutcome(registration.OutcomeUnreachable),
+		attr.OAuthRegistrationReason(registration.ReasonUpstreamUnavailable),
+		attr.OAuthRegistrationRetryable(true),
+	), points[0].Attributes)
+}
+
 func newCIMDCallbackFailureFixture(t *testing.T) (*remotesessions.ChallengeManager, *sdkmetric.ManualReader, string) {
 	t.Helper()
 
