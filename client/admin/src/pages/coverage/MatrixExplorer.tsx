@@ -388,9 +388,15 @@ export function MatrixExplorer({
   const rows = items[axes.rows].filter((item) =>
     selected[axes.rows].includes(item.id),
   );
-  const columns = items[axes.columns].filter((item) =>
-    selected[axes.columns].includes(item.id),
-  );
+  const columns = items[axes.columns]
+    .filter((item) => selected[axes.columns].includes(item.id))
+    .sort((a, b) => {
+      if (axes.columns !== "capabilities") return 0;
+      return (
+        Number(a.id.endsWith("-redaction")) -
+        Number(b.id.endsWith("-redaction"))
+      );
+    });
   const rowHighlights = highlighted[axes.rows].filter((id) =>
     rows.some((row) => row.id === id),
   );
