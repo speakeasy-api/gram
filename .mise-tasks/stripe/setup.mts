@@ -2,8 +2,8 @@
 
 //MISE description="Provision and validate Stripe sandbox billing objects and initialize the local webhook secret"
 
-// Idempotent: TUM is provisioned by meter event name and price lookup key;
-// MCP egress and risk scans prices are resolved from the sandbox catalog.
+// Idempotent: missing sandbox meters/prices are provisioned by event name
+// and lookup key; compatible existing prices and event names are preserved.
 // Re-running re-saves the existing IDs. Refuses live-mode keys outright.
 
 import { intro, isCancel, log, note, outro, password } from "@clack/prompts";
@@ -38,6 +38,7 @@ interface StripeAccount {
 interface StripeMeter {
   id: string;
   event_name: string;
+  event_time_window?: string | null;
   status: string;
   livemode: boolean;
   default_aggregation?: { formula?: string };
@@ -304,6 +305,7 @@ async function resolveWebhookSecret(key: string): Promise<string> {
 async function findMeter(
   key: string,
   status: "active" | "inactive",
+  eventName: string,
 ): Promise<StripeMeter | undefined> {
   let startingAfter: string | undefined;
   do {
@@ -317,7 +319,7 @@ async function findMeter(
       params,
     );
     const meter = meters.data.find(
-      (candidate) => candidate.event_name === METER_EVENT_NAME,
+      (candidate) => candidate.event_name === eventName,
     );
     if (meter || !meters.has_more) return meter;
 
@@ -337,6 +339,7 @@ function assertMeterConfiguration(
     [
       ["status", meter.status, expectedStatus],
       ["livemode", meter.livemode, false],
+      ["event_time_window", meter.event_time_window ?? null, null],
       [
         "default_aggregation.formula",
         meter.default_aggregation?.formula,
@@ -358,17 +361,111 @@ function assertMeterConfiguration(
   );
 }
 
-async function resolveMeteredPrice(key: string, lookupKey: string) {
+async function ensureMeter(
+  key: string,
+  eventName: string,
+  displayName: string,
+) {
+  let meter = await findMeter(key, "active", eventName);
+  if (meter) {
+    log.info(`Meter "${eventName}" already exists: ${meter.id}`);
+  } else {
+    meter = await findMeter(key, "inactive", eventName);
+    if (meter) {
+      assertMeterConfiguration(meter, "inactive");
+      meter = await stripe<StripeMeter>(
+        key,
+        "POST",
+        `/billing/meters/${meter.id}/reactivate`,
+      );
+      log.success(`Reactivated meter "${eventName}": ${meter.id}`);
+    } else {
+      meter = await stripe<StripeMeter>(key, "POST", "/billing/meters", {
+        display_name: displayName,
+        event_name: eventName,
+        "default_aggregation[formula]": "sum",
+        "value_settings[event_payload_key]": "value",
+        "customer_mapping[type]": "by_id",
+        "customer_mapping[event_payload_key]": "stripe_customer_id",
+      });
+      log.success(`Created meter "${eventName}": ${meter.id}`);
+    }
+  }
+  assertMeterConfiguration(meter, "active");
+
+  assertConfiguration(`Meter ${meter.id}`, [
+    ["event_name", meter.event_name, eventName],
+  ]);
+  return meter;
+}
+
+// Sandbox simulation only, NOT authoritative production pricing. Backend
+// tier_limits.go specifies $20/GiB; definition.go and handler_stripe.go export
+// raw bytes. Stripe allows 12 decimal places in cents, so the nearest rate is
+// $19.9999983976448/GiB. No transform_quantity or rounding of usage is applied.
+const SANDBOX_EGRESS_CENTS_PER_BYTE = "0.000001862645";
+// Risk definitions export o200k_base tokens per scanner: $0.99/1M tokens.
+const SANDBOX_RISK_CENTS_PER_TOKEN = "0.000099";
+
+async function resolveMeteredPrice(
+  key: string,
+  lookupKey: string,
+  eventName: string,
+  displayName: string,
+  unitAmount: string,
+) {
   const prices = await stripe<StripeList<StripePrice>>(key, "GET", "/prices", {
     "lookup_keys[]": lookupKey,
     active: "true",
     limit: "1",
   });
-  const price = prices.data?.[0];
+  let price = prices.data?.[0];
+  let resolvedMeter: StripeMeter | undefined;
   if (!price) {
-    throw new Error(
-      `No active Stripe sandbox price with lookup key "${lookupKey}". Create the monthly metered price with the reviewed pricing and re-run stripe:setup.`,
+    // Never replace an archived price or silently transfer its lookup key.
+    const inactive = await stripe<StripeList<StripePrice>>(
+      key,
+      "GET",
+      "/prices",
+      {
+        "lookup_keys[]": lookupKey,
+        active: "false",
+        limit: "1",
+      },
     );
+    if (inactive.data.length > 0) {
+      throw new Error(
+        `Archived price "${lookupKey}" exists; review it in the sandbox before re-running. Setup will not replace it.`,
+      );
+    }
+    const meter = await ensureMeter(key, eventName, displayName);
+    resolvedMeter = meter;
+    price = await stripe<StripePrice>(key, "POST", "/prices", {
+      "product_data[name]": displayName,
+      "product_data[metadata][speakeasy_product]":
+        PRODUCT_METADATA_SPEAKEASY_PRODUCT,
+      lookup_key: lookupKey,
+      nickname:
+        lookupKey === MCP_EGRESS_PRICE_LOOKUP_KEY
+          ? "Sandbox approximation of $20/GiB (12-decimal cents/byte)"
+          : "Sandbox risk scans ($0.99 per 1M tokens)",
+      currency: "usd",
+      billing_scheme: "per_unit",
+      unit_amount_decimal: unitAmount,
+      "recurring[interval]": "month",
+      "recurring[usage_type]": "metered",
+      "recurring[meter]": meter.id,
+    });
+    assertConfiguration(`New price "${lookupKey}"`, [
+      ["recurring.meter", price.recurring?.meter, meter.id],
+      ["billing_scheme", price.billing_scheme, "per_unit"],
+      ["unit_amount_decimal", price.unit_amount_decimal, unitAmount],
+    ]);
+    if (lookupKey === MCP_EGRESS_PRICE_LOOKUP_KEY) {
+      log.info(
+        "Sandbox MCP approximation: Stripe's 12-decimal precision gives $19.9999983976448/GiB, not authoritative production pricing.",
+      );
+    }
   }
   assertConfiguration(
     `Price "${lookupKey}" (${price.id})`,
@@ -384,7 +481,20 @@ async function resolveMeteredPrice(key: string, lookupKey: string) {
     "Correct the sandbox price configuration and re-run stripe:setup.",
   );
   log.info(`Resolved price "${lookupKey}": ${price.id}`);
-  return price;
+  // Existing prices retain their rates, billing schemes and actual event names.
+  const meter =
+    resolvedMeter ??
+    (await stripe<StripeMeter>(
+      key,
+      "GET",
+      `/billing/meters/${price.recurring!.meter}`,
+    ));
+  assertMeterConfiguration(meter, "active");
+  assertConfiguration(`Meter for "${lookupKey}"`, [
+    ["id", meter.id, price.recurring!.meter],
+    ["event_name configured", Boolean(meter.event_name?.trim()), true],
+  ]);
+  return { price, meter };
 }
 
 export async function provisionCatalog(key: string) {
@@ -397,42 +507,26 @@ export async function provisionCatalog(key: string) {
   }
   log.info("Connected to Stripe sandbox account.");
 
-  const mcpEgressPrice = await resolveMeteredPrice(
-    key,
-    MCP_EGRESS_PRICE_LOOKUP_KEY,
-  );
-  const riskScansPrice = await resolveMeteredPrice(
-    key,
-    RISK_SCANS_PRICE_LOOKUP_KEY,
-  );
+  // Backend event names are configurable (flags_stripe.go), with no defaults.
+  // Use stable snake_case names only for new local sandbox catalog entries.
+  const { price: mcpEgressPrice, meter: mcpEgressMeter } =
+    await resolveMeteredPrice(
+      key,
+      MCP_EGRESS_PRICE_LOOKUP_KEY,
+      "mcp_egress",
+      "Sandbox MCP egress",
+      SANDBOX_EGRESS_CENTS_PER_BYTE,
+    );
+  const { price: riskScansPrice, meter: riskScansMeter } =
+    await resolveMeteredPrice(
+      key,
+      RISK_SCANS_PRICE_LOOKUP_KEY,
+      "risk_scans",
+      "Sandbox risk scans",
+      SANDBOX_RISK_CENTS_PER_TOKEN,
+    );
 
-  // Meter — event names are unique across active and inactive meters.
-  let meter = await findMeter(key, "active");
-  if (meter) {
-    log.info(`Meter "${METER_EVENT_NAME}" already exists: ${meter.id}`);
-  } else {
-    meter = await findMeter(key, "inactive");
-    if (meter) {
-      assertMeterConfiguration(meter, "inactive");
-      meter = await stripe<StripeMeter>(
-        key,
-        "POST",
-        `/billing/meters/${meter.id}/reactivate`,
-      );
-      log.success(`Reactivated meter "${METER_EVENT_NAME}": ${meter.id}`);
-    } else {
-      meter = await stripe<StripeMeter>(key, "POST", "/billing/meters", {
-        display_name: METER_DISPLAY_NAME,
-        event_name: METER_EVENT_NAME,
-        "default_aggregation[formula]": "sum",
-        "value_settings[event_payload_key]": "value",
-        "customer_mapping[type]": "by_id",
-        "customer_mapping[event_payload_key]": "stripe_customer_id",
-      });
-      log.success(`Created meter "${METER_EVENT_NAME}": ${meter.id}`);
-    }
-  }
-  assertMeterConfiguration(meter, "active");
+  const meter = await ensureMeter(key, METER_EVENT_NAME, METER_DISPLAY_NAME);
 
   // Price and product — keyed on the lookup key. Creating them in one request
   // avoids leaving an orphan product if price creation fails.
@@ -568,7 +662,15 @@ export async function provisionCatalog(key: string) {
   }
   assertPortalConfiguration(portalConfiguration);
 
-  return { meter, price, mcpEgressPrice, riskScansPrice, portalConfiguration };
+  return {
+    meter,
+    price,
+    mcpEgressPrice,
+    riskScansPrice,
+    mcpEgressMeter,
+    riskScansMeter,
+    portalConfiguration,
+  };
 }
 
 interface SetupDependencies {
@@ -587,15 +689,48 @@ export async function setupStripe(deps: SetupDependencies) {
   }
   // Authentication must succeed before provisioning catalog objects.
   const webhookSecret = await deps.webhookSecret(key);
-  const { meter, price, mcpEgressPrice, riskScansPrice, portalConfiguration } =
-    await deps.provision(key);
+  const {
+    meter,
+    price,
+    mcpEgressPrice,
+    riskScansPrice,
+    mcpEgressMeter,
+    riskScansMeter,
+    portalConfiguration,
+  } = await deps.provision(key);
+  // Categories use different units; only the risk scanners share a meter.
+  const categories = [
+    ["TUM", meter],
+    ["MCP egress", mcpEgressMeter],
+    ["risk scans", riskScansMeter],
+  ] as const;
+  for (const [index, [category, categoryMeter]] of categories.entries()) {
+    for (const [otherCategory, otherMeter] of categories.slice(index + 1)) {
+      for (const field of ["id", "event_name"] as const) {
+        if (categoryMeter[field] === otherMeter[field]) {
+          throw new Error(
+            `${category} and ${otherCategory} must use distinct meter ${field} values.`,
+          );
+        }
+      }
+    }
+  }
   await deps.persist({
     STRIPE_API_KEY: key,
     STRIPE_PRICE_ID_TUM: price.id,
     STRIPE_PRICE_ID_MCP_EGRESS: mcpEgressPrice.id,
     STRIPE_PRICE_ID_RISK_SCANS: riskScansPrice.id,
     STRIPE_METER_ID_TUM: meter.id,
-    STRIPE_METER_EVENT_NAME: METER_EVENT_NAME,
+    STRIPE_METER_EVENT_NAME: meter.event_name,
+    STRIPE_METER_EVENT_NAME_MCP_BANDWIDTH_EGRESS: mcpEgressMeter.event_name,
+    // All scanners contribute their individual token quantities to one price.
+    STRIPE_METER_EVENT_NAME_RISK_GITLEAKS: riskScansMeter.event_name,
+    STRIPE_METER_EVENT_NAME_RISK_PRESIDIO: riskScansMeter.event_name,
+    STRIPE_METER_EVENT_NAME_RISK_PROMPT_INJECTION: riskScansMeter.event_name,
+    STRIPE_METER_EVENT_NAME_RISK_PROMPT_POLICY: riskScansMeter.event_name,
+    STRIPE_METER_EVENT_NAME_RISK_CUSTOM_RULES: riskScansMeter.event_name,
+    STRIPE_METER_EVENT_NAME_RISK_CLI_DESTRUCTIVE: riskScansMeter.event_name,
+    STRIPE_METER_EVENT_NAME_RISK_LLM_ANALYZER: riskScansMeter.event_name,
     STRIPE_PORTAL_CONFIGURATION_ID: portalConfiguration.id,
     STRIPE_WEBHOOK_SECRET: webhookSecret,
   });
