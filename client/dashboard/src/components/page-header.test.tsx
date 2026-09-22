@@ -15,6 +15,9 @@ vi.mock("./workspace-switcher.tsx", () => ({
 vi.mock("./command-palette/CommandPaletteTrigger", () => ({
   CommandPaletteTrigger: () => <button data-testid="command-palette" />,
 }));
+vi.mock("./impersonation-banner-state", () => ({
+  useShowsImpersonationBanner: () => false,
+}));
 vi.mock("@/components/ui/Sidebar", () => ({
   SidebarTrigger: () => <button data-testid="sidebar-trigger" />,
 }));

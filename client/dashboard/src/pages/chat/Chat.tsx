@@ -92,7 +92,12 @@ export function ChatHome(): ReactElement {
     // grain. Scrolling lives on an inner wrapper so the mesh (and the back
     // affordance) stay pinned to the viewport instead of scrolling away with
     // the content.
-    <div className={cn(BRAND_MESH_SURFACE_CLASS, "flex h-full flex-col")}>
+    <div
+      className={cn(
+        BRAND_MESH_SURFACE_CLASS,
+        "flex h-[calc(100vh-var(--banner-offset,0px))] flex-col",
+      )}
+    >
       <BrandMeshLayers />
       {/* Header row on the same --header-height grid as Page.Header, but with
           no rule below it — the mesh surface should read unbroken here. */}
