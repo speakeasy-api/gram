@@ -135,6 +135,18 @@ describe("EvidencePanel", () => {
     expect(screen.getByText("delete_everything")).toBeTruthy();
   });
 
+  it("says nothing about the count while the whole listing is shown", () => {
+    // The line exists to admit that rows are hidden. Left up when the filter
+    // is cleared it would claim the opposite of what the list is doing.
+    renderPanel(remoteDocument({ capabilities: manyTools() }));
+
+    expect(screen.queryByText(/declared tools\./)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Destructive 1/ }));
+    expect(screen.getByText(/declared tools\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /All 9/ }));
+    expect(screen.queryByText(/declared tools\./)).toBeNull();
+  });
+
   it("narrows the tool listing by name", () => {
     renderPanel(remoteDocument({ capabilities: manyTools() }));
 
