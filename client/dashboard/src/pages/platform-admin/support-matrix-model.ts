@@ -1,4 +1,3 @@
-export type OutcomeId = "gateway" | "security" | "cost" | "identity";
 export type SurfaceId = "cc" | "chat" | "cowork" | "codex" | "cursor" | "other";
 export type CapabilityId =
   | "session"
@@ -6,47 +5,6 @@ export type CapabilityId =
   | "identity"
   | "cost"
   | "shadow";
-
-export type PlannerState = {
-  outcomes: OutcomeId[];
-  surfaces: SurfaceId[];
-  answers: Record<string, string>;
-  step: 1 | 2 | 3 | 4;
-};
-
-export const defaultPlannerState: PlannerState = {
-  outcomes: ["security"],
-  surfaces: ["cc", "chat", "cowork"],
-  answers: { plan: "Enterprise", mdm: "Managed fleet" },
-  step: 1,
-};
-
-export const outcomes = [
-  {
-    id: "gateway" as const,
-    name: "MCP Gateway",
-    description: "Broker, scope, and audit the MCP servers agents reach.",
-    capabilities: ["session"] as CapabilityId[],
-  },
-  {
-    id: "security" as const,
-    name: "Agent Security",
-    description: "Block risky prompts and tool calls before they execute.",
-    capabilities: ["blocking", "session"] as CapabilityId[],
-  },
-  {
-    id: "cost" as const,
-    name: "Cost Tracking",
-    description: "Attribute spend and tokens to sessions and surfaces.",
-    capabilities: ["cost"] as CapabilityId[],
-  },
-  {
-    id: "identity" as const,
-    name: "Agent Identity",
-    description: "Bind agent activity to users, roles, and devices.",
-    capabilities: ["identity"] as CapabilityId[],
-  },
-];
 
 export const surfaces = [
   { id: "cc" as const, name: "Claude Code", detail: "CLI · Desktop · Cloud" },
@@ -100,7 +58,6 @@ export type IntegrationMethod = {
   setup: string;
   surfaces: SurfaceId[];
   capabilities: CapabilityId[];
-  eligible?: (answers: Record<string, string>) => boolean;
 };
 
 export const methods: IntegrationMethod[] = [
@@ -111,7 +68,6 @@ export const methods: IntegrationMethod[] = [
     setup: "About 10 minutes · Anthropic console",
     surfaces: ["cc", "chat", "cowork"],
     capabilities: ["session", "blocking"],
-    eligible: (a) => a.plan === "Enterprise",
   },
   {
     id: "client-hooks",
@@ -130,7 +86,6 @@ export const methods: IntegrationMethod[] = [
     setup: "1–2 days · fleet rollout",
     surfaces: ["cc", "codex", "cursor", "other"],
     capabilities: ["session", "identity", "cost", "shadow"],
-    eligible: (a) => a.mdm !== "No MDM",
   },
   {
     id: "provider-import",
@@ -150,33 +105,6 @@ export const methods: IntegrationMethod[] = [
     capabilities: ["session", "cost"],
   },
 ];
-
-export function targetCapabilities(selected: OutcomeId[]): CapabilityId[] {
-  return [
-    ...new Set(
-      outcomes
-        .filter((o) => selected.includes(o.id))
-        .flatMap((o) => o.capabilities),
-    ),
-  ];
-}
-
-export function recommendation(state: PlannerState): IntegrationMethod | null {
-  const wanted = targetCapabilities(state.outcomes);
-  const best = methods
-    .filter((method) => !method.eligible || method.eligible(state.answers))
-    .map((method) => ({
-      method,
-      score:
-        method.surfaces.filter((surface) => state.surfaces.includes(surface))
-          .length *
-        method.capabilities.filter((capability) => wanted.includes(capability))
-          .length,
-    }))
-    .sort((a, b) => b.score - a.score)[0];
-
-  return best && best.score > 0 ? best.method : null;
-}
 
 export function surfaceForHookSource(value: string): SurfaceId {
   const source = value.toLowerCase();

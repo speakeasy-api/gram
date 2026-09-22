@@ -1,51 +1,43 @@
 import { describe, expect, it } from "vitest";
 import {
-  defaultPlannerState,
-  recommendation,
+  capabilities,
+  methods,
   surfaceForHookSource,
-  targetCapabilities,
+  surfaces,
 } from "./support-matrix-model";
 
-describe("support coverage planner model", () => {
-  it("turns selected outcomes into a unique capability target", () => {
-    expect(targetCapabilities(["gateway", "security", "cost"])).toEqual([
-      "session",
-      "blocking",
-      "cost",
-    ]);
-  });
-
-  it("does not recommend enterprise-only inference hooks for a team plan", () => {
-    const result = recommendation({
-      ...defaultPlannerState,
-      answers: { ...defaultPlannerState.answers, plan: "Team" },
-    });
-
-    expect(result?.id).toBe("client-hooks");
-  });
-
-  it("does not recommend an integration that covers no target cells", () => {
-    expect(
-      recommendation({
-        ...defaultPlannerState,
-        outcomes: ["identity"],
-        surfaces: ["cowork"],
-        answers: { plan: "Team", mdm: "No MDM" },
-      }),
-    ).toBeNull();
-  });
-
+describe("support matrix model", () => {
   it.each([
-    ["claude", "chat"],
-    ["claude-chat-web", "chat"],
     ["claude-code", "cc"],
     ["claude-code-web", "cc"],
-    ["claude-code-desktop", "cc"],
+    ["claudecode", "cc"],
+    ["claude", "chat"],
+    ["claude-desktop", "chat"],
+    ["claude-chat-web", "chat"],
     ["cowork-desktop", "cowork"],
     ["cursor", "cursor"],
-    ["codex-cli", "codex"],
+    ["openai", "codex"],
+    ["chatgpt-web", "codex"],
     ["gemini", "other"],
-  ] as const)("maps %s telemetry to the %s surface", (source, surface) => {
-    expect(surfaceForHookSource(source)).toBe(surface);
+  ])("maps %s to %s", (source, expected) => {
+    expect(surfaceForHookSource(source)).toBe(expected);
+  });
+
+  it("defines integration footprints using known surfaces and capabilities", () => {
+    const surfaceIds = new Set(surfaces.map((surface) => surface.id));
+    const capabilityIds = new Set(
+      capabilities.map((capability) => capability.id),
+    );
+
+    for (const method of methods) {
+      expect(method.surfaces.every((surface) => surfaceIds.has(surface))).toBe(
+        true,
+      );
+      expect(
+        method.capabilities.every((capability) =>
+          capabilityIds.has(capability),
+        ),
+      ).toBe(true);
+    }
   });
 });
