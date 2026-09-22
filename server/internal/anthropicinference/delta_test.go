@@ -24,14 +24,6 @@ func chainIdentities(messages ...Message) []messageIdentity {
 	return stored
 }
 
-func frameHashes(messages ...Message) [][]byte {
-	hashes := make([][]byte, 0, len(messages))
-	for _, msg := range messages {
-		hashes = append(hashes, contentHash(msg))
-	}
-	return hashes
-}
-
 func TestAlignTranscriptContinuesStoredHistory(t *testing.T) {
 	t.Parallel()
 	prompt, reply, next := textMessage("user", "EXAMPLE prompt"), textMessage("assistant", "EXAMPLE reply"), textMessage("user", "EXAMPLE next")
