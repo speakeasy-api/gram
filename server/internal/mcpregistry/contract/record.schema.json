@@ -1,0 +1,1384 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "server": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200,
+          "pattern": "^[a-zA-Z0-9.-]+\\/[a-zA-Z0-9._-]+$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "$schema": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9+.-]*:(?:\\/\\/(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|:)*@)?(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})*|\\[(?:[a-fA-F0-9:.]+|[vV][a-fA-F0-9]+\\.[a-zA-Z0-9._~!$&'()*+,;=:-]+)\\])(?::[0-9]*)?(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])+(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])+(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|\\/|)(?:\\?(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])|[/?])*)?(?:#(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])|[/?])*)?$",
+          "format": "gram-source-uri"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "websiteUrl": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9+.-]*:(?:\\/\\/(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|:)*@)?(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})*|\\[(?:[a-fA-F0-9:.]+|[vV][a-fA-F0-9]+\\.[a-zA-Z0-9._~!$&'()*+,;=:-]+)\\])(?::[0-9]*)?(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])+(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])+(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|\\/|)(?:\\?(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])|[/?])*)?(?:#(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])|[/?])*)?$",
+          "format": "gram-source-uri"
+        },
+        "repository": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9+.-]*:(?:\\/\\/(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|:)*@)?(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})*|\\[(?:[a-fA-F0-9:.]+|[vV][a-fA-F0-9]+\\.[a-zA-Z0-9._~!$&'()*+,;=:-]+)\\])(?::[0-9]*)?(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])+(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])+(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|\\/|)(?:\\?(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])|[/?])*)?(?:#(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])|[/?])*)?$",
+              "format": "gram-source-uri"
+            },
+            "source": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "subfolder": {
+              "type": "string"
+            }
+          },
+          "required": ["url", "source"],
+          "allOf": [
+            {
+              "type": "object",
+              "additionalProperties": {}
+            }
+          ]
+        },
+        "icons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "src": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9+.-]*:(?:\\/\\/(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|:)*@)?(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})*|\\[(?:[a-fA-F0-9:.]+|[vV][a-fA-F0-9]+\\.[a-zA-Z0-9._~!$&'()*+,;=:-]+)\\])(?::[0-9]*)?(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])+(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])+(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|\\/|)(?:\\?(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])|[/?])*)?(?:#(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])|[/?])*)?$",
+                "format": "gram-source-uri",
+                "maxLength": 255
+              },
+              "mimeType": {
+                "type": "string",
+                "enum": [
+                  "image/png",
+                  "image/jpeg",
+                  "image/jpg",
+                  "image/svg+xml",
+                  "image/webp"
+                ]
+              },
+              "sizes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(\\d+x\\d+|any)$"
+                }
+              },
+              "theme": {
+                "type": "string",
+                "enum": ["light", "dark"]
+              }
+            },
+            "required": ["src"],
+            "allOf": [
+              {
+                "type": "object",
+                "additionalProperties": {}
+              }
+            ]
+          }
+        },
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "registryType": {
+                "type": "string"
+              },
+              "identifier": {
+                "type": "string"
+              },
+              "transport": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["stdio"]
+                      }
+                    },
+                    "required": ["type"],
+                    "allOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["streamable-http"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "pattern": "^https?:\\/\\/[^\\s]+$"
+                      },
+                      "headers": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "choices": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "string",
+                                "number",
+                                "boolean",
+                                "filepath"
+                              ]
+                            },
+                            "isRequired": {
+                              "type": "boolean"
+                            },
+                            "isSecret": {
+                              "type": "boolean"
+                            },
+                            "placeholder": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "variables": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                  "choices": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "format": {
+                                    "type": "string",
+                                    "enum": [
+                                      "string",
+                                      "number",
+                                      "boolean",
+                                      "filepath"
+                                    ]
+                                  },
+                                  "isRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "isSecret": {
+                                    "type": "boolean"
+                                  },
+                                  "placeholder": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "allOf": [
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                  }
+                                ]
+                              }
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["name"],
+                          "allOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "required": ["type", "url"],
+                    "allOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["sse"]
+                      },
+                      "url": {
+                        "type": "string",
+                        "pattern": "^https?:\\/\\/[^\\s]+$"
+                      },
+                      "headers": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "choices": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "string",
+                                "number",
+                                "boolean",
+                                "filepath"
+                              ]
+                            },
+                            "isRequired": {
+                              "type": "boolean"
+                            },
+                            "isSecret": {
+                              "type": "boolean"
+                            },
+                            "placeholder": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "variables": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                  "choices": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "format": {
+                                    "type": "string",
+                                    "enum": [
+                                      "string",
+                                      "number",
+                                      "boolean",
+                                      "filepath"
+                                    ]
+                                  },
+                                  "isRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "isSecret": {
+                                    "type": "boolean"
+                                  },
+                                  "placeholder": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "allOf": [
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                  }
+                                ]
+                              }
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["name"],
+                          "allOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "required": ["type", "url"],
+                    "allOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
+                    ]
+                  }
+                ]
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "allOf": [
+                  {
+                    "not": {
+                      "const": "latest"
+                    }
+                  }
+                ]
+              },
+              "registryBaseUrl": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9+.-]*:(?:\\/\\/(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|:)*@)?(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})*|\\[(?:[a-fA-F0-9:.]+|[vV][a-fA-F0-9]+\\.[a-zA-Z0-9._~!$&'()*+,;=:-]+)\\])(?::[0-9]*)?(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])+(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])+(?:\\/(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])*)*|\\/|)(?:\\?(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])|[/?])*)?(?:#(?:(?:(?:[a-zA-Z0-9._~!$&'()*+,;=-]|%[a-fA-F0-9]{2})|[:@])|[/?])*)?$",
+                "format": "gram-source-uri"
+              },
+              "runtimeHint": {
+                "type": "string"
+              },
+              "fileSha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "environmentVariables": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "choices": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "format": {
+                      "type": "string",
+                      "enum": ["string", "number", "boolean", "filepath"]
+                    },
+                    "isRequired": {
+                      "type": "boolean"
+                    },
+                    "isSecret": {
+                      "type": "boolean"
+                    },
+                    "placeholder": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    },
+                    "variables": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "choices": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "format": {
+                            "type": "string",
+                            "enum": ["string", "number", "boolean", "filepath"]
+                          },
+                          "isRequired": {
+                            "type": "boolean"
+                          },
+                          "isSecret": {
+                            "type": "boolean"
+                          },
+                          "placeholder": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "allOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": {}
+                          }
+                        ]
+                      }
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["name"],
+                  "allOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": {}
+                    }
+                  ]
+                }
+              },
+              "runtimeArguments": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "choices": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "string",
+                                "number",
+                                "boolean",
+                                "filepath"
+                              ]
+                            },
+                            "isRequired": {
+                              "type": "boolean"
+                            },
+                            "isSecret": {
+                              "type": "boolean"
+                            },
+                            "placeholder": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "variables": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                  "choices": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "format": {
+                                    "type": "string",
+                                    "enum": [
+                                      "string",
+                                      "number",
+                                      "boolean",
+                                      "filepath"
+                                    ]
+                                  },
+                                  "isRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "isSecret": {
+                                    "type": "boolean"
+                                  },
+                                  "placeholder": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "allOf": [
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                  }
+                                ]
+                              }
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": ["positional"]
+                            },
+                            "isRepeated": {
+                              "type": "boolean"
+                            },
+                            "valueHint": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["value", "type"],
+                          "allOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "choices": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "string",
+                                "number",
+                                "boolean",
+                                "filepath"
+                              ]
+                            },
+                            "isRequired": {
+                              "type": "boolean"
+                            },
+                            "isSecret": {
+                              "type": "boolean"
+                            },
+                            "placeholder": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "variables": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                  "choices": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "format": {
+                                    "type": "string",
+                                    "enum": [
+                                      "string",
+                                      "number",
+                                      "boolean",
+                                      "filepath"
+                                    ]
+                                  },
+                                  "isRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "isSecret": {
+                                    "type": "boolean"
+                                  },
+                                  "placeholder": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "allOf": [
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                  }
+                                ]
+                              }
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": ["positional"]
+                            },
+                            "isRepeated": {
+                              "type": "boolean"
+                            },
+                            "valueHint": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["type", "valueHint"],
+                          "allOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "choices": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "format": {
+                          "type": "string",
+                          "enum": ["string", "number", "boolean", "filepath"]
+                        },
+                        "isRequired": {
+                          "type": "boolean"
+                        },
+                        "isSecret": {
+                          "type": "boolean"
+                        },
+                        "placeholder": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        },
+                        "variables": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "choices": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "format": {
+                                "type": "string",
+                                "enum": [
+                                  "string",
+                                  "number",
+                                  "boolean",
+                                  "filepath"
+                                ]
+                              },
+                              "isRequired": {
+                                "type": "boolean"
+                              },
+                              "isSecret": {
+                                "type": "boolean"
+                              },
+                              "placeholder": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "allOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              }
+                            ]
+                          }
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": ["named"]
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "isRepeated": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["type", "name"],
+                      "allOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              "packageArguments": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "choices": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "string",
+                                "number",
+                                "boolean",
+                                "filepath"
+                              ]
+                            },
+                            "isRequired": {
+                              "type": "boolean"
+                            },
+                            "isSecret": {
+                              "type": "boolean"
+                            },
+                            "placeholder": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "variables": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                  "choices": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "format": {
+                                    "type": "string",
+                                    "enum": [
+                                      "string",
+                                      "number",
+                                      "boolean",
+                                      "filepath"
+                                    ]
+                                  },
+                                  "isRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "isSecret": {
+                                    "type": "boolean"
+                                  },
+                                  "placeholder": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "allOf": [
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                  }
+                                ]
+                              }
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": ["positional"]
+                            },
+                            "isRepeated": {
+                              "type": "boolean"
+                            },
+                            "valueHint": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["value", "type"],
+                          "allOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "choices": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "string",
+                                "number",
+                                "boolean",
+                                "filepath"
+                              ]
+                            },
+                            "isRequired": {
+                              "type": "boolean"
+                            },
+                            "isSecret": {
+                              "type": "boolean"
+                            },
+                            "placeholder": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "variables": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                  "choices": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "format": {
+                                    "type": "string",
+                                    "enum": [
+                                      "string",
+                                      "number",
+                                      "boolean",
+                                      "filepath"
+                                    ]
+                                  },
+                                  "isRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "isSecret": {
+                                    "type": "boolean"
+                                  },
+                                  "placeholder": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "allOf": [
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                  }
+                                ]
+                              }
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": ["positional"]
+                            },
+                            "isRepeated": {
+                              "type": "boolean"
+                            },
+                            "valueHint": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["type", "valueHint"],
+                          "allOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "choices": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "format": {
+                          "type": "string",
+                          "enum": ["string", "number", "boolean", "filepath"]
+                        },
+                        "isRequired": {
+                          "type": "boolean"
+                        },
+                        "isSecret": {
+                          "type": "boolean"
+                        },
+                        "placeholder": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        },
+                        "variables": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "choices": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "format": {
+                                "type": "string",
+                                "enum": [
+                                  "string",
+                                  "number",
+                                  "boolean",
+                                  "filepath"
+                                ]
+                              },
+                              "isRequired": {
+                                "type": "boolean"
+                              },
+                              "isSecret": {
+                                "type": "boolean"
+                              },
+                              "placeholder": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "allOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              }
+                            ]
+                          }
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": ["named"]
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "isRepeated": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["type", "name"],
+                      "allOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            "required": ["registryType", "identifier", "transport"],
+            "allOf": [
+              {
+                "type": "object",
+                "additionalProperties": {}
+              }
+            ]
+          }
+        },
+        "remotes": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["streamable-http"]
+                  },
+                  "url": {
+                    "type": "string",
+                    "pattern": "^https?:\\/\\/[^\\s]+$"
+                  },
+                  "headers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "choices": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "format": {
+                          "type": "string",
+                          "enum": ["string", "number", "boolean", "filepath"]
+                        },
+                        "isRequired": {
+                          "type": "boolean"
+                        },
+                        "isSecret": {
+                          "type": "boolean"
+                        },
+                        "placeholder": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        },
+                        "variables": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "choices": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "format": {
+                                "type": "string",
+                                "enum": [
+                                  "string",
+                                  "number",
+                                  "boolean",
+                                  "filepath"
+                                ]
+                              },
+                              "isRequired": {
+                                "type": "boolean"
+                              },
+                              "isSecret": {
+                                "type": "boolean"
+                              },
+                              "placeholder": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "allOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              }
+                            ]
+                          }
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["name"],
+                      "allOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      ]
+                    }
+                  },
+                  "variables": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "choices": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "format": {
+                          "type": "string",
+                          "enum": ["string", "number", "boolean", "filepath"]
+                        },
+                        "isRequired": {
+                          "type": "boolean"
+                        },
+                        "isSecret": {
+                          "type": "boolean"
+                        },
+                        "placeholder": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "allOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": ["type", "url"],
+                "allOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["sse"]
+                  },
+                  "url": {
+                    "type": "string",
+                    "pattern": "^https?:\\/\\/[^\\s]+$"
+                  },
+                  "headers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "choices": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "format": {
+                          "type": "string",
+                          "enum": ["string", "number", "boolean", "filepath"]
+                        },
+                        "isRequired": {
+                          "type": "boolean"
+                        },
+                        "isSecret": {
+                          "type": "boolean"
+                        },
+                        "placeholder": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        },
+                        "variables": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "choices": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "format": {
+                                "type": "string",
+                                "enum": [
+                                  "string",
+                                  "number",
+                                  "boolean",
+                                  "filepath"
+                                ]
+                              },
+                              "isRequired": {
+                                "type": "boolean"
+                              },
+                              "isSecret": {
+                                "type": "boolean"
+                              },
+                              "placeholder": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "allOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              }
+                            ]
+                          }
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["name"],
+                      "allOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      ]
+                    }
+                  },
+                  "variables": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "choices": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "format": {
+                          "type": "string",
+                          "enum": ["string", "number", "boolean", "filepath"]
+                        },
+                        "isRequired": {
+                          "type": "boolean"
+                        },
+                        "isSecret": {
+                          "type": "boolean"
+                        },
+                        "placeholder": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "allOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": ["type", "url"],
+                "allOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "_meta": {
+          "type": "object",
+          "properties": {
+            "io.modelcontextprotocol.registry/publisher-provided": {
+              "type": "object"
+            },
+            "io.modelcontextprotocol.registry/official": {
+              "not": {}
+            }
+          },
+          "allOf": [
+            {
+              "type": "object",
+              "additionalProperties": {}
+            }
+          ]
+        }
+      },
+      "required": ["name", "description", "version"],
+      "allOf": [
+        {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      ]
+    },
+    "_meta": {
+      "type": "object",
+      "properties": {
+        "io.modelcontextprotocol.registry/official": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["active", "deprecated", "deleted"]
+            },
+            "statusMessage": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "statusChangedAt": {
+              "type": "string",
+              "format": "gram-source-date-time"
+            },
+            "publishedAt": {
+              "type": "string",
+              "format": "gram-source-date-time"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "gram-source-date-time"
+            },
+            "isLatest": {
+              "type": "boolean"
+            }
+          },
+          "allOf": [
+            {
+              "type": "object",
+              "additionalProperties": {}
+            }
+          ],
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "status",
+              "statusMessage",
+              "statusChangedAt",
+              "publishedAt",
+              "updatedAt",
+              "isLatest"
+            ]
+          }
+        },
+        "io.modelcontextprotocol.registry/publisher-provided": {
+          "not": {}
+        }
+      },
+      "allOf": [
+        {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      ]
+    }
+  },
+  "required": ["server"],
+  "allOf": [
+    {
+      "type": "object",
+      "additionalProperties": {}
+    }
+  ]
+}

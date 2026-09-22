@@ -1,0 +1,1943 @@
+{
+  "server": {
+    "name": "com.vercel/vercel-mcp",
+    "icons": [
+      {
+        "src": "https://storage.googleapis.com/pulse_public/dewey_icons/vercel.svg",
+        "sizes": [
+          "any"
+        ],
+        "mimeType": "image/svg+xml"
+      }
+    ],
+    "title": "Vercel",
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+    "remotes": [
+      {
+        "url": "https://mcp.vercel.com",
+        "type": "streamable-http"
+      }
+    ],
+    "version": "0.0.3",
+    "repository": {
+      "url": "https://github.com/vercel/vercel-mcp-overview",
+      "source": "github"
+    },
+    "websiteUrl": "https://vercel.com/docs/mcp/vercel-mcp",
+    "description": "Integrate with Vercel to manage deployments, projects, domains, and search docs."
+  },
+  "_meta": {
+    "com.pulsemcp/server": {
+      "visitorsEstimateMostRecentWeek": 33009,
+      "visitorsEstimateLastFourWeeks": 126664,
+      "visitorsEstimateTotal": 653144,
+      "isOfficial": true
+    },
+    "com.pulsemcp/server-version": {
+      "source": "pulsemcp.com",
+      "status": "active",
+      "publishedAt": "2026-01-17T03:00:05Z",
+      "updatedAt": "2026-09-11T05:06:30Z",
+      "isLatest": true,
+      "remotes[0]": {
+        "isSelfHosted": false,
+        "authOptions": [
+          {
+            "type": "oauth",
+            "detail": {
+              "protectedResourceMetadata": {
+                "logo_uri": "https://mcp.vercel.com/icons/vercel-light.svg",
+                "resource": "https://mcp.vercel.com/",
+                "description": "Vercel's official MCP server — Vercel platform tools, deployment management, and documentation for AI assistants.",
+                "resource_name": "Vercel MCP",
+                "organization_uri": "https://vercel.com",
+                "scopes_supported": [
+                  "openid"
+                ],
+                "organization_name": "Vercel",
+                "authorization_servers": [
+                  "https://vercel.com"
+                ],
+                "resource_documentation": "https://vercel.com/docs/mcp/vercel-mcp"
+              },
+              "authorizationServerMetadata": {
+                "issuer": "https://vercel.com",
+                "jwks_uri": "https://vercel.com/.well-known/jwks",
+                "token_endpoint": "https://api.vercel.com/login/oauth/token",
+                "claims_supported": [
+                  "sub",
+                  "aud",
+                  "exp",
+                  "iat",
+                  "iss",
+                  "jti",
+                  "nbf",
+                  "nonce",
+                  "preferred_username",
+                  "email",
+                  "picture"
+                ],
+                "scopes_supported": [
+                  "openid",
+                  "email",
+                  "profile",
+                  "offline_access"
+                ],
+                "userinfo_endpoint": "https://api.vercel.com/login/oauth/userinfo",
+                "revocation_endpoint": "https://api.vercel.com/login/oauth/token/revoke",
+                "grant_types_supported": [
+                  "authorization_code",
+                  "client_credentials",
+                  "refresh_token",
+                  "urn:ietf:params:oauth:grant-type:device_code"
+                ],
+                "registration_endpoint": "https://api.vercel.com/login/oauth/register",
+                "authorization_endpoint": "https://vercel.com/oauth/authorize",
+                "introspection_endpoint": "https://api.vercel.com/login/oauth/token/introspect",
+                "subject_types_supported": [
+                  "public"
+                ],
+                "response_modes_supported": [
+                  "web_message.opener"
+                ],
+                "response_types_supported": [
+                  "code"
+                ],
+                "device_authorization_endpoint": "https://api.vercel.com/login/oauth/device-authorization",
+                "code_challenge_methods_supported": [
+                  "S256"
+                ],
+                "id_token_signing_alg_values_supported": [
+                  "RS256"
+                ],
+                "token_endpoint_auth_methods_supported": [
+                  "client_secret_basic",
+                  "client_secret_post",
+                  "client_secret_jwt",
+                  "private_key_jwt"
+                ],
+                "revocation_endpoint_auth_methods_supported": [
+                  "client_secret_basic",
+                  "client_secret_post",
+                  "client_secret_jwt",
+                  "private_key_jwt"
+                ],
+                "token_endpoint_auth_signing_alg_values_supported": [
+                  "HS256",
+                  "HS384",
+                  "HS512",
+                  "RS256",
+                  "RS384",
+                  "RS512",
+                  "PS256",
+                  "PS384",
+                  "PS512",
+                  "ES256",
+                  "ES384",
+                  "ES512",
+                  "EdDSA"
+                ],
+                "revocation_endpoint_auth_signing_alg_values_supported": [
+                  "HS256",
+                  "HS384",
+                  "HS512",
+                  "RS256",
+                  "RS384",
+                  "RS512",
+                  "PS256",
+                  "PS384",
+                  "PS512",
+                  "ES256",
+                  "ES384",
+                  "ES512",
+                  "EdDSA"
+                ]
+              },
+              "grantTypes": {
+                "humanToMachine": {
+                  "authorizationCode": true
+                },
+                "machineToMachine": {
+                  "jwtBearer": false,
+                  "clientCredentials": true
+                }
+              },
+              "clientRegistration": {
+                "cimd": {
+                  "supported": false
+                },
+                "dynamic": {
+                  "supported": true,
+                  "redirectsAccepted": {
+                    "custom": false,
+                    "localhost": true
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "tools": [
+          {
+            "name": "search_vercel_documentation",
+            "description": "Search the Vercel documentation.\n  \n  Use this tool to answer any questions about Vercel’s platform, features, and best practices, including:\n  - Core Concepts: Projects, Deployments, Git Integration, Preview Deployments, Environments\n  - Frontend & Frameworks: Next.js, SvelteKit, Nuxt, Astro, Remix, frameworks configuration and optimization\n  - APIs: REST API, Vercel SDK, Build Output API\n  - Compute: Fluid Compute, Functions, Routing Middleware, Cron Jobs, OG Image Generation, Sandbox, Data Cache\n  - AI: Vercel AI SDK, AI Gateway, MCP, v0\n  - Performance & Delivery: Edge Network, Caching, CDN, Image Optimization, Headers, Redirects, Rewrites\n  - Pricing: Plans, Spend Management, Billing\n  - Security: Audit Logs, Firewall, Bot Management, BotID, OIDC, RBAC, Secure Compute, 2FA\n  - Storage: Blog, Edge Config",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "topic"
+              ],
+              "properties": {
+                "topic": {
+                  "type": "string",
+                  "description": "Topic to focus the documentation search on (e.g., 'routing', 'data-fetching')."
+                },
+                "tokens": {
+                  "type": "number",
+                  "default": 2500,
+                  "description": "Maximum number of tokens to include in the result. Default is 2500."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true
+            }
+          },
+          {
+            "name": "deploy_to_vercel",
+            "description": "Deploy files directly when no usable remote git repository exists or the user explicitly requests a manual file deployment. If the intended source is pushed to a repository's production branch, use create_git_project to automatically deploy changes on every push. Provide the file tree and an explicit target; Vercel auto-detects the framework and builds.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "target",
+                "name",
+                "files"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Project name. Vercel creates the project if it does not already exist."
+                },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "file",
+                      "data"
+                    ],
+                    "properties": {
+                      "data": {
+                        "type": "string",
+                        "description": "File contents: plain text, or base64 when encoding is \"base64\"."
+                      },
+                      "file": {
+                        "type": "string",
+                        "description": "Root-relative POSIX path, e.g. \"app/page.tsx\"."
+                      },
+                      "encoding": {
+                        "enum": [
+                          "utf-8",
+                          "base64"
+                        ],
+                        "type": "string",
+                        "description": "Content encoding. Defaults to \"utf-8\"; use \"base64\" for binary files."
+                      }
+                    }
+                  },
+                  "description": "The file tree to deploy. Source files only — Vercel installs deps and builds."
+                },
+                "target": {
+                  "enum": [
+                    "preview",
+                    "production"
+                  ],
+                  "type": "string",
+                  "description": "Required. \"preview\" for a shareable non-production URL, or \"production\" to go live."
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "projectSettings": {
+                  "type": "object",
+                  "properties": {
+                    "framework": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "buildCommand": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "rootDirectory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "installCommand": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "outputDirectory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "description": "Optional build settings. Omit to let Vercel auto-detect the framework."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "get_git_deployment_context",
+            "description": "Lists the user's Vercel teams with each team's plan, connected Cursor Origin workspaces, and linked Git projects.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "properties": {}
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "create_git_project",
+            "description": "Preferred when the intended source is pushed to an accessible remote repository's production branch. Create a Vercel project linked to that repository, or reuse the existing project already linked to it, to automatically deploy changes on every push. New projects use the team's default deployment protection. Creates a preview deployment from the production branch by default; do not ask for deployment confirmation. Use deploy_to_vercel only when no usable remote repository exists or the user explicitly requests a manual file deployment. This prevents new bare projects; it does not reconnect an existing unlinked project with the same name.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "repo",
+                "teamId"
+              ],
+              "properties": {
+                "repo": {
+                  "type": "string",
+                  "description": "Repository as \"owner/name\", or a repository URL such as https://github.com/owner/name or https://origin.cursor.com/owner/name."
+                },
+                "deploy": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Whether to create a preview deployment from the linked repository's production branch. Defaults to true; set false only when the user explicitly requests link-only behavior."
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool\nRequired: the root MCP endpoint has no implicit team scope, so this prevents accidentally creating the project in the authenticated user's personal account."
+                },
+                "provider": {
+                  "enum": [
+                    "github",
+                    "gitlab",
+                    "bitbucket",
+                    "cursor-origin"
+                  ],
+                  "type": "string",
+                  "description": "Git provider to link. Inferred from recognized repository URLs; otherwise defaults to \"github\". Use \"cursor-origin\" for Cursor-hosted repositories at origin.cursor.com. Ignored when the project already exists."
+                },
+                "projectName": {
+                  "type": "string",
+                  "description": "Vercel project to create or reuse. Defaults to the lowercased repository name."
+                },
+                "rootDirectory": {
+                  "type": "string",
+                  "description": "Root-relative directory to build in a monorepo. Only applied when creating the project."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "openWorldHint": true,
+              "idempotentHint": false,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "list_projects",
+            "description": "List all Vercel projects for a user (with a max of 50). Use this to help discover the Project ID of the project that the user is working on.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "teamId"
+              ],
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "get_project",
+            "description": "Get a specific project in Vercel",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "projectId",
+                "teamId"
+              ],
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "projectId": {
+                  "type": "string",
+                  "description": "The project ID to get the deployment events for. Alternatively the project slug can be used.\nProject IDs start with \"prj_\".\nIf you do not know the project ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the projectId\n- Use the `list_projects` tool"
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "pause_project",
+            "description": "Pause a Vercel project. Its production deployment will stop serving traffic and return 503 DEPLOYMENT_PAUSED until the project is unpaused.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "projectId",
+                "teamId"
+              ],
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "projectId": {
+                  "type": "string",
+                  "description": "The project ID to get the deployment events for. Alternatively the project slug can be used.\nProject IDs start with \"prj_\".\nIf you do not know the project ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the projectId\n- Use the `list_projects` tool"
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "idempotentHint": true,
+              "destructiveHint": true
+            }
+          },
+          {
+            "name": "unpause_project",
+            "description": "Unpause a Vercel project so its production deployment can resume serving traffic and consuming metered resources.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "projectId",
+                "teamId"
+              ],
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "projectId": {
+                  "type": "string",
+                  "description": "The project ID to get the deployment events for. Alternatively the project slug can be used.\nProject IDs start with \"prj_\".\nIf you do not know the project ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the projectId\n- Use the `list_projects` tool"
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "idempotentHint": true,
+              "destructiveHint": true
+            }
+          },
+          {
+            "name": "get_project_deployment_protection",
+            "description": "Get the effective password protection, Vercel Authentication, and Trusted IP settings for a Vercel project. Password values are never returned.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "projectId",
+                "teamId"
+              ],
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "projectId": {
+                  "type": "string",
+                  "description": "The project ID to get the deployment events for. Alternatively the project slug can be used.\nProject IDs start with \"prj_\".\nIf you do not know the project ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the projectId\n- Use the `list_projects` tool"
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "update_project_deployment_protection",
+            "description": "Partially update password protection, Vercel Authentication, and Trusted IPs for a Vercel project. Omitted settings are preserved. Availability depends on the Vercel team plan and caller permissions.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "projectId",
+                "teamId"
+              ],
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "projectId": {
+                  "type": "string",
+                  "description": "The project ID to get the deployment events for. Alternatively the project slug can be used.\nProject IDs start with \"prj_\".\nIf you do not know the project ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the projectId\n- Use the `list_projects` tool"
+                },
+                "trustedIps": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "enabled",
+                        "deploymentType",
+                        "addresses",
+                        "protectionMode"
+                      ],
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "addresses": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "value"
+                            ],
+                            "properties": {
+                              "note": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "minItems": 1
+                        },
+                        "deploymentType": {
+                          "enum": [
+                            "all",
+                            "preview",
+                            "production",
+                            "prod_deployment_urls_and_all_previews"
+                          ],
+                          "type": "string",
+                          "description": "Where the Trusted IP allowlist applies."
+                        },
+                        "protectionMode": {
+                          "enum": [
+                            "additional",
+                            "exclusive"
+                          ],
+                          "type": "string",
+                          "description": "Whether an IP match is required in addition to other protection or can bypass it."
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "enabled"
+                      ],
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      }
+                    }
+                  ],
+                  "description": "Enable or disable Trusted IPs. Omit to preserve the current setting."
+                },
+                "ssoProtection": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "enabled",
+                        "deploymentType"
+                      ],
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "deploymentType": {
+                          "enum": [
+                            "all",
+                            "preview",
+                            "prod_deployment_urls_and_all_previews"
+                          ],
+                          "type": "string",
+                          "description": "Where protection applies: all deployments, previews only, or production deployment URLs and all previews."
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "enabled"
+                      ],
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      }
+                    }
+                  ],
+                  "description": "Enable or disable Vercel Authentication. Omit to preserve the current setting."
+                },
+                "passwordProtection": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "enabled",
+                        "deploymentType",
+                        "password"
+                      ],
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "password": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "The new password. This value is write-only and redacted."
+                        },
+                        "deploymentType": {
+                          "enum": [
+                            "all",
+                            "preview",
+                            "prod_deployment_urls_and_all_previews"
+                          ],
+                          "type": "string",
+                          "description": "Where protection applies: all deployments, previews only, or production deployment URLs and all previews."
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "enabled"
+                      ],
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      }
+                    }
+                  ],
+                  "description": "Enable or disable password protection. Omit to preserve the current setting."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "idempotentHint": true,
+              "destructiveHint": true
+            }
+          },
+          {
+            "name": "list_deployments",
+            "description": "List all deployments for a project",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "projectId",
+                "teamId"
+              ],
+              "properties": {
+                "since": {
+                  "type": "number",
+                  "description": "Get deployments created after this timestamp."
+                },
+                "until": {
+                  "type": "number",
+                  "description": "Get deployments created before this timestamp."
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to list deployments for."
+                },
+                "projectId": {
+                  "type": "string",
+                  "description": "The project ID to list deployments for."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "get_deployment",
+            "description": "Get a specific deployment by ID or URL.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "idOrUrl",
+                "teamId"
+              ],
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "idOrUrl": {
+                  "type": "string",
+                  "description": "The unique identifier or hostname of the deployment."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "get_deployment_build_logs",
+            "description": "Get the build logs for a deployment by ID or URL, to investigate why a build failed. Returns the most recent lines by default (where build errors appear). Use errorsOnly to see just the failing lines. Omit since and until for latest logs; use since to narrow the window and omit until when the end should be the current time.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "idOrUrl",
+                "teamId"
+              ],
+              "properties": {
+                "limit": {
+                  "type": "number",
+                  "default": 100,
+                  "description": "Maximum number of log lines to return. Defaults is 100."
+                },
+                "since": {
+                  "type": "string",
+                  "description": "Start of the window as an ISO date or relative lookback from now (e.g. \"1h\", \"30m\")."
+                },
+                "until": {
+                  "type": "string",
+                  "description": "Optional end of the window as an ISO date, relative lookback, or \"now\". Omit this when the end should be the current time."
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "buildId": {
+                  "type": "string",
+                  "description": "Filter to a specific build ID (bld_...) for multi-build deployments."
+                },
+                "idOrUrl": {
+                  "type": "string",
+                  "description": "The unique identifier or hostname of the deployment."
+                },
+                "direction": {
+                  "enum": [
+                    "tail",
+                    "head"
+                  ],
+                  "type": "string",
+                  "default": "tail",
+                  "description": "Which end of the build log to return. \"tail\" (default) returns the most recent lines, where build errors appear. \"head\" returns the earliest lines."
+                },
+                "errorsOnly": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Return only error, stderr, exit, and fatal events."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "get_runtime_logs",
+            "description": "Get runtime logs for a project or deployment. Runtime logs show application output (console.log, errors, etc.) from serverless functions and edge functions during execution. Supports filtering by environment, log level, status code, source, time range, and full-text search. For recent windows, pass since like \"30m\" or \"24h\" and omit until; until is only needed for historical end times. For wide time ranges, scope to a deploymentId for speed, or use group_by to get counts instead of individual lines. To investigate production errors specifically, prefer get_runtime_errors.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "projectId",
+                "teamId"
+              ],
+              "properties": {
+                "level": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "error",
+                      "warning",
+                      "info",
+                      "fatal"
+                    ],
+                    "type": "string"
+                  },
+                  "description": "Filter by log level(s). Can specify multiple levels."
+                },
+                "limit": {
+                  "type": "number",
+                  "description": "Maximum number of log entries to return. Defaults to 50, max 100."
+                },
+                "query": {
+                  "type": "string",
+                  "description": "Full-text search query to filter logs."
+                },
+                "since": {
+                  "type": "string",
+                  "description": "Start of the window as an ISO date or relative lookback from now (e.g., \"1h\", \"30m\", \"7d\"). Defaults to 24 hours ago."
+                },
+                "until": {
+                  "type": "string",
+                  "description": "Optional end of the window as an ISO date, relative lookback, or \"now\". Omit this when the end should be the current time."
+                },
+                "source": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "serverless",
+                      "edge-function",
+                      "edge-middleware",
+                      "static"
+                    ],
+                    "type": "string"
+                  },
+                  "description": "Filter by source type(s). Can specify multiple sources."
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "group_by": {
+                  "enum": [
+                    "statusCode",
+                    "requestPath",
+                    "route",
+                    "level",
+                    "source",
+                    "deploymentId",
+                    "branch"
+                  ],
+                  "type": "string",
+                  "description": "Return counts grouped by this attribute instead of individual log lines. Use for \"how many errors\", \"status code breakdown\", \"top paths\". Fast even over wide time ranges."
+                },
+                "projectId": {
+                  "type": "string",
+                  "description": "The project ID to get runtime logs for."
+                },
+                "requestId": {
+                  "type": "string",
+                  "description": "Filter by specific request ID."
+                },
+                "statusCode": {
+                  "type": "string",
+                  "description": "Filter by HTTP status code (e.g., \"500\", \"4xx\")."
+                },
+                "environment": {
+                  "enum": [
+                    "production",
+                    "preview"
+                  ],
+                  "type": "string",
+                  "description": "Filter by environment: \"production\" or \"preview\"."
+                },
+                "deploymentId": {
+                  "type": "string",
+                  "description": "Filter logs to a specific deployment ID or URL."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "get_runtime_errors",
+            "description": "Get grouped runtime error clusters for a project (error name, occurrence count, affected routes, sample messages, first/last seen). Use this first to answer \"why is production erroring\" — it reads a pre-aggregated table and does not time out. For recent windows, pass since like \"24h\" or \"7d\" and omit until; until is only needed for historical end times. Max 7-day range.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "projectId",
+                "teamId"
+              ],
+              "properties": {
+                "since": {
+                  "type": "string",
+                  "description": "Start of the window as an ISO date or relative lookback from now (e.g. \"1h\", \"24h\", \"7d\"). Defaults to 24h ago; max lookback is 7d."
+                },
+                "until": {
+                  "type": "string",
+                  "description": "Optional end of the window as an ISO date, relative lookback, or \"now\". Omit this when the end should be the current time."
+                },
+                "routes": {
+                  "type": "string",
+                  "description": "Comma-separated route paths to filter by (e.g. \"/api/checkout\")."
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "projectId": {
+                  "type": "string",
+                  "description": "The project ID to get runtime errors for."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "list_agent_run_projects",
+            "description": "List projects in a Vercel team that have Agent Runs observability data for agents built with the eve framework, with run counts and average duration rollups. Use this to discover which projects have eve agent activity before drilling into a project.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "teamId"
+              ],
+              "properties": {
+                "to": {
+                  "type": "string",
+                  "description": "End time as ISO 8601, Unix seconds, Unix milliseconds, a relative duration like \"1h\", or \"now\". Must be used with from."
+                },
+                "from": {
+                  "type": "string",
+                  "description": "Start time as ISO 8601, Unix seconds, Unix milliseconds, or a relative duration like \"12h\". Must be used with to."
+                },
+                "period": {
+                  "enum": [
+                    "5m",
+                    "15m",
+                    "1h",
+                    "6h",
+                    "12h",
+                    "1d",
+                    "3d",
+                    "7d",
+                    "14d",
+                    "30d",
+                    "90d"
+                  ],
+                  "type": "string",
+                  "description": "Preset time range. Ignored when both from and to are provided. Defaults to the dashboard endpoint default."
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "environment": {
+                  "type": "string",
+                  "description": "Agent run environment, usually \"production\" or \"preview\". Defaults to \"production\"."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "list_agent_runs",
+            "description": "List Agent Runs for a Vercel project. Agent Runs are the observability layer for agents built with the eve framework. The response includes summaries, status, model, trigger, token usage, time series, and pagination metadata. Use this to find recent or matching production eve agent runs before fetching detail or trace data.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "teamId",
+                "projectId"
+              ],
+              "properties": {
+                "to": {
+                  "type": "string",
+                  "description": "End time as ISO 8601, Unix seconds, Unix milliseconds, a relative duration like \"1h\", or \"now\". Must be used with from."
+                },
+                "from": {
+                  "type": "string",
+                  "description": "Start time as ISO 8601, Unix seconds, Unix milliseconds, or a relative duration like \"12h\". Must be used with to."
+                },
+                "page": {
+                  "type": "number",
+                  "description": "1-based page number. Defaults to 1."
+                },
+                "period": {
+                  "enum": [
+                    "5m",
+                    "15m",
+                    "1h",
+                    "6h",
+                    "12h",
+                    "1d",
+                    "3d",
+                    "7d",
+                    "14d",
+                    "30d",
+                    "90d"
+                  ],
+                  "type": "string",
+                  "description": "Preset time range. Ignored when both from and to are provided. Defaults to the dashboard endpoint default."
+                },
+                "search": {
+                  "type": "string",
+                  "description": "Server-side title search for Agent Runs."
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "pageSize": {
+                  "type": "number",
+                  "description": "Number of runs per page. The dashboard endpoint caps this at 100."
+                },
+                "projectId": {
+                  "type": "string",
+                  "description": "The project ID to get the deployment events for. Alternatively the project slug can be used.\nProject IDs start with \"prj_\".\nIf you do not know the project ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the projectId\n- Use the `list_projects` tool"
+                },
+                "environment": {
+                  "type": "string",
+                  "description": "Agent run environment, usually \"production\" or \"preview\". Defaults to \"production\"."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "get_agent_run",
+            "description": "Get detailed metadata for a single Agent Run from an eve agent, including events, workflow metadata, usage, and subagent breakout data. Use list_agent_runs first if you need to discover a run ID.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "teamId",
+                "projectId",
+                "runId"
+              ],
+              "properties": {
+                "to": {
+                  "type": "string",
+                  "description": "End time as ISO 8601, Unix seconds, Unix milliseconds, a relative duration like \"1h\", or \"now\". Must be used with from."
+                },
+                "from": {
+                  "type": "string",
+                  "description": "Start time as ISO 8601, Unix seconds, Unix milliseconds, or a relative duration like \"12h\". Must be used with to."
+                },
+                "runId": {
+                  "type": "string",
+                  "description": "The Agent Run ID to inspect."
+                },
+                "period": {
+                  "enum": [
+                    "5m",
+                    "15m",
+                    "1h",
+                    "6h",
+                    "12h",
+                    "1d",
+                    "3d",
+                    "7d",
+                    "14d",
+                    "30d",
+                    "90d"
+                  ],
+                  "type": "string",
+                  "description": "Preset time range. Ignored when both from and to are provided. Defaults to the dashboard endpoint default."
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "projectId": {
+                  "type": "string",
+                  "description": "The project ID to get the deployment events for. Alternatively the project slug can be used.\nProject IDs start with \"prj_\".\nIf you do not know the project ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the projectId\n- Use the `list_projects` tool"
+                },
+                "environment": {
+                  "type": "string",
+                  "description": "Agent run environment, usually \"production\" or \"preview\". Defaults to \"production\"."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "get_agent_run_trace",
+            "description": "Get the trace for a single Agent Run from an eve agent, including turns, messages, reasoning, tool calls, token usage, and tool input/output when available. Use this for debugging exact agent behavior in production.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "teamId",
+                "projectId",
+                "runId"
+              ],
+              "properties": {
+                "to": {
+                  "type": "string",
+                  "description": "End time as ISO 8601, Unix seconds, Unix milliseconds, a relative duration like \"1h\", or \"now\". Must be used with from."
+                },
+                "from": {
+                  "type": "string",
+                  "description": "Start time as ISO 8601, Unix seconds, Unix milliseconds, or a relative duration like \"12h\". Must be used with to."
+                },
+                "runId": {
+                  "type": "string",
+                  "description": "The Agent Run ID to inspect."
+                },
+                "period": {
+                  "enum": [
+                    "5m",
+                    "15m",
+                    "1h",
+                    "6h",
+                    "12h",
+                    "1d",
+                    "3d",
+                    "7d",
+                    "14d",
+                    "30d",
+                    "90d"
+                  ],
+                  "type": "string",
+                  "description": "Preset time range. Ignored when both from and to are provided. Defaults to the dashboard endpoint default."
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "projectId": {
+                  "type": "string",
+                  "description": "The project ID to get the deployment events for. Alternatively the project slug can be used.\nProject IDs start with \"prj_\".\nIf you do not know the project ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the projectId\n- Use the `list_projects` tool"
+                },
+                "environment": {
+                  "type": "string",
+                  "description": "Agent run environment, usually \"production\" or \"preview\". Defaults to \"production\"."
+                },
+                "maxFieldLength": {
+                  "type": "number",
+                  "description": "Maximum length for individual string fields in the returned trace. Defaults to 8000; use 0 to disable truncation."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "get_web_analytics",
+            "description": "Query Web Analytics for a Vercel project. Count mode returns total visitors and pageviews (or custom event count). Aggregate mode groups results over time or by dimensions such as route, requestPath, country, referrerHostname, deviceType, browserName, eventName, flags/<name>, or eventData/<property>. Web Analytics must be enabled for the project.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "projectId"
+              ],
+              "properties": {
+                "by": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 2,
+                  "minItems": 1,
+                  "description": "One or two dimensions for aggregate mode. Time dimensions: hour, day, week, month, year. Other common dimensions: country, deviceType, environment, requestPath, referrerHostname, osName, browserName, route, UTM fields, eventName, flags/<name>, and eventData/<property>."
+                },
+                "mode": {
+                  "enum": [
+                    "count",
+                    "aggregate"
+                  ],
+                  "type": "string",
+                  "description": "Count returns one total. Aggregate returns rows grouped by one or two by dimensions and requires since, until, and by. Defaults to count."
+                },
+                "limit": {
+                  "type": "integer",
+                  "maximum": 100,
+                  "minimum": 1,
+                  "description": "Maximum distinct results in aggregate mode. Remaining values are grouped into Others. Defaults to 10."
+                },
+                "since": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "description": "Start or end of the date range as a date string, ISO 8601 timestamp, or Unix timestamp in milliseconds. Since and until must be provided together."
+                },
+                "until": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "description": "Start or end of the date range as a date string, ISO 8601 timestamp, or Unix timestamp in milliseconds. Since and until must be provided together."
+                },
+                "filter": {
+                  "type": "string",
+                  "description": "OData filter expression, for example requestPath eq '/pricing' and country eq 'US', eventName eq 'signup', or eventData/plan eq 'pro'."
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "dataset": {
+                  "enum": [
+                    "visits",
+                    "events"
+                  ],
+                  "type": "string",
+                  "description": "Data to query: visits for automatically tracked pageviews, or events for custom events sent with track(). Defaults to visits."
+                },
+                "projectId": {
+                  "type": "string",
+                  "description": "The project ID to get the deployment events for. Alternatively the project slug can be used.\nProject IDs start with \"prj_\".\nIf you do not know the project ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the projectId\n- Use the `list_projects` tool"
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "get_access_to_vercel_url",
+            "description": "Creates a temporary shareable link that bypasses authentication for protected Vercel deployments.\n\n  When you encounter a Vercel deployment URL (like https://myapp-abc123.vercel.app), \n  you might receive a 403 (Forbidden) error when trying to access it. \n\n  This tool generates a special URL with a '_vercel_share' parameter that allows temporary access \n  without requiring login credentials. The shareable URL will expire in 23 hours.\n  \n  When you use the returned URL, that URL will redirect and set an auth cookie.\n  If your fetch implementation does not support cookies, use the 'web_fetch_vercel_url' tool instead.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "url"
+              ],
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "description": "The full URL of the Vercel deployment (e.g. \"https://myapp.vercel.app\")."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "web_fetch_vercel_url",
+            "description": "Fetches a Vercel deployment URL and returns the response.\n  This is useful if another web fetch tool returns 401 (Unauthorized) or 403 (Forbidden) for a Vercel URL.\n  Supports accessing deployments protected with Vercel Authentication which the user of this MCP server has access to.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "url"
+              ],
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "description": "The full URL of the Vercel deployment including the path (e.g. \"https://myapp.vercel.app/my-page\")."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "list_teams",
+            "description": "List the user's teams. Use this to help discover the Team ID of the teams that the user is part of.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "properties": {}
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "import-claude-design-from-url",
+            "description": "Import a design into Vercel from a publicly fetchable URL. The file is a self-contained HTML bundle with all images, fonts, and styles inlined.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "url"
+              ],
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "description": "Public HTTPS URL to the design file. Valid for ~1 hour. Fetched server-side."
+                },
+                "title": {
+                  "type": "string",
+                  "description": "Suggested title for the imported design."
+                },
+                "claude_design_project_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Stable Claude Design project identifier. Reuse it to update the same imported Vercel project."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "check_domain_availability_and_price",
+            "description": "Check if domain names are available for purchase and get pricing information",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "names"
+              ],
+              "properties": {
+                "names": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "maxItems": 10,
+                  "minItems": 1,
+                  "description": "Array of domain names to check availability for (e.g., [\"example.com\", \"test.org\"])"
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "get_purchase_quote",
+            "description": "Read-only price quote for a Vercel purchase. NEVER charges. This is the ONLY way to obtain an idempotencyKey — the buy_* tools no longer quote and reject un-quoted calls, so this is the REQUIRED first step before any buy_* tool. It returns the cost (when Vercel exposes one) and an idempotencyKey to pass to the matching buy tool (buy_credits, buy_domain, buy_addon, buy_pro) with confirm:true within 5 minutes to execute the charge. Present the quote to the user for explicit approval (use a structured question tool such as AskUserQuestion when available) before confirming. Products with no API price (add-ons, Pro) return a priceNote and billing URL instead of a number. Every quote includes a disclosures object the assistant must relay to the user before approval: the payment method (default card on file), that taxes/fees may apply on top of the base price, the item terms, and a link to the full terms.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "product",
+                "teamId"
+              ],
+              "properties": {
+                "years": {
+                  "type": "integer",
+                  "maximum": 10,
+                  "description": "For product:domain — registration term in years (defaults to the TLD minimum).",
+                  "exclusiveMinimum": 0
+                },
+                "amount": {
+                  "type": "integer",
+                  "maximum": 1000,
+                  "description": "Required for product:credits — amount in whole US dollars (1–1000).",
+                  "exclusiveMinimum": 0
+                },
+                "domain": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Required for product:domain — the domain to register, e.g. \"example.com\"."
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "product": {
+                  "enum": [
+                    "credits",
+                    "domain",
+                    "addon",
+                    "pro"
+                  ],
+                  "type": "string",
+                  "description": "Which purchase to quote."
+                },
+                "quantity": {
+                  "type": "integer",
+                  "maximum": 9007199254740991,
+                  "description": "Required for product:addon — number of units.",
+                  "exclusiveMinimum": 0
+                },
+                "autoRenew": {
+                  "type": "boolean",
+                  "description": "For product:domain — whether to auto-renew at term end. Defaults to true. Cosmetic in the quote; not part of the signed idempotencyKey."
+                },
+                "creditType": {
+                  "enum": [
+                    "v0",
+                    "gateway",
+                    "agent"
+                  ],
+                  "type": "string",
+                  "description": "Required for product:credits — which credit balance to top up."
+                },
+                "productAlias": {
+                  "enum": [
+                    "siem"
+                  ],
+                  "type": "string",
+                  "description": "Required for product:addon — the add-on to quote. Only \"siem\" is available today."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "openWorldHint": true,
+              "idempotentHint": false,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "buy_pro",
+            "description": "Executes a Vercel Pro upgrade previously quoted by get_purchase_quote — quoting first is REQUIRED; this tool rejects un-quoted calls. Get the quote, present it to the user for explicit approval (use a structured question tool such as AskUserQuestion when available), then call with confirm:true, the quote's idempotencyKey, and the same parameters. This starts RECURRING Pro billing immediately at the standard Pro price. The quote returns required disclosures the assistant must relay before approval: the payment method (default card on file), that taxes/fees may apply on top of the price, the subscription terms (recurring monthly charge, no trial, cancel anytime in billing settings), and a full-terms link.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "teamId"
+              ],
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "confirm": {
+                  "type": "boolean",
+                  "description": "Set true to execute the upgrade; requires the idempotencyKey from get_purchase_quote."
+                },
+                "idempotencyKey": {
+                  "type": "string",
+                  "description": "The idempotencyKey returned by get_purchase_quote."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "openWorldHint": true,
+              "idempotentHint": false,
+              "destructiveHint": true
+            }
+          },
+          {
+            "name": "buy_credits",
+            "description": "Executes a prepaid Vercel credits purchase (v0, AI Gateway, or Vercel Agent) previously quoted by get_purchase_quote — quoting first is REQUIRED; this tool rejects un-quoted calls. Get the quote, present it to the user for explicit approval (use a structured question tool such as AskUserQuestion when available), then call with confirm:true, the quote's idempotencyKey, and the same parameters. When the user has not named an amount, offer quick-picks — $10, $25, $50, or $100 — or let them enter any custom amount ($1–$1000); do not just quote the range. Some credit types require a plan: Vercel Agent credits require the team to be on Vercel Pro (use buy_pro first), and v0 credits require a paid v0 plan (set up at v0.dev); AI Gateway credits have no plan prerequisite. If the required plan is missing the purchase is rejected (nothing is charged) with guidance. The charge is immediate and non-refundable. The quote returns required disclosures the assistant must relay before approval: the payment method (default card on file), that taxes/fees may apply on top of the base price, the item terms (credits expire in one year), and a full-terms link.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "creditType",
+                "amount",
+                "teamId"
+              ],
+              "properties": {
+                "amount": {
+                  "type": "integer",
+                  "maximum": 1000,
+                  "description": "Amount to purchase, in whole US dollars (1–1000).",
+                  "exclusiveMinimum": 0
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "confirm": {
+                  "type": "boolean",
+                  "description": "Set true to execute the charge; requires the idempotencyKey from get_purchase_quote."
+                },
+                "creditType": {
+                  "enum": [
+                    "v0",
+                    "gateway",
+                    "agent"
+                  ],
+                  "type": "string",
+                  "description": "Which credit balance to top up: v0, gateway (AI Gateway), or agent (Vercel Agent)."
+                },
+                "idempotencyKey": {
+                  "type": "string",
+                  "description": "The idempotencyKey returned by get_purchase_quote."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "openWorldHint": true,
+              "idempotentHint": false,
+              "destructiveHint": true
+            }
+          },
+          {
+            "name": "buy_addon",
+            "description": "Executes a Vercel add-on purchase (currently only \"siem\"), by integer quantity, previously quoted by get_purchase_quote — quoting first is REQUIRED; this tool rejects un-quoted calls. Get the quote, present it to the user for explicit approval (use a structured question tool such as AskUserQuestion when available), then call with confirm:true, the quote's idempotencyKey, and the same parameters. The team must be on the Flex plan. No price quote exists for add-ons; the charge is non-refundable. The quote returns required disclosures the assistant must relay before approval: the payment method (default card on file), that taxes/fees may apply on top of the price, the item terms (Flex plan required, billed on the next invoice), and a full-terms link.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "productAlias",
+                "quantity",
+                "teamId"
+              ],
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "confirm": {
+                  "type": "boolean",
+                  "description": "Set true to execute the charge; requires the idempotencyKey from get_purchase_quote."
+                },
+                "quantity": {
+                  "type": "integer",
+                  "maximum": 9007199254740991,
+                  "description": "Number of units to purchase.",
+                  "exclusiveMinimum": 0
+                },
+                "productAlias": {
+                  "enum": [
+                    "siem"
+                  ],
+                  "type": "string",
+                  "description": "The add-on to purchase. Only \"siem\" is available today."
+                },
+                "idempotencyKey": {
+                  "type": "string",
+                  "description": "The idempotencyKey returned by get_purchase_quote."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "openWorldHint": true,
+              "idempotentHint": false,
+              "destructiveHint": true
+            }
+          },
+          {
+            "name": "buy_domain",
+            "description": "Executes a single-domain registration previously quoted by get_purchase_quote (product:domain) — quoting first is REQUIRED; this tool rejects un-quoted calls. Get the quote, present it to the user for explicit approval (use a structured question tool such as AskUserQuestion when available), then call with confirm:true, the quote's idempotencyKey, the expectedPrice and years from the quote, and the full registrant contact to execute the non-refundable purchase. Vercel stores no reusable registrant profile, so contact details must be supplied each time. The quote returns required disclosures the assistant must relay before approval: the payment method (default card on file), that taxes/fees may apply on top of the price, the item terms (non-refundable), and, when auto-renew is on, the recurring-charge terms in disclosures.subscription (renews automatically each term at the then-current price until auto-renew is turned off), plus a full-terms link.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "domain",
+                "teamId"
+              ],
+              "properties": {
+                "years": {
+                  "type": "integer",
+                  "maximum": 10,
+                  "description": "Registration term in years. Required on confirm — must match the term shown in the quote.",
+                  "exclusiveMinimum": 0
+                },
+                "domain": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The domain to register, e.g. \"example.com\"."
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "confirm": {
+                  "type": "boolean",
+                  "description": "Set true to execute the purchase; requires the idempotencyKey from get_purchase_quote."
+                },
+                "contact": {
+                  "type": "object",
+                  "required": [
+                    "firstName",
+                    "lastName",
+                    "email",
+                    "phone",
+                    "address1",
+                    "city",
+                    "state",
+                    "zip",
+                    "country"
+                  ],
+                  "properties": {
+                    "zip": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "city": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "email": {
+                      "type": "string",
+                      "format": "email",
+                      "pattern": "^(([^<>()\\[\\]\\\\.,;:\\s@\"]+(\\.[^<>()\\[\\]\\\\.,;:\\s@\"]+)*)|(\".+\"))@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}])|(([a-zA-Z\\-0-9]+\\.)+[a-zA-Z]{2,}))$"
+                    },
+                    "phone": {
+                      "type": "string",
+                      "pattern": "^\\+\\d{10,15}$"
+                    },
+                    "state": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "country": {
+                      "type": "string",
+                      "maxLength": 2,
+                      "minLength": 2,
+                      "description": "Two-letter ISO country code, e.g. US"
+                    },
+                    "address1": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "lastName": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "firstName": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "companyName": {
+                      "type": "string"
+                    }
+                  },
+                  "description": "Registrant (WHOIS) contact. Not needed for the quote; REQUIRED on confirm. All fields must be provided."
+                },
+                "autoRenew": {
+                  "type": "boolean",
+                  "description": "Whether to auto-renew at the end of the term. Defaults to true."
+                },
+                "expectedPrice": {
+                  "type": "number",
+                  "description": "Required on confirm: the purchasePrice (USD) from the quote. The server rejects the order if it no longer matches the live price.",
+                  "exclusiveMinimum": 0
+                },
+                "idempotencyKey": {
+                  "type": "string",
+                  "description": "The idempotencyKey returned by get_purchase_quote."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "openWorldHint": true,
+              "idempotentHint": false,
+              "destructiveHint": true
+            }
+          },
+          {
+            "name": "get_domain_order",
+            "description": "Get the status of a domain purchase order returned by buy_domain, to confirm whether the registration completed.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "orderId"
+              ],
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "orderId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The orderId returned by buy_domain."
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "list_toolbar_threads",
+            "description": "List Vercel toolbar comment threads for a team. Returns unresolved threads by default. Use this to see feedback, comments, or discussions on deployments and previews.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "teamId"
+              ],
+              "properties": {
+                "page": {
+                  "type": "string",
+                  "description": "Filter by page path (e.g. /docs) or glob (e.g. /docs*)"
+                },
+                "limit": {
+                  "type": "number",
+                  "description": "Maximum number of results to return. Defaults to 20."
+                },
+                "branch": {
+                  "type": "string",
+                  "description": "Filter by branch name"
+                },
+                "offset": {
+                  "type": "number",
+                  "description": "Pagination offset"
+                },
+                "search": {
+                  "type": "string",
+                  "description": "Search text in comments"
+                },
+                "status": {
+                  "enum": [
+                    "resolved",
+                    "unresolved"
+                  ],
+                  "type": "string",
+                  "description": "Filter by status. Defaults to unresolved."
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "projectId": {
+                  "type": "string",
+                  "description": "Filter by project ID"
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "get_toolbar_thread",
+            "description": "Get a specific toolbar thread by ID, including all messages and context.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "threadId",
+                "teamId"
+              ],
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "threadId": {
+                  "type": "string",
+                  "description": "The thread ID to retrieve"
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "change_toolbar_thread_resolve_status",
+            "description": "Change the resolve status of a toolbar thread. Can be used to mark a thread as resolved or unresolve a previously resolved thread.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "threadId",
+                "teamId",
+                "resolved"
+              ],
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "resolved": {
+                  "type": "boolean",
+                  "description": "Set to true to resolve the thread, false to unresolve it"
+                },
+                "threadId": {
+                  "type": "string",
+                  "description": "The thread ID to update"
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "reply_to_toolbar_thread",
+            "description": "Add a reply message to an existing toolbar thread.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "threadId",
+                "teamId",
+                "markdown"
+              ],
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "markdown": {
+                  "type": "string",
+                  "description": "The message content in markdown format"
+                },
+                "threadId": {
+                  "type": "string",
+                  "description": "The thread ID to reply to"
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "edit_toolbar_message",
+            "description": "Edit an existing message in a toolbar thread.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "threadId",
+                "messageId",
+                "teamId",
+                "markdown"
+              ],
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "markdown": {
+                  "type": "string",
+                  "description": "The updated message content in markdown format"
+                },
+                "threadId": {
+                  "type": "string",
+                  "description": "The thread ID containing the message"
+                },
+                "messageId": {
+                  "type": "string",
+                  "description": "The message ID to edit"
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "destructiveHint": false
+            }
+          },
+          {
+            "name": "add_toolbar_reaction",
+            "description": "Add an emoji reaction to a message in a toolbar thread.",
+            "inputSchema": {
+              "type": "object",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "required": [
+                "threadId",
+                "messageId",
+                "teamId",
+                "emoji"
+              ],
+              "properties": {
+                "emoji": {
+                  "type": "string",
+                  "description": "The emoji to add as a reaction (e.g. 👍)"
+                },
+                "teamId": {
+                  "type": "string",
+                  "description": "The team ID to get the deployment events for. Alternatively the team slug can be used.\nTeam IDs start with \"team_\".\nIf you do not know the team ID or slug, it can be found through these mechanism:\n- Read the file .vercel/project.json if it exists and extract the orgId\n- Use the `list_teams` tool"
+                },
+                "threadId": {
+                  "type": "string",
+                  "description": "The thread ID containing the message"
+                },
+                "messageId": {
+                  "type": "string",
+                  "description": "The message ID to react to"
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "destructiveHint": false
+            }
+          }
+        ]
+      }
+    }
+  }
+}
