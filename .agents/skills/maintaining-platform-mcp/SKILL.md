@@ -55,7 +55,7 @@ Extend an existing outcome when that keeps the catalogue clearer. Lifecycle stat
 4. Declare `ToolMeta` deliberately:
    - choose external and managed-assistant audiences independently;
    - use `ProjectScopeExplicit` when every caller must name a project, `ProjectScopeDefaultable` only when the product explicitly supports the organization's literal Default project, and `ProjectScopeNone` only when the operation is not scoped to one project;
-   - set live authorization and discovery scopes without relying on tool visibility as enforcement;
+   - for the external endpoint, preserve connection-time live organization-membership admission through `Runtime.Handler`/`PrepareExternalContext` separately from per-tool `ToolMeta.Authorization`; set live authorization and discovery scopes without relying on tool visibility as enforcement;
    - admit a tool to the managed assistant only when it works under assistant identity and exact-project scoping without an external OAuth connection.
 5. For mutations, preserve the product workflow's safeguards. At minimum, check for a fresh target read, exact target selection, explicit confirmation, expected-version or equivalent concurrency protection, a stable idempotency key when replay is possible, atomic audit logging, and a post-mutation live read. Set MCP annotations accurately.
 6. Register the tool through the shared `Registrar` path in `tools.go`. When a capability can be disabled or incompletely composed, follow the live/unavailable registration pairs in neighboring `tool_*.go` files: keep the same name, audiences, authorization, project scope, schema, and annotations, then return a bounded readable refusal rather than silently dropping the tool from the catalogue.
@@ -63,7 +63,7 @@ Extend an existing outcome when that keeps the catalogue clearer. Lifecycle stat
    - server instructions in `tools.go` for platform-wide behavior;
    - shipped Platform MCP skills when a multi-tool workflow or named tool changes;
    - setup resources, docs, and tool descriptions when terminology or next actions change.
-8. Add focused tests for the live behavior and contract. As applicable, prove the listed input/output schema, live authorization and discovery filtering, each admitted audience, unavailable registration, secret/hidden-resource omissions, mutation safeguards, and the committed state returned after mutation. Put cross-tool invariants in `descriptor_test.go`; keep tool behavior beside the tool or service tests.
+8. Add focused tests for the live behavior and contract. As applicable, prove connection-time live membership admission in `runtime_test.go`, per-call authorization and discovery filtering, the listed input/output schema, each admitted audience, unavailable registration, secret/hidden-resource omissions, mutation safeguards, and the committed state returned after mutation. Put cross-tool invariants in `descriptor_test.go`; keep tool behavior beside the tool or service tests.
 
 ## Review checklist
 
@@ -72,7 +72,7 @@ Extend an existing outcome when that keeps the catalogue clearer. Lifecycle stat
 - [ ] A new tool represents a useful user outcome rather than mirroring an implementation endpoint.
 - [ ] Name, description, input/output schema, annotations, refusals, and next actions match the real contract.
 - [ ] External and managed-assistant audiences were considered separately.
-- [ ] Project targeting, live authorization, discovery scopes, and hidden-resource behavior are correct.
+- [ ] Connection-time live membership, per-tool authorization, project targeting, discovery scopes, and hidden-resource behavior are correct and tested as separate boundaries.
 - [ ] Mutations retain confirmation, idempotency/concurrency, audit, and verification safeguards.
 - [ ] Disabled dependencies produce a stable readable result where the surrounding catalogue does.
 - [ ] Server instructions and distributed Platform MCP skills reference only current tools and workflows.
