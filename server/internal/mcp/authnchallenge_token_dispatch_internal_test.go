@@ -149,17 +149,18 @@ func TestServeTokenGrantFailsClosedWithoutDeclaredClientAuthentication(t *testin
 		called = append(called, "authenticated")
 		return nil
 	}
-	clientless := func(context.Context, http.ResponseWriter, *http.Request, *ResolvedMcpEndpoint, presentedClientCredentials, string, *slog.Logger) error {
+	clientless := func(context.Context, http.ResponseWriter, *http.Request, presentedClientCredentials, *slog.Logger) error {
 		called = append(called, "clientless")
 		return nil
 	}
 
 	grants := map[string]tokenGrant{
 		"undeclared with both handlers": {authenticated: authenticated, clientless: clientless},
-		"undeclared with no handlers":   {},
+		"zero value with no handlers":   {},
+		"undeclared with no handlers":   {clientAuth: tokenClientAuthUndeclared},
 		"required without handler":      {clientAuth: tokenClientAuthRequired, clientless: clientless},
 		"none without handler":          {clientAuth: tokenClientAuthNone, authenticated: authenticated},
-		"unknown requirement":           {clientAuth: tokenClientAuth(99), authenticated: authenticated, clientless: clientless},
+		"unknown requirement":           {clientAuth: tokenClientAuth("unknown"), authenticated: authenticated, clientless: clientless},
 	}
 	for name, grant := range grants {
 		w := httptest.NewRecorder()
@@ -177,11 +178,9 @@ func TestServeTokenGrantClientlessSkipsClientResolution(t *testing.T) {
 	t.Parallel()
 
 	service, endpoint, _ := newTokenDispatchTestService(t)
-	var gotBaseURL string
 	grant := tokenGrant{
 		clientAuth: tokenClientAuthNone,
-		clientless: func(_ context.Context, w http.ResponseWriter, _ *http.Request, _ *ResolvedMcpEndpoint, _ presentedClientCredentials, baseURL string, _ *slog.Logger) error {
-			gotBaseURL = baseURL
+		clientless: func(_ context.Context, w http.ResponseWriter, _ *http.Request, _ presentedClientCredentials, _ *slog.Logger) error {
 			w.WriteHeader(http.StatusNoContent)
 			return nil
 		},
@@ -190,7 +189,6 @@ func TestServeTokenGrantClientlessSkipsClientResolution(t *testing.T) {
 	r := newTokenDispatchRequest(t, url.Values{"grant_type": {oauthwire.GrantTypeJWTBearer}})
 	require.NoError(t, service.serveTokenGrant(t.Context(), w, r, endpoint, service.logger, oauthwire.GrantTypeJWTBearer, presentedClientCredentials{}, grant))
 	require.Equal(t, http.StatusNoContent, w.Code)
-	require.Equal(t, "https://gram.example", gotBaseURL)
 }
 
 // Requests refused before any client authentication keep the credential
