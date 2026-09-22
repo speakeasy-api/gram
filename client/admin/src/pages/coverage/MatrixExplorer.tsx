@@ -14,6 +14,11 @@ import {
   Building2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -30,6 +35,7 @@ import {
 } from "@/components/ui/table";
 import { matrixCsv, downloadMatrixCsv } from "./csv";
 import { resolveMatrixCell } from "./matrixCell";
+import { CoverageTooltip } from "./CoverageTooltip";
 import { IntegrationRequirements } from "./IntegrationRequirements";
 import { Choice } from "./CoverageEditor";
 import {
@@ -265,7 +271,6 @@ function AccountIcons({
         return (
           <span
             key={account}
-            title={label}
             aria-label={label}
             className={
               fact.status === "supported"
@@ -282,43 +287,66 @@ function AccountIcons({
 }
 
 function FactCell({
-  fact,
+  cell,
   accounts,
+  account,
   label,
   onClick,
 }: {
-  fact: Fact;
-  accounts?: Record<AccountType, Fact>;
+  cell: ReturnType<typeof resolveMatrixCell>;
+  accounts?: Record<AccountType, ReturnType<typeof resolveMatrixCell>>;
+  account: AccountFilter;
   label: string;
   onClick: () => void;
 }): JSX.Element {
+  const { fact } = cell;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={`${label}: ${accounts ? accountTypes.map((account) => `${accountLabels[account]}: ${statusLabels[accounts[account].status]}`).join(", ") : statusLabels[fact.status]}${fact.verify ? ", needs verification" : ""}`}
-      title={[
-        statusLabels[fact.status],
-        fact.note,
-        fact.verify ? "Needs verification" : "",
-      ]
-        .filter(Boolean)
-        .join(" · ")}
-      data-support-status={accounts ? "accounts" : fact.status}
-      className="support-status focus-visible:ring-ring flex min-h-10 w-full items-center justify-center gap-1.5 rounded-sm px-1.5 py-1 text-xs focus-visible:ring-2 focus-visible:ring-inset"
-    >
-      {accounts ? (
-        <AccountIcons facts={accounts} />
-      ) : (
-        <>
-          <span className="shrink-0 text-base">
-            {symbols[fact.status]}
-            {fact.verify && <sup>*</sup>}
-          </span>
-          <span className="min-w-0 truncate">{statusLabels[fact.status]}</span>
-        </>
-      )}
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={`${label}: ${accounts ? accountTypes.map((account) => `${accountLabels[account]}: ${statusLabels[accounts[account].fact.status]}`).join(", ") : statusLabels[fact.status]}${fact.verify ? ", needs verification" : ""}`}
+          data-support-status={accounts ? "accounts" : fact.status}
+          className="support-status focus-visible:ring-ring flex min-h-10 w-full items-center justify-center gap-1.5 rounded-sm px-1.5 py-1 text-xs focus-visible:ring-2 focus-visible:ring-inset"
+        >
+          {accounts ? (
+            <AccountIcons
+              facts={{
+                personal: accounts.personal.fact,
+                team: accounts.team.fact,
+                enterprise: accounts.enterprise.fact,
+              }}
+            />
+          ) : (
+            <>
+              <span className="shrink-0 text-base">
+                {symbols[fact.status]}
+                {fact.verify && <sup>*</sup>}
+              </span>
+              <span className="min-w-0 truncate">
+                {statusLabels[fact.status]}
+              </span>
+            </>
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        sideOffset={6}
+        className="max-w-sm space-y-3 text-left"
+      >
+        <p className="font-semibold">{label}</p>
+        {accounts ? (
+          accountTypes.map((type) => (
+            <CoverageTooltip key={type} account={type} cell={accounts[type]} />
+          ))
+        ) : (
+          <CoverageTooltip account={account} cell={cell} />
+        )}
+        <p className="text-xs opacity-75">Click to inspect or edit coverage.</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -474,12 +502,8 @@ export function MatrixExplorer({
       [axes.columns]: column.id,
       [third]: sliceId,
     };
-    const { method, product, capability, mapping, fact } = resolveMatrixCell(
-      draft,
-      catalog,
-      ids,
-      account,
-    );
+    const cell = resolveMatrixCell(draft, catalog, ids, account);
+    const { method, product, capability, mapping } = cell;
     const label = `${row.name} × ${column.name}`;
     if (!capability && method && product) {
       const key = mappingKey(method.id, product.id);
@@ -506,15 +530,16 @@ export function MatrixExplorer({
     if (!capability) return <span>Unknown</span>;
     return (
       <FactCell
-        fact={fact}
+        cell={cell}
+        account={account}
         accounts={
           account === "all"
             ? (Object.fromEntries(
                 accountTypes.map((type) => [
                   type,
-                  resolveMatrixCell(draft, catalog, ids, type).fact,
+                  resolveMatrixCell(draft, catalog, ids, type),
                 ]),
-              ) as Record<AccountType, Fact>)
+              ) as Record<AccountType, ReturnType<typeof resolveMatrixCell>>)
             : undefined
         }
         label={label}

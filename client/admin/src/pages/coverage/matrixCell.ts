@@ -15,6 +15,8 @@ import {
   type Capability,
 } from "./model";
 
+export type MethodContribution = { method: Method; fact: Fact };
+
 export function resolveMatrixCell(
   draft: Draft,
   catalog: Catalog,
@@ -26,6 +28,7 @@ export function resolveMatrixCell(
   capability?: Capability;
   mapping: Mapping;
   fact: Fact;
+  contributions: MethodContribution[];
 } {
   const { methods, products, capabilities } = catalog;
   const method = methods.find((item) => item.id === ids.methods);
@@ -35,31 +38,31 @@ export function resolveMatrixCell(
     method && product
       ? (draft.mappings[mappingKey(method.id, product.id)] ?? emptyMapping)
       : emptyMapping;
-  let fact = unknown;
-  if (capability) {
-    if (method && product)
-      fact = getFact(
-        mapping,
-        capability.id,
-        methodReference(draft, method, capability.id),
-      );
-    else if (method) fact = methodReference(draft, method, capability.id);
-    else if (product)
-      fact = summarize(
-        methods.map((item) =>
-          accountFact(
-            item,
-            getFact(
-              draft.mappings[mappingKey(item.id, product.id)] ?? emptyMapping,
-              capability.id,
-              methodReference(draft, item, capability.id),
-            ),
-            account,
-            draft.mappings[mappingKey(item.id, product.id)]?.conditions,
-          ),
+  const candidates = method ? [method] : methods;
+  const contributions: MethodContribution[] = [];
+  if (capability && (method || product)) {
+    for (const candidate of candidates) {
+      const candidateMapping = product
+        ? (draft.mappings[mappingKey(candidate.id, product.id)] ?? emptyMapping)
+        : emptyMapping;
+      const reference = methodReference(draft, candidate, capability.id);
+      const claim = product
+        ? getFact(candidateMapping, capability.id, reference)
+        : reference;
+      contributions.push({
+        method: candidate,
+        fact: accountFact(
+          candidate,
+          claim,
+          account,
+          candidateMapping.conditions,
         ),
-      );
+      });
+    }
   }
-  if (method) fact = accountFact(method, fact, account, mapping.conditions);
-  return { method, product, capability, mapping, fact };
+  let fact = unknown;
+  if (method) fact = contributions[0]?.fact ?? unknown;
+  else if (product && capability)
+    fact = summarize(contributions.map((entry) => entry.fact));
+  return { method, product, capability, mapping, fact, contributions };
 }

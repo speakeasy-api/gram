@@ -1,5 +1,5 @@
 import { accountFact, type AccountFilter } from "./accounts";
-import { useState, type JSX } from "react";
+import { useId, useState, type JSX } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -27,11 +27,13 @@ import {
 import "./support-status.css";
 
 export function Choice({
+  id,
   label,
   value,
   options,
   onChange,
 }: {
+  id?: string;
   label: string;
   value: string;
   options: { value: string; label: string }[];
@@ -39,7 +41,7 @@ export function Choice({
 }): JSX.Element {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger aria-label={label} className="w-full">
+      <SelectTrigger id={id} aria-label={label} className="w-full">
         <SelectValue placeholder={label} />
       </SelectTrigger>
       <SelectContent>
@@ -53,17 +55,33 @@ export function Choice({
   );
 }
 
+function withoutSourceAnnotation(value: string): string {
+  return value.replace(/\bSource cell:\s*(?:✅|❌|☠️?|✓|×|--)?\s*;?\s*/gi, "");
+}
+
 export function FactEditor({
   fact,
+  capability,
+  description,
   onChange,
 }: {
   fact: Fact;
+  capability: Capability;
+  description: string;
   onChange: (fact: Fact) => void;
 }): JSX.Element {
+  const statusId = useId();
   return (
     <div className="space-y-3">
+      <div className="space-y-1">
+        <label htmlFor={statusId} className="text-sm font-medium">
+          {capability.name} coverage
+        </label>
+        <p className="text-muted-foreground text-xs">{description}</p>
+      </div>
       <Choice
-        label="Coverage status"
+        id={statusId}
+        label={`${capability.name} coverage`}
         value={fact.status}
         options={Object.entries(statusLabels).map(([value, label]) => ({
           value,
@@ -77,7 +95,7 @@ export function FactEditor({
         aria-label="Coverage limitations"
         rows={3}
         placeholder="Limitations, mechanism, or evidence…"
-        value={fact.note}
+        value={withoutSourceAnnotation(fact.note)}
         onChange={(event) => onChange({ ...fact, note: event.target.value })}
       />
       <label className="flex items-center gap-2 text-sm">
@@ -174,7 +192,7 @@ export function MethodEditor({
             aria-label="OS and plan conditions"
             rows={3}
             placeholder="OS / plan conditions, e.g. macOS, Enterprise only"
-            value={mapping.conditions}
+            value={withoutSourceAnnotation(mapping.conditions)}
             onChange={(event) =>
               updateMapping({ ...mapping, conditions: event.target.value })
             }
@@ -184,6 +202,8 @@ export function MethodEditor({
       {(!product || mapping.applicability === "applicable") && (
         <FactEditor
           fact={fact}
+          capability={capability}
+          description={`How well ${method.name} supports ${capability.name} ${product ? `on ${product.name}` : "across applicable platforms"}. This status applies to all eligible account types.`}
           onChange={(next) => {
             setSaved(false);
             if (product)
