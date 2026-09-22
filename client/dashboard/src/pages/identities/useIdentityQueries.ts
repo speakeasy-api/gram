@@ -2,7 +2,7 @@ import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import {
   fetchIdentityPeers,
@@ -23,7 +23,10 @@ import {
   buildGetUserMetricsSummaryQuery,
   useGetUserMetricsSummary,
 } from "@gram/client/react-query/getUserMetricsSummary.js";
-import { useRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
+import { buildRiskUserBreakdownQuery } from "@gram/client/react-query/riskUserBreakdown.js";
+import type { RiskOverviewCategory } from "@gram/client/models/components/riskoverviewcategory.js";
+import type { RiskRuleBreakdownEntry } from "@gram/client/models/components/riskrulebreakdownentry.js";
+import type { RiskUserBreakdownResult } from "@gram/client/models/components/riskuserbreakdownresult.js";
 import { useShadowMCPInventoryServersForUser } from "@gram/client/react-query/shadowMCPInventoryServersForUser.js";
 import { useIdentityAccess } from "@gram/client/react-query/identityAccess.js";
 
@@ -297,22 +300,100 @@ export function useIdentityAuditLogs(
   });
 }
 
+/** The most agent ids the risk panels ask about, one request each. */
+const MAX_RISK_IDENTIFIERS = 10;
+
+export type IdentityRisk = {
+  data:
+    | {
+        findings: number;
+        categories: RiskOverviewCategory[];
+        rules: RiskRuleBreakdownEntry[];
+      }
+    | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  refetch: () => Promise<unknown>;
+};
+
+/**
+ * This identity's findings by category and rule, across every agent id it
+ * reports. The breakdown endpoint takes one id, so each is asked separately
+ * and the results summed: a finding belongs to one id, so none is counted
+ * twice.
+ */
 export function useIdentityRisk(
   identity: IdentityModel,
   from: Date,
   to: Date,
-): ReturnType<typeof useRiskUserBreakdown> {
+): IdentityRisk {
+  const client = useGramContext();
   const { slug: gramProject } = useIdentityProject();
   const canReadRisk = useCanReadRisk();
-  const externalUserId = identity.externalUserIds[0];
-  return useRiskUserBreakdown(
-    { externalUserId: externalUserId ?? "", from, to, gramProject },
-    undefined,
-    {
+  const ids = identity.externalUserIds.slice(0, MAX_RISK_IDENTIFIERS);
+  return useQueries({
+    queries: ids.map((externalUserId) => ({
+      ...buildRiskUserBreakdownQuery(client, {
+        externalUserId,
+        from,
+        to,
+        gramProject,
+      }),
       ...OFF,
-      enabled: canReadRisk && !!externalUserId,
+      enabled: canReadRisk,
+    })),
+    combine: (results) => {
+      const loaded = results.flatMap((r) => (r.data ? [r.data] : []));
+      return {
+        data: loaded.length > 0 ? sumBreakdowns(loaded) : undefined,
+        isLoading: results.some((r) => r.isLoading),
+        isError: results.some((r) => r.isError),
+        // Only the failed reads: see retryFailed.
+        refetch: () =>
+          Promise.all(results.filter((r) => r.isError).map((r) => r.refetch())),
+      };
     },
-  );
+  });
+}
+
+function sumBreakdowns(
+  breakdowns: RiskUserBreakdownResult[],
+): NonNullable<IdentityRisk["data"]> {
+  const categories = new Map<string, RiskOverviewCategory>();
+  const rules = new Map<string, RiskRuleBreakdownEntry>();
+  for (const b of breakdowns) {
+    for (const c of b.categories) {
+      const seen = categories.get(c.category);
+      categories.set(c.category, {
+        ...c,
+        findings: (seen?.findings ?? 0) + Number(c.findings),
+      });
+    }
+    for (const r of b.rules) {
+      const key = `${r.source}\u0000${r.ruleId}`;
+      const seen = rules.get(key);
+      rules.set(key, {
+        ...r,
+        findings: (seen?.findings ?? 0) + Number(r.findings),
+      });
+    }
+  }
+  const byFindings = (a: { findings: number }, b: { findings: number }) =>
+    b.findings - a.findings;
+  return {
+    findings: breakdowns.reduce((sum, b) => sum + Number(b.findings), 0),
+    categories: [...categories.values()].sort(byFindings),
+    rules: [...rules.values()].sort(byFindings),
+  };
+}
+
+/** Which of an identity's ids the risk panels matched on, for a footer. */
+export function riskMatchedOnLabel(externalUserIds: string[]): string {
+  if (externalUserIds.length === 0) {
+    return "This identity reports no agent identifier, so risk cannot key on it.";
+  }
+  if (externalUserIds.length === 1) return `Matched on ${externalUserIds[0]}`;
+  return `Matched on all ${externalUserIds.length} identifiers this identity reports`;
 }
 
 /**

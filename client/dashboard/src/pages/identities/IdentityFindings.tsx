@@ -40,12 +40,14 @@ import {
   type FindingsFilter,
   RISK_UNAVAILABLE,
   RULE_PARAM,
+  setFindingsFilterParams,
 } from "./identityFindingsLink";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 import { useIdentityOutlet } from "./identityRoute";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
+  riskMatchedOnLabel,
   useCanReadRisk,
   useIdentityPrincipalUrn,
   useIdentityProject,
@@ -77,20 +79,14 @@ export default function IdentityFindingsPage(): JSX.Element {
     new URLSearchParams(location.search),
   );
   const [searchParams, setSearchParams] = useSearchParams();
-  const filter: FindingsFilter = {
-    category: searchParams.get(CATEGORY_PARAM) ?? undefined,
-    ruleId: searchParams.get(RULE_PARAM) ?? undefined,
-  };
+  const ruleId = searchParams.get(RULE_PARAM) ?? undefined;
+  // A rule replaces a category, even in a hand-edited address carrying both.
+  const filter: FindingsFilter = ruleId
+    ? { ruleId }
+    : { category: searchParams.get(CATEGORY_PARAM) ?? undefined };
   const setFilter = (next: FindingsFilter) =>
     setSearchParams(
-      (prev) => {
-        const params = new URLSearchParams(prev);
-        params.delete(CATEGORY_PARAM);
-        params.delete(RULE_PARAM);
-        if (next.category) params.set(CATEGORY_PARAM, next.category);
-        if (next.ruleId) params.set(RULE_PARAM, next.ruleId);
-        return params;
-      },
+      (prev) => setFindingsFilterParams(new URLSearchParams(prev), next),
       { replace: true },
     );
 
@@ -331,6 +327,7 @@ function FindingsTable({
             <MaskedMatch
               resultId={result.id}
               matchRedacted={result.matchRedacted}
+              chatId={result.chatId}
             />
           </div>
         ),
@@ -383,7 +380,7 @@ function FindingsTable({
         noResultsMessage="No findings in this window."
       />
       <p className="text-muted-foreground mt-2 text-xs">
-        {matchedOnLabel(externalUserIds)}
+        {riskMatchedOnLabel(externalUserIds)}
       </p>
       <ChatDetailSheet
         chatId={openChat?.chatId ?? null}
@@ -439,9 +436,4 @@ function FindingDetail({ result }: { result: RiskResult }): JSX.Element {
 
 function categoryLabel(category: string): string {
   return RULE_CATEGORY_META[category as RuleCategory]?.label ?? category;
-}
-
-function matchedOnLabel(externalUserIds: string[]): string {
-  if (externalUserIds.length === 1) return `Matched on ${externalUserIds[0]}`;
-  return `Matched on all ${externalUserIds.length} identifiers this identity reports`;
 }

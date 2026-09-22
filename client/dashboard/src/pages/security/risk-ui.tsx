@@ -188,11 +188,18 @@ export function RevealAllToggle({
 export function MaskedMatch({
   resultId,
   matchRedacted,
+  chatId,
   tone = "default",
   wrap = false,
 }: {
   resultId: string | undefined;
   matchRedacted: string | undefined;
+  /**
+   * The finding's chat. When given, reveal needs chat:read on that chat rather
+   * than on any chat, so a grant for other sessions doesn't offer a reveal the
+   * server will refuse.
+   */
+  chatId?: string;
   /**
    * "contrast" renders for a dark code-block backdrop (the Watchdog drawer's
    * evidence card): the masked state becomes a red redaction chip and the
@@ -208,7 +215,7 @@ export function MaskedMatch({
 }): JSX.Element {
   const contrast = tone === "contrast";
   const { hasScope } = useRBAC();
-  const canReveal = hasScope(REVEAL_SCOPE);
+  const canReveal = hasScope(REVEAL_SCOPE, chatId);
   const ctx = useRevealAll();
   const generation = ctx?.generation;
   const revealAll = ctx?.revealAll ?? false;
@@ -351,7 +358,9 @@ function LockedRedactedMatch({
         </span>
       }
     >
+      {/* Focusable so keyboard users can reach the fingerprint too. */}
       <span
+        tabIndex={0}
         className={cn(
           "inline-flex max-w-full min-w-0 gap-1 text-xs",
           wrap ? "items-start" : "items-center",

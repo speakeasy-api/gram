@@ -18,6 +18,21 @@ export const CATEGORY_PARAM = "category";
 export const RULE_PARAM = "rule";
 
 /**
+ * Writes `filter` into `params`, replacing any earlier one. A rule belongs to
+ * one category, so a rule filter drops the category rather than stacking both.
+ */
+export function setFindingsFilterParams(
+  params: URLSearchParams,
+  filter: FindingsFilter,
+): URLSearchParams {
+  params.delete(CATEGORY_PARAM);
+  params.delete(RULE_PARAM);
+  if (filter.ruleId) params.set(RULE_PARAM, filter.ruleId);
+  else if (filter.category) params.set(CATEGORY_PARAM, filter.category);
+  return params;
+}
+
+/**
  * The Findings sub-page for this identity, narrowed to `filter`. Keeps the
  * reader's window and other params.
  */
@@ -27,12 +42,10 @@ export function identityFindingsHref(
   search: string,
   filter: FindingsFilter,
 ): string {
-  const params = new URLSearchParams(search);
-  params.delete(CATEGORY_PARAM);
-  params.delete(RULE_PARAM);
-  if (filter.category) params.set(CATEGORY_PARAM, filter.category);
-  if (filter.ruleId) params.set(RULE_PARAM, filter.ruleId);
-  const query = params.toString();
+  const query = setFindingsFilterParams(
+    new URLSearchParams(search),
+    filter,
+  ).toString();
   const base = routes.identities.detail.findings.href(encodeIdentityUrn(urn));
   return query ? `${base}?${query}` : base;
 }

@@ -27,6 +27,7 @@ import { sectionMeta } from "./sectionMeta";
 import { shadowMCPAccessSummaryOf } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import {
   retryFailed,
+  riskMatchedOnLabel,
   useCanReadRisk,
   useIdentityChallenges,
   useIdentityPrincipalUrn,
@@ -99,11 +100,6 @@ export default function IdentitySecurity(): JSX.Element {
   const unresolvedTotal = unresolvedQuery.data?.total;
   const shadowServers = shadowQuery.data?.servers ?? [];
 
-  // Risk keys on the ids agents report and the endpoint takes one of them, so
-  // this names the identifier the panel actually asked about.
-  const riskIdentifier = identity.externalUserIds[0];
-  const unqueriedIdentifiers = Math.max(identity.externalUserIds.length - 1, 0);
-
   return (
     <IdentitySection
       title="Security"
@@ -130,15 +126,9 @@ export default function IdentitySecurity(): JSX.Element {
           refreshFailed={riskQuery.isError && categories.length > 0}
           onRetry={retryFailed(riskQuery)}
           footer={
-            !canReadRisk
-              ? undefined
-              : !riskIdentifier
-                ? "This identity reports no agent identifier, so risk cannot key on it."
-                : unqueriedIdentifiers > 0
-                  ? `Matched on ${riskIdentifier}. This identity reports ${unqueriedIdentifiers} further identifier${
-                      unqueriedIdentifiers === 1 ? "" : "s"
-                    }, which are not counted here.`
-                  : `Matched on ${riskIdentifier}`
+            canReadRisk
+              ? riskMatchedOnLabel(identity.externalUserIds)
+              : undefined
           }
         >
           {!canReadRisk ? (

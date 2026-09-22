@@ -134,7 +134,7 @@ export function ShareBar({
           );
           return (
             <li key={share.key} className="flex items-center gap-2">
-              {onSelect && share.key !== "__other__" ? (
+              {onSelect && !(folded.length > 0 && share === shares.at(-1)) ? (
                 <button
                   type="button"
                   className="group flex min-w-0 flex-1 items-center gap-2 text-left"
