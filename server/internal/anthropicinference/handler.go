@@ -99,7 +99,7 @@ func Attach(mux goahttp.Muxer, logger *slog.Logger, processor Processor, resolve
 		config.SigningSecrets = nil
 		h := &handler{config: config, keys: keys, processor: processor, logger: logger}
 		h.ServeHTTP(w, r)
-	}), 9*time.Second, fallbackVerdictJSON)
+	}), requestBudget, fallbackVerdictJSON)
 	mux.Handle(http.MethodPost, "/hooks/anthropic-inference/{id}", func(w http.ResponseWriter, r *http.Request) {
 		endpoint.ServeHTTP(verdictTimeoutWriter{ResponseWriter: w}, r)
 	})

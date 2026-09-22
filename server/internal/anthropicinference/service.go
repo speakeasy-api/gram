@@ -29,14 +29,18 @@ import (
 )
 
 const (
-	// verdictBudget caps risk evaluation at nine seconds. The HTTP handler's
-	// overall deadline can cancel evaluation earlier.
+	// verdictBudget caps risk evaluation at nine seconds. Earlier request work
+	// can shorten it to preserve checkpoint and response headroom.
 	verdictBudget = 9 * time.Second
 	// scanConcurrency bounds how many inputs of one transcript are evaluated
 	// at once.
 	scanConcurrency = 4
 	// checkpointBudget bounds the marker write that follows scanning.
 	checkpointBudget = 500 * time.Millisecond
+	// responseBudget reserves time to serialize the verdict after checkpointing.
+	responseBudget = 250 * time.Millisecond
+	// requestBudget leaves 250ms before the documented 10-second upstream timeout.
+	requestBudget = verdictBudget + checkpointBudget + responseBudget
 	// unavailableDenyReason is the fail-closed copy for a request that could
 	// not be evaluated in full.
 	unavailableDenyReason = "Speakeasy could not evaluate this request. Please try again."
@@ -87,7 +91,11 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, writer *chat.ChatMessageW
 // evaluated checkpoint can exempt historical content from another scan.
 func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verdict, error) {
 	ctx = policyflags.WithRequestMemo(ctx)
-	budget, cancel := context.WithTimeout(ctx, verdictBudget)
+	duration := verdictBudget
+	if deadline, ok := ctx.Deadline(); ok {
+		duration = min(duration, time.Until(deadline)-checkpointBudget-responseBudget)
+	}
+	budget, cancel := context.WithTimeout(ctx, duration)
 	defer cancel()
 	userID, err := s.store.ResolveActor(budget, config, frame)
 	if err != nil {
