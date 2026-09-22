@@ -16,8 +16,10 @@ import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
 import {
   useIsPlatformAdmin,
   useOrganization,
+  useProject,
   useSession,
 } from "@/contexts/Auth";
+import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useReadableAgents } from "@/hooks/useReadableAgents";
@@ -34,7 +36,7 @@ import { useAgentsSuspendMutation } from "@gram/client/react-query/agentsSuspend
 import { useCreateAgentMutation } from "@gram/client/react-query/createAgent.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Bot, Plus } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -154,9 +156,15 @@ function AgentList({
 }) {
   // Ownership is an independent authorization path. Do not gate this query on RBAC.
   const agents = useReadableAgents(true);
+  const project = useProject();
   const [search, setSearch] = useState("");
-  const rows = (agents.data ?? []).filter((agent) =>
-    agent.name.toLowerCase().includes(search.trim().toLowerCase()),
+  const rows = (agents.data ?? []).filter(
+    (agent) =>
+      // An agent bound to another project is that project's to manage, so
+      // showing it here reads as a listing bug. Organization-wide agents have
+      // no home project and belong in every project's list.
+      (!agent.projectId || agent.projectId === project.id) &&
+      agent.name.toLowerCase().includes(search.trim().toLowerCase()),
   );
   const columns: Column<ManagedAgent>[] = [
     {
@@ -233,6 +241,28 @@ function AgentOwner({ agent }: { agent: ManagedAgent }) {
   );
 }
 
+/** Where a new agent belongs. Mirrors the optional project binding on API keys. */
+type AgentScope = "organization" | "project";
+
+/**
+ * Names the project an agent belongs to, or says it belongs to none. An agent
+ * bound to another project can still be reached by id, so this reports the
+ * binding rather than assuming it is the project being viewed.
+ */
+function AgentScopeLabel({ agent }: { agent: ManagedAgent }) {
+  const organization = useOrganization();
+  if (!agent.projectId) {
+    return <Text>{organization.name} (all projects)</Text>;
+  }
+  // Named from the organization's own project list rather than the active
+  // project, so an agent reached by id from elsewhere still says where it
+  // belongs. A project the caller cannot see falls back to its id.
+  const bound = organization.projects?.find(
+    (candidate) => candidate.id === agent.projectId,
+  );
+  return <Text>{bound?.name ?? agent.projectId}</Text>;
+}
+
 function CreateAgent({
   disabled,
   onCreated,
@@ -240,10 +270,18 @@ function CreateAgent({
   disabled: boolean;
   onCreated: (id: string) => void;
 }) {
+  const organization = useOrganization();
+  const project = useProject();
   const [name, setName] = useState("");
+  // null until the person picks, so the default can follow the project as it
+  // resolves. A useState initializer would run once, before useProject has an
+  // id, and strand the form on organization scope.
+  const [chosenScope, setChosenScope] = useState<AgentScope | null>(null);
   const [draft, setDraft] = useState<AgentPolicyDraft>({});
   const [error, setError] = useState<string | null>(null);
-  const organization = useOrganization();
+  // Project leads once one is available; an explicit pick always wins.
+  const scope: AgentScope =
+    chosenScope ?? (project.id ? "project" : "organization");
   const { user } = useSession();
   const queryClient = useQueryClient();
   const create = useCreateAgentMutation({
@@ -270,12 +308,22 @@ function CreateAgent({
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) return;
+    // useProject yields an empty id before a project resolves. Sending that
+    // would read as "omitted" and quietly create an organization-wide agent
+    // after the user asked for a project one.
+    if (scope === "project" && !project.id) {
+      setError("Select a project before scoping an agent to one.");
+      return;
+    }
     const policyGrants = agentPolicyGrantsFromDraft(draft);
     setError(null);
     create.mutate({
       request: {
         createAgentForm: {
           name: trimmedName,
+          // Omitted, not blank: an organization-wide agent carries no project
+          // binding at all.
+          ...(scope === "project" ? { projectId: project.id } : {}),
           ...(policyGrants.length > 0 ? { policyGrants } : {}),
         },
       },
@@ -284,23 +332,17 @@ function CreateAgent({
 
   return (
     <FormPage
-      title="Agents"
-      description="Create a first-class nonhuman principal with ownership and an independent lifecycle."
+      // The scope cards sit side by side and the permissions table carries a
+      // tab strip and a button on one row; both are cramped at form measure.
+      width="wide"
+      title="Agents · Create"
+      description={
+        disabled
+          ? "Agent management is unavailable in the shared demo because it requires active organization membership."
+          : "You will be the owner. Ownership gives you intrinsic setup access without creating a reusable permission grant."
+      }
     >
-      <form onSubmit={onSubmit} className="border bg-card p-6">
-        <div className="mb-6 flex items-start gap-4">
-          <div className="border p-2">
-            <Bot className="size-5" aria-hidden="true" />
-          </div>
-          <div>
-            <Text className="font-medium">Create an agent</Text>
-            <Text muted small className="mt-1">
-              {disabled
-                ? "Agent management is unavailable in the shared demo because it requires active organization membership."
-                : "You will be the owner. Ownership gives you intrinsic setup access without creating a reusable permission grant."}
-            </Text>
-          </div>
-        </div>
+      <form onSubmit={onSubmit} className="w-full">
         <div className="space-y-2">
           <Label htmlFor="agent-name">Agent name</Label>
           <Input
@@ -313,7 +355,35 @@ function CreateAgent({
             autoFocus
           />
         </div>
-        <div className="mt-6 space-y-2">
+        <div className="mt-8 space-y-2">
+          <Label>Scope</Label>
+          <Text muted small>
+            Where this agent is listed and managed. Scope does not change what
+            it can reach — permissions below decide that.
+          </Text>
+          <RadioCardGroup
+            orientation="horizontal"
+            value={scope}
+            onValueChange={(value) => setChosenScope(value as AgentScope)}
+            disabled={disabled || create.isPending}
+            aria-label="Agent scope"
+          >
+            <RadioCard value="project" title="Project" disabled={!project.id}>
+              <Text muted small>
+                {project.id
+                  ? `Sits with ${project.name}, so the team working there finds and manages it alongside their own servers.`
+                  : "Select a project first."}
+              </Text>
+            </RadioCard>
+            <RadioCard value="organization" title="Organization">
+              <Text muted small>
+                Sits above every project in {organization.name}. Use this for a
+                shared agent that serves more than one team.
+              </Text>
+            </RadioCard>
+          </RadioCardGroup>
+        </div>
+        <div className="mt-8 space-y-2">
           <Label>Permissions</Label>
           <Text muted small>
             The most this agent may ever be delegated. An agent with no
@@ -321,11 +391,13 @@ function CreateAgent({
             Each key is narrowed again at issuance, against your live
             permissions and the owner's.
           </Text>
-          <AgentPolicyEditor
-            draft={draft}
-            onChange={setDraft}
-            disabled={disabled || create.isPending}
-          />
+          <div className="pt-2">
+            <AgentPolicyEditor
+              draft={draft}
+              onChange={setDraft}
+              disabled={disabled || create.isPending}
+            />
+          </div>
         </div>
         {error && (
           <p role="alert" className="mt-4 text-sm">
@@ -494,6 +566,10 @@ function AgentIdentity({
             <dt className="text-muted-foreground">Owner</dt>
             <dd>
               <AgentOwner agent={agent} />
+            </dd>
+            <dt className="text-muted-foreground">Scope</dt>
+            <dd>
+              <AgentScopeLabel agent={agent} />
             </dd>
             <dt className="text-muted-foreground">Lifecycle</dt>
             <dd>

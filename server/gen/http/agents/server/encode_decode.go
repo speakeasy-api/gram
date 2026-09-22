@@ -3637,6 +3637,7 @@ func marshalAgentsManagedAgentToManagedAgentResponse(v *agents.ManagedAgent) *Ma
 		OwnerReassignmentRequiredAt: v.OwnerReassignmentRequiredAt,
 		OwnerReassignmentReason:     v.OwnerReassignmentReason,
 		Name:                        v.Name,
+		ProjectID:                   v.ProjectID,
 		Lifecycle:                   string(v.Lifecycle),
 		CreatedAt:                   v.CreatedAt,
 		UpdatedAt:                   v.UpdatedAt,

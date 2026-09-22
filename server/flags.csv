@@ -13,3 +13,5 @@ org_gram_demo_workspace,risk-list-from-clickhouse,true
 org_gram_demo_workspace,risk-finding-analytics,true
 org_gram_demo_workspace,gram-risk-llm-analyzer,true,shadow
 72640a3e-93dd-5dbc-89b2-6b95bead0fac,platform-mcp,true
+72640a3e-93dd-5dbc-89b2-6b95bead0fac,agent-management,true
+72640a3e-93dd-5dbc-89b2-6b95bead0fac,agent-identity-credentials,true

@@ -1,11 +1,16 @@
 -- name: CreateAgent :one
+-- project_id is nullable while agents created before project scoping carry
+-- none. The composite foreign key pins it to the agent's own organization, so
+-- a project from another tenant is rejected by the database rather than here.
 INSERT INTO agents (
   organization_id,
   owner_user_id,
+  project_id,
   name
 ) VALUES (
   @organization_id,
   @owner_user_id,
+  sqlc.narg('project_id'),
   @name
 )
 RETURNING *;
@@ -15,11 +20,13 @@ INSERT INTO agents (
   id,
   organization_id,
   owner_user_id,
+  project_id,
   name
 ) VALUES (
   @id,
   @organization_id,
   @owner_user_id,
+  sqlc.narg('project_id'),
   @name
 )
 RETURNING *;

@@ -727,6 +727,11 @@ export function CreateRoleDialog({
             )}
 
             {/* ─── Permissions ─── */}
+            <div className="border-border border-t pt-4">
+              <Text variant="body" className="mb-3 font-medium">
+                Add permissions
+              </Text>
+            </div>
             <RolePermissionsSection
               groups={scopeGroups}
               selectedScopes={new Set(Object.keys(grants))}

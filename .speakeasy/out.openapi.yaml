@@ -74442,6 +74442,9 @@ components:
           items:
             $ref: '#/components/schemas/AgentPolicyGrantForm'
           description: Optional initial allow-only agent policy ceilings, created atomically with the agent. Effective credential permissions remain limited by the live owner and authorizer.
+        project_id:
+          type: string
+          description: Optional project binding. Omit or send an empty string for an organization-wide agent; independent of policy grants and the Gram-Project header.
       required:
         - name
     CreateAgentPolicyGrantForm:
@@ -84076,6 +84079,10 @@ components:
           type: string
         permissions:
           $ref: '#/components/schemas/AgentPermissions'
+        project_id:
+          type: string
+          description: The optional project this agent is scoped to; absent for an organization-wide agent
+          format: uuid
         updated_at:
           type: string
           format: date-time
