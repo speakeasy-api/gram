@@ -8,9 +8,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
 )
 
-//go:fix inline
-func ptr(s string) *string { return new(s) }
-
 // NormalizeEnvironment is total: every input resolves to one of the three
 // constants and never to "". Call sites compare against those constants by
 // name, so an empty return would silently make an endpoint look like "no
