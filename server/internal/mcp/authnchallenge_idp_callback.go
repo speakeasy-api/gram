@@ -105,6 +105,15 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	}
 	s.recordPrivateOAuthAuthority(ctx, challengeState.Endpoint.Authority, authorityStarted, nil)
 
+	// Ready bootstrap URLs carry no browser proof themselves. Check the
+	// host-only callback cookie before consuming state so a copied URL cannot
+	// prevent the initiating browser from completing its login (including retries).
+	if federation := challengeState.Federation; federation != nil && federation.StartPhase == "ready" {
+		if err := validateChallengeBrowser(r, challengeState, true); err != nil {
+			return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageIDPCallback, oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Login browser binding is invalid. Restart login", false)
+		}
+	}
+
 	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
@@ -368,7 +377,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 					ConfigurationHash: policy.ConfigurationHash, ExplicitRetry: federation.ExplicitRetry,
 				})
 				if err != nil {
-					return finishFederation(oops.CodeUnavailable, nil, "Delegation policy is unavailable. Restart login", false)
+					// Optional policy storage must not invalidate the retained base login.
+					// An unknown policy never authorizes an additional consent prompt.
+					requestOffline = false
 				}
 			}
 			if requestOffline {

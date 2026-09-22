@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -28,7 +29,7 @@ func (c *offlineLoginConsumer) ConsumeFederatedLogin(ctx context.Context, r mcp.
 
 func TestFederatedOptionalOfflineConsent(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"no_refresh", "cancel", "provider_error", "account_switch", "suppressed", "membership_denied"} {
+	for _, scenario := range []string{"no_refresh", "cancel", "provider_error", "account_switch", "suppressed", "policy_unavailable", "membership_denied"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			ctx, f := newFederationLoginFixture(t, scenario != "membership_denied", true)
@@ -43,6 +44,9 @@ func TestFederatedOptionalOfflineConsent(t *testing.T) {
 					require.Equal(t, []string{mockidp.MockUserID}, f.resolver.memberChecks, "membership must precede per-human policy lookup")
 					require.NotEmpty(t, request.ConfigurationHash)
 					require.Equal(t, request.Provider.OfflineConfigurationHash(), request.ConfigurationHash)
+					if scenario == "policy_unavailable" {
+						return true, errors.New("temporary policy store failure")
+					}
 					return scenario != "suppressed", nil
 				},
 				consume: func(_ context.Context, login mcp.AuthorizedFederatedLogin) error {
@@ -85,7 +89,15 @@ func TestFederatedOptionalOfflineConsent(t *testing.T) {
 			require.Len(t, logins, 1)
 			require.False(t, logins[0].OfflineRequested)
 			require.False(t, logins[0].OptionalRefused)
-			if scenario == "suppressed" {
+			if scenario == "suppressed" || scenario == "policy_unavailable" {
+				require.Equal(t, http.StatusFound, first.Code)
+				consent, err := url.Parse(first.Header().Get("Location"))
+				require.NoError(t, err)
+				require.Empty(t, consent.Query().Get("error"))
+				completed, err := f.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+consent.Query().Get("state"))
+				require.NoError(t, err)
+				require.Nil(t, completed.Federation)
+				require.Equal(t, mockidp.MockUserID, completed.Subject.ID)
 				require.NotContains(t, first.Header().Get("Location"), f.provider.URL)
 				require.Equal(t, 1, lookups)
 				return

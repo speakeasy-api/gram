@@ -137,6 +137,21 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 			bootstrap := httptest.NewRequest(http.MethodGet, actionResponse.Header().Get("Location"), nil).WithContext(ctx)
 			retryCookies := actionResponse.Result().Cookies()
 			require.Len(t, retryCookies, 1)
+			for _, wrongCookie := range []bool{false, true} {
+				transferred := httptest.NewRequest(http.MethodGet, bootstrap.URL.String(), nil).WithContext(ctx)
+				if wrongCookie {
+					cookie := *retryCookies[0]
+					cookie.Value = "different-browser"
+					transferred.AddCookie(&cookie)
+				}
+				response := httptest.NewRecorder()
+				require.NoError(t, f.ti.service.HandleIDPCallback(response, transferred))
+				assertFederationErrorRedirect(t, response)
+				_, err := f.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+bootstrap.URL.Query().Get("state"))
+				require.NoError(t, err, "missing or wrong browser proof must preserve retry state")
+				require.Len(t, handoffs, 1)
+				require.Len(t, lookups, 1)
+			}
 			bootstrap.AddCookie(retryCookies[0])
 			begin := httptest.NewRecorder()
 			require.NoError(t, f.ti.service.HandleIDPCallback(begin, bootstrap))
