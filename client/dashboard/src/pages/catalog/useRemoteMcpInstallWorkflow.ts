@@ -42,6 +42,7 @@ import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSe
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useEffectiveUserSessionIssuers } from "@/hooks/useEffectiveUserSessionIssuers";
 
 type InstallPhaseName =
   | "selectRemotes"
@@ -344,6 +345,10 @@ export function useRemoteMcpInstallWorkflow({
   const currentProjectSlug = useProjectSlugForRequests();
   const isPlatformAdmin = useIsPlatformAdmin();
   const targetProjectSlug = projectSlug ?? currentProjectSlug;
+  const issuerQuery = useEffectiveUserSessionIssuers({
+    projectSlug: targetProjectSlug,
+  });
+  const defaultOrganizationIssuerId = issuerQuery.organizationIssuers[0]?.id;
 
   // Informational "already installed" signal: a remote MCP server with a
   // matching URL already exists in the target project. Unproxied servers
@@ -529,10 +534,11 @@ export function useRemoteMcpInstallWorkflow({
   const canInstall = useMemo(() => {
     return (
       serverConfigs.length > 0 &&
+      !issuerQuery.isLoading &&
       serverConfigs.every((c) => c.name.trim() !== "") &&
       serverConfigs.some((c) => c.remotes.length > 0)
     );
-  }, [serverConfigs]);
+  }, [issuerQuery.isLoading, serverConfigs]);
 
   // goBack returns to selectRemotes phase - only available if there were multi-remote servers
   const goBack = useCallback(() => {
@@ -582,6 +588,10 @@ export function useRemoteMcpInstallWorkflow({
             createMcpServerForm: {
               name: target.name,
               remoteMcpServerId: remoteMcpServer.id,
+              userSessionIssuerId: defaultOrganizationIssuerId,
+              // Catalog installs are noninteractive, so prefer the first
+              // organization issuer and retain the project-specific fallback
+              // when the organization has none.
               // Private (user-session gated) rather than the sources flow's
               // "disabled": catalog installs promise a usable server, and the
               // pre-staged endpoint must actually serve. Public would expose
@@ -692,7 +702,14 @@ export function useRemoteMcpInstallWorkflow({
         iconPersistence,
       };
     },
-    [authedFetch, client, isPlatformAdmin, orgSlug, targetProjectSlug],
+    [
+      authedFetch,
+      client,
+      defaultOrganizationIssuerId,
+      isPlatformAdmin,
+      orgSlug,
+      targetProjectSlug,
+    ],
   );
 
   const startInstall = useCallback(async () => {

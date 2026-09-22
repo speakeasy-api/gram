@@ -74,6 +74,9 @@ var _ = Service("userSessionIssuers", func() {
 				Format(FormatUUID)
 			})
 			Attribute("limit", Int, "Page size (default 50, max 100).")
+			Attribute("mcp_resource_id", String, "Optional MCP server or toolset resource ID used to authorize callers with resource-scoped mcp:write access. The resource must belong to the selected project.", func() {
+				Format(FormatUUID)
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -85,6 +88,7 @@ var _ = Service("userSessionIssuers", func() {
 			GET("/rpc/userSessionIssuers.list")
 			Param("cursor")
 			Param("limit")
+			Param("mcp_resource_id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()

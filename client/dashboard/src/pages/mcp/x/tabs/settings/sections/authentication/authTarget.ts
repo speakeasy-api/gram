@@ -20,8 +20,12 @@ import { useMemo } from "react";
 export type AuthTarget = {
   /** Seeds auto-derived issuer slugs on first add. */
   slug: string;
-  /** Project owning the target; scopes permission gates to it. */
+  /** Project owning the target. */
   projectId: string;
+  /** Resource identifier used by the target's mcp:write check. */
+  permissionResourceId: string;
+  /** Whether the target backend accepts organization-owned issuers. */
+  supportsOrganizationIssuers: boolean;
   /** Current issuer link; null when the target has none yet. */
   userSessionIssuerId: string | null;
   /**
@@ -29,8 +33,7 @@ export type AuthTarget = {
    * no probeable upstream (tunneled, toolset-backed), leaving the probe idle.
    */
   remoteMcpServerId?: string;
-  /** Link a freshly created issuer to the target (first add). Absent for
-   * targets that always have an issuer (mcp servers). */
+  /** Attach an existing or freshly created issuer to the target. */
   linkUserSessionIssuer?: (userSessionIssuerId: string) => Promise<void>;
   /** True when the target's issuer may bind several upstream providers
    * (gateways front many members). Remote/tunneled servers have exactly one
@@ -41,12 +44,33 @@ export type AuthTarget = {
 };
 
 export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
+  const client = useSdkClient();
+
   return useMemo(
     () => ({
       slug: mcpServer.slug ?? "mcp",
       projectId: mcpServer.projectId,
+      permissionResourceId: mcpServer.toolsetId ?? mcpServer.id,
+      supportsOrganizationIssuers: true,
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
+      linkUserSessionIssuer: async (userSessionIssuerId: string) => {
+        const latest = await client.mcpServers.get({ id: mcpServer.id });
+        await client.mcpServers.update({
+          updateMcpServerForm: {
+            id: latest.id,
+            environmentId: latest.environmentId,
+            networkAccessMode: latest.networkAccessMode,
+            remoteMcpServerId: latest.remoteMcpServerId,
+            tunneledMcpServerId: latest.tunneledMcpServerId,
+            toolsetId: latest.toolsetId,
+            unproxiedMcpServerId: latest.unproxiedMcpServerId,
+            toolVariationsGroupId: latest.toolVariationsGroupId,
+            userSessionIssuerId,
+            visibility: latest.visibility,
+          },
+        });
+      },
       invalidate: async (queryClient: QueryClient) => {
         await Promise.all([
           invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
@@ -54,7 +78,7 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
         ]);
       },
     }),
-    [mcpServer],
+    [client, mcpServer],
   );
 }
 
@@ -65,6 +89,8 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
     () => ({
       slug: toolset.slug,
       projectId: toolset.projectId,
+      permissionResourceId: toolset.id,
+      supportsOrganizationIssuers: true,
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
         // Toolsets are already live, so linking only flips auth gating —
@@ -95,6 +121,8 @@ export function useMetaMcpAuthTarget(
     () => ({
       slug: slugSeed,
       projectId: metaMcpServer.projectId,
+      permissionResourceId: metaMcpServer.projectId,
+      supportsOrganizationIssuers: false,
       userSessionIssuerId: metaMcpServer.userSessionIssuerId ?? null,
       multipleProviders: true,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {

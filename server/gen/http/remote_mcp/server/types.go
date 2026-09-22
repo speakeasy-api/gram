@@ -23,6 +23,11 @@ type CreateServerRequestBody struct {
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The transport type for the remote MCP server (e.g. streamable-http)
 	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
+	// For createServerAndMcpServer, the ID of an existing project- or
+	// organization-owned user session issuer to attach to the linked MCP server.
+	// Omit to mint a project issuer. The source-only createServer method rejects
+	// this field.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 }
 
 // CreateServerAndMcpServerRequestBody is the type of the "remoteMcp" service
@@ -35,6 +40,11 @@ type CreateServerAndMcpServerRequestBody struct {
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The transport type for the remote MCP server (e.g. streamable-http)
 	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
+	// For createServerAndMcpServer, the ID of an existing project- or
+	// organization-owned user session issuer to attach to the linked MCP server.
+	// Omit to mint a project issuer. The source-only createServer method rejects
+	// this field.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 }
 
 // UpdateServerRequestBody is the type of the "remoteMcp" service
@@ -5225,9 +5235,10 @@ func NewDeleteServerHeaderGatewayErrorResponseBody(res *goa.ServiceError) *Delet
 // payload.
 func NewCreateServerPayload(body *CreateServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.CreateServerPayload {
 	v := &remotemcp.CreateServerPayload{
-		Name:          body.Name,
-		URL:           *body.URL,
-		TransportType: *body.TransportType,
+		Name:                body.Name,
+		URL:                 *body.URL,
+		TransportType:       *body.TransportType,
+		UserSessionIssuerID: body.UserSessionIssuerID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -5240,9 +5251,10 @@ func NewCreateServerPayload(body *CreateServerRequestBody, sessionToken *string,
 // createServerAndMcpServer endpoint payload.
 func NewCreateServerAndMcpServerPayload(body *CreateServerAndMcpServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.CreateServerAndMcpServerPayload {
 	v := &remotemcp.CreateServerAndMcpServerPayload{
-		Name:          body.Name,
-		URL:           *body.URL,
-		TransportType: *body.TransportType,
+		Name:                body.Name,
+		URL:                 *body.URL,
+		TransportType:       *body.TransportType,
+		UserSessionIssuerID: body.UserSessionIssuerID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -5426,6 +5438,9 @@ func ValidateCreateServerRequestBody(body *CreateServerRequestBody) (err error) 
 	if body.URL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
 	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
 	return
 }
 
@@ -5440,6 +5455,9 @@ func ValidateCreateServerAndMcpServerRequestBody(body *CreateServerAndMcpServerR
 	}
 	if body.URL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	return
 }

@@ -96,7 +96,11 @@ type ListUserSessionIssuersPayload struct {
 	// Pagination cursor: id of the last item from the previous page.
 	Cursor *string
 	// Page size (default 50, max 100).
-	Limit            *int
+	Limit *int
+	// Optional MCP server or toolset resource ID used to authorize callers with
+	// resource-scoped mcp:write access. The resource must belong to the selected
+	// project.
+	McpResourceID    *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

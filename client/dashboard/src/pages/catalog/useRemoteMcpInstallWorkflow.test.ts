@@ -13,6 +13,7 @@ const mockUnproxiedDeleteServer = vi.fn();
 const mockFetchImageFromURL = vi.fn();
 const mockMcpMetadataSet = vi.fn();
 const mockAutoConfigureRemoteMcpAuth = vi.fn();
+const mockUseEffectiveUserSessionIssuers = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
 const mockClient = {
@@ -57,6 +58,11 @@ vi.mock("@/contexts/Fetcher", () => ({
 vi.mock("@/pages/sources/remote-mcp/autoConfigureAuth", () => ({
   autoConfigureRemoteMcpAuth: (...args: unknown[]) =>
     mockAutoConfigureRemoteMcpAuth(...args),
+}));
+
+vi.mock("@/hooks/useEffectiveUserSessionIssuers", () => ({
+  useEffectiveUserSessionIssuers: (...args: unknown[]) =>
+    mockUseEffectiveUserSessionIssuers(...args),
 }));
 
 vi.mock("sonner", () => ({
@@ -137,6 +143,12 @@ const EMPTY_SERVERS: PulseMCPServer[] = [];
 describe("useRemoteMcpInstallWorkflow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseEffectiveUserSessionIssuers.mockReturnValue({
+      issuers: [],
+      organizationIssuers: [],
+      isLoading: false,
+      isError: false,
+    });
     mockUseRemoteMcpServers.mockReturnValue({
       data: undefined,
     } as ReturnType<typeof useRemoteMcpServers>);
@@ -398,6 +410,32 @@ describe("useRemoteMcpInstallWorkflow", () => {
       mcpServerParam: "mcp-server-slug",
     });
     expect(state.statuses[0]!.mcpEndpointUrl).toContain("/mcp/test-org-abc123");
+  });
+
+  it("uses an organization issuer for noninteractive catalog installs", async () => {
+    mockUseEffectiveUserSessionIssuers.mockReturnValue({
+      issuers: [{ id: "project-issuer" }, { id: "organization-issuer" }],
+      organizationIssuers: [{ id: "organization-issuer" }],
+      isLoading: false,
+      isError: false,
+    });
+    const servers = [makeServer({ title: "My Server" })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    expect(mockMcpServersCreate).toHaveBeenCalledWith(
+      {
+        createMcpServerForm: expect.objectContaining({
+          userSessionIssuerId: "organization-issuer",
+        }),
+      },
+      undefined,
+      undefined,
+    );
   });
 
   it("creates an unproxied MCP server for Figma instead of a remote one", async () => {

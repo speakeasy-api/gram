@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
 )
 
 const dashboardRemoteMCPInitialVisibility = "disabled"
@@ -44,9 +45,10 @@ type RemoteMCPProvisioningService struct {
 }
 
 type DashboardRemoteMCPProvisioningInput struct {
-	Name          *string
-	URL           string
-	TransportType string
+	Name                *string
+	URL                 string
+	TransportType       string
+	UserSessionIssuerID *string
 }
 
 type RemoteMCPProvisioningResult struct {
@@ -75,6 +77,10 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 
 	remoteName := normalizedRemoteMCPSourceName(input.Name)
 	displayName := remoteMCPDisplayName(input.URL, remoteName)
+	userSessionIssuerID, err := conv.PtrToNullUUID(input.UserSessionIssuerID)
+	if err != nil {
+		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id")
+	}
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -85,7 +91,11 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 	if err := requireLiveProjectForActiveOrganization(ctx, tx, authCtx); err != nil {
 		return RemoteMCPProvisioningResult{}, err
 	}
-	remote, err := createRemoteMCPSource(ctx, tx, s.audit, authCtx, remoteMCPSourceInput(input))
+	remote, err := createRemoteMCPSource(ctx, tx, s.audit, authCtx, remoteMCPSourceInput{
+		Name:          input.Name,
+		URL:           input.URL,
+		TransportType: input.TransportType,
+	})
 	if err != nil {
 		return RemoteMCPProvisioningResult{}, err
 	}
@@ -102,6 +112,7 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 		Visibility:            dashboardRemoteMCPInitialVisibility,
 		NetworkAccessMode:     networkaccess.ModePublicOnly,
 		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   userSessionIssuerID,
 		RemoteMCPServerID:     uuid.NullUUID{UUID: remote.ID, Valid: true},
 		TunneledMCPServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -109,6 +120,9 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
+		if errors.Is(err, usersessionbindings.ErrNotFound) {
+			return RemoteMCPProvisioningResult{}, oops.E(oops.CodeNotFound, err, "user session issuer not found")
+		}
 		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "materialize remote-backed MCP server")
 	}
 	if err := tx.Commit(ctx); err != nil {

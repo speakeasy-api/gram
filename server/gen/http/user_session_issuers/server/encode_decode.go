@@ -515,6 +515,7 @@ func DecodeListUserSessionIssuersRequest(mux goahttp.Muxer, decoder func(*http.R
 		var (
 			cursor           *string
 			limit            *int
+			mcpResourceID    *string
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
@@ -539,6 +540,13 @@ func DecodeListUserSessionIssuersRequest(mux goahttp.Muxer, decoder func(*http.R
 				limit = &pv
 			}
 		}
+		mcpResourceIDRaw := qp.Get("mcp_resource_id")
+		if mcpResourceIDRaw != "" {
+			mcpResourceID = &mcpResourceIDRaw
+		}
+		if mcpResourceID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_resource_id", *mcpResourceID, goa.FormatUUID))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -554,7 +562,7 @@ func DecodeListUserSessionIssuersRequest(mux goahttp.Muxer, decoder func(*http.R
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListUserSessionIssuersPayload(cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListUserSessionIssuersPayload(cursor, limit, mcpResourceID, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
