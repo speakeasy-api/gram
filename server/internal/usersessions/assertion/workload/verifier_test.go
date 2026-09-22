@@ -26,10 +26,12 @@ const (
 )
 
 type testKeys struct {
-	key *jose.JSONWebKey
+	key     *jose.JSONWebKey
+	lookups int
 }
 
 func (k *testKeys) VerificationKeyForAlgorithm(_ context.Context, _ jwks.Source, _ string, _ jose.SignatureAlgorithm) (*jose.JSONWebKey, error) {
+	k.lookups++
 	return k.key, nil
 }
 
@@ -57,12 +59,17 @@ type testSigner struct {
 	key    *jose.JSONWebKey
 }
 
-func newTestSigner(t *testing.T) testSigner {
+// newTestSigner sets the typ header to typ, which may be any JSON value; a
+// nil typ omits the header.
+func newTestSigner(t *testing.T, typ any) testSigner {
 	t.Helper()
 	private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.ES256, Key: private},
-		(&jose.SignerOptions{}).WithType("JWT").WithHeader(jose.HeaderKey("kid"), "key-1"))
+	opts := (&jose.SignerOptions{}).WithHeader(jose.HeaderKey("kid"), "key-1")
+	if typ != nil {
+		opts = opts.WithHeader(jose.HeaderType, typ)
+	}
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.ES256, Key: private}, opts)
 	require.NoError(t, err)
 	return testSigner{signer: signer, key: &jose.JSONWebKey{Key: private.Public(), KeyID: "key-1", Algorithm: string(jose.ES256), Use: "sig"}}
 }
@@ -87,25 +94,28 @@ func (s testSigner) sign(t *testing.T, claims jwt.Claims, extra any) string {
 	return raw
 }
 
-func newTestVerifier(t *testing.T, signer testSigner) (*Verifier, *testGuard, Expectation) {
+// newTestVerifier also returns the key resolver, whose lookups count every key
+// resolution the verifier attempts.
+func newTestVerifier(t *testing.T, signer testSigner) (*Verifier, *testKeys, *testGuard, Expectation) {
 	t.Helper()
 	source, err := jwks.NewRemoteSource("https://platform.example.com/jwks")
 	require.NoError(t, err)
 	guard := &testGuard{seen: make(map[replay.Key]bool), maxHold: assertioncore.ReplayHoldFor(4 * time.Hour), err: nil}
-	verifier, err := NewVerifier(&testKeys{key: signer.key}, guard)
+	keys := &testKeys{key: signer.key, lookups: 0}
+	verifier, err := NewVerifier(keys, guard)
 	require.NoError(t, err)
 	expect := Expectation{
 		Issuer: testIssuer, Subject: testSubject, KeySource: source,
 		ReplayIssuer: "user-session-issuer-1", ReplayParty: "workload-issuer-1",
 		Audiences: []string{testAudience}, MaxLifetime: 4 * time.Hour,
 	}
-	return verifier, guard, expect
+	return verifier, keys, guard, expect
 }
 
 func TestVerifyCachedPlatformTokenCanBeReusedByDigest(t *testing.T) {
 	t.Parallel()
-	signer := newTestSigner(t)
-	verifier, _, expect := newTestVerifier(t, signer)
+	signer := newTestSigner(t, "JWT")
+	verifier, _, _, expect := newTestVerifier(t, signer)
 	raw := signer.sign(t, testClaims(), nil)
 	first, err := verifier.Verify(t.Context(), raw, expect)
 	require.NoError(t, err)
@@ -117,8 +127,8 @@ func TestVerifyCachedPlatformTokenCanBeReusedByDigest(t *testing.T) {
 
 func TestVerifyUTIIsSingleUse(t *testing.T) {
 	t.Parallel()
-	signer := newTestSigner(t)
-	verifier, _, expect := newTestVerifier(t, signer)
+	signer := newTestSigner(t, "JWT")
+	verifier, _, _, expect := newTestVerifier(t, signer)
 	raw := signer.sign(t, testClaims(), map[string]any{"uti": uuid.NewString()})
 	_, err := verifier.Verify(t.Context(), raw, expect)
 	require.NoError(t, err)
@@ -128,8 +138,8 @@ func TestVerifyUTIIsSingleUse(t *testing.T) {
 
 func TestVerifyJTIPrecedesUTI(t *testing.T) {
 	t.Parallel()
-	signer := newTestSigner(t)
-	verifier, _, expect := newTestVerifier(t, signer)
+	signer := newTestSigner(t, "JWT")
+	verifier, _, _, expect := newTestVerifier(t, signer)
 	claims := testClaims()
 	claims.ID = uuid.NewString()
 	first := signer.sign(t, claims, map[string]any{"uti": "first"})
@@ -142,8 +152,8 @@ func TestVerifyJTIPrecedesUTI(t *testing.T) {
 
 func TestVerifyUnreadableUTIFallsBackToDigest(t *testing.T) {
 	t.Parallel()
-	signer := newTestSigner(t)
-	verifier, _, expect := newTestVerifier(t, signer)
+	signer := newTestSigner(t, "JWT")
+	verifier, _, _, expect := newTestVerifier(t, signer)
 	raw := signer.sign(t, testClaims(), map[string]any{"uti": []string{"unexpected"}})
 	_, err := verifier.Verify(t.Context(), raw, expect)
 	require.NoError(t, err)
@@ -154,8 +164,8 @@ func TestVerifyUnreadableUTIFallsBackToDigest(t *testing.T) {
 
 func TestVerifyIssuerAndSubjectAreIndependent(t *testing.T) {
 	t.Parallel()
-	signer := newTestSigner(t)
-	verifier, _, expect := newTestVerifier(t, signer)
+	signer := newTestSigner(t, "JWT")
+	verifier, _, _, expect := newTestVerifier(t, signer)
 	claims := testClaims()
 	claims.Subject = "repo:other/deploy"
 	_, err := verifier.Verify(t.Context(), signer.sign(t, claims, nil), expect)
@@ -168,8 +178,8 @@ func TestVerifyIssuerAndSubjectAreIndependent(t *testing.T) {
 
 func TestVerifyReplayIdentifierIsScopedToWorkloadSubject(t *testing.T) {
 	t.Parallel()
-	signer := newTestSigner(t)
-	verifier, _, expect := newTestVerifier(t, signer)
+	signer := newTestSigner(t, "JWT")
+	verifier, _, _, expect := newTestVerifier(t, signer)
 	first := testClaims()
 	first.ID = uuid.NewString()
 	_, err := verifier.Verify(t.Context(), signer.sign(t, first, nil), expect)
@@ -184,8 +194,8 @@ func TestVerifyReplayIdentifierIsScopedToWorkloadSubject(t *testing.T) {
 
 func TestVerifyRejectsAnotherAuthorizationServerAudience(t *testing.T) {
 	t.Parallel()
-	signer := newTestSigner(t)
-	verifier, _, expect := newTestVerifier(t, signer)
+	signer := newTestSigner(t, "JWT")
+	verifier, _, _, expect := newTestVerifier(t, signer)
 	claims := testClaims()
 	claims.Audience = jwt.Audience{"https://gram.example.com/mcp/other"}
 	_, err := verifier.Verify(t.Context(), signer.sign(t, claims, nil), expect)
@@ -194,8 +204,8 @@ func TestVerifyRejectsAnotherAuthorizationServerAudience(t *testing.T) {
 
 func TestVerifyWorkloadLifetimeIsIndependentOfClientCeiling(t *testing.T) {
 	t.Parallel()
-	signer := newTestSigner(t)
-	verifier, guard, expect := newTestVerifier(t, signer)
+	signer := newTestSigner(t, "JWT")
+	verifier, _, guard, expect := newTestVerifier(t, signer)
 	claims := testClaims()
 	claims.Expiry = jwt.NewNumericDate(time.Now().Add(3 * time.Hour))
 	raw := signer.sign(t, claims, nil)
@@ -208,9 +218,61 @@ func TestVerifyWorkloadLifetimeIsIndependentOfClientCeiling(t *testing.T) {
 
 func TestVerifyReplayStoreFailureIsClosed(t *testing.T) {
 	t.Parallel()
-	signer := newTestSigner(t)
-	verifier, guard, expect := newTestVerifier(t, signer)
+	signer := newTestSigner(t, "JWT")
+	verifier, _, guard, expect := newTestVerifier(t, signer)
 	guard.err = errors.New("store unavailable")
 	_, err := verifier.Verify(t.Context(), signer.sign(t, testClaims(), nil), expect)
 	require.Equal(t, ReasonReplayStoreUnavailable, ReasonOf(err))
+}
+
+func TestVerifyRefusesNonBearerTypesBeforeKeyResolution(t *testing.T) {
+	t.Parallel()
+	for _, typ := range []string{
+		"wit+jwt",
+		"WIT+JWT",
+		"application/wit+jwt",
+		"Application/WIT+JWT",
+		"at+jwt",
+		"AT+JWT",
+		"application/at+jwt",
+		" at+jwt ",
+		"application/at+jwt; charset=utf-8",
+	} {
+		signer := newTestSigner(t, typ)
+		verifier, keys, guard, expect := newTestVerifier(t, signer)
+		_, err := verifier.Verify(t.Context(), signer.sign(t, testClaims(), nil), expect)
+		require.Equal(t, ReasonTypeNotBearer, ReasonOf(err), "typ %q", typ)
+		require.Zero(t, keys.lookups, "typ %q must be refused before any key is resolved", typ)
+		require.Empty(t, guard.seen, "typ %q must be refused before its identifier is spent", typ)
+	}
+}
+
+func TestVerifyAcceptsBearerTypes(t *testing.T) {
+	t.Parallel()
+	for _, typ := range []any{
+		nil,
+		"JWT",
+		"jwt",
+		"application/jwt",
+		"JOSE",
+		"authorization-grant+jwt",
+		"application/authorization-grant+jwt",
+		"wit+jwt-proof",
+		"at+jwt+extra",
+	} {
+		signer := newTestSigner(t, typ)
+		verifier, keys, _, expect := newTestVerifier(t, signer)
+		_, err := verifier.Verify(t.Context(), signer.sign(t, testClaims(), nil), expect)
+		require.NoError(t, err, "typ %v", typ)
+		require.Equal(t, 1, keys.lookups, "typ %v", typ)
+	}
+}
+
+func TestVerifyRefusesNonStringType(t *testing.T) {
+	t.Parallel()
+	signer := newTestSigner(t, 42)
+	verifier, keys, _, expect := newTestVerifier(t, signer)
+	_, err := verifier.Verify(t.Context(), signer.sign(t, testClaims(), nil), expect)
+	require.Equal(t, ReasonMalformed, ReasonOf(err))
+	require.Zero(t, keys.lookups)
 }

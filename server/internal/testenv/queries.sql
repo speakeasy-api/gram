@@ -1088,3 +1088,29 @@ SELECT
    WHERE at.project_id = @project_id AND at.assistant_id = @assistant_id) AS toolsets,
   (SELECT count(*) FROM assistant_mcp_servers ams
    WHERE ams.project_id = @project_id AND ams.assistant_id = @assistant_id) AS mcp_servers;
+
+-- name: SetUserSessionIssuerUseAuthenticationHostFixture :execrows
+-- Project-scoped issuers carry no organization_id, so their tenancy is read
+-- through the project.
+UPDATE user_session_issuers AS issuer
+SET use_authentication_host = @use_authentication_host
+WHERE issuer.id = @issuer_id
+  AND COALESCE(
+    issuer.organization_id,
+    (SELECT p.organization_id FROM projects AS p WHERE p.id = issuer.project_id)
+  ) = @organization_id::text;
+
+-- name: CreateWorkloadIssuerFixture :one
+INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri)
+VALUES (@organization_id, sqlc.narg(project_id), @name, @issuer, @jwks_uri)
+RETURNING id;
+
+-- name: CreateWorkloadIdentityAdmissionFixture :exec
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject)
+VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject);
+
+-- name: SoftDeleteWorkloadIssuerFixture :execrows
+UPDATE workload_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id;
