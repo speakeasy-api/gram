@@ -377,8 +377,12 @@ func (s *Service) serveLegacyToolsetProtectedResource(ctx context.Context, w htt
 // keys the emitted issuer / endpoint URLs onto the legacy /oauth/{slug}
 // surface.
 func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, toolset *toolsets_repo.Toolset, oauthSlug, resourceURL string) error {
-	// Legacy toolsets have no user session issuer to opt in to the
-	// authentication host, so their metadata never names it.
+	// Only a toolset with no user session issuer reaches this path. Its
+	// metadata describes the legacy OAuth configuration (an external
+	// authorization server or the OAuth proxy), and it has no issuer to set
+	// use_authentication_host on, so the authentication host never serves it.
+	// A toolset gated by a user session issuer is served through
+	// ServeGetAuthorizationServer like every other backend.
 	if OnAuthenticationHost(ctx) {
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 	}
