@@ -532,6 +532,38 @@ func TestMCPListSnapshot_BoundToOwner(t *testing.T) {
 	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "another org's snapshot is ignored")
 }
 
+// A caller with no tenant scope may seed a session no tenant owns, but never
+// take over one a tenant already owns — otherwise it could overwrite another
+// organization's session inventory.
+func TestMCPListSnapshot_UnscopedWriterCannotTakeOverOwnedSnapshot(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := "owned-snapshot-" + uuid.NewString()
+	ti.service.cacheCanonicalMCPList(ctx, sessionID, []MCPServerEntry{testMCPEntry("human")}, true)
+
+	// The shape Claude's SessionStart capture has before project auth resolves.
+	ti.service.cacheCanonicalMCPList(t.Context(), sessionID, []MCPServerEntry{testMCPEntry("intruder")}, true)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Equal(t, "human", entries[0].Name, "an unscoped writer never takes over an owned snapshot")
+}
+
+// The other half of that rule: an unowned session may still be seeded without
+// tenant scope, and a scoped reader can consume it.
+func TestMCPListSnapshot_UnscopedWriterSeedsUnownedSnapshot(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := "unowned-seed-" + uuid.NewString()
+	ti.service.cacheCanonicalMCPList(t.Context(), sessionID, []MCPServerEntry{testMCPEntry("seeded")}, true)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Equal(t, "seeded", entries[0].Name, "an unowned session can still be seeded")
+}
+
 func TestGetCachedMCPList_OwnerNotFoundIsMiss(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

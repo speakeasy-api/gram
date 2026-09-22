@@ -143,10 +143,20 @@ func (o mcpListOwner) isAgent() bool {
 	return err == nil && principal.Type == urn.PrincipalTypeAgent
 }
 
-// shares reports whether o and other may use one session's snapshot: known
-// scopes must agree, and an agent-owned snapshot belongs to that agent alone.
+// shares reports whether o and other may use one session's snapshot, where o
+// is always the recorded owner: known scopes must agree, and an agent-owned
+// snapshot belongs to that agent alone.
+//
+// The comparison is deliberately asymmetric. A caller with no tenant scope may
+// seed a session no tenant owns — Claude's SessionStart capture runs before
+// project auth resolves, and that inventory would otherwise be lost — but it
+// may never take over a session a tenant already owns, which is how one tenant
+// could otherwise overwrite or consume another's inventory.
 func (o mcpListOwner) shares(other mcpListOwner) bool {
 	if o.ProjectID != "" && other.ProjectID != "" && (o.OrgID != other.OrgID || o.ProjectID != other.ProjectID) {
+		return false
+	}
+	if o.ProjectID != "" && other.ProjectID == "" {
 		return false
 	}
 	if o.isAgent() || other.isAgent() {
