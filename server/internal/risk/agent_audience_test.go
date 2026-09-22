@@ -55,6 +55,25 @@ func agentRequestContextWithID(t *testing.T, ctx context.Context, ti *testInstan
 	return contextvalues.WithPrincipalAPIKeyAuthorization(ctx, &clone, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), credential), agent.ID
 }
 
+// newShadowMCPTestScanner builds the scanner these audience tests share, so a
+// change to its wiring updates one place rather than every case.
+func newShadowMCPTestScanner(t *testing.T, ti *testInstance) *risk.Scanner {
+	t.Helper()
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
+		nil,
+		nil,
+		nil,
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	require.NoError(t, err)
+	return scanner
+}
+
 func TestScanner_LookupShadowMCPBlockingPolicy_AgentRoleAudience(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -85,18 +104,7 @@ func TestScanner_LookupShadowMCPBlockingPolicy_AgentRoleAudience(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	scanner, err := risk.NewScanner(
-		testenv.NewLogger(t),
-		testenv.NewTracerProvider(t),
-		testenv.NewMeterProvider(t),
-		ti.conn,
-		newTestCustomRuleAnalyzer(t, ti.conn),
-		nil,
-		nil,
-		nil,
-		nil,
-		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-	require.NoError(t, err)
+	scanner := newShadowMCPTestScanner(t, ti)
 
 	memberCtx := agentRequestContext(t, ctx, ti, "Role member agent", role.RoleUrn)
 	memberPolicy, err := scanner.LookupShadowMCPBlockingPolicy(memberCtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "")

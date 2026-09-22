@@ -316,6 +316,16 @@ func stripAgentIdentity(ctx context.Context, attrs map[attr.Key]any) {
 	}
 }
 
+// sanitizeResourceAttrs applies the row rules to an OTLP resource's
+// attributes: client-supplied actor keys are always dropped, along with an
+// agent's self-reported identity. The trusted actor is stamped per record, so
+// it is not repeated here.
+func sanitizeResourceAttrs(ctx context.Context, attrs map[attr.Key]any) {
+	delete(attrs, attr.AuthorizationActorTypeKey)
+	delete(attrs, attr.AuthorizationActorIDKey)
+	stripAgentIdentity(ctx, attrs)
+}
+
 // withAgentActor strips client-supplied actor attributes (and, for agents,
 // self-reported identity) from a telemetry row, then stamps the trusted agent
 // actor when one authenticated the request.

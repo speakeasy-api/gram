@@ -424,7 +424,7 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 		}
 
 		resourceAttrs := resourceAttributesMap(resourceLog.Resource)
-		stripAgentIdentity(ctx, resourceAttrs)
+		sanitizeResourceAttrs(ctx, resourceAttrs)
 		resourceServiceName := stringAttr(resourceAttrs, attr.ServiceNameKey)
 
 		for _, scopeLog := range resourceLog.ScopeLogs {

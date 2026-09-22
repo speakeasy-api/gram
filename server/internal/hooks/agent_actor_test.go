@@ -501,7 +501,7 @@ func testMCPEntry(name string) MCPServerEntry {
 func TestMCPListSnapshot_BoundToOwner(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	_, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	agentCtx := agentKeyContext(t, ctx, ti)
 
@@ -530,7 +530,6 @@ func TestMCPListSnapshot_BoundToOwner(t *testing.T) {
 	}, time.Hour))
 	_, err = ti.service.getCachedMCPList(ctx, otherOrgSession)
 	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "another org's snapshot is ignored")
-	require.NotNil(t, authCtx.ProjectID)
 }
 
 func TestGetCachedMCPList_OwnerNotFoundIsMiss(t *testing.T) {

@@ -173,7 +173,7 @@ func (s *Service) writeCodexOTELLogsToClickHouse(ctx context.Context, payload *g
 		}
 
 		resourceAttrs := resourceAttributesMap(resourceLog.Resource)
-		stripAgentIdentity(ctx, resourceAttrs)
+		sanitizeResourceAttrs(ctx, resourceAttrs)
 		resourceServiceName := stringAttr(resourceAttrs, attr.ServiceNameKey)
 
 		for _, scopeLog := range resourceLog.ScopeLogs {
@@ -282,7 +282,7 @@ func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *ge
 		}
 
 		resourceAttrs := resourceAttributesMap(resourceMetric.Resource)
-		stripAgentIdentity(ctx, resourceAttrs)
+		sanitizeResourceAttrs(ctx, resourceAttrs)
 
 		for _, scopeMetric := range resourceMetric.ScopeMetrics {
 			if scopeMetric == nil {

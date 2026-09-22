@@ -537,9 +537,15 @@ func (s *Service) parseMCPInventoryFromPayload(ctx context.Context, payload *gen
 }
 
 // cacheMCPListSnapshot stores the parsed inventory and agent variant under the
-// session's cache keys. Shared by the SessionStart/ConfigChange capture path
-// and the PreToolUse enforcement resolver, so a payload-carried inventory
-// self-heals the cache that the best-effort telemetry path later reads.
+// session's cache keys and reports whether the caller owns this session's
+// snapshot. Shared by the SessionStart/ConfigChange capture path and the
+// PreToolUse enforcement resolver, so a payload-carried inventory self-heals
+// the cache that the best-effort telemetry path later reads.
+//
+// A cache write failure is logged but still reports ownership: the shadow-MCP
+// inventory row the caller persists next is independent security evidence and
+// must survive a transient Redis error. Only an ownership or authentication
+// mismatch refuses.
 func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, entries []MCPServerEntry, variant string) bool {
 	if !s.claimMCPListSnapshot(ctx, sessionID) {
 		return false
@@ -550,7 +556,6 @@ func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, en
 			attr.SlogEvent("claude_hook_mcp_list_cache_set_failed"),
 			attr.SlogError(err),
 		)
-		return false
 	}
 
 	variantKey := sessionAgentVariantCacheKey(sessionID)

@@ -36,6 +36,13 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) ([]*gen.Se
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	// Display-name overrides are a human surface. An agent key admitted for
+	// plugin sync or hook ingest carries project grants for those jobs, and
+	// those grants must not also open this one.
+	if isAgentActor(ctx) {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
@@ -70,6 +77,11 @@ func (s *Service) Upsert(ctx context.Context, payload *gen.UpsertPayload) (*gen.
 
 	if authCtx.ProjectID == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "project_id required")
+	}
+
+	// A human surface: see List.
+	if isAgentActor(ctx) {
+		return nil, oops.C(oops.CodeForbidden)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
@@ -113,6 +125,11 @@ func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error 
 
 	if authCtx.ProjectID == nil {
 		return oops.E(oops.CodeBadRequest, nil, "project_id required")
+	}
+
+	// A human surface: see List.
+	if isAgentActor(ctx) {
+		return oops.C(oops.CodeForbidden)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
