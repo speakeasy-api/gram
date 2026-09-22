@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -156,22 +157,22 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 	return s.ServeToken(w, r, endpoint)
 }
 
-// tokenClientAuth is what a token grant requires of the calling client. The
-// zero value declares nothing, and serveTokenGrant refuses a grant carrying
-// it, so a grant that omits its requirement fails closed.
-type tokenClientAuth int
+// tokenClientAuth is what a token grant requires of the calling client.
+// serveTokenGrant dispatches only the declared values below, so a grant that
+// omits its requirement, or names an unknown one, fails closed.
+type tokenClientAuth string
 
 const (
-	// tokenClientAuthUndeclared is the zero value and is never dispatched.
-	tokenClientAuthUndeclared tokenClientAuth = iota
+	// tokenClientAuthUndeclared declares nothing and is never dispatched.
+	tokenClientAuthUndeclared tokenClientAuth = "undeclared"
 
 	// tokenClientAuthRequired runs client resolution, CIMD admission, client
 	// authentication and the Shadow AI block check before the grant handler.
-	tokenClientAuthRequired
+	tokenClientAuthRequired tokenClientAuth = "required"
 
 	// tokenClientAuthNone dispatches without resolving or authenticating a
 	// client, for a caller that holds no client registration.
-	tokenClientAuthNone
+	tokenClientAuthNone tokenClientAuth = "none"
 )
 
 type tokenGrantAuthenticatedHandler func(
@@ -189,9 +190,7 @@ type tokenGrantClientlessHandler func(
 	ctx context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
-	endpoint *ResolvedMcpEndpoint,
 	creds presentedClientCredentials,
-	baseURL string,
 	logger *slog.Logger,
 ) error
 
@@ -269,8 +268,8 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	grant, ok := s.tokenGrantFor(r, grantType, creds)
 	if !ok {
 		clientID, _ := resolvePresentedClientID(creds)
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, creds.method, grantType, "unsupported_grant_type")
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, creds.method, grantType, oautherr.CodeUnsupportedGrantType)
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
 	}
 	return s.serveTokenGrant(ctx, w, r, endpoint, logger, grantType, creds, grant)
 }
@@ -303,9 +302,9 @@ func (s *Service) serveTokenGrant(
 		}
 		return grant.authenticated(ctx, w, r, endpoint, clientRow, baseURL, creds.method, logger)
 	case grant.clientAuth == tokenClientAuthNone && grant.clientless != nil:
-		return grant.clientless(ctx, w, r, endpoint, creds, baseURL, logger)
+		return grant.clientless(ctx, w, r, creds, logger)
 	default:
-		err := fmt.Errorf("token grant %q has client authentication %d without a matching handler", grantType, grant.clientAuth)
+		err := fmt.Errorf("token grant %q has client authentication %q without a matching handler", grantType, grant.clientAuth)
 		return oops.E(oops.CodeUnexpected, err, "dispatch token grant").LogError(ctx, logger)
 	}
 }
@@ -316,13 +315,11 @@ func refuseClientlessTokenGrant(
 	ctx context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
-	_ *ResolvedMcpEndpoint,
 	creds presentedClientCredentials,
-	_ string,
 	logger *slog.Logger,
 ) error {
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", creds.clientID, creds.method, r.PostForm.Get("grant_type"), "missing_client_id")
-	return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
+	return writeTokenError(ctx, w, logger, http.StatusUnauthorized, oautherr.CodeInvalidClient, "client_id is required")
 }
 
 // authenticateTokenClient resolves and authenticates the client a token
