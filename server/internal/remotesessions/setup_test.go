@@ -75,6 +75,7 @@ func TestMain(m *testing.M) {
 	}
 
 	infra = res
+	remotesessions.DelegationTestDatabase = res.CloneTestDatabase
 
 	code := m.Run()
 

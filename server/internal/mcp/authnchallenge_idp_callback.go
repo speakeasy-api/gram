@@ -105,6 +105,15 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	}
 	s.recordPrivateOAuthAuthority(ctx, challengeState.Endpoint.Authority, authorityStarted, nil)
 
+	// Ready bootstrap URLs carry no browser proof themselves. Check the
+	// host-only callback cookie before consuming state so a copied URL cannot
+	// prevent the initiating browser from completing its login (including retries).
+	if federation := challengeState.Federation; federation != nil && federation.StartPhase == "ready" {
+		if err := validateChallengeBrowser(r, challengeState, true); err != nil {
+			return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageIDPCallback, oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Login browser binding is invalid. Restart login", false)
+		}
+	}
+
 	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
@@ -140,6 +149,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	}
 	// Resolve through the live endpoint organization; a callback cannot select
 	// a provider, and an in-flight challenge can never switch to or from WorkOS.
+	optionalRefused := false
 	provider, trustedIssuerID, trustedClientID, configuration, err := s.federatedProvider(ctx, endpoint)
 	if err != nil {
 		return failFederationDependency(err, "Login configuration is unavailable. Restart login or contact your administrator")
@@ -184,9 +194,14 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// WorkOS error propagation below is intentionally unchanged.
 		if q.Get("error") != "" {
 			if q.Get("error") == "access_denied" {
-				return finishFederation(oops.CodeForbidden, nil, "Login was declined", true)
+				if federation.OfflineRequested && federation.ValidatedUserID != "" && federation.ValidatedIdentity != nil && q.Get("code") == "" {
+					optionalRefused = true
+				} else {
+					return finishFederation(oops.CodeForbidden, nil, "Login was declined", true)
+				}
+			} else {
+				return finishFederation(oops.CodeGatewayError, errors.New("federated provider returned an error"), "Federated login failed. Contact your administrator", false)
 			}
-			return finishFederation(oops.CodeGatewayError, errors.New("federated provider returned an error"), "Federated login failed. Contact your administrator", false)
 		}
 	}
 
@@ -195,7 +210,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// client with the same error code so the client can render an
 	// appropriate message instead of seeing a generic "state and code are
 	// required" 400.
-	if idpErr := q.Get("error"); idpErr != "" {
+	if idpErr := q.Get("error"); idpErr != "" && !optionalRefused {
 		errDescription := q.Get("error_description")
 		// First-party challenges have no MCP client to bounce the error back to
 		// (no RedirectURI), so surface it directly. Declines are forbidden;
@@ -246,7 +261,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	code := q.Get("code")
-	if code == "" {
+	if code == "" && !optionalRefused {
 		if challengeState.Federation != nil {
 			return finishFederation(oops.CodeBadRequest, remotesessions.ErrFederatedIdentity, "Invalid login response", false)
 		}
@@ -259,11 +274,17 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	var gramUserID string
 	impersonated := false
 	if federation := challengeState.Federation; federation != nil {
-		verified, err := s.remoteChallengeMgr.ExchangeFederatedCode(ctx, provider, federation.CallbackURL, code, federation.Nonce, federation.Verifier)
-		if err != nil {
-			return failFederationDependency(err, "Federated identity verification failed. Restart login or contact your administrator")
+		verified := federation.ValidatedIdentity
+		if !optionalRefused {
+			verified, err = s.remoteChallengeMgr.ExchangeFederatedCode(ctx, provider, federation.CallbackURL, code, federation.Nonce, federation.Verifier)
+			if err != nil {
+				return failFederationDependency(err, "Federated identity verification failed. Restart login or contact your administrator")
+			}
+			defer verified.DiscardCredentials()
 		}
-		defer verified.DiscardCredentials()
+		if (federation.OfflineRequested || federation.ExplicitRetry) && (federation.ValidatedIdentity == nil || verified == nil || verified.Issuer != federation.ValidatedIdentity.Issuer || verified.Subject != federation.ValidatedIdentity.Subject) {
+			return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "The offline consent account must match the login account", false)
+		}
 		federatedIdentity = verified
 		gramUserID, err = s.resolveFederatedHuman(ctx, endpoint, verified)
 		if err != nil {
@@ -272,6 +293,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 				return finishFederation(oops.CodeForbidden, errors.New("federated user is not provisioned"), "Your account is not provisioned for this organization. Contact your administrator", false)
 			}
 			return failFederationDependency(err, "Identity verification is temporarily unavailable. Restart login")
+		}
+		if (federation.OfflineRequested || federation.ExplicitRetry) && gramUserID != federation.ValidatedUserID {
+			return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "The offline consent account must match the login account", false)
 		}
 		// Hold only in this stack frame until organization authorization below.
 	} else {
@@ -323,12 +347,57 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 			return finishFederation(oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration, "Login configuration changed. Restart login", false)
 		}
 		if s.federatedLoginConsumer != nil {
-			err := s.federatedLoginConsumer.ConsumeFederatedLogin(ctx, AuthorizedFederatedLogin{
+			policy, err := current.OfflinePolicy()
+			if err != nil {
+				return failFederationDependency(err, "Login configuration is unavailable. Restart login")
+			}
+			if federation.OfflineRequested && federation.ConfigurationHash != policy.ConfigurationHash {
+				return finishFederation(oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration, "Login configuration changed. Restart login", false)
+			}
+
+			handedIdentity := federatedIdentity
+			if optionalRefused {
+				handedIdentity = nil
+			}
+			err = s.federatedLoginConsumer.ConsumeFederatedLogin(ctx, AuthorizedFederatedLogin{
 				OrganizationID: endpoint.OrganizationID, UserID: gramUserID, UserSessionIssuerID: challengeState.UserSessionIssuerID,
-				TrustedIssuerID: federation.IssuerID, TrustedClientID: federation.ClientID, Identity: federatedIdentity,
+				TrustedIssuerID: federation.IssuerID, TrustedClientID: federation.ClientID, Identity: handedIdentity,
+				Provider: current, ConfigurationHash: policy.ConfigurationHash, OfflineRequested: federation.OfflineRequested, OptionalRefused: optionalRefused,
 			})
 			if err != nil {
 				return finishFederation(oops.CodeUnavailable, errors.New("federated credential handoff failed"), "Login credential handoff failed. Restart login", false)
+			}
+			// Observe policy after retention: an unsolicited refresh credential from
+			// minimal login can make the optional consent request unnecessary.
+			requestOffline := false
+			if lookup, ok := s.federatedLoginConsumer.(FederatedOfflinePolicy); ok && policy.Enabled && !federation.OfflineRequested {
+				requestOffline, err = lookup.ShouldRequestFederatedOffline(ctx, FederatedOfflineRequest{
+					Provider: current, OrganizationID: endpoint.OrganizationID, UserID: gramUserID,
+					TrustedIssuerID: federation.IssuerID, TrustedClientID: federation.ClientID,
+					ConfigurationHash: policy.ConfigurationHash, ExplicitRetry: federation.ExplicitRetry,
+				})
+				if err != nil {
+					// Optional policy storage must not invalidate the retained base login.
+					// An unknown policy never authorizes an additional consent prompt.
+					requestOffline = false
+				}
+			}
+			if requestOffline {
+				// The first login is already retained. Cache identity only, never tokens,
+				// and allow exactly one more authorization round trip for this challenge.
+				federation.ValidatedUserID = gramUserID
+				federation.ValidatedIdentity = &remotesessions.FederatedIdentity{ExpiresAt: time.Time{}, Nonce: "", Issuer: federatedIdentity.Issuer, Subject: federatedIdentity.Subject, Email: federatedIdentity.Email, EmailVerified: federatedIdentity.EmailVerified}
+				federation.OfflineRequested = true
+				federation.ConfigurationHash = policy.ConfigurationHash
+				federation.Nonce, err = generateOpaqueToken()
+				if err != nil {
+					return failFederationDependency(err, "Login is unavailable. Restart login")
+				}
+				federation.Verifier, err = generateOpaqueToken()
+				if err != nil {
+					return failFederationDependency(err, "Login is unavailable. Restart login")
+				}
+				return s.startFederatedLogin(w, r, &challengeState, current)
 			}
 		}
 	}
@@ -343,6 +412,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	challengeState.ID = uuid.NewString()
 	challengeState.Subject = &subject
 	challengeState.AuthorizerUserID = gramUserID
+	if federation := challengeState.Federation; federation != nil {
+		challengeState.FederatedBinding = &FederatedConsentBinding{IssuerID: federation.IssuerID, ClientID: federation.ClientID, Issuer: federatedIdentity.Issuer, Subject: federatedIdentity.Subject}
+	}
 	challengeState.Federation = nil // Drop nonce and PKCE; Browser must survive consent and remote linking.
 	challengeState.AuthorizerImpersonated = &impersonated
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {

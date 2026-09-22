@@ -30,6 +30,7 @@ import (
 // There is deliberately no provider-wide current nonce or current secret.
 type federationToken struct {
 	nonce, email, issuer, secret, challenge string
+	subject                                 string
 	expectPKCERejection                     bool
 	verified                                bool
 }
@@ -127,7 +128,11 @@ func (p *federationProvider) serveHTTP(issuer string, w http.ResponseWriter, r *
 			}
 			return
 		}
-		raw, err := jwt.Signed(p.signer).Claims(jwt.Claims{Issuer: token.issuer, Subject: "upstream-human", Audience: jwt.Audience{"selected-client"}, IssuedAt: jwt.NewNumericDate(time.Now()), Expiry: jwt.NewNumericDate(time.Now().Add(time.Minute))}).Claims(map[string]any{"nonce": token.nonce, "email": token.email, "email_verified": token.verified}).Serialize()
+		subject := token.subject
+		if subject == "" {
+			subject = "upstream-human"
+		}
+		raw, err := jwt.Signed(p.signer).Claims(jwt.Claims{Issuer: token.issuer, Subject: subject, Audience: jwt.Audience{"selected-client"}, IssuedAt: jwt.NewNumericDate(time.Now()), Expiry: jwt.NewNumericDate(time.Now().Add(time.Minute))}).Claims(map[string]any{"nonce": token.nonce, "email": token.email, "email_verified": token.verified}).Serialize()
 		if err != nil {
 			p.errors = append(p.errors, fmt.Errorf("sign token: %w", err))
 			http.Error(w, "sign token failed", http.StatusInternalServerError)

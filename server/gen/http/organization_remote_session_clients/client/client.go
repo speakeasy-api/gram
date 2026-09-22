@@ -26,6 +26,10 @@ type Client struct {
 	// endpoint.
 	GetClientDoer goahttp.Doer
 
+	// GetClientDelegationStatus Doer is the HTTP client used to make requests to
+	// the getClientDelegationStatus endpoint.
+	GetClientDelegationStatusDoer goahttp.Doer
+
 	// GetClientDeletePreflight Doer is the HTTP client used to make requests to
 	// the getClientDeletePreflight endpoint.
 	GetClientDeletePreflightDoer goahttp.Doer
@@ -89,6 +93,7 @@ func NewClient(
 	return &Client{
 		ListClientsDoer:               doer,
 		GetClientDoer:                 doer,
+		GetClientDelegationStatusDoer: doer,
 		GetClientDeletePreflightDoer:  doer,
 		ListClientMcpServersDoer:      doer,
 		CreateClientDoer:              doer,
@@ -150,6 +155,31 @@ func (c *Client) GetClient() goa.Endpoint {
 		resp, err := c.GetClientDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationRemoteSessionClients", "getClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetClientDelegationStatus returns an endpoint that makes HTTP requests to
+// the organizationRemoteSessionClients service getClientDelegationStatus
+// server.
+func (c *Client) GetClientDelegationStatus() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetClientDelegationStatusRequest(c.encoder)
+		decodeResponse = DecodeGetClientDelegationStatusResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetClientDelegationStatusRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetClientDelegationStatusDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionClients", "getClientDelegationStatus", err)
 		}
 		return decodeResponse(resp)
 	}

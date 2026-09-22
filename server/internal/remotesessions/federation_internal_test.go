@@ -193,14 +193,15 @@ func TestFederatedEffectiveScopes(t *testing.T) {
 	p := federatedFixture(t)
 	p.client.Scope = []string{"profile"}
 	p.issuer.ScopeOverride = []string{"openid", "email", "override", "offline_access"}
+	_, err := newFederatedProvider(p.organizationID, p.issuer, p.client, p.metadata)
+	require.ErrorIs(t, err, ErrFederatedConfiguration, "issuer overrides cannot repair the client allowlist")
+	p.client.Scope = []string{"openid", "email", "profile"}
+	p.issuer.ScopeOverride = []string{"downstream:admin"}
 	next, err := newFederatedProvider(p.organizationID, p.issuer, p.client, p.metadata)
 	require.NoError(t, err)
 	u, err := next.BuildAuthorizationURL("https://gram.example.test/callback", "state", "nonce", strings.Repeat("a", 43))
 	require.NoError(t, err)
-	require.Equal(t, "openid email override", u.Query().Get("scope"))
-	p.issuer.ScopeOverride = []string{"openid"}
-	_, err = newFederatedProvider(p.organizationID, p.issuer, p.client, p.metadata)
-	require.ErrorIs(t, err, ErrFederatedConfiguration)
+	require.Equal(t, "openid email profile", u.Query().Get("scope"))
 }
 
 func TestFederatedRuntimePolicy(t *testing.T) {

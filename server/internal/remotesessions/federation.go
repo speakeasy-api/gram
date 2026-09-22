@@ -35,18 +35,26 @@ var (
 // FederatedProvider is a request-local snapshot, never a decrypted-secret cache.
 // Callers must reload it and compare Fingerprint before exchanging a callback.
 type FederatedProvider struct {
-	organizationID string
-	client         repo.RemoteSessionClient
-	issuer         repo.RemoteSessionIssuer
-	metadata       rfc8414Document
-	fingerprint    string
+	organizationID     string
+	client             repo.RemoteSessionClient
+	issuer             repo.RemoteSessionIssuer
+	metadata           rfc8414Document
+	fingerprint        string
+	signingKeyRevision string
 }
 
 func (p *FederatedProvider) MarshalJSON() ([]byte, error) { return []byte("{}"), nil }
 
-func (p *FederatedProvider) String() string      { return "[federated provider]" }
-func (p *FederatedProvider) GoString() string    { return p.String() }
-func (p *FederatedProvider) Fingerprint() string { return p.fingerprint }
+func (p *FederatedProvider) String() string   { return "[federated provider]" }
+func (p *FederatedProvider) GoString() string { return p.String() }
+
+// Fingerprint binds callback state to both discovery/registration policy and
+// the active signing key. Key rotation under the same set ID must invalidate an
+// in-flight callback rather than retain credentials against a stale revision.
+func (p *FederatedProvider) Fingerprint() string {
+	digest := sha256.Sum256([]byte(p.fingerprint + ":" + p.signingKeyRevision))
+	return hex.EncodeToString(digest[:])
+}
 
 // ValidateResponseIssuer implements RFC 9207 before the code leaves Gram.
 // The response issuer is never used to select a provider. The shared callback
@@ -88,6 +96,10 @@ func (m *ChallengeManager) LoadFederatedProvider(ctx context.Context, organizati
 	if err != nil {
 		return nil, err
 	}
+	p.signingKeyRevision, err = federatedSigningKeyRevision(ctx, m.db, organizationID, p.client)
+	if err != nil {
+		return nil, err
+	}
 	if err := m.preflightFederatedSigner(p); err != nil {
 		return nil, err
 	}
@@ -120,7 +132,7 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 	if doc.ResponseTypesSupported != nil && !slices.Contains(doc.ResponseTypesSupported, "code") {
 		return nil, ErrFederatedConfiguration
 	}
-	effectiveScopes := federatedScopes(issuer, client)
+	effectiveScopes := client.Scope
 	if !slices.Contains(effectiveScopes, "openid") || !slices.Contains(effectiveScopes, "email") {
 		return nil, ErrFederatedConfiguration
 	}
@@ -167,7 +179,7 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 		return nil, ErrFederatedConfiguration
 	}
 	digest := sha256.Sum256(encoded)
-	return &FederatedProvider{organizationID: organizationID, client: client, issuer: issuer, metadata: doc, fingerprint: hex.EncodeToString(digest[:])}, nil
+	return &FederatedProvider{organizationID: organizationID, client: client, issuer: issuer, metadata: doc, fingerprint: hex.EncodeToString(digest[:]), signingKeyRevision: ""}, nil
 }
 
 func (p *FederatedProvider) BuildAuthorizationURL(callbackURL, state, nonce, verifier string) (*url.URL, error) {
@@ -182,7 +194,7 @@ func (p *FederatedProvider) BuildAuthorizationURL(callbackURL, state, nonce, ver
 	if err != nil {
 		return nil, ErrFederatedConfiguration
 	}
-	effectiveScopes := federatedScopes(p.issuer, p.client)
+	effectiveScopes := p.client.Scope
 	scope := make([]string, 0, len(effectiveScopes))
 	for _, item := range effectiveScopes {
 		if item != "offline_access" {
@@ -243,10 +255,12 @@ func validFederatedVerifier(verifier string) bool {
 // absent distinct from false so shared provisioned-human policy can decide.
 // There is intentionally no exported token accessor or credential JSON field.
 type FederatedIdentity struct {
-	Issuer        string
-	Subject       string
-	Email         string
-	EmailVerified *bool
+	ExpiresAt     time.Time `json:"ExpiresAt"`
+	Nonce         string    `json:"Nonce"`
+	Issuer        string    `json:"Issuer"`
+	Subject       string    `json:"Subject"`
+	Email         string    `json:"Email"`
+	EmailVerified *bool     `json:"EmailVerified"`
 	credentials   *federatedCredentialState
 }
 
@@ -267,42 +281,32 @@ func (m *ChallengeManager) ExchangeFederatedCode(ctx context.Context, p *Federat
 	if err := m.validateFederatedMetadataHosts(ctx, p.issuer, p.metadata); err != nil {
 		return nil, err
 	}
-	secret := ""
-	if p.client.ClientSecretEncrypted.Valid && p.client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
-		var err error
-		secret, err = m.enc.Decrypt(p.client.ClientSecretEncrypted.String)
-		if err != nil {
-			return nil, ErrFederatedConfiguration
-		}
-	}
-	method, err := ResolveTokenEndpointAuthMethod(p.client.TokenEndpointAuthMethod.String, secret)
-	if err != nil || method == TokenEndpointAuthMethodNone {
-		return nil, ErrFederatedConfiguration
-	}
-	audience, err := ResolveTokenEndpointAuthAudience(p.client.TokenEndpointAuthAudienceFormat.String, p.issuer.Issuer, p.metadata.TokenEndpoint)
+	doer, clientAuth, err := m.federatedTokenClient(p)
 	if err != nil {
-		return nil, ErrFederatedConfiguration
-	}
-	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, p.issuer.TunneledMcpServerID)
-	if err != nil {
-		return nil, ErrFederatedConfiguration
+		return nil, err
 	}
 	// The shared exchange reads only these fields; federation owns its own state.
 	exchangeState := RemoteLoginState{RedirectURI: callbackURL, CodeVerifier: verifier, TokenEndpoint: p.metadata.TokenEndpoint} //nolint:exhaustruct // Not a persisted remote-session challenge.
-	tok, err := m.exchangeCode(ctx, doer, exchangeState, tokenEndpointClientAuth{Method: method, RemoteSessionClientID: p.client.ID, OrganizationID: p.organizationID, JSONWebKeySetID: p.client.JsonWebKeySetID.UUID, ClientID: p.client.ClientID, ClientSecret: secret, AssertionAudience: audience, AssertionSigner: m.assertions}, "", code)
+	tok, err := m.exchangeCode(ctx, doer, exchangeState, clientAuth, "", code)
 	if err != nil {
 		return nil, classifyFederatedExchangeError(err)
 	}
+	receivedAt := time.Now()
 	identity, err := m.verifyFederatedIdentity(ctx, p, tok, code, nonce, doer)
 	if err != nil {
 		return nil, err
 	}
-	identity.credentials = &federatedCredentialState{mu: sync.Mutex{}, value: EphemeralFederatedCredentials{idToken: tok.IDToken, refreshToken: tok.RefreshToken, expiresIn: tok.ExpiresIn, refreshExpiresIn: tok.RefreshExpiresIn, receivedAt: time.Now()}}
+	credentials := federatedRefreshCredentials(tok, receivedAt)
+	identity.credentials = &federatedCredentialState{mu: sync.Mutex{}, value: credentials.EphemeralFederatedCredentials}
 	return identity, nil
 }
 
 func (m *ChallengeManager) verifyFederatedIdentity(ctx context.Context, p *FederatedProvider, tok tokenResponse, code, nonce string, doer httpDoer) (*FederatedIdentity, error) {
-	if tok.IDToken == "" || nonce == "" || m.idTokens == nil {
+	return m.verifyFederatedIdentityMode(ctx, p, tok, code, nonce, "", doer, false)
+}
+
+func (m *ChallengeManager) verifyFederatedIdentityMode(ctx context.Context, p *FederatedProvider, tok tokenResponse, code, nonce, subject string, doer httpDoer, refresh bool) (*FederatedIdentity, error) {
+	if tok.IDToken == "" || (!refresh && nonce == "") || m.idTokens == nil {
 		return nil, ErrFederatedIdentity
 	}
 	algorithms, err := acceptedIDTokenAlgorithms(p.metadata.IDTokenSigningAlgValuesSupported)
@@ -342,14 +346,28 @@ func (m *ChallengeManager) verifyFederatedIdentity(ctx context.Context, p *Feder
 			return nil, ErrFederatedIdentity
 		}
 	}
-	identity, err := m.idTokens.Verify(ctx, tok.IDToken, IDTokenExpectation{issuer: p.issuer.Issuer, clientID: p.client.ClientID, jwksURI: p.metadata.JwksURI, fetchScope: p.issuer.ID.String(), transport: doer, signingAlgs: p.metadata.IDTokenSigningAlgValuesSupported, nonce: nonce, subject: ""})
+	verificationNonce := nonce
+	if refresh {
+		verificationNonce = ""
+	}
+	identity, err := m.idTokens.Verify(ctx, tok.IDToken, IDTokenExpectation{issuer: p.issuer.Issuer, clientID: p.client.ClientID, jwksURI: p.metadata.JwksURI, fetchScope: p.issuer.ID.String(), transport: doer, signingAlgs: p.metadata.IDTokenSigningAlgValuesSupported, nonce: verificationNonce, subject: subject})
 	if err != nil {
+		// Keep dependency failures distinguishable without exposing upstream URLs,
+		// bodies, or claims. Missing/mismatched keys and bad signatures are not
+		// tagged by the resolver as key-set unavailability.
+		if errors.Is(err, errJWTKeySetUnavailable) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return nil, ErrFederatedUnavailable
+		}
 		return nil, ErrFederatedIdentity
 	}
-	return validateFederatedClaims(identity.Claims, p, tok, code, nonce, header.Algorithm, time.Now())
+	return validateFederatedClaimsMode(identity.Claims, p, tok, code, nonce, subject, header.Algorithm, time.Now(), refresh)
 }
 
 func validateFederatedClaims(all map[string]json.RawMessage, p *FederatedProvider, tok tokenResponse, code, nonce, algorithm string, now time.Time) (*FederatedIdentity, error) {
+	return validateFederatedClaimsMode(all, p, tok, code, nonce, "", algorithm, now, false)
+}
+
+func validateFederatedClaimsMode(all map[string]json.RawMessage, p *FederatedProvider, tok tokenResponse, code, nonce, subject, algorithm string, now time.Time, refresh bool) (*FederatedIdentity, error) {
 	// Signature verification precedes these stricter OIDC checks. In particular,
 	// the enrichment verifier allows normalized issuer and missing iat.
 	var claims jwt.Claims
@@ -357,7 +375,17 @@ func validateFederatedClaims(all map[string]json.RawMessage, p *FederatedProvide
 	if err != nil || json.Unmarshal(encoded, &claims) != nil {
 		return nil, ErrFederatedIdentity
 	}
-	if claims.Issuer != p.issuer.Issuer || claims.Subject == "" || claims.Expiry == nil || claims.IssuedAt == nil || nonce == "" || claimString(all, "nonce") != nonce {
+	if claims.Issuer != p.issuer.Issuer || claims.Subject == "" || claims.Expiry == nil || claims.IssuedAt == nil {
+		return nil, ErrFederatedIdentity
+	}
+	if refresh {
+		if subject == "" || claims.Subject != subject {
+			return nil, ErrFederatedIdentity
+		}
+		if _, present := all["nonce"]; present && (nonce == "" || claimString(all, "nonce") != nonce) {
+			return nil, ErrFederatedIdentity
+		}
+	} else if nonce == "" || claimString(all, "nonce") != nonce {
 		return nil, ErrFederatedIdentity
 	}
 	if claims.ValidateWithLeeway(jwt.Expected{Issuer: p.issuer.Issuer, Subject: "", AnyAudience: jwt.Audience{p.client.ClientID}, ID: "", Time: now}, idTokenMaxSkew) != nil || claims.IssuedAt.Time().After(claims.Expiry.Time()) {
@@ -383,7 +411,7 @@ func validateFederatedClaims(all map[string]json.RawMessage, p *FederatedProvide
 		}
 	}
 	email := strings.TrimSpace(claimString(all, "email"))
-	if email == "" {
+	if email == "" && !refresh {
 		return nil, ErrFederatedIdentity
 	}
 	var verified *bool
@@ -394,7 +422,7 @@ func validateFederatedClaims(all map[string]json.RawMessage, p *FederatedProvide
 		}
 		verified = &b
 	}
-	return &FederatedIdentity{Issuer: claims.Issuer, Subject: claims.Subject, Email: email, EmailVerified: verified, credentials: nil}, nil
+	return &FederatedIdentity{ExpiresAt: claims.Expiry.Time(), Nonce: claimString(all, "nonce"), Issuer: claims.Issuer, Subject: claims.Subject, Email: email, EmailVerified: verified, credentials: nil}, nil
 }
 
 func validFederatedTokenHash(claim, value, algorithm string) bool {
@@ -421,13 +449,6 @@ func validFederatedTokenHash(claim, value, algorithm string) bool {
 }
 
 var _ fmt.GoStringer = (*FederatedProvider)(nil)
-
-func federatedScopes(issuer repo.RemoteSessionIssuer, client repo.RemoteSessionClient) []string {
-	if len(issuer.ScopeOverride) > 0 {
-		return issuer.ScopeOverride
-	}
-	return client.Scope
-}
 
 // Preflight only known local availability; never sign or contact KMS at authorize.
 func (m *ChallengeManager) preflightFederatedSigner(p *FederatedProvider) error {
@@ -456,4 +477,28 @@ func classifyFederatedExchangeError(err error) error {
 		return ErrFederatedConfiguration
 	}
 	return ErrFederatedIdentity
+}
+
+func (m *ChallengeManager) federatedTokenClient(p *FederatedProvider) (httpDoer, tokenEndpointClientAuth, error) {
+	secret := ""
+	if p.client.ClientSecretEncrypted.Valid && p.client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
+		var err error
+		secret, err = m.enc.Decrypt(p.client.ClientSecretEncrypted.String)
+		if err != nil {
+			return nil, tokenEndpointClientAuth{}, ErrFederatedConfiguration
+		}
+	}
+	method, err := ResolveTokenEndpointAuthMethod(p.client.TokenEndpointAuthMethod.String, secret)
+	if err != nil || method == TokenEndpointAuthMethodNone {
+		return nil, tokenEndpointClientAuth{}, ErrFederatedConfiguration
+	}
+	audience, err := ResolveTokenEndpointAuthAudience(p.client.TokenEndpointAuthAudienceFormat.String, p.issuer.Issuer, p.metadata.TokenEndpoint)
+	if err != nil {
+		return nil, tokenEndpointClientAuth{}, ErrFederatedConfiguration
+	}
+	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, p.issuer.TunneledMcpServerID)
+	if err != nil {
+		return nil, tokenEndpointClientAuth{}, ErrFederatedConfiguration
+	}
+	return doer, tokenEndpointClientAuth{Method: method, RemoteSessionClientID: p.client.ID, OrganizationID: p.organizationID, JSONWebKeySetID: p.client.JsonWebKeySetID.UUID, ClientID: p.client.ClientID, ClientSecret: secret, AssertionAudience: audience, AssertionSigner: m.assertions}, nil
 }

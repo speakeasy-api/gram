@@ -167,7 +167,7 @@ func UsageCommands() []string {
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|update-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|probe-url|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
-		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|rotate-client|delete-client|remove-client-from-mcp-server)",
+		"organization-remote-session-clients (list-clients|get-client|get-client-delegation-status|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|rotate-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|attach-key-set|detach-key-set|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
@@ -2421,6 +2421,10 @@ func ParseEndpoint(
 		organizationRemoteSessionClientsGetClientIDFlag           = organizationRemoteSessionClientsGetClientFlags.String("id", "REQUIRED", "")
 		organizationRemoteSessionClientsGetClientSessionTokenFlag = organizationRemoteSessionClientsGetClientFlags.String("session-token", "", "")
 		organizationRemoteSessionClientsGetClientApikeyTokenFlag  = organizationRemoteSessionClientsGetClientFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionClientsGetClientDelegationStatusFlags            = flag.NewFlagSet("get-client-delegation-status", flag.ExitOnError)
+		organizationRemoteSessionClientsGetClientDelegationStatusIDFlag           = organizationRemoteSessionClientsGetClientDelegationStatusFlags.String("id", "REQUIRED", "")
+		organizationRemoteSessionClientsGetClientDelegationStatusSessionTokenFlag = organizationRemoteSessionClientsGetClientDelegationStatusFlags.String("session-token", "", "")
 
 		organizationRemoteSessionClientsGetClientDeletePreflightFlags            = flag.NewFlagSet("get-client-delete-preflight", flag.ExitOnError)
 		organizationRemoteSessionClientsGetClientDeletePreflightIDFlag           = organizationRemoteSessionClientsGetClientDeletePreflightFlags.String("id", "REQUIRED", "")
@@ -4907,6 +4911,7 @@ func ParseEndpoint(
 	organizationRemoteSessionClientsFlags.Usage = organizationRemoteSessionClientsUsage
 	organizationRemoteSessionClientsListClientsFlags.Usage = organizationRemoteSessionClientsListClientsUsage
 	organizationRemoteSessionClientsGetClientFlags.Usage = organizationRemoteSessionClientsGetClientUsage
+	organizationRemoteSessionClientsGetClientDelegationStatusFlags.Usage = organizationRemoteSessionClientsGetClientDelegationStatusUsage
 	organizationRemoteSessionClientsGetClientDeletePreflightFlags.Usage = organizationRemoteSessionClientsGetClientDeletePreflightUsage
 	organizationRemoteSessionClientsListClientMcpServersFlags.Usage = organizationRemoteSessionClientsListClientMcpServersUsage
 	organizationRemoteSessionClientsCreateClientFlags.Usage = organizationRemoteSessionClientsCreateClientUsage
@@ -6994,6 +6999,9 @@ func ParseEndpoint(
 
 			case "get-client":
 				epf = organizationRemoteSessionClientsGetClientFlags
+
+			case "get-client-delegation-status":
+				epf = organizationRemoteSessionClientsGetClientDelegationStatusFlags
 
 			case "get-client-delete-preflight":
 				epf = organizationRemoteSessionClientsGetClientDeletePreflightFlags
@@ -9670,6 +9678,9 @@ func ParseEndpoint(
 			case "get-client":
 				endpoint = c.GetClient()
 				data, err = organizationremotesessionclientsc.BuildGetClientPayload(*organizationRemoteSessionClientsGetClientIDFlag, *organizationRemoteSessionClientsGetClientSessionTokenFlag, *organizationRemoteSessionClientsGetClientApikeyTokenFlag)
+			case "get-client-delegation-status":
+				endpoint = c.GetClientDelegationStatus()
+				data, err = organizationremotesessionclientsc.BuildGetClientDelegationStatusPayload(*organizationRemoteSessionClientsGetClientDelegationStatusIDFlag, *organizationRemoteSessionClientsGetClientDelegationStatusSessionTokenFlag)
 			case "get-client-delete-preflight":
 				endpoint = c.GetClientDeletePreflight()
 				data, err = organizationremotesessionclientsc.BuildGetClientDeletePreflightPayload(*organizationRemoteSessionClientsGetClientDeletePreflightIDFlag, *organizationRemoteSessionClientsGetClientDeletePreflightSessionTokenFlag, *organizationRemoteSessionClientsGetClientDeletePreflightApikeyTokenFlag)
@@ -20932,6 +20943,7 @@ func organizationRemoteSessionClientsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-clients: List the remote_session_clients registered with a given issuer in the caller's organization, each with its MCP server attachment count. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-client: Get a remote_session_client in the caller's organization by id. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-client-delegation-status: Read sanitized delegation observations for the current upstream configuration in the last 30 days. Requires org:admin. Never exercises credentials; presence is not proof of future refresh success.`)
 	fmt.Fprintln(os.Stderr, `    get-client-delete-preflight: Authoritative impact summary for deleting a remote_session_client: associated session count, affected MCP server names, and trusted identity-provider login references that must be explicitly unlinked before deletion. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    list-client-mcp-servers: List the MCP servers a remote_session_client is attached to (resolved through user_session_issuers) in the caller's organization. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    create-client: Register a standalone remote_session_client under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.`)
@@ -20992,6 +21004,26 @@ func organizationRemoteSessionClientsGetClientUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients get-client --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionClientsGetClientDelegationStatusUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-clients get-client-delegation-status", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read sanitized delegation observations for the current upstream configuration in the last 30 days. Requires org:admin. Never exercises credentials; presence is not proof of future refresh success.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients get-client-delegation-status --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 func organizationRemoteSessionClientsGetClientDeletePreflightUsage() {

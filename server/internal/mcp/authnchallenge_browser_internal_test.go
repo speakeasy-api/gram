@@ -35,7 +35,7 @@ func browserTestState() AuthnChallengeState {
 
 func TestConsentRejectsTransferredBrowserState(t *testing.T) {
 	t.Parallel()
-	for _, action := range []string{"get", "approve", "deny", "connect", "disconnect", "validate", "set_auto_refresh"} {
+	for _, action := range []string{"get", "approve", "deny", "connect", "disconnect", "validate", "set_auto_refresh", "retry_delegation"} {
 		t.Run(action, func(t *testing.T) {
 			t.Parallel()
 			s := browserTestService(t)
