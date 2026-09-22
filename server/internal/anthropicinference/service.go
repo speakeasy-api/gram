@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"slices"
 	"strings"
 	"time"
@@ -375,11 +374,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	}
 
 	messages := conversationMessages(frame.Messages)
-	hashes := make([][]byte, len(messages))
-	for index, msg := range messages {
-		hashes[index] = contentHash(msg)
-	}
-	start, prev, err := s.alignFrame(ctx, config, chatID, hashes)
+	start, prev, err := s.alignFrame(ctx, config, chatID, messages)
 	if err != nil {
 		return 0, err
 	}
@@ -389,7 +384,8 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 		msg := messages[index]
 		// The chained identity makes concurrent deliveries and retries share the
 		// same rows, while identical messages at different positions stay apart.
-		prev = chainHash(prev, hashes[index])
+		hash := contentHash(msg)
+		prev = chainHash(prev, hash)
 		id := messageIdentityID(prev)
 		rows, attachments, err := storageBlocks(msg, id)
 		if err != nil {
@@ -455,7 +451,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 					UserAgent:         pgtype.Text{String: "", Valid: false},
 					IpAddress:         pgtype.Text{String: "", Valid: false},
 					Source:            conv.ToPGText(inferenceSource(frame.Source.Application)),
-					ContentHash:       conv.Ternary(rowIndex == len(rows)-1, hashes[index], nil),
+					ContentHash:       conv.Ternary(rowIndex == len(rows)-1, hash, nil),
 					Generation:        0,
 					CreatedAt:         createdAt,
 				},
@@ -480,9 +476,9 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 // stored before content hashing carries ordinals rather than hashes, and a
 // client that rewrote every stored message in place is still sending the same
 // conversation, so its history is not archived a second time.
-func (s *postgresStore) alignFrame(ctx context.Context, config Config, chatID uuid.UUID, hashes [][]byte) (int, []byte, error) {
+func (s *postgresStore) alignFrame(ctx context.Context, config Config, chatID uuid.UUID, messages []Message) (int, []byte, error) {
 	rows, err := chatrepo.New(s.db).ListInferenceMessageIdentities(ctx, chatrepo.ListInferenceMessageIdentitiesParams{
-		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}, RowLimit: int32(min(math.MaxInt32, max(alignmentWindow, len(hashes)+1))),
+		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}, RowLimit: alignmentAnchors,
 	})
 	if err != nil {
 		return 0, nil, fmt.Errorf("list stored inference messages: %w", err)
@@ -497,14 +493,14 @@ func (s *postgresStore) alignFrame(ctx context.Context, config Config, chatID uu
 			stored = append(stored, identity)
 		}
 	}
-	if start, prev, ok := alignTranscript(stored, hashes); ok {
+	if start, prev, ok := alignTranscript(stored, messages); ok {
 		return start, prev, nil
 	}
 	storedCount, err := chatrepo.New(s.db).CountInferenceMessages(ctx, chatrepo.CountInferenceMessagesParams{ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}})
 	if err != nil {
 		return 0, nil, fmt.Errorf("count stored inference messages: %w", err)
 	}
-	return min(int(storedCount), len(hashes)), nil, nil
+	return min(int(storedCount), len(messages)), nil, nil
 }
 
 // Include the actor because Claude Code session ids can be client asserted.

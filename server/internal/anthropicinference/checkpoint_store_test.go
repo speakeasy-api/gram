@@ -199,11 +199,11 @@ func TestPostgresCheckpointInvalidation(t *testing.T) {
 	}
 }
 
-func TestStoreRepeatedFrameBeyondAlignmentWindow(t *testing.T) {
+func TestStoreRepeatedFrameBeyondAnchorLimit(t *testing.T) {
 	t.Parallel()
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
-	frame.Messages = make([]Message, alignmentWindow+1)
+	frame.Messages = make([]Message, alignmentAnchors+1)
 	for i := range frame.Messages {
 		frame.Messages[i] = textMessage("user", "continue")
 	}
@@ -211,13 +211,13 @@ func TestStoreRepeatedFrameBeyondAlignmentWindow(t *testing.T) {
 	saveFrame(t, store, config, frame, "")
 	rows, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
 	require.NoError(t, err)
-	require.Len(t, rows, alignmentWindow+1)
+	require.Len(t, rows, alignmentAnchors+1)
 	frame.Messages = append(frame.Messages, textMessage("user", "continue"))
 	saveFrame(t, store, config, frame, "")
 	saveFrame(t, store, config, frame, "")
 	rows, err = chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
 	require.NoError(t, err)
-	require.Len(t, rows, alignmentWindow+2)
+	require.Len(t, rows, alignmentAnchors+1)
 }
 
 func TestPostgresCanceledEvaluationPreservesPreviousCheckpoint(t *testing.T) {
