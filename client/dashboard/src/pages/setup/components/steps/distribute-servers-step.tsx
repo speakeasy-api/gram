@@ -327,6 +327,10 @@ export function DistributeServersStep({
     if (!drawerOpen || drawerError) return;
 
     if (workflow.phase === "configure") {
+      if (workflow.installBlockedReason) {
+        setDrawerError(workflow.installBlockedReason);
+        return;
+      }
       if (!startedRef.current && workflow.canInstall) {
         startedRef.current = true;
         void workflow.startInstall();

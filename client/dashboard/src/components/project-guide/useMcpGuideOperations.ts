@@ -720,6 +720,15 @@ export function useMcpGuideOperations(): {
         });
       }
     }
+    if (workflow.phase === "configure" && workflow.installBlockedReason) {
+      updateActiveOperation(undefined);
+      operation.report({
+        type: "error",
+        scope: operation.scope,
+        message: workflow.installBlockedReason,
+      });
+      return;
+    }
     if (
       workflow.phase === "configure" &&
       workflow.canInstall &&
