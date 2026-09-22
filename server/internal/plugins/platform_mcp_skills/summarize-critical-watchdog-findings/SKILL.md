@@ -18,15 +18,18 @@ Turn an AICP Watchdog review into a concise, channel-neutral digest: establish t
 ## Read workflow
 
 1. Call `get_platform_context`. Verify the expected organization as described above. Stop on a mismatch; do not query another organization as a fallback.
-2. Call `list_projects` through this same connection. Resolve the explicit project against the returned IDs/slugs. If discovery is truncated, stop and ask the user to choose from the complete AICP dashboard list before retrying with a verified scope. Stop on a missing, ambiguous, or inaccessible project; do not probe guessed IDs or substitute another project.
+2. Select the project using one of these paths:
+   - **Configured project:** If the user or saved task supplies an exact project ID or slug, use that selector directly. Do not call `list_projects` or require complete organization-wide discovery for this path. The findings tool enforces access to the selected project; supplying a selector is not proof of authorization. If both selectors are supplied, ask the user to choose one before querying.
+   - **Project discovery:** If no exact selector is supplied, call `list_projects` through this same connection and ask the user to choose an exact ID or slug. If discovery is truncated, stop discovery and direct the user to the complete AICP dashboard list; resume only after they supply an exact selector. Do not infer scope from a partial list, guess IDs, or silently select Default. In an unattended task without a selector, return “Digest unavailable” and ask the owner to configure one.
+     Stop on a missing, ambiguous, or inaccessible project; never substitute another project.
 3. Set `to` once to the current execution time in UTC and `from` to exactly 24 hours earlier. Use RFC3339 timestamps. A delayed scheduled run still uses the actual execution time, not its originally scheduled time. Report the resulting rolling window, not “yesterday.”
 4. Call `list_watchdog_findings` with exactly these choices:
    - `severity: "critical"`. Never broaden severity automatically, including when the result is empty.
-   - The resolved `project_id` (omit `project_slug`; do not send both selectors).
+   - Exactly one explicit selector: `project_id` or `project_slug`. Pass the selected value unchanged; do not send both selectors.
    - The computed `from` and `to`.
    - `group_by: ["app"]`.
      Tool names may have connector-specific prefixes. Use the matching registered operations, not the general Event Feed.
-5. Validate the returned project ID, severity, window, totals, and groups. Require nonnegative `total_alerts` and `total_count`, and an explicit `truncated` flag. Missing fields, mismatched scope, or inconsistent totals are a failed digest, not an empty result. For an untruncated response, the number of groups and sum of their counts must equal `total_alerts` and `total_count`. For a truncated response, returned groups/counts must not exceed those totals.
+5. Validate the returned project against the supplied selector: compare its ID for `project_id`, or its slug for `project_slug`. Stop on a mismatch. Validate severity, window, totals, and groups. Require nonnegative `total_alerts` and `total_count`, and an explicit `truncated` flag. Missing fields, mismatched scope, or inconsistent totals are a failed digest, not an empty result. For an untruncated response, the number of groups and sum of their counts must equal `total_alerts` and `total_count`. For a truncated response, returned groups/counts must not exceed those totals.
 6. Sort returned rules by finding count descending, breaking ties by rule ID. Summarize up to five rules. Return the digest in the format below without invoking any delivery tools.
 
 ## Digest format
