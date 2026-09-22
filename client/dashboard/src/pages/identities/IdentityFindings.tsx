@@ -242,13 +242,15 @@ function FindingsTable({
     [query.data, ruleId],
   );
   // A page that only held those near-misses would show as empty, or as "No
-  // findings" with more to load, so skip on to the next one.
+  // findings" with more to load, so skip on to the next one. Not after a
+  // failure: retrying on every render would hide the Retry control.
   const lastPage = query.data?.pages.at(-1);
   const skipPage =
     !!ruleId &&
     !!lastPage &&
     !lastPage.results.some((result) => result.ruleId === ruleId) &&
-    query.hasNextPage;
+    query.hasNextPage &&
+    !query.isError;
   const { isFetchingNextPage, fetchNextPage } = query;
   useEffect(() => {
     if (skipPage && !isFetchingNextPage) void fetchNextPage();
