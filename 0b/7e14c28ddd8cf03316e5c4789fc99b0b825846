@@ -1,0 +1,22 @@
+.changeset/calm-tigers-scan.md
+  h_e404c1a6a54184 1-5
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  h_e404c1a6a54184 12,562-623,729-851
+server/internal/background/activities/risk_analysis/batch_publish.go
+  h_e404c1a6a54184 26-33,35-36,38,42
+server/internal/background/activities/risk_analysis/metrics.go
+  h_e404c1a6a54184 24,36,85-93,135,159-165
+server/internal/background/activities/risk_analysis/scan_prompt_injection.go
+  h_e404c1a6a54184 5-6,17,20-21,31-32,40,44,72-75,78,82,86-98,101,104,107-113,133,137,144-185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0b7e14c28ddd8cf03316e5c4789fc99b0b825846",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
