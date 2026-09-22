@@ -20,7 +20,11 @@ import {
   useRecentlyVisited,
   useRecentsUserId,
 } from "./recentlyVisited";
-import { PeopleResults, ResourceResults } from "./ResourceResults";
+import {
+  PeopleResults,
+  ProjectsResults,
+  ResourceResults,
+} from "./ResourceResults";
 
 // Speakeasy brand spectrum — the same brand-language gradient the Project
 // Assistant uses. Rendered as a thin hairline at the top of the palette so the
@@ -38,7 +42,8 @@ export function CommandPalette(): JSX.Element {
   const [query, setQuery] = useState("");
 
   // Project Assistant and resource search are project-scoped. At the org level
-  // (no project in the URL) the palette still works for navigating org pages.
+  // (no project in the URL) the palette still navigates org pages, and searches
+  // the org-scoped resources — projects and people.
   const inProject = Boolean(projectSlug);
 
   // Recently visited pages (client-side; read only while the palette is open).
@@ -169,7 +174,9 @@ export function CommandPalette(): JSX.Element {
       )}
       <CommandInput
         placeholder={
-          inProject ? "Ask AI or search resources and pages…" : "Search pages…"
+          inProject
+            ? "Ask AI or search resources and pages…"
+            : "Search projects and pages…"
         }
         value={query}
         onValueChange={setQuery}
@@ -217,6 +224,15 @@ export function CommandPalette(): JSX.Element {
 
         {/* Idle: Ask AI sits up top for discoverability. */}
         {!hasQuery && askAiGroup}
+
+        {/* Projects are organization-scoped, so the palette offers them from
+            either shell. At the org level picking a project is the palette's
+            main job, so the group is there from the moment it opens; inside a
+            project it is a switcher, so it waits for a query rather than
+            heading an idle palette with the projects you aren't in. */}
+        {isOpen && (!inProject || hasQuery) && (
+          <ProjectsResults onNavigate={closeAndReset} />
+        )}
 
         {sortedGroups.map(([groupName, groupActions]) => (
           <CommandGroup key={groupName} heading={groupName}>
