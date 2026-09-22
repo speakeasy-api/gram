@@ -16,7 +16,7 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNow } from "date-fns";
+import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { Loader2 } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -39,6 +39,7 @@ import {
 } from "../risk-utils";
 import { useDismissFinding } from "../useDismissFinding";
 import { collectFindingsForRules } from "./collect-findings";
+import { EvidenceTitle } from "./EvidenceTitle";
 import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
 import { SuppressMenu } from "./SuppressMenu";
 import { SCORE_TEXT_COLOR } from "./signals-helpers";
@@ -117,10 +118,12 @@ function EvidenceRow({
   result,
   onExclude,
   onDismiss,
+  onOpenChat,
 }: {
   result: RiskResult;
   onExclude: (result: RiskResult) => void;
   onDismiss: (result: RiskResult) => void;
+  onOpenChat: (chatId: string, chatMessageId?: string) => void;
 }): JSX.Element {
   // A judge finding's "match" is the entire flagged event (often absent on
   // the realtime path), and its description carries the verdict rationale —
@@ -142,14 +145,13 @@ function EvidenceRow({
   const showRuleTitle = evidenceShowsRuleTitle(result.source, result.ruleId);
   return (
     <div className="border-border overflow-hidden rounded-md border">
-      <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <span className="text-muted-foreground truncate font-mono text-xs">
-          {result.chatTitle || getRuleTitleFallback(result.ruleId)}
-        </span>
-        <span className="text-muted-foreground shrink-0 font-mono text-xs">
-          {formatDistanceToNow(result.createdAt, { addSuffix: true })}
-        </span>
-      </div>
+      <EvidenceTitle
+        title={result.chatTitle || getRuleTitleFallback(result.ruleId)}
+        createdAt={result.createdAt}
+        chatId={result.chatId}
+        chatMessageId={result.chatMessageId}
+        onOpenChat={onOpenChat}
+      />
       {rationale ? (
         <div className="px-3 py-3">
           <EventMatchDialog
@@ -223,6 +225,12 @@ export function SignalDrawer({
     null,
   );
   const [collecting, setCollecting] = useState(false);
+  // Keyed to its signal, so a chat left open never reappears under another.
+  const [openChat, setOpenChat] = useState<{
+    signalKey: string;
+    chatId: string;
+    chatMessageId: string | undefined;
+  } | null>(null);
   // Set when leaving the exclusion editor so the remounting detail view
   // slides back in from the left — but never on the drawer's first open,
   // where the Sheet's own slide already animates the content.
@@ -232,6 +240,9 @@ export function SignalDrawer({
     setExclusionState(null);
     setReturningFromEditor(true);
   };
+
+  const shownChat =
+    openChat && openChat.signalKey === signal?.key ? openChat : null;
 
   const ruleId = signal?.ruleId ?? "";
   // The list endpoint's rule filter is substring-match, so an id that is a
@@ -355,6 +366,7 @@ export function SignalDrawer({
             setExclusionState(null);
             setReturningFromEditor(false);
             setPendingDismiss(null);
+            setOpenChat(null);
             onClose();
           }
         }}
@@ -598,6 +610,13 @@ export function SignalDrawer({
                                 })
                               }
                               onDismiss={(r) => dismiss([r])}
+                              onOpenChat={(chatId, chatMessageId) =>
+                                setOpenChat({
+                                  signalKey: signal.key,
+                                  chatId,
+                                  chatMessageId,
+                                })
+                              }
                             />
                           )}
                         />
@@ -608,6 +627,15 @@ export function SignalDrawer({
               </div>
             </RevealAllProvider>
           )}
+          {/* Nested in this sheet so closing it doesn't read as an outside
+              click and close the drawer too. */}
+          <ChatDetailSheet
+            chatId={shownChat?.chatId ?? null}
+            focusedMessageId={shownChat?.chatMessageId}
+            onClose={() => setOpenChat(null)}
+            onDelete={() => setOpenChat(null)}
+            riskFocus
+          />
         </SheetContent>
       </Sheet>
       <SuppressFindingsDialog
