@@ -39,6 +39,11 @@ func TestService_ListScopes(t *testing.T) {
 		require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(scope)].Visibility)
 		require.Nil(t, bySlug[string(scope)].ExclusionScope)
 	}
+	for _, scope := range []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest} {
+		require.Equal(t, "org", bySlug[string(scope)].ResourceType, scope)
+		require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(scope)].Visibility, scope)
+		require.Nil(t, bySlug[string(scope)].ExclusionScope, scope)
+	}
 	require.Equal(t, "Read organization metadata and members.", bySlug[string(authz.ScopeOrgRead)].Description)
 	require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(authz.ScopeProjectWrite)].Visibility)
 	require.Equal(t, authz.ScopeVisibilityInternal, bySlug[string(authz.ScopeProjectBlockedWrite)].Visibility)

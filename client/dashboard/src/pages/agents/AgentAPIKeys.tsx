@@ -30,10 +30,13 @@ import type { ManagedAgent } from "@gram/client/models/components/managedagent.j
 import type { Key } from "@gram/client/models/components/key.js";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import {
+  agentKeyExpiry,
   buildRequestedGrants,
+  DEFAULT_AGENT_KEY_EXPIRY_DAYS,
   delegableGrantKey,
   validateAgentAPIKeyName,
 } from "./agent-api-key-grants";
+import { HumanizeDateTime } from "@/lib/dates";
 import { AgentGrantSelector, type GrantNarrowings } from "./AgentGrantSelector";
 import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
@@ -139,7 +142,7 @@ function AgentAPIKeysContent({
   const [serversBusy, setServersBusy] = useState(false);
   const [name, setName] = useState("");
   const [narrowings, setNarrowings] = useState<GrantNarrowings>({});
-  const [expiryDays, setExpiryDays] = useState("90");
+  const [expiryDays, setExpiryDays] = useState(DEFAULT_AGENT_KEY_EXPIRY_DAYS);
   const [customExpiry, setCustomExpiry] = useState("");
   const [issued, setIssued] = useState(false);
   const [reviewGrants, setReviewGrants] = useState<AgentPolicyGrantForm[]>([]);
@@ -254,32 +257,49 @@ function AgentAPIKeysContent({
     setIssued(false);
     setName("");
     setNarrowings({});
-    setExpiryDays("90");
+    setExpiryDays(DEFAULT_AGENT_KEY_EXPIRY_DAYS);
     setCustomExpiry("");
     setError(null);
     create.reset();
     onDone?.();
   };
-  const expiryValidation = (now: number) => {
-    // Leave five minutes below the server limit for modest browser clock skew.
-    const maxLifetime = 365 * 86_400_000 - 5 * 60_000;
-    // Date-only selections expire at local midnight, not UTC midnight.
-    const expiresAt =
-      expiryDays === "custom"
-        ? new Date(`${customExpiry}T00:00:00`)
-        : new Date(
-            now + Math.min(Number(expiryDays) * 86_400_000, maxLifetime),
-          );
-    let reason: string | undefined;
-    if (!Number.isFinite(expiresAt.getTime()))
-      reason = "Choose a valid expiration date.";
-    else if (expiresAt.getTime() <= now)
-      reason = "Expiration date must be in the future.";
-    else if (expiresAt.getTime() > now + maxLifetime)
-      reason =
-        "Expiration date must be within 365 days minus a 5-minute clock-skew margin.";
-    return { expiresAt, reason };
-  };
+  const disablingReasons: string[] = [];
+  if (!canIssue)
+    disablingReasons.push(
+      "Issuance requires an active agent with a valid owner and credential authorization.",
+    );
+  if (create.isPending) disablingReasons.push("An API key is being created.");
+  if (delegable.isFetching)
+    disablingReasons.push("Delegable permissions are still loading.");
+  else if (!discoveryComplete)
+    disablingReasons.push(
+      "Delegable permissions could not be loaded. Retry permissions.",
+    );
+  try {
+    // Validated here for the disabling reason only; issue() re-validates to
+    // build the request.
+    validateAgentAPIKeyName(name);
+  } catch (error) {
+    disablingReasons.push(
+      error instanceof Error ? error.message : "Enter a valid key name.",
+    );
+  }
+  let requestedGrants: AgentPolicyGrantForm[] = [];
+  try {
+    const selections = (discoveryComplete ? (delegable.data ?? []) : [])
+      .map((grant) => ({ grant, key: delegableGrantKey(grant) }))
+      .filter(({ key }) => narrowings[key] !== undefined)
+      .map(({ grant, key }) => ({ grant, narrowing: narrowings[key] ?? {} }));
+    requestedGrants = buildRequestedGrants(selections);
+  } catch (error) {
+    disablingReasons.push(
+      error instanceof Error ? error.message : "Select valid permissions.",
+    );
+  }
+  if (!requestedGrants.length)
+    disablingReasons.push("Select at least one valid permission.");
+  const expiryValidation = (now: number) =>
+    agentKeyExpiry(expiryDays, customExpiry, now);
   const expiryReason = expiryValidation(Date.now()).reason;
   const returnToStep = (next: number) => {
     setStep(next);
@@ -491,6 +511,22 @@ function AgentAPIKeysContent({
           </time>
         ) : (
           "—"
+        ),
+    },
+    {
+      key: "lastAccessedAt",
+      header: "Last used",
+      render: (key) =>
+        key.lastAccessedAt ? (
+          <time
+            className="min-w-0 truncate"
+            title={key.lastAccessedAt.toLocaleString()}
+            dateTime={key.lastAccessedAt.toISOString()}
+          >
+            <HumanizeDateTime date={key.lastAccessedAt} />
+          </time>
+        ) : (
+          "Never"
         ),
     },
     {
