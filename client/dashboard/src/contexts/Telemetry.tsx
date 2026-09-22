@@ -8,10 +8,12 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import type { User } from "./Auth";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 
 export type Telemetry = Pick<
   PostHog,
   | "isFeatureEnabled"
+  | "getFeatureFlag"
   | "onFeatureFlags"
   | "capture"
   | "identify"
@@ -22,6 +24,7 @@ export type Telemetry = Pick<
 
 export const nullTelemetry: Telemetry = {
   isFeatureEnabled: () => false,
+  getFeatureFlag: () => undefined,
   onFeatureFlags: () => () => {},
   capture: () => ({ uuid: "", event: "", properties: {} }),
   identify: () => {},
@@ -30,9 +33,25 @@ export const nullTelemetry: Telemetry = {
   group: () => {},
 };
 
+// Variants the localhost provider reports for multivariate flags. Every
+// other flag reads as a plain enabled boolean (`isFeatureEnabled` is always
+// true, `getFeatureFlag` is undefined). The risk analyzer defaults to `shadow`
+// so the local dashboard shows the legacy policy editor unless the local
+// flags file says otherwise.
+const DEV_FEATURE_FLAG_VARIANTS: Partial<Record<string, string>> = {
+  [FEATURE_FLAGS.riskLlmAnalyzer]: "shadow",
+};
+
 export const devTelemetry: Telemetry = {
   ...nullTelemetry,
   isFeatureEnabled: () => true,
+  getFeatureFlag: (feature: string) => DEV_FEATURE_FLAG_VARIANTS[feature],
+};
+
+// Edit this map alongside `AM_TESTING_TELEMETRY` to exercise a multivariate
+// flag through the logging provider.
+const TEST_FEATURE_FLAG_VARIANTS: Partial<Record<string, string | boolean>> = {
+  [FEATURE_FLAGS.riskLlmAnalyzer]: "shadow",
 };
 
 export const testTelemetry: Telemetry = {
@@ -56,6 +75,11 @@ export const testTelemetry: Telemetry = {
   isFeatureEnabled: (feature: string) => {
     console.log("POSTHOG IS_FEATURE_ENABLED", feature);
     return true;
+  },
+  getFeatureFlag: (feature: string) => {
+    const variant = TEST_FEATURE_FLAG_VARIANTS[feature];
+    console.log("POSTHOG GET_FEATURE_FLAG", feature, variant);
+    return variant;
   },
   onFeatureFlags: () => () => {},
   reset: () => {
