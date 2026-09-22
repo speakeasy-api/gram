@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -49,19 +50,20 @@ const discoveryHTTPTimeout = 10 * time.Second
 // and the served (or merged) document verbatim, from which every typed field
 // is derived.
 type rfc8414Document struct {
-	Issuer                            string   `json:"issuer"`
-	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
-	TokenEndpoint                     string   `json:"token_endpoint"`
-	RevocationEndpoint                string   `json:"revocation_endpoint"`
-	RegistrationEndpoint              string   `json:"registration_endpoint"`
-	JwksURI                           string   `json:"jwks_uri"`
-	ServiceDocumentation              string   `json:"service_documentation"`
-	OpPolicyURI                       string   `json:"op_policy_uri"`
-	OpTosURI                          string   `json:"op_tos_uri"`
-	ScopesSupported                   []string `json:"scopes_supported"`
-	GrantTypesSupported               []string `json:"grant_types_supported"`
-	ResponseTypesSupported            []string `json:"response_types_supported"`
-	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+	Issuer                              string   `json:"issuer"`
+	AuthorizationEndpoint               string   `json:"authorization_endpoint"`
+	TokenEndpoint                       string   `json:"token_endpoint"`
+	RevocationEndpoint                  string   `json:"revocation_endpoint"`
+	RegistrationEndpoint                string   `json:"registration_endpoint"`
+	JwksURI                             string   `json:"jwks_uri"`
+	ServiceDocumentation                string   `json:"service_documentation"`
+	OpPolicyURI                         string   `json:"op_policy_uri"`
+	OpTosURI                            string   `json:"op_tos_uri"`
+	ScopesSupported                     []string `json:"scopes_supported"`
+	GrantTypesSupported                 []string `json:"grant_types_supported"`
+	AuthorizationGrantProfilesSupported []string `json:"authorization_grant_profiles_supported"`
+	ResponseTypesSupported              []string `json:"response_types_supported"`
+	TokenEndpointAuthMethodsSupported   []string `json:"token_endpoint_auth_methods_supported"`
 
 	// CodeChallengeMethodsSupported stays nil when the document omits the
 	// field, and only here: persistence collapses it to an empty array
@@ -121,10 +123,12 @@ type rfc8414Document struct {
 type discoveryResult struct {
 	doc      rfc8414Document
 	warnings []string
-	// unreadable is the well-known URL of a candidate that failed transiently,
-	// so a refresh keeps the stored document's members for it instead of
-	// withdrawing them; "" when every candidate answered definitively.
+	// unreadable identifies a transiently failed well-known candidate for
+	// incomplete-discovery diagnostics; "" when every candidate answered
+	// definitively. Refresh persists only fresh discovery evidence.
 	unreadable string
+	// unreadableErr retains the upstream status and cause for refresh failures.
+	unreadableErr *discoveryError
 }
 
 // metadataFamily is the discovery specification a well-known URL follows.
@@ -280,7 +284,7 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 
 	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.jwksResolver, s.tunnels, existing)
 	if err != nil {
-		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
+		return nil, s.recordIssuerDiscoveryFailure(ctx, logger, existing, err)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -427,30 +431,31 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 	txRepo := repo.New(dbtx)
 
 	issuer, err := txRepo.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
-		Slug:                              payload.Slug,
-		Issuer:                            payload.Issuer,
-		Name:                              conv.PtrToPGTextTrimmed(payload.Name),
-		LogoAssetID:                       logoAssetID,
-		ClientSetupDocumentationUrl:       conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
-		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
-		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
-		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
-		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
-		ServiceDocumentation:              conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
-		OpPolicyUri:                       conv.PtrToPGTextEmpty(payload.OpPolicyURI),
-		OpTosUri:                          conv.PtrToPGTextEmpty(payload.OpTosURI),
-		ScopesSupported:                   payload.ScopesSupported,
-		GrantTypesSupported:               payload.GrantTypesSupported,
-		ResponseTypesSupported:            payload.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
-		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
-		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
-		Oidc:                              conv.PtrValOr(payload.Oidc, false),
-		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
-		TunneledMcpServerID:               tunnelID,
+		ProjectID:                           uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		OrganizationID:                      conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                                payload.Slug,
+		Issuer:                              payload.Issuer,
+		Name:                                conv.PtrToPGTextTrimmed(payload.Name),
+		LogoAssetID:                         logoAssetID,
+		ClientSetupDocumentationUrl:         conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
+		AuthorizationEndpoint:               conv.PtrToPGText(payload.AuthorizationEndpoint),
+		TokenEndpoint:                       conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                  conv.PtrToPGText(payload.RevocationEndpoint),
+		RegistrationEndpoint:                conv.PtrToPGText(payload.RegistrationEndpoint),
+		JwksUri:                             conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:                conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
+		OpPolicyUri:                         conv.PtrToPGTextEmpty(payload.OpPolicyURI),
+		OpTosUri:                            conv.PtrToPGTextEmpty(payload.OpTosURI),
+		ScopesSupported:                     payload.ScopesSupported,
+		GrantTypesSupported:                 payload.GrantTypesSupported,
+		ResponseTypesSupported:              payload.ResponseTypesSupported,
+		TokenEndpointAuthMethodsSupported:   payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:       payload.CodeChallengeMethodsSupported,
+		ClientIDMetadataDocumentSupported:   conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
+		Oidc:                                conv.PtrValOr(payload.Oidc, false),
+		Passthrough:                         conv.PtrValOr(payload.Passthrough, false),
+		TunneledMcpServerID:                 tunnelID,
+		AuthorizationGrantProfilesSupported: payload.AuthorizationGrantProfilesSupported,
 		// Discovered fields forwarded from the draft. Omitted fields store NULL
 		// ("not captured"), like code_challenge_methods_supported above.
 		UserinfoEndpoint:                           conv.PtrToPGTextEmpty(payload.UserinfoEndpoint),
@@ -640,28 +645,29 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	beforeView := mv.BuildRemoteSessionIssuerView(existing)
 
 	updated, err := txRepo.UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{
-		Slug:                              conv.PtrToPGText(payload.Slug),
-		Issuer:                            conv.PtrToPGText(payload.Issuer),
-		Name:                              conv.PtrToPGText(payload.Name),
-		LogoAssetID:                       conv.PtrToPGText(payload.LogoAssetID),
-		ClientSetupDocumentationUrl:       conv.PtrToPGText(payload.ClientSetupDocumentationURL),
-		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
-		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
-		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
-		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
-		ServiceDocumentation:              conv.PtrToPGText(payload.ServiceDocumentation),
-		OpPolicyUri:                       conv.PtrToPGText(payload.OpPolicyURI),
-		OpTosUri:                          conv.PtrToPGText(payload.OpTosURI),
-		ScopesSupported:                   payload.ScopesSupported,
-		GrantTypesSupported:               payload.GrantTypesSupported,
-		ResponseTypesSupported:            payload.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
-		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
-		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
-		TunneledMcpServerID:               conv.PtrToPGText(tunneledMcpServerID),
-		UserinfoEndpoint:                  conv.PtrToPGText(payload.UserinfoEndpoint),
-		IntrospectionEndpoint:             conv.PtrToPGText(payload.IntrospectionEndpoint),
+		Slug:                                conv.PtrToPGText(payload.Slug),
+		Issuer:                              conv.PtrToPGText(payload.Issuer),
+		Name:                                conv.PtrToPGText(payload.Name),
+		LogoAssetID:                         conv.PtrToPGText(payload.LogoAssetID),
+		ClientSetupDocumentationUrl:         conv.PtrToPGText(payload.ClientSetupDocumentationURL),
+		AuthorizationEndpoint:               conv.PtrToPGText(payload.AuthorizationEndpoint),
+		TokenEndpoint:                       conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                  conv.PtrToPGText(payload.RevocationEndpoint),
+		RegistrationEndpoint:                conv.PtrToPGText(payload.RegistrationEndpoint),
+		JwksUri:                             conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:                conv.PtrToPGText(payload.ServiceDocumentation),
+		OpPolicyUri:                         conv.PtrToPGText(payload.OpPolicyURI),
+		OpTosUri:                            conv.PtrToPGText(payload.OpTosURI),
+		ScopesSupported:                     payload.ScopesSupported,
+		GrantTypesSupported:                 payload.GrantTypesSupported,
+		ResponseTypesSupported:              payload.ResponseTypesSupported,
+		TokenEndpointAuthMethodsSupported:   payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:       payload.CodeChallengeMethodsSupported,
+		ClientIDMetadataDocumentSupported:   conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
+		TunneledMcpServerID:                 conv.PtrToPGText(tunneledMcpServerID),
+		UserinfoEndpoint:                    conv.PtrToPGText(payload.UserinfoEndpoint),
+		IntrospectionEndpoint:               conv.PtrToPGText(payload.IntrospectionEndpoint),
+		AuthorizationGrantProfilesSupported: payload.AuthorizationGrantProfilesSupported,
 		IntrospectionEndpointAuthMethodsSupported:  payload.IntrospectionEndpointAuthMethodsSupported,
 		IDTokenSigningAlgValuesSupported:           payload.IDTokenSigningAlgValuesSupported,
 		ClaimsSupported:                            payload.ClaimsSupported,
@@ -1078,14 +1084,15 @@ func (e *discoveryError) UserMessage() string {
 // payload: callers must not reflect upstream endpoints or registration
 // material to untrusted clients.
 type DiscoveredIssuerMetadata struct {
-	Issuer                            string
-	AuthorizationEndpoint             string
-	TokenEndpoint                     string
-	RegistrationEndpoint              string
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
+	Issuer                              string
+	AuthorizationEndpoint               string
+	TokenEndpoint                       string
+	RegistrationEndpoint                string
+	ScopesSupported                     []string
+	GrantTypesSupported                 []string
+	AuthorizationGrantProfilesSupported []string
+	ResponseTypesSupported              []string
+	TokenEndpointAuthMethodsSupported   []string
 
 	// CodeChallengeMethodsSupported is never nil: discovery ran, so a document
 	// that omits the field yields an empty slice — the persisted
@@ -1148,14 +1155,15 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	}
 	doc := discovered.doc
 	return DiscoveredIssuerMetadata{
-		Issuer:                            doc.Issuer,
-		AuthorizationEndpoint:             doc.AuthorizationEndpoint,
-		TokenEndpoint:                     doc.TokenEndpoint,
-		RegistrationEndpoint:              doc.RegistrationEndpoint,
-		ScopesSupported:                   append([]string(nil), doc.ScopesSupported...),
-		GrantTypesSupported:               append([]string(nil), doc.GrantTypesSupported...),
-		ResponseTypesSupported:            append([]string(nil), doc.ResponseTypesSupported...),
-		TokenEndpointAuthMethodsSupported: append([]string(nil), doc.TokenEndpointAuthMethodsSupported...),
+		Issuer:                              doc.Issuer,
+		AuthorizationEndpoint:               doc.AuthorizationEndpoint,
+		TokenEndpoint:                       doc.TokenEndpoint,
+		RegistrationEndpoint:                doc.RegistrationEndpoint,
+		ScopesSupported:                     append([]string(nil), doc.ScopesSupported...),
+		GrantTypesSupported:                 slices.Clone(doc.GrantTypesSupported),
+		AuthorizationGrantProfilesSupported: orEmptySlice(slices.Clone(doc.AuthorizationGrantProfilesSupported)),
+		ResponseTypesSupported:              append([]string(nil), doc.ResponseTypesSupported...),
+		TokenEndpointAuthMethodsSupported:   append([]string(nil), doc.TokenEndpointAuthMethodsSupported...),
 
 		// An empty advertised list must survive as empty here, because nil and
 		// empty persist differently for this field (NULL "never captured" vs
@@ -1174,7 +1182,7 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
 		Metadata:          retainableDocument(doc.raw),
 		UnreadableURL:     discovered.unreadable,
-		UnreadableMessage: unreadableCandidateMessage(discovered.unreadable),
+		UnreadableMessage: unreadableCandidateMessage(discovered.unreadable, discovered.unreadableErr),
 	}, nil
 }
 
@@ -1190,8 +1198,8 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 // is almost always a catch-all answering a speculative candidate, so it is
 // returned only when no candidate yields a usable document. A candidate that
 // fails transiently is unreadable: the run still succeeds when another
-// candidate was usable and names the URL so a refresh can keep the stored
-// members for it, but an origin-root fallback is never adopted and an
+// candidate was usable and names the URL without borrowing stored
+// members from earlier discovery, but an origin-root fallback is never adopted and an
 // endpoint-less document is never returned while one is unreadable, since
 // the outage may be hiding the real document. When nothing usable was read
 // the error is a *discoveryError naming the failed URL and upstream status.
@@ -1236,6 +1244,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 	// in what the primary left out. There are only two families, so the loop
 	// ends as soon as the second has contributed.
 	var firstErr *discoveryError
+	var untrustedErr *untrustedDocumentError
 	var primary, fallback *rfc8414Document
 	var primaryFamily metadataFamily
 	// unreadable records, per family, the first candidate that could not be
@@ -1243,7 +1252,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 	// candidate may be hiding fields the merge would have captured, whichever
 	// order the probes ran in and even when a later candidate of its family
 	// merged, and a refresh must not mistake their absence for withdrawal.
-	unreadable := make(map[metadataFamily]string, 2)
+	unreadable := make(map[metadataFamily]*discoveryError, 2)
 	// unreadableErr is the first transient failure, returned whenever an
 	// unreadable candidate leaves the run unable to say what the issuer
 	// serves: the caller must retry rather than act on a guess.
@@ -1269,9 +1278,20 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 					unreadableErr = attemptErr
 				}
 				if _, seen := unreadable[candidate.family]; !seen {
-					unreadable[candidate.family] = candidate.url
+					unreadable[candidate.family] = attemptErr
 				}
 			}
+			continue
+		}
+
+		// Discovery location is not issuer identity. Even an origin fallback
+		// must name the requested issuer byte-for-byte.
+		if doc.Issuer == "" {
+			untrustedErr = &untrustedDocumentError{reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuerURL)}
+			continue
+		}
+		if doc.Issuer != issuerURL {
+			untrustedErr = &untrustedDocumentError{reason: fmt.Sprintf("metadata document advertises issuer %q, but the requested issuer is %q; refusing to adopt another authorization server's metadata", truncateForMessage(doc.Issuer), issuerURL)}
 			continue
 		}
 
@@ -1294,7 +1314,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 		// Only a document naming the same issuer may contribute: an
 		// origin-root fallback on a multi-tenant host can describe a sibling
 		// tenant, and one naming no issuer cannot be tied to this one.
-		if doc.Issuer != "" && issuerURLsEqual(doc.Issuer, primary.Issuer) {
+		if doc.Issuer != "" && doc.Issuer == primary.Issuer {
 			union := mergeIssuerMetadata(*primary, doc)
 			primary = &union
 			break
@@ -1302,22 +1322,37 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 	}
 
 	if primary != nil {
+		partialErr := unreadable[primaryFamily.other()]
+		if partialErr == nil {
+			partialErr = unreadable[primaryFamily]
+		}
+		partialURL := ""
+		if partialErr != nil {
+			partialURL = partialErr.WellKnownURL
+		}
 		result := discoveryResult{
-			doc:        *primary,
-			warnings:   collectDiscoveryWarnings(issuerURL, *primary),
-			unreadable: conv.Default(unreadable[primaryFamily.other()], unreadable[primaryFamily]),
+			doc:           *primary,
+			warnings:      collectDiscoveryWarnings(issuerURL, *primary),
+			unreadable:    partialURL,
+			unreadableErr: partialErr,
 		}
 		if result.unreadable != "" {
-			result.warnings = append(result.warnings, unreadableCandidateMessage(result.unreadable))
+			result.warnings = append(result.warnings, unreadableCandidateMessage(result.unreadable, result.unreadableErr))
 		}
 		return result, nil
+	}
+
+	// Reject unusable identity evidence only after every candidate was tried.
+	// An unread candidate still takes transient precedence so it can be retried.
+	if untrustedErr != nil && unreadableErr == nil {
+		return discoveryResult{}, untrustedErr
 	}
 
 	// An endpoint-less document is only worth returning when it is all the
 	// issuer has. With a candidate unread, the real document may be behind
 	// the outage, so the run is transient rather than a verdict on the issuer.
 	if fallback != nil && unreadableErr == nil {
-		return discoveryResult{doc: *fallback, warnings: collectDiscoveryWarnings(issuerURL, *fallback), unreadable: ""}, nil
+		return discoveryResult{doc: *fallback, warnings: collectDiscoveryWarnings(issuerURL, *fallback), unreadable: "", unreadableErr: nil}, nil
 	}
 	if unreadableErr != nil {
 		return discoveryResult{}, unreadableErr
@@ -1369,11 +1404,16 @@ func documentFromRaw(raw []byte) rfc8414Document {
 // unreadableCandidateMessage is the public-safe statement, for warnings and
 // the metadata_last_error column, that a well-known candidate could not be
 // read; "" when url is empty.
-func unreadableCandidateMessage(url string) string {
+func unreadableCandidateMessage(url string, discoveryErr *discoveryError) string {
 	if url == "" {
 		return ""
 	}
-	return fmt.Sprintf("metadata document at %s was unreadable; members only it advertises were not merged", url)
+	message := fmt.Sprintf("metadata document at %s was unreadable; members only it advertises were not merged", url)
+	if discoveryErr != nil && discoveryErr.WellKnownURL == url {
+		// UserMessage preserves status without exposing response bodies or causes.
+		message += "; " + discoveryErr.UserMessage()
+	}
+	return message
 }
 
 // rawDocumentIssuer reads the issuer member of a stored discovery document,
@@ -1457,7 +1497,15 @@ func attemptIssuerProbe(ctx context.Context, client httpDoer, wellKnown string) 
 		}
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	mediaType, _, mediaErr := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if mediaErr != nil || mediaType != "application/json" {
+		return rfc8414Document{}, &discoveryError{WellKnownURL: wellKnown, Status: resp.StatusCode, cause: errors.New("discovery content type must be application/json"), definitive: true}
+	}
+	const maxDiscoveryBodyBytes = 1 << 20
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDiscoveryBodyBytes+1))
+	if len(body) > maxDiscoveryBodyBytes {
+		return rfc8414Document{}, &discoveryError{WellKnownURL: wellKnown, Status: resp.StatusCode, cause: errors.New("discovery document exceeds body limit"), definitive: true}
+	}
 	if err != nil {
 		return rfc8414Document{}, &discoveryError{
 			WellKnownURL: wellKnown,
@@ -1487,6 +1535,37 @@ func attemptIssuerProbe(ctx context.Context, client httpDoer, wellKnown string) 
 // loopback exception for endpoints is measured against. A stored document is
 // re-projected the same way, without a fetch.
 func decodeIssuerDocument(body []byte, requested *url.URL) (rfc8414Document, error) {
+	return decodeIssuerDocumentWithLegacyNulls(body, requested, false)
+}
+
+// Stored documents captured before strict array validation may contain null
+// arrays. Treat those as absent during reprojection, without relaxing discovery.
+func decodeIssuerDocumentWithLegacyNulls(body []byte, requested *url.URL, legacyNulls bool) (rfc8414Document, error) {
+	// JSON null is accepted by Go's []string decoder, even as an element.
+	// Metadata arrays must actually be arrays containing only strings.
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(body, &members); err != nil || members == nil {
+		return rfc8414Document{}, errors.New("discovery document must be a JSON object")
+	}
+	for _, name := range []string{"scopes_supported", "grant_types_supported", "authorization_grant_profiles_supported", "response_types_supported", "token_endpoint_auth_methods_supported", "code_challenge_methods_supported", "introspection_endpoint_auth_methods_supported", "id_token_signing_alg_values_supported", "claims_supported"} {
+		raw, present := members[name]
+		if !present || (legacyNulls && bytes.Equal(bytes.TrimSpace(raw), []byte("null"))) {
+			continue
+		}
+		var values []json.RawMessage
+		if err := json.Unmarshal(raw, &values); err != nil || values == nil {
+			return rfc8414Document{}, fmt.Errorf("%s must be an array of strings", name)
+		}
+		for _, value := range values {
+			var entry any
+			if err := json.Unmarshal(value, &entry); err != nil {
+				return rfc8414Document{}, fmt.Errorf("decode %s entry: %w", name, err)
+			}
+			if _, ok := entry.(string); !ok {
+				return rfc8414Document{}, fmt.Errorf("%s must contain only strings", name)
+			}
+		}
+	}
 	var doc rfc8414Document
 	if err := json.Unmarshal(body, &doc); err != nil {
 		return rfc8414Document{}, fmt.Errorf("decode discovery document: %w", err)
@@ -1661,7 +1740,7 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 	warnings := []string{}
 	if doc.Issuer == "" {
 		warnings = append(warnings, "issuer field missing from discovery document")
-	} else if !issuerURLsEqual(doc.Issuer, requestedIssuer) {
+	} else if doc.Issuer != requestedIssuer {
 		warnings = append(warnings, fmt.Sprintf("discovery issuer %q does not match requested %q", truncateForMessage(doc.Issuer), requestedIssuer))
 	}
 	if doc.AuthorizationEndpoint == "" {
