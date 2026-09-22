@@ -168,7 +168,7 @@ describe("evidenceSignals", () => {
     );
 
     expect(headline(signals, "acts-on-behalf")).toBe(
-      "2 of 3 tools declare it acts on your behalf",
+      "2 of 3 tools declare that they act on your behalf",
     );
     expect(headline(signals, "destructive-tools")).toBe(
       "1 of 3 tools declares destructive effects",
@@ -194,7 +194,7 @@ describe("evidenceSignals", () => {
     );
 
     expect(headline(signals, "schema-arbitrary_command")).toBe(
-      "1 of 1 tool takes a shell command as a parameter",
+      "1 tool takes a shell command as a parameter",
     );
   });
 
@@ -235,7 +235,7 @@ describe("evidenceSignals", () => {
     );
 
     expect(headline(signals, "write-scopes")).toBe(
-      "It will ask to be granted write, tasks:admin",
+      "The scopes it requests include write, tasks:admin",
     );
   });
 

@@ -168,8 +168,16 @@ function SignalGroup({
       </div>
       {visible.length > 0 && (
         <ul id={listId} className="mt-1.5 space-y-1.5">
-          {visible.map((signal) => (
-            <SignalRow key={signal.id} signal={signal} />
+          {visible.map((signal, index) => (
+            <SignalRow
+              key={signal.id}
+              signal={signal}
+              // One link per run of rows sharing a section, at its head. Six
+              // consecutive rows about the tool listing produced six identical
+              // links down the gutter, which read as a column of chrome
+              // rather than as somewhere to go.
+              showSection={signal.section !== visible[index - 1]?.section}
+            />
           ))}
         </ul>
       )}
@@ -177,7 +185,13 @@ function SignalGroup({
   );
 }
 
-function SignalRow({ signal }: { signal: EvidenceSignal }): JSX.Element {
+function SignalRow({
+  signal,
+  showSection,
+}: {
+  signal: EvidenceSignal;
+  showSection: boolean;
+}): JSX.Element {
   return (
     <li className="flex items-baseline gap-2 text-xs">
       {/* A square, not a dot: the page has no round corners anywhere else,
@@ -192,17 +206,18 @@ function SignalRow({ signal }: { signal: EvidenceSignal }): JSX.Element {
           <span className="text-muted-foreground"> {signal.detail}</span>
         )}
       </p>
-      {signal.section && (
-        // Where to read the working, not a call to action: muted until
-        // hovered, and never wrapping, because a two-line link in the gutter
-        // of every row is what made this list look like a table of contents.
-        <a
-          href={`#${evidenceSectionAnchor(signal.section)}`}
-          className="text-muted-foreground hover:text-foreground hover:decoration-foreground shrink-0 whitespace-nowrap underline decoration-dotted underline-offset-2"
-        >
-          {SECTION_LABELS[signal.section]}
-        </a>
-      )}
+      {signal.section &&
+        showSection && (
+          // Where to read the working, not a call to action: muted until
+          // hovered, and never wrapping, because a two-line link in the gutter
+          // of every row is what made this list look like a table of contents.
+          <a
+            href={`#${evidenceSectionAnchor(signal.section)}`}
+            className="text-muted-foreground hover:text-foreground hover:decoration-foreground shrink-0 whitespace-nowrap underline decoration-dotted underline-offset-2"
+          >
+            {SECTION_LABELS[signal.section]}
+          </a>
+        )}
     </li>
   );
 }

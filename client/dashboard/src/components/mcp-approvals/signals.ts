@@ -333,9 +333,9 @@ function collectAuthoritySignals(document: EvidenceDocument, add: Emit): void {
     add({
       id: "write-scopes",
       tone: "watch",
-      headline: `It will ask to be granted ${writeScopes.join(", ")}`,
+      headline: `The scopes it requests include ${writeScopes.join(", ")}`,
       detail:
-        "These are the scopes the authorization server actually enforces, unlike the tool annotations.",
+        "Scopes are the one part of this the authorization server actually enforces, unlike the tool annotations.",
       section: "handover",
     });
   }
@@ -385,7 +385,7 @@ function collectCapabilitySignals(document: EvidenceDocument, add: Emit): void {
     add({
       id: "acts-on-behalf",
       tone: "watch",
-      headline: `${ofTools(actingCount, total)} ${plural(actingCount, "declares", "declare")} it acts on your behalf`,
+      headline: `${ofTools(actingCount, total)} ${plural(actingCount, "declares that it acts", "declare that they act")} on your behalf`,
       detail: "Each one does more than read when the model calls it.",
       section: "capabilities",
     });
@@ -408,7 +408,10 @@ function collectCapabilitySignals(document: EvidenceDocument, add: Emit): void {
     add({
       id: `schema-${schema.capability}`,
       tone: "watch",
-      headline: `${ofTools(count, total)} ${plural(count, "takes", "take")} a ${schema.takes} as a parameter`,
+      // The bare count, not the ratio the annotation signals use: one tool
+      // that takes a shell command is the whole finding, and "1 of 61" buries
+      // it in a denominator that does not change what it means.
+      headline: `${count} ${plural(count, "tool takes", "tools take")} a ${schema.takes} as a parameter`,
       detail: schema.detail,
       section: "capabilities",
     });
