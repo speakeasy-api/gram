@@ -48,6 +48,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 
 	// Tee the export into the OTel event feed pipeline before the per-client
 	// split below, so every client's records in the batch are mirrored.
+	sanitizeTeedLogsPayload(ctx, payload)
 	s.teeOTELLogsToEventFeed(ctx, payload, orgID, projectID)
 	s.ingestOTLPLogs(ctx, logger, payload, orgID, *authCtx.ProjectID)
 	return nil
@@ -75,6 +76,7 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 	payload = claudePayload
 
 	sessions := extractSessionMetadata(payload)
+	agent := isAgentActor(ctx)
 
 	// Resolve and attribute each session before writing the raw OTEL log rows so
 	// those rows can be stamped with the account attribution (provider,
@@ -119,12 +121,15 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 		// account UUID — would otherwise satisfy the company-credential arm
 		// below and stamp Claude rows with Codex attribution.
 		var cached SessionMetadata
-		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil &&
+		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil && !agent &&
 			cached.Provider == providerAnthropic && cached.GramOrgID == orgID && cached.ProjectID == projectID &&
 			(cached.UserAccountID != "" || (cached.AccountType != "" && cached.ExternalAccountUUID == "")) &&
 			!sessionEnrichesAttribution(session, cached) {
 			attributionBySession[session.SessionID] = cached
 			continue
+		}
+		if agent {
+			cached = agentSessionView(cached, orgID, projectID)
 		}
 
 		// Merge this batch's identity over anything an earlier (incomplete) batch
@@ -132,6 +137,12 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 		// identity rather than only the fields this single batch happened to carry.
 		userEmail := conv.Default(session.UserEmail, cached.UserEmail)
 		userID := ""
+		// The OTEL email is the AI account's report; for an agent actor it is
+		// observed only and never resolves to a human.
+		observedEmail := userEmail
+		if agent {
+			userEmail, observedEmail = "", session.UserEmail
+		}
 		if userEmail != "" {
 			lookup := conv.NormalizeEmail(userEmail)
 			id, ok := userIDByEmail[lookup]
@@ -165,15 +176,18 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 			UserAccountID: "",
 			// On this path user.email is the account's own report, so it doubles
 			// as the observed email consumers keep separate from actor identity.
-			ObservedUserEmail: userEmail,
+			ObservedUserEmail: observedEmail,
 			GramOrgID:         orgID,
 			ProjectID:         projectID,
+		}
+		if agent {
+			clearAgentAccountIdentity(&completeMetadata)
 		}
 
 		sessionLogger := logger.With(
 			attr.SlogServiceName(session.ServiceName),
 			attr.SlogGenAIConversationID(session.SessionID),
-			attr.SlogAuthUserEmail(session.UserEmail),
+			attr.SlogAuthUserEmail(userEmail),
 		)
 
 		_, metadataErr := s.getSessionMetadata(ctx, completeMetadata.SessionID)
@@ -182,11 +196,14 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 		// owning employee (directly for team accounts, via the device bridge for
 		// personal ones), and persist the account entity. Failures are
 		// non-fatal — session capture/enforcement must continue regardless.
-		if err := s.attributeSession(ctx, &completeMetadata); err != nil {
-			sessionLogger.WarnContext(ctx, "failed to attribute AI account for session",
-				attr.SlogEvent("account_attribution_failed"),
-				attr.SlogError(err),
-			)
+		// Agent actors skip it: attribution (incl. the device bridge) links to employees.
+		if !agent {
+			if err := s.attributeSession(ctx, &completeMetadata); err != nil {
+				sessionLogger.WarnContext(ctx, "failed to attribute AI account for session",
+					attr.SlogEvent("account_attribution_failed"),
+					attr.SlogError(err),
+				)
+			}
 		}
 
 		attributionBySession[completeMetadata.SessionID] = completeMetadata
@@ -221,7 +238,8 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 		// lets the next batch re-attribute and retry the link. Process each
 		// session independently so a single cache failure does not abort
 		// flushing the remaining sessions in the batch.
-		if !linkFailed {
+		// Agent sessions never seed the human-keyed session cache.
+		if !linkFailed && !agent {
 			if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
 				sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
 					attr.SlogEvent("claude_logs_cache_set_failed"),
@@ -241,7 +259,11 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 			}
 		}
 
-		s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
+		// Buffered hooks came from unauthenticated requests; an agent batch must
+		// never adopt them.
+		if !agent {
+			s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
+		}
 
 		sessionLogger.InfoContext(ctx, "Stored session metadata",
 			attr.SlogEvent("session_validated"),
@@ -402,6 +424,7 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 		}
 
 		resourceAttrs := resourceAttributesMap(resourceLog.Resource)
+		stripAgentIdentity(ctx, resourceAttrs)
 		resourceServiceName := stringAttr(resourceAttrs, attr.ServiceNameKey)
 
 		for _, scopeLog := range resourceLog.ScopeLogs {
@@ -477,13 +500,16 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				if sessionMeta.UserID != "" {
 					userInfo = telemetry.UserInfoByIDAndEmail(sessionMeta.UserID, sessionMeta.UserEmail)
 				}
+				if isAgentActor(ctx) {
+					userInfo = telemetry.UserInfoByEmail("")
+				}
 
 				timestamp, observedTimestamp := otelLogTimestamps(logRecord)
 				logParams := telemetry.WithOTELMetadata(telemetry.LogParams{
 					Timestamp:  timestamp,
 					ToolInfo:   claudeOTELLogToolInfo(surface, orgID, parsedProjectID.String()),
 					UserInfo:   userInfo,
-					Attributes: logAttrs,
+					Attributes: withAgentActor(ctx, logAttrs),
 				}, observedTimestamp, resourceAttrs)
 
 				// Claude redacts user-configured MCP server/tool names to
