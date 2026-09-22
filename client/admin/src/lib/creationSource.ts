@@ -50,8 +50,13 @@ export function creationSourceFact(
     };
   }
 
+  // Own-property check, not a bare lookup: the server may send any string, and
+  // "constructor" or "toString" would otherwise read off Object.prototype and
+  // hand the record a function to render instead of the source it was given.
   return {
-    label: CREATION_SOURCE_LABELS[trimmed] ?? trimmed,
+    label: Object.hasOwn(CREATION_SOURCE_LABELS, trimmed)
+      ? CREATION_SOURCE_LABELS[trimmed]!
+      : trimmed,
     recorded: true,
     platformAdmin: trimmed === PLATFORM_ADMIN_SOURCE,
   };

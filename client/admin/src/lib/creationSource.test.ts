@@ -46,4 +46,14 @@ describe("creationSourceFact", () => {
     expect(fact.recorded).toBe(true);
     expect(fact.platformAdmin).toBe(false);
   });
+
+  // The column is free-form text, so a source can collide with a name every
+  // object inherits. A bare index lookup answers those with a function or an
+  // object, which the record then tries to render.
+  it.each(["constructor", "toString", "__proto__", "hasOwnProperty"])(
+    "renders %s as its own text rather than an inherited property",
+    (source) => {
+      expect(creationSourceFact(source).label).toBe(source);
+    },
+  );
 });
