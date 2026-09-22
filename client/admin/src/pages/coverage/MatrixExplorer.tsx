@@ -433,7 +433,7 @@ export function MatrixExplorer({
 
   const sliceLabels: Record<Axis, string> = {
     methods: "Across all methods",
-    platforms: "Method reference claims",
+    platforms: "General capabilities",
     capabilities: "Applicability only",
   };
   function changeAxis(position: "rows" | "columns", axis: Axis) {
