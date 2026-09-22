@@ -91,6 +91,18 @@ export function formatMeterQuantity(
 ): string {
   return formatMeterRatio(BigInt(value), 1n, unit, notation);
 }
+
+export function formatScaledMeterQuantity(value: string, unit: string): string {
+  const isBytes = unit === "bytes";
+  const divisor = isBytes ? 1024n ** 3n : 1_000_000n;
+  const quantity = BigInt(value);
+  const magnitude = quantity < 0n ? -quantity : quantity;
+  const hundredths = (magnitude * 100n + divisor / 2n) / divisor;
+  const whole = exactInteger.format(hundredths / 100n);
+  const fraction = (hundredths % 100n).toString().padStart(2, "0");
+  const sign = quantity < 0n && hundredths !== 0n ? "-" : "";
+  return `${sign}${whole}.${fraction} ${isBytes ? "GiB" : "MTok"}`;
+}
 export function formatDailyMeterRate(
   total: string,
   unit: string,
