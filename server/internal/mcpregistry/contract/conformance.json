@@ -1,0 +1,578 @@
+[
+  {
+    "name": "valid URL template",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "invalid name",
+    "record": {
+      "server": {
+        "name": "missing-slash",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "valid name",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "nonstring version",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": 1,
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "empty server version",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "255 Unicode code points",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "256 Unicode code points",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "six ordered remotes",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://example.invalid/0"
+          },
+          {
+            "type": "sse",
+            "url": "https://example.invalid/1"
+          },
+          {
+            "type": "streamable-http",
+            "url": "https://example.invalid/2"
+          },
+          {
+            "type": "sse",
+            "url": "https://example.invalid/3"
+          },
+          {
+            "type": "streamable-http",
+            "url": "https://example.invalid/4"
+          },
+          {
+            "type": "sse",
+            "url": "https://example.invalid/5"
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "invalid remote transport",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "stdio",
+            "url": "https://example.invalid"
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "missing remote URL",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "sse"
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "whitespace in remote URL",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "sse",
+            "url": "https://has space"
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "URN",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "websiteUrl": "urn:example:fixture"
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "relative URI",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "websiteUrl": "/relative"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid percent escape",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "websiteUrl": "https://example.invalid/%ZZ"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid IPv6 literal",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "websiteUrl": "https://[:::]/"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "valid leap second",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "publishedAt": "2016-12-31T23:59:60Z"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "mid-month leap second",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "publishedAt": "2016-12-15T23:59:60Z"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid calendar day",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "publishedAt": "2023-02-29T00:00:00Z"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "offset leap second",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "publishedAt": "2017-01-01T00:59:60+01:00"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "fractional timestamp",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "publishedAt": "2024-02-29t12:30:00.123456789+05:30"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "unknown official property",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "unknown": true
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "open extension JSON",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "_meta": {
+          "io.modelcontextprotocol.registry/publisher-provided": {
+            "example.invalid": {
+              "array": [
+                null,
+                true,
+                9007199254740993,
+                {
+                  "nested": []
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "package version 'latest'",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "packages": [
+          {
+            "registryType": "custom",
+            "identifier": "fixture",
+            "version": "latest",
+            "transport": {
+              "type": "stdio"
+            }
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "package version 'LATEST'",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "packages": [
+          {
+            "registryType": "custom",
+            "identifier": "fixture",
+            "version": "LATEST",
+            "transport": {
+              "type": "stdio"
+            }
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "package version ''",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "packages": [
+          {
+            "registryType": "custom",
+            "identifier": "fixture",
+            "version": "",
+            "transport": {
+              "type": "stdio"
+            }
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "bracketed IPv4",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "websiteUrl": "https://[127.0.0.1]/"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "IPv6",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "websiteUrl": "https://[2001:db8::1]/"
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "IPvFuture",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "websiteUrl": "https://[v1.test]/"
+      }
+    },
+    "valid": true
+  }
+]

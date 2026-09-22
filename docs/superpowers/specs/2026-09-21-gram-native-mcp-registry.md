@@ -371,8 +371,8 @@ release; wire their DB-backed read handlers with the Stage B consumer release,
 not ahead of it. Make it clear that admin changes affect the new registry, not live
 Pulse. No provider flag is needed: the released consumer code remains Pulse-backed.
 
-Copy the accepted records and schema inputs into Gram. Seed 62 approved records,
-excluding the example fixture and Figma, preserving complete payloads, names,
+Copy the accepted records and schema inputs into Gram. Start with only the two user-approved pinned Vercel and Linear records,
+excluding all other source records, the example fixture and Figma, preserving complete payloads, names,
 remote order, and inherited metadata. Record input hashes/counts and import outcome.
 Make reruns idempotent: insert missing records, detect collisions/conflicts, and
 never overwrite subsequent admin edits or mint new IDs for existing names. Use an
@@ -380,6 +380,10 @@ explicit import step, not an unconditional boot-time reseed. Known template-base
 installation limitations stay documented; this is not recent live verification.
 
 ### Stage B — release internal consumers and protect the transition
+
+The two-record Stage A starter is not full-catalog or cutover proof. The pinned
+source historically contained 62 non-example records; full-catalog approval and
+reference coverage against the candidate database remain required before cutover.
 
 Adapt all consumers to the in-process service and test on staging. The merged and
 deployed replacement release is the cutover, not a separate provider activation.

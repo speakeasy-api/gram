@@ -20,7 +20,7 @@
 - Staff admins use the existing staff-admin login. Ordinary customer sessions/API keys do not grant staff access or global-catalog mutation rights.
 - Explicit Save changes the live entry immediately after server validation. No drafts, autosave, review queue, or separate publish step for ordinary edits.
 - Unpublish hides an entry from browsing without destroying its data or breaking retained reference lookup.
-- Import the already-approved snapshot, not a new Pulse export. Keep Figma excluded. The accepted production count is **62**, excluding the example fixture.
+- Import the already-approved snapshot, not a new Pulse export. Keep Figma excluded. Task 0 uses only the approved **two-record starter** (Vercel and Linear). The historical source inventory is 62, not starter or production acceptance evidence; full-catalog acceptance remains a Stage B gate.
 - `id` and `server.name` are immutable after creation. Entry UUIDs are not legacy registry/provider UUIDs. Do not rewrite installed identities.
 - Save and visibility changes require an opaque, lossless stale-editor token; every successful mutation advances it.
 - Preserve complete extension JSON, remote ordering, and unknown-versus-empty declarations. URL templates are legitimate data, not verified endpoints.
@@ -61,7 +61,7 @@ New:
 - `server/internal/mcpregistry/{service.go,validation.go,queries.sql,import.go}`: concrete service, strict canonical validation, SQL queries and explicit import.
 - `server/internal/mcpregistry/{setup_test.go,service_test.go,validation_test.go,import_test.go}`: local PostgreSQL harness and contract/race/import tests.
 - `server/internal/mcpregistry/contract/{record.schema.json,conformance.json}`: one vendored self-contained schema and shared valid/invalid fixture cases, sourced in Task 0.
-- `server/internal/mcpregistry/baseline/{manifest.json,records/*.json}`: existing 62-record input and hashes, after Task 0 validation and public-data check.
+- `server/internal/mcpregistry/baseline/{manifest.json,records/*.json}`: approved two-record starter input and hashes, after Task 0 validation and public-data check.
 - `server/internal/mcpregistry/repo/`: SQLc-generated, not handwritten.
 - `server/internal/admin/{registry.go,registry_handler_test.go}`: adapters, staff attribution and real HTTP tests.
 - `server/cmd/gram/{registry_import.go,registry_import_test.go}`: explicit import command.
@@ -156,9 +156,9 @@ RPCs on the existing `admin` service, with `security.AdminAuth`:
 
 **Consumes:** existing `speakeasy-api/mcp-registry` catalog/schema at `c5873aaaad0a2988e39f1ed7c237006bbfb05826`; no historical checkpoint or fresh Pulse export.
 
-**Produces:** self-contained canonical JSON Schema with explicit dialect, shared fixtures, 62 exact record files, and a manifest with full revision and per-file SHA-256 hashes.
+**Produces:** self-contained canonical JSON Schema with explicit dialect, shared fixtures, two exact starter record files, and a manifest with full revision and per-file SHA-256 hashes.
 
-- [ ] **Acquire the pinned existing source**, without invoking any Pulse acquisition script:
+- [x] **Acquire the pinned existing source**, without invoking any Pulse acquisition script:
 
 ```sh
 export APPROVED_REGISTRY_SOURCE="$(mktemp -d /tmp/gram-registry-input.XXXXXX)"
@@ -168,14 +168,14 @@ gh api repos/speakeasy-api/mcp-registry/tarball/c5873aaaad0a2988e39f1ed7c237006b
 
 The source directory is temporary and is not committed. Vendor only the reviewed catalog/schema inputs into Gram; retain no runtime dependency on the standalone repository. Pin the full revision in the manifest, and do not silently advance it with future remote-main changes.
 
-- [ ] **Pin and validate the input set.** Enumerate `data/servers/*.json`, exclude only the approved example fixture, check record names rather than filenames for Figma, and fail unless count/uniqueness/payload shape match approval. Use this exact inventory check before copying:
+- [x] **Pin and validate the input set.** Select only `data/servers/app.linear__linear.json` and `data/servers/com.vercel__vercel-mcp.json`; do not copy the other 60 records. Check record names rather than filenames for Figma, and fail unless count/uniqueness/payload shape match approval. Use this exact inventory check before copying:
 
 ```python
 import hashlib, json, os
 from pathlib import Path
 root = Path(os.environ['APPROVED_REGISTRY_SOURCE']) / 'data/servers'
-files = sorted(p for p in root.glob('*.json') if p.name != 'example.json')
-assert len(files) == 62
+files = [root / name for name in ['app.linear__linear.json', 'com.vercel__vercel-mcp.json']]
+assert len(files) == 2
 names = []
 for p in files:
     raw = p.read_bytes()
@@ -186,15 +186,15 @@ for p in files:
     assert record['server'].get('remotes')
     names.append(name)
     print(p.name, len(raw), hashlib.sha256(raw).hexdigest())
-assert len(set(names)) == 62
+assert len(set(names)) == 2
 ```
 
-- [ ] **Port the canonical schema without introducing dual handwritten models.** Vendor/export the approved full-record schema as `contract/record.schema.json`; bundle referenced schemas offline, preserve open extension metadata, remote requirements and supported URL templates. Confirm the explicit dialect and assert format semantics in both validators using existing source tests and shared negative fixtures ported with the contract. Unsupported constraints fail schema initialization rather than become no-op matches. Translate the source custom filters into faithfully enforced schema/format semantics and add negative cases; do not silently drop a filter during export. Resolve any demonstrated conformance discrepancy during this task rather than assuming a historical archive contains the answer.
-- [ ] **Record byte limits and provenance.** Write manifest fields `source_revision`, `schema_sha256`, `records:[{file,name,sha256}]`, `count`, `max_record_bytes` and the actual maximum generated-API mutation-envelope size. Proposed service limits are 8 MiB raw record and 16 MiB registry mutation envelope; reject the proposal if the approved largest fixture cannot round-trip. Keep record bodies out of logs/review output.
-- [ ] **Check public suitability**, including file names and URLs; never copy credentials/customer identifiers. Keep confidential operational evidence in Linear, not the baseline files.
-- [ ] Commit the approved data/schema slice only after provenance and conformance pass. No new Pulse acquisition, runtime export dependency or boot-time import.
+- [x] **Port the canonical schema without introducing dual handwritten models.** Vendor/export the approved full-record schema as `contract/record.schema.json`; bundle referenced schemas offline, preserve open extension metadata, remote requirements and supported URL templates. Confirm the explicit dialect and assert format semantics in both validators using existing source tests and shared negative fixtures ported with the contract. Unsupported constraints fail schema initialization rather than become no-op matches. Translate the source custom filters into faithfully enforced schema/format semantics and add negative cases; do not silently drop a filter during export. Resolve any demonstrated conformance discrepancy during this task rather than assuming a historical archive contains the answer.
+- [x] **Record byte limits and provenance.** Write manifest fields `source_revision`, `schema_sha256`, `records:[{file,name,sha256}]`, `count`, `max_record_bytes` and `planned_max_mutation_envelope_bytes`, measured using the documented admin JSON wrapper. The generated API does not exist until Task 5: its actual SDK serialization/envelope measurement is a Task 5 release check, not a Task 0 dependency. Proposed service limits are 8 MiB raw record and 16 MiB registry mutation envelope; reject the proposal if the approved largest fixture cannot round-trip. Keep record bodies out of logs/review output.
+- [x] **Check public suitability**, including file names and URLs; never copy credentials/customer identifiers. Keep confidential operational evidence in Linear, not the baseline files.
+- [x] Commit the approved data/schema slice only after provenance and conformance pass. No new Pulse acquisition, runtime export dependency or boot-time import.
 
-**Expected check:** success produces exactly 62 hash-pinned records and one validated schema contract. Availability/count/name/version/remote checks already passed during planning; vendoring, full schema conformance and database import remain implementation work.
+**Expected check:** success produces exactly two hash-pinned starter records and one validated schema contract. Task 0 implementation and independent review passed for the two-record starter: Go contract tests, 34 browser tests, pinned-source export/fixture/hash parity and public-content review. Minimal contract compilation was brought forward from Task 2 to verify parity; later validation code must reuse it. Database import remains Task 4, and actual generated-SDK envelope measurement remains Task 5.
 
 ## Task 1 — Add the catalog table in a schema-only PR
 
@@ -386,7 +386,7 @@ type ImportSummary struct { Inserted, Unchanged int; Conflicts []string }
 func (s *Service) Import(ctx context.Context, source fs.FS) (ImportSummary, error)
 ```
 
-- [ ] Write tests `TestImportApprovedCountAndHashes`, `TestImportRerunKeepsIDs`, `TestImportRejectsHashMismatch`, `TestImportPreservesStaffEdit`, `TestImportConcurrentCreate` before implementing the importer. Use `testing/fstest.MapFS` for synthetic records/manifest; use the approved baseline for the 62-record conformance test. Tests hash exact source bytes, not reserialized JSON.
+- [ ] Write tests `TestImportApprovedCountAndHashes`, `TestImportRerunKeepsIDs`, `TestImportRejectsHashMismatch`, `TestImportPreservesStaffEdit`, `TestImportConcurrentCreate` before implementing the importer. Use `testing/fstest.MapFS` for synthetic records/manifest; use the approved baseline for the two-record starter conformance test. Tests hash exact source bytes, not reserialized JSON.
 - [ ] Validate the **entire** manifest and every record before beginning a transaction. Require approved count, no duplicate names, excluded fixture/Figma, schema conformance and exact hashes. Report file/name/hash/count summaries, never payload contents.
 - [ ] Within one transaction, use the `InsertImportedEntry` query below per record, then read the existing row by name when no insert occurred. Compare database JSONB equality, not whitespace. Equal rows are unchanged; differing rows are conflicts, never overwritten. If any conflict exists, roll back new inserts and return the conflict summary/error. This makes rerun-after-edit non-destructive and visible, not a silent reset. Preserve visibility and UUIDs.
 
@@ -443,7 +443,7 @@ mise run test:gen-sdk
 mise run test:server ./internal/admin/ ./internal/mcpregistry/
 ```
 
-Verify exported operation names against annotations and SDK output. Add an SDK round-trip test that deserializes then serializes `updated_at="2026-09-21T12:00:00.123456Z"` and leaves it a byte-identical string. No hand-edited generated files.
+Verify exported operation names against annotations and SDK output. Measure the actual largest generated-SDK mutation envelope against the vendored baseline and compare it with the Task 0 planned-envelope measurement and 16 MiB limit; do not treat a planned wrapper measurement as generated-API evidence. Add an SDK round-trip test that deserializes then serializes `updated_at="2026-09-21T12:00:00.123456Z"` and leaves it a byte-identical string. No hand-edited generated files.
 
 - [ ] Commit API, adapters and generated outputs after the real HTTP suite passes.
 
@@ -549,7 +549,7 @@ Planning checks: all referenced `mise run` task names were found in this worktre
 | Spec requirement                                                                 | Plan location                                                        |
 | -------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | Global JSONB, stable identity, unique unpublished names                          | Tasks 1–3                                                            |
-| Approved 62 records, hashes, no fresh export, idempotent import                  | Tasks 0/4                                                            |
+| Approved two-record starter, hashes, no fresh export, idempotent import          | Tasks 0/4                                                            |
 | Canonical schema, complete metadata, URL templates, strict server validation     | Tasks 0/2/5/6                                                        |
 | Staff-only auth, origin checks, safe errors and attribution                      | Task 5                                                               |
 | Immediate Save, explicit visibility, repairability                               | Tasks 3/5/6                                                          |
