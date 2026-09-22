@@ -164,15 +164,9 @@ func (k *KMSClients) Factory(_ context.Context, _ oauth2.TokenSource) (gcpkms.Pr
 }
 
 // NewProvisioner builds a provisioner over the test database with the stub
-// GCP identity and the given KMS factory.
-func NewProvisioner(t *testing.T, conn *pgxpool.Pool, kmsClients gcpkms.ProvisioningClientFactory, serverURL string, credentialID uuid.UUID) *identityproviderconnections.Provisioner {
-	t.Helper()
-	return NewProvisionerPinnedTo(t, conn, kmsClients, serverURL, credentialID, "")
-}
-
-// NewProvisionerPinnedTo is NewProvisioner with the signing service account the
-// credential must impersonate; empty means unpinned.
-func NewProvisionerPinnedTo(t *testing.T, conn *pgxpool.Pool, kmsClients gcpkms.ProvisioningClientFactory, serverURL string, credentialID uuid.UUID, signingServiceAccount string) *identityproviderconnections.Provisioner {
+// GCP identity and the given KMS factory. signingServiceAccount pins the
+// service account the credential must impersonate; empty means unpinned.
+func NewProvisioner(t *testing.T, conn *pgxpool.Pool, kmsClients gcpkms.ProvisioningClientFactory, serverURL string, credentialID uuid.UUID, signingServiceAccount string) *identityproviderconnections.Provisioner {
 	t.Helper()
 
 	base, err := url.Parse(serverURL)
@@ -211,7 +205,7 @@ func Provision(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizati
 
 	credentialID := CreatePlatformSigningCredential(t, ctx, conn)
 	connectionID := CreateConnection(t, ctx, conn, organizationID, identityproviderconnections.ProviderOkta)
-	provisioner := NewProvisioner(t, conn, NewKMSClients(t).Factory, serverURL, credentialID)
+	provisioner := NewProvisioner(t, conn, NewKMSClients(t).Factory, serverURL, credentialID, "")
 
 	client, err := provisioner.ProvisionClient(ctx, identityproviderconnections.ProvisionClientParams{
 		OrganizationID: organizationID,

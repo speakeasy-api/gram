@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	adminecgen "github.com/speakeasy-api/gram/server/gen/admin_external_credentials"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalcredentials/repo"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
@@ -19,7 +20,7 @@ func TestCreateGcpIamPlatformCredential_Ambient(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	cred, err := ti.service.CreateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.CreateGcpIamPlatformCredentialPayload{
+	cred, err := ti.service.CreateGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.CreateGcpIamPlatformCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "platform-ambient",
 		ImpersonateServiceAccount: nil,
@@ -43,7 +44,7 @@ func TestCreateGcpIamPlatformCredential_NameRequired(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	_, err := ti.service.CreateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.CreateGcpIamPlatformCredentialPayload{
+	_, err := ti.service.CreateGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.CreateGcpIamPlatformCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "   ",
 		ImpersonateServiceAccount: nil,
@@ -58,7 +59,7 @@ func TestCreateGcpIamPlatformCredential_WifTripleMustBeComplete(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	_, err := ti.service.CreateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.CreateGcpIamPlatformCredentialPayload{
+	_, err := ti.service.CreateGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.CreateGcpIamPlatformCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "partial-wif",
 		ImpersonateServiceAccount: nil,
@@ -73,7 +74,7 @@ func TestCreateGcpIamPlatformCredential_ExemptsOwnProjectSigner(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	cred, err := ti.service.CreateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.CreateGcpIamPlatformCredentialPayload{
+	cred, err := ti.service.CreateGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.CreateGcpIamPlatformCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "identity-provider-signer",
 		ImpersonateServiceAccount: conv.PtrEmpty(provisiontest.SigningServiceAccount()),
@@ -91,8 +92,14 @@ func TestCreateGcpIamPlatformCredential_ExemptsOwnProjectSigner(t *testing.T) {
 func TestCreateGcpIamPlatformCredential_RejectsStaleAdminFlag(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
+	// The session claims admin but users.admin was never set, as after a revocation.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	stale := *authCtx
+	stale.IsAdmin = true
+	ctx = contextvalues.WithValidatedGramSession(ctx, &stale, false)
 
-	_, err := ti.service.CreateGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.CreateGcpIamPlatformCredentialPayload{
+	_, err := ti.service.CreateGcpIamPlatformCredential(ctx, &adminecgen.CreateGcpIamPlatformCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "platform-ambient",
 		ImpersonateServiceAccount: nil,
@@ -109,21 +116,21 @@ func TestUpdateGcpIamPlatformCredential_RenameDoesNotRelogExemption(t *testing.T
 	const grant = "exempted a gcp iam credential from own-project screening"
 	signer := provisiontest.SigningServiceAccount()
 
-	cred, err := ti.service.CreateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.CreateGcpIamPlatformCredentialPayload{
+	cred, err := ti.service.CreateGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.CreateGcpIamPlatformCredentialPayload{
 		SessionToken: nil, Name: "identity-provider-signer", ImpersonateServiceAccount: conv.PtrEmpty(signer),
 		WifPoolID: nil, WifProviderID: nil, WifProjectNumber: nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, strings.Count(logs.String(), grant))
 
-	_, err = ti.service.UpdateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
+	_, err = ti.service.UpdateGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
 		SessionToken: nil, ID: cred.ID, Name: "identity-provider-signer-renamed", ImpersonateServiceAccount: conv.PtrEmpty(signer),
 		WifPoolID: nil, WifProviderID: nil, WifProjectNumber: nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, strings.Count(logs.String(), grant), "a rename that keeps the target is not a new grant")
 
-	_, err = ti.service.UpdateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
+	_, err = ti.service.UpdateGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
 		SessionToken: nil, ID: cred.ID, Name: "identity-provider-signer-renamed", ImpersonateServiceAccount: conv.PtrEmpty("other-" + signer),
 		WifPoolID: nil, WifProviderID: nil, WifProjectNumber: nil,
 	})

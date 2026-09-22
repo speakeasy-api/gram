@@ -23,19 +23,19 @@ func TestDeleteGcpIamPlatformCredential_SoftDeletes(t *testing.T) {
 
 	cred := createPlatformGCPAmbientCredential(t, ctx, ti, "platform-delete")
 
-	err := ti.service.DeleteGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.DeleteGcpIamPlatformCredentialPayload{
+	err := ti.service.DeleteGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.DeleteGcpIamPlatformCredentialPayload{
 		ID:           cred.ID,
 		SessionToken: nil,
 	})
 	require.NoError(t, err)
 
-	_, err = ti.service.GetGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.GetGcpIamPlatformCredentialPayload{
+	_, err = ti.service.GetGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.GetGcpIamPlatformCredentialPayload{
 		ID:           cred.ID,
 		SessionToken: nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	result, err := ti.service.ListPlatformExternalCredentials(withAdmin(t, ctx), &adminecgen.ListPlatformExternalCredentialsPayload{
+	result, err := ti.service.ListPlatformExternalCredentials(withAdmin(t, ctx, ti), &adminecgen.ListPlatformExternalCredentialsPayload{
 		Provider:     nil,
 		SessionToken: nil,
 	})
@@ -66,17 +66,17 @@ func TestGcpIamPlatformCredential_RefusesMutationWhileManagedKeysLive(t *testing
 	})
 	require.NoError(t, err)
 
-	err = ti.service.DeleteGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.DeleteGcpIamPlatformCredentialPayload{ID: cred.ID, SessionToken: nil})
+	err = ti.service.DeleteGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.DeleteGcpIamPlatformCredentialPayload{ID: cred.ID, SessionToken: nil})
 	requireOopsCode(t, err, oops.CodeConflict)
 
-	_, err = ti.service.UpdateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
+	_, err = ti.service.UpdateGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
 		ID: cred.ID, SessionToken: nil, Name: "renamed", ImpersonateServiceAccount: nil, WifPoolID: nil, WifProviderID: nil, WifProjectNumber: nil,
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
 
 	_, err = extkeysrepo.New(ti.conn).SoftDeleteExternalKey(ctx, extkeysrepo.SoftDeleteExternalKeyParams{ID: key.ID, OrganizationID: conv.ToPGText(ti.orgID), Provider: "gcp_kms"})
 	require.NoError(t, err)
-	require.NoError(t, ti.service.DeleteGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.DeleteGcpIamPlatformCredentialPayload{ID: cred.ID, SessionToken: nil}))
+	require.NoError(t, ti.service.DeleteGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.DeleteGcpIamPlatformCredentialPayload{ID: cred.ID, SessionToken: nil}))
 }
 
 // Deleting a missing id is an idempotent no-op.
@@ -84,7 +84,7 @@ func TestDeleteGcpIamPlatformCredential_MissingIsNoOp(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	err := ti.service.DeleteGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.DeleteGcpIamPlatformCredentialPayload{
+	err := ti.service.DeleteGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.DeleteGcpIamPlatformCredentialPayload{
 		ID:           uuid.NewString(),
 		SessionToken: nil,
 	})
@@ -98,7 +98,7 @@ func TestDeleteGcpIamPlatformCredential_ExcludesOrgCredential(t *testing.T) {
 
 	orgCred := createGCPImpersonationCredential(t, ctx, ti, "org-scoped")
 
-	err := ti.service.DeleteGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.DeleteGcpIamPlatformCredentialPayload{
+	err := ti.service.DeleteGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.DeleteGcpIamPlatformCredentialPayload{
 		ID:           orgCred.ID,
 		SessionToken: nil,
 	})
