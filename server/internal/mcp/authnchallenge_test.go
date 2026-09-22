@@ -1515,6 +1515,42 @@ func TestHandleRegister_LegacyToolsetSlug_ResolvesViaFallback(t *testing.T) {
 // TestHandleRegister_UnknownSlug_ReturnsNotFound confirms a slug matching
 // neither an mcp_endpoint nor a toolset still 404s after the addressing miss
 // falls through the toolset fallback.
+// A registration resolves its endpoint, and with it a live issuer, before it
+// inserts the client. When a migration or delete retires that issuer in
+// between, the insert must land nowhere rather than on the tombstone.
+func TestServeRegister_IssuerRetiredAfterResolution_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	slug := "retired-register-" + uuid.NewString()
+	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "public", issuerID)
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+	require.NoError(t, err)
+
+	// The production delete refuses an issuer that still owns a server, so
+	// retire the row directly: what matters is that the endpoint above was
+	// resolved while the issuer was live.
+	retired, err := testrepo.New(ti.conn).SoftDeleteAttachmentConfigFixture(ctx, testrepo.SoftDeleteAttachmentConfigFixtureParams{ID: issuerID, ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, retired)
+
+	w := httptest.NewRecorder()
+	err = ti.service.ServeRegister(w, newRegisterRequest(t, slug, dcrPublicClientBody), endpoint)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	require.Empty(t, w.Body.String())
+
+	clients, err := usersessions_repo.New(ti.conn).CountUserSessionIssuerClientsForMigration(ctx, usersessions_repo.CountUserSessionIssuerClientsForMigrationParams{UserSessionIssuerID: issuerID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Zero(t, clients, "no live client may reference the retired issuer")
+}
+
 func TestHandleRegister_UnknownSlug_ReturnsNotFound(t *testing.T) {
 	t.Parallel()
 

@@ -1316,3 +1316,101 @@ UPDATE principal_remote_session_bindings SET remote_session_client_id = @other_c
 
 -- name: MutateAttachmentDifferentRequestingIssuerFixture :execrows
 UPDATE principal_remote_session_bindings SET user_session_issuer_id = @provenance WHERE project_id = @project AND principal_id = @agent;
+
+-- name: InsertPrincipalRemoteSessionBindingFixture :one
+INSERT INTO principal_remote_session_bindings (
+  project_id,
+  organization_id,
+  principal_id,
+  user_session_issuer_id,
+  remote_session_client_id,
+  remote_session_id,
+  grant_generation,
+  attached_by_subject_id
+) VALUES (
+  @project_id,
+  @organization_id,
+  @principal_id,
+  @user_session_issuer_id,
+  @remote_session_client_id,
+  @remote_session_id,
+  @grant_generation,
+  @attached_by_subject_id
+)
+RETURNING id;
+
+-- name: GetPrincipalRemoteSessionBindingIssuerFixture :one
+SELECT user_session_issuer_id
+FROM principal_remote_session_bindings
+WHERE id = @id;
+
+-- name: InsertRemoteSessionEMABindingFixture :one
+INSERT INTO remote_session_ema_bindings (
+  project_id,
+  organization_id,
+  user_session_issuer_id,
+  remote_session_issuer_id,
+  resource,
+  remote_session_client_id
+) VALUES (
+  @project_id,
+  @organization_id,
+  @user_session_issuer_id,
+  @remote_session_issuer_id,
+  @resource,
+  @remote_session_client_id
+)
+RETURNING id;
+
+-- name: GetRemoteSessionEMABindingFixture :one
+SELECT user_session_issuer_id, generation
+FROM remote_session_ema_bindings
+WHERE id = @id;
+
+-- name: SoftDeleteUserSessionMigrationChildrenFixture :one
+-- Builds tombstones across every counted migration child table without
+-- invoking production cascades that would erase the independent test cases.
+WITH client AS (
+  UPDATE user_session_clients SET deleted_at = clock_timestamp()
+  WHERE user_session_clients.id = @client_id AND user_session_clients.deleted IS FALSE
+  RETURNING user_session_clients.id
+), session AS (
+  UPDATE user_sessions SET deleted_at = clock_timestamp()
+  WHERE user_sessions.id = @session_id AND user_sessions.deleted IS FALSE
+  RETURNING user_sessions.id
+), consent AS (
+  UPDATE user_session_consents SET deleted_at = clock_timestamp()
+  WHERE user_session_consents.id = @consent_id AND user_session_consents.deleted IS FALSE
+  RETURNING user_session_consents.id
+), cimd AS (
+  UPDATE user_session_issuer_cimd_clients SET deleted_at = clock_timestamp()
+  WHERE user_session_issuer_cimd_clients.id = @cimd_id AND user_session_issuer_cimd_clients.deleted IS FALSE
+  RETURNING user_session_issuer_cimd_clients.id
+), remote AS (
+  UPDATE remote_sessions SET deleted_at = clock_timestamp()
+  WHERE remote_sessions.id = @remote_session_id AND remote_sessions.deleted IS FALSE
+  RETURNING remote_sessions.id
+)
+SELECT
+  (SELECT count(*)::int FROM client) AS clients,
+  (SELECT count(*)::int FROM session) AS sessions,
+  (SELECT count(*)::int FROM consent) AS consents,
+  (SELECT count(*)::int FROM cimd) AS cimd_clients,
+  (SELECT count(*)::int FROM remote) AS remote_sessions;
+
+-- name: GetUserSessionMigrationTombstonesFixture :one
+SELECT
+  client.user_session_issuer_id AS client_issuer_id,
+  client.project_id AS client_project_id,
+  session.user_session_issuer_id AS session_issuer_id,
+  session.project_id AS session_project_id,
+  consent.project_id AS consent_project_id,
+  cimd.user_session_issuer_id AS cimd_issuer_id,
+  cimd.project_id AS cimd_project_id,
+  remote.user_session_issuer_id AS remote_session_issuer_id
+FROM user_session_clients AS client
+JOIN user_sessions AS session ON session.id = @session_id
+JOIN user_session_consents AS consent ON consent.id = @consent_id
+JOIN user_session_issuer_cimd_clients AS cimd ON cimd.id = @cimd_id
+JOIN remote_sessions AS remote ON remote.id = @remote_session_id
+WHERE client.id = @client_id;

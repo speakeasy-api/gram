@@ -41143,6 +41143,105 @@ paths:
             x-speakeasy-name-override: getDeletePreflight
             x-speakeasy-react-hook:
                 name: OrganizationUserSessionIssuerDeletePreflight
+    /rpc/organizationUserSessionIssuers.getMigratePreflight:
+        get:
+            description: Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. Requires org:read.
+            operationId: getOrganizationUserSessionIssuerMigratePreflight
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer to migrate away from.
+                  in: query
+                  name: source_id
+                  required: true
+                  schema:
+                    description: The user_session_issuer to migrate away from.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The user_session_issuer to migrate onto.
+                  in: query
+                  name: target_id
+                  required: true
+                  schema:
+                    description: The user_session_issuer to migrate onto.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrganizationUserSessionIssuerMigratePreflight'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getIssuerMigratePreflight organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: getMigratePreflight
+            x-speakeasy-react-hook:
+                name: OrganizationUserSessionIssuerMigratePreflight
     /rpc/organizationUserSessionIssuers.list:
         get:
             description: List organization-owned user_session_issuers. Requires org:read.
@@ -41362,6 +41461,180 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: OrganizationUserSessionIssuerCimdClients
+    /rpc/organizationUserSessionIssuers.migrate:
+        post:
+            description: Consolidate a source user_session_issuer onto a target issuer, preserving clients, sessions, attachments, and remote-session credentials before soft-deleting the source. The target must be in the same project or a broader organization scope. Access tokens issued through the authorization_code and refresh_token grants are audience-bound to the issuer, so once a repointed MCP server verifies bearers against the target, outstanding access tokens minted under the source are rejected until the client refreshes. Migrated sessions and refresh tokens keep working, so the refresh succeeds without re-authorization. Tokens from the jwt-bearer (ID-JAG) grant are bound to the resource URL and are unaffected. Requires org:admin.
+            operationId: migrateOrganizationUserSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MigrateIssuerRequestBody2'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MigrateOrganizationUserSessionIssuerResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: migrateIssuer organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: migrate
+            x-speakeasy-react-hook:
+                name: MigrateOrganizationUserSessionIssuer
+    /rpc/organizationUserSessionIssuers.move:
+        post:
+            description: Re-scope a user_session_issuer in the caller's organization. Provide a project_id to make it project-specific, or omit it to make it organization-owned. Existing clients and sessions move with the issuer. Requires org:admin.
+            operationId: moveOrganizationUserSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MoveIssuerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionIssuer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: moveIssuer organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: move
+            x-speakeasy-react-hook:
+                name: MoveOrganizationUserSessionIssuer
     /rpc/organizationUserSessionIssuers.update:
         post:
             description: Update an organization-owned user_session_issuer. Requires org:admin.
@@ -89348,6 +89621,23 @@ components:
             required:
                 - source_id
                 - target_id
+        MigrateIssuerRequestBody2:
+            type: object
+            properties:
+                confirmed_warnings_fingerprint:
+                    type: string
+                    description: The exact warnings_fingerprint returned by the latest preflight. Required when that preflight reports warnings.
+                source_id:
+                    type: string
+                    description: The user_session_issuer to migrate away from; soft-deleted on success.
+                    format: uuid
+                target_id:
+                    type: string
+                    description: The surviving user_session_issuer.
+                    format: uuid
+            required:
+                - source_id
+                - target_id
         MigrateOrganizationRemoteSessionIssuerResult:
             type: object
             properties:
@@ -89364,6 +89654,43 @@ components:
             required:
                 - issuer
                 - clients_migrated
+                - source_deleted
+        MigrateOrganizationUserSessionIssuerResult:
+            type: object
+            properties:
+                cimd_clients_migrated:
+                    type: integer
+                    description: CIMD allowlist entries moved or merged.
+                    format: int64
+                clients_migrated:
+                    type: integer
+                    description: Clients re-pointed to the target.
+                    format: int64
+                consents_migrated:
+                    type: integer
+                    description: Consents normalized to the target scope.
+                    format: int64
+                issuer:
+                    $ref: '#/components/schemas/UserSessionIssuer'
+                remote_sessions_migrated:
+                    type: integer
+                    description: Remote-session credentials whose provenance moved.
+                    format: int64
+                sessions_migrated:
+                    type: integer
+                    description: User sessions re-pointed to the target.
+                    format: int64
+                source_deleted:
+                    type: boolean
+                    description: True when the source issuer was soft-deleted.
+            description: Outcome of consolidating a source user_session_issuer onto a target issuer.
+            required:
+                - issuer
+                - clients_migrated
+                - sessions_migrated
+                - consents_migrated
+                - cimd_clients_migrated
+                - remote_sessions_migrated
                 - source_deleted
         MigrateRemoteSessionIssuerRequestBody:
             type: object
@@ -90565,6 +90892,70 @@ components:
                 - mcp_servers
                 - toolsets
                 - can_delete
+        OrganizationUserSessionIssuerMigratePreflight:
+            type: object
+            properties:
+                can_migrate:
+                    type: boolean
+                    description: True when no hard blocker is present.
+                cimd_client_count:
+                    type: integer
+                    description: Custom CIMD allowlist entries that would move or merge.
+                    format: int64
+                client_count:
+                    type: integer
+                    description: Clients that would move.
+                    format: int64
+                conflicting_client_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Active OAuth client ids already present on both issuers. Non-empty blocks migration.
+                consent_count:
+                    type: integer
+                    description: User-session consents that would move.
+                    format: int64
+                ema_binding_conflict_count:
+                    type: integer
+                    description: Enterprise-managed authorization bindings already present on the target. Non-zero blocks migration.
+                    format: int64
+                platform_owned:
+                    type: boolean
+                    description: Whether a Platform MCP catalog registration owns either issuer. True blocks migration.
+                principal_binding_conflict_count:
+                    type: integer
+                    description: Active principal bindings that would violate target uniqueness. Non-zero blocks migration.
+                    format: int64
+                remote_session_count:
+                    type: integer
+                    description: Remote-session credentials whose issuer provenance would move.
+                    format: int64
+                session_count:
+                    type: integer
+                    description: User sessions that would move.
+                    format: int64
+                warnings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionIssuerFieldMismatch'
+                    description: Configuration differences that do not block the migration. The target's values become authoritative for future authorization; existing sessions and refresh tokens are unaffected.
+                warnings_fingerprint:
+                    type: string
+                    description: Stable fingerprint of the current warnings. Empty when there are no warnings; otherwise pass this exact value to migrateIssuer to confirm them.
+            description: Authoritative impact summary for consolidating one user_session_issuer onto another.
+            required:
+                - client_count
+                - session_count
+                - consent_count
+                - cimd_client_count
+                - remote_session_count
+                - conflicting_client_ids
+                - principal_binding_conflict_count
+                - ema_binding_conflict_count
+                - platform_owned
+                - warnings
+                - warnings_fingerprint
+                - can_migrate
         OrganizationUserSessionIssuerReference:
             type: object
             properties:
@@ -104239,6 +104630,23 @@ components:
                 - client_id_metadata_uri
                 - created_at
                 - updated_at
+        UserSessionIssuerFieldMismatch:
+            type: object
+            properties:
+                field:
+                    type: string
+                    description: The differing field name.
+                source_value:
+                    type: string
+                    description: The source issuer's rendered value. Empty when unset.
+                target_value:
+                    type: string
+                    description: The target issuer's rendered value. Empty when unset.
+            description: One user_session_issuer setting whose source and target values differ.
+            required:
+                - field
+                - source_value
+                - target_value
         UserSessionUpstream:
             type: object
             properties:

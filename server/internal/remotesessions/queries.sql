@@ -996,6 +996,25 @@ WHERE id = @id
   AND (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id = @organization_id::text))
   AND deleted IS FALSE;
 
+-- name: LockLiveUserSessionIssuerForRemoteSessionWrite :one
+-- First lock of the remote-login callback transaction, taken before the
+-- client row. Issuer migration holds the issuer FOR UPDATE and then inserts
+-- client links that key-share the same client row, so a callback that locked
+-- the client first and only then reached the remote_sessions foreign key
+-- would deadlock with it. Locking the issuer first puts both in the same
+-- order, and the liveness predicate is re-evaluated once the migration
+-- commits, so a login started on a retired issuer is rejected rather than
+-- stored against its tombstone. FOR KEY SHARE is the mode the foreign key
+-- takes anyway and does not conflict with the FOR NO KEY UPDATE issuer
+-- deletion holds, so the callback still never waits on a delete: that race is
+-- settled by the delete's cascade sweeping the stored grant.
+SELECT id
+FROM user_session_issuers
+WHERE id = @id
+  AND (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id = @organization_id::text))
+  AND deleted IS FALSE
+FOR KEY SHARE;
+
 -- name: ListRemoteSessionClientsByProjectID :many
 SELECT
     sqlc.embed(c),

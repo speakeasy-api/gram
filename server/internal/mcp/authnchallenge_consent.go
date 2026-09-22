@@ -932,6 +932,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			RemoteSetHash:       remoteSetHashEmpty,
 		}); err != nil && !isUniqueViolation(err) {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return oops.E(oops.CodeNotFound, err, "oauth client not found").LogWarn(ctx, logger)
+			}
 			return oops.E(oops.CodeUnexpected, err, "record consent").LogError(ctx, logger)
 		}
 	}
