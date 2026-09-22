@@ -4005,6 +4005,7 @@ func unmarshalManagedAgentResponseToAgentsManagedAgent(v *ManagedAgentResponse) 
 		OwnerReassignmentRequiredAt: v.OwnerReassignmentRequiredAt,
 		OwnerReassignmentReason:     v.OwnerReassignmentReason,
 		Name:                        *v.Name,
+		ProjectID:                   v.ProjectID,
 		Lifecycle:                   agents.AgentLifecycle(*v.Lifecycle),
 		CreatedAt:                   *v.CreatedAt,
 		UpdatedAt:                   *v.UpdatedAt,

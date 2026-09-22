@@ -69,6 +69,8 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   detail: vi.fn(),
   organizationId: "org_example",
+  projectId: "00000000-0000-4000-8000-000000000001",
+  createMutate: vi.fn(),
   impersonatorEmail: undefined as string | undefined,
   user: {
     id: "user_owner",
@@ -101,7 +103,12 @@ vi.mock("@/components/ui/Avatar", () => ({
   ),
 }));
 vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ id: mocks.organizationId, slug: "example" }),
+  useOrganization: () => ({
+    id: mocks.organizationId,
+    slug: "example",
+    name: "Example Org",
+  }),
+  useProject: () => ({ id: mocks.projectId, slug: "alpha", name: "Alpha" }),
   useSession: () => ({
     user: mocks.user,
     organizationOverride: mocks.unsupported,
@@ -125,7 +132,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => mocks.sdkClient(),
 }));
 vi.mock("@gram/client/react-query/createAgent.js", () => ({
-  useCreateAgentMutation: () => ({ mutate: vi.fn() }),
+  useCreateAgentMutation: () => ({ mutate: mocks.createMutate }),
 }));
 vi.mock("@gram/client/react-query/renameAgent.js", () => ({
   useRenameAgentMutation: () => ({ mutate: vi.fn() }),
@@ -419,5 +426,43 @@ describe("Agent owner access", () => {
     expect(screen.queryByText("Identity")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Wizard done" }));
     expect(mocks.navigate).toHaveBeenLastCalledWith({ id: "agent_example" });
+  });
+});
+
+describe("Agent scope", () => {
+  function openCreateForm() {
+    mocks.params = new URLSearchParams("create=true");
+    setup();
+    fireEvent.change(screen.getByLabelText("Agent name"), {
+      target: { value: "Scoped agent" },
+    });
+  }
+
+  it("defaults to organization scope and sends no project binding", () => {
+    openCreateForm();
+    expect(
+      screen
+        .getByRole("radio", { name: /Organization/ })
+        .getAttribute("data-state"),
+    ).toBe("checked");
+
+    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+
+    expect(mocks.createMutate).toHaveBeenCalledTimes(1);
+    const form = mocks.createMutate.mock.calls[0]![0].request.createAgentForm;
+    expect(form.name).toBe("Scoped agent");
+    // Omitted rather than blank: the server reads a missing binding as
+    // organization-wide.
+    expect("projectId" in form).toBe(false);
+  });
+
+  it("sends the active project when project scope is chosen", () => {
+    openCreateForm();
+    fireEvent.click(screen.getByRole("radio", { name: /Project/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+
+    expect(mocks.createMutate).toHaveBeenCalledTimes(1);
+    const form = mocks.createMutate.mock.calls[0]![0].request.createAgentForm;
+    expect(form.projectId).toBe(mocks.projectId);
   });
 });

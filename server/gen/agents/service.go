@@ -148,6 +148,9 @@ type AgentSession struct {
 type CreatePayload struct {
 	SessionToken *string
 	Name         string
+	// Optional project binding. Omit for an organization-wide agent; independent
+	// of policy grants and the Gram-Project header.
+	ProjectID *string
 	// Eligible same-organization human owner; defaults to the caller
 	OwnerUserID *string
 	// Optional initial allow-only agent policy ceilings, created atomically with
@@ -246,10 +249,13 @@ type ManagedAgent struct {
 	// Stable reason that explicit reassignment is required
 	OwnerReassignmentReason *string
 	Name                    string
-	Lifecycle               AgentLifecycle
-	Permissions             *AgentPermissions
-	CreatedAt               string
-	UpdatedAt               string
+	// The optional project this agent is scoped to; absent for an
+	// organization-wide agent
+	ProjectID   *string
+	Lifecycle   AgentLifecycle
+	Permissions *AgentPermissions
+	CreatedAt   string
+	UpdatedAt   string
 }
 
 // ReassignPayload is the payload type of the agents service reassign method.

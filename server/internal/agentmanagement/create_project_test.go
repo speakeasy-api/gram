@@ -13,7 +13,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -28,18 +27,6 @@ func seedProject(t *testing.T, conn *pgxpool.Pool, organizationID, slug string) 
 	return project
 }
 
-func humanContextInProject(t *testing.T, organizationID, userID string, projectID *uuid.UUID) context.Context {
-	t.Helper()
-	sessionID := "session-" + userID
-	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID: organizationID,
-		UserID:               userID,
-		SessionID:            &sessionID,
-		ProjectID:            projectID,
-	})
-	return contextvalues.WithValidatedGramSession(ctx, mustAuthContext(t, ctx), false)
-}
-
 func newProjectScopedService(t *testing.T, conn *pgxpool.Pool) *Service {
 	t.Helper()
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
@@ -48,9 +35,18 @@ func newProjectScopedService(t *testing.T, conn *pgxpool.Pool) *Service {
 	return service
 }
 
-// An agent belongs to the project it was created in, so a gateway derived from
-// its grants has a project to enumerate without re-reading the key's selectors.
-func TestCreateAgentRecordsCreatingProject(t *testing.T) {
+func storedAgent(t *testing.T, conn *pgxpool.Pool, organizationID, agentID string) repo.Agent {
+	t.Helper()
+	agent, err := repo.New(conn).GetAgentByID(t.Context(), repo.GetAgentByIDParams{
+		OrganizationID: organizationID, ID: uuid.MustParse(agentID),
+	})
+	require.NoError(t, err)
+	return agent
+}
+
+// The binding is whatever the caller asked for, as it is for API keys — not
+// whatever project the dashboard happened to be pointed at.
+func TestCreateAgentRecordsRequestedProject(t *testing.T) {
 	t.Parallel()
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-agent-project")
@@ -58,36 +54,51 @@ func TestCreateAgentRecordsCreatingProject(t *testing.T) {
 	project := seedProject(t, conn, "org-agent-project", "agent-project-alpha")
 	service := newProjectScopedService(t, conn)
 
-	ctx := humanContextInProject(t, "org-agent-project", "owner", &project.ID)
-	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Project agent"})
+	projectID := project.ID.String()
+	ctx := validatedHumanContext(t, "org-agent-project", "owner")
+	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Project agent", ProjectID: &projectID})
 	require.NoError(t, err)
+	require.NotNil(t, created.ProjectID)
+	require.Equal(t, projectID, *created.ProjectID)
 
-	stored, err := repo.New(conn).GetAgentByID(t.Context(), repo.GetAgentByIDParams{
-		OrganizationID: "org-agent-project", ID: uuid.MustParse(created.ID),
-	})
-	require.NoError(t, err)
-	require.True(t, stored.ProjectID.Valid, "agent created inside a project must record it")
+	stored := storedAgent(t, conn, "org-agent-project", created.ID)
+	require.True(t, stored.ProjectID.Valid)
 	require.Equal(t, project.ID, stored.ProjectID.UUID)
 }
 
-// Creating without an active project must still succeed: agents predate
-// project scoping, and the column stays nullable through the expand phase.
-func TestCreateAgentWithoutActiveProjectStoresNoProject(t *testing.T) {
+// Omitting the binding means an organization-wide agent. It must not fall back
+// to an active project, or "organization-wide" would be unrequestable from a
+// dashboard that always has one selected.
+func TestCreateAgentWithoutProjectIsOrganizationWide(t *testing.T) {
 	t.Parallel()
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-agent-no-project")
 	seedOrganizationUser(t, conn, "org-agent-no-project", "owner")
+	seedProject(t, conn, "org-agent-no-project", "agent-project-unused")
 	service := newProjectScopedService(t, conn)
 
-	ctx := humanContextInProject(t, "org-agent-no-project", "owner", nil)
-	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Unscoped agent"})
+	ctx := validatedHumanContext(t, "org-agent-no-project", "owner")
+	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Org wide agent"})
 	require.NoError(t, err)
+	require.Nil(t, created.ProjectID)
 
-	stored, err := repo.New(conn).GetAgentByID(t.Context(), repo.GetAgentByIDParams{
-		OrganizationID: "org-agent-no-project", ID: uuid.MustParse(created.ID),
-	})
-	require.NoError(t, err)
+	stored := storedAgent(t, conn, "org-agent-no-project", created.ID)
 	require.False(t, stored.ProjectID.Valid)
+}
+
+// An empty string is a cleared form field, not a malformed id.
+func TestCreateAgentTreatsBlankProjectAsOrganizationWide(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-agent-blank-project")
+	seedOrganizationUser(t, conn, "org-agent-blank-project", "owner")
+	service := newProjectScopedService(t, conn)
+
+	blank := ""
+	ctx := validatedHumanContext(t, "org-agent-blank-project", "owner")
+	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Blank project agent", ProjectID: &blank})
+	require.NoError(t, err)
+	require.Nil(t, created.ProjectID)
 }
 
 // The composite foreign key pins the project to the agent's own organization,
@@ -102,8 +113,9 @@ func TestCreateAgentRejectsProjectFromAnotherOrganization(t *testing.T) {
 	foreign := seedProject(t, conn, "org-agent-tenant-b", "agent-project-foreign")
 	service := newProjectScopedService(t, conn)
 
-	ctx := humanContextInProject(t, "org-agent-tenant-a", "owner", &foreign.ID)
-	_, err := service.Create(ctx, &gen.CreatePayload{Name: "Cross tenant agent"})
+	foreignID := foreign.ID.String()
+	ctx := validatedHumanContext(t, "org-agent-tenant-a", "owner")
+	_, err := service.Create(ctx, &gen.CreatePayload{Name: "Cross tenant agent", ProjectID: &foreignID})
 	require.Error(t, err)
 
 	// Naming the constraint is the point: a bare require.Error would still pass

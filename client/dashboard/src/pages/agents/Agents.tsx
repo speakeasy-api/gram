@@ -16,8 +16,10 @@ import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
 import {
   useIsPlatformAdmin,
   useOrganization,
+  useProject,
   useSession,
 } from "@/contexts/Auth";
+import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useReadableAgents } from "@/hooks/useReadableAgents";
@@ -233,6 +235,9 @@ function AgentOwner({ agent }: { agent: ManagedAgent }) {
   );
 }
 
+/** Where a new agent belongs. Mirrors the optional project binding on API keys. */
+type AgentScope = "organization" | "project";
+
 function CreateAgent({
   disabled,
   onCreated,
@@ -241,9 +246,11 @@ function CreateAgent({
   onCreated: (id: string) => void;
 }) {
   const [name, setName] = useState("");
+  const [scope, setScope] = useState<AgentScope>("organization");
   const [draft, setDraft] = useState<AgentPolicyDraft>({});
   const [error, setError] = useState<string | null>(null);
   const organization = useOrganization();
+  const project = useProject();
   const { user } = useSession();
   const queryClient = useQueryClient();
   const create = useCreateAgentMutation({
@@ -276,6 +283,9 @@ function CreateAgent({
       request: {
         createAgentForm: {
           name: trimmedName,
+          // Omitted, not blank: an organization-wide agent carries no project
+          // binding at all.
+          ...(scope === "project" ? { projectId: project.id } : {}),
           ...(policyGrants.length > 0 ? { policyGrants } : {}),
         },
       },
@@ -312,6 +322,31 @@ function CreateAgent({
             disabled={disabled}
             autoFocus
           />
+        </div>
+        <div className="mt-6 space-y-2">
+          <Label>Scope</Label>
+          <Text muted small>
+            Where this agent belongs. Scope does not grant or withhold access on
+            its own — permissions below are what decide what it can reach.
+          </Text>
+          <RadioCardGroup
+            orientation="horizontal"
+            value={scope}
+            onValueChange={(value) => setScope(value as AgentScope)}
+            disabled={disabled || create.isPending}
+            aria-label="Agent scope"
+          >
+            <RadioCard value="organization" title="Organization">
+              <Text muted small>
+                Belongs to {organization.name}, not to any one project.
+              </Text>
+            </RadioCard>
+            <RadioCard value="project" title="Project">
+              <Text muted small>
+                Belongs to {project.name}.
+              </Text>
+            </RadioCard>
+          </RadioCardGroup>
         </div>
         <div className="mt-6 space-y-2">
           <Label>Permissions</Label>

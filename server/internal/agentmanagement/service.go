@@ -146,12 +146,14 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		if err != nil {
 			return err
 		}
-		// The agent belongs to the project it was created in. Older agents
-		// predate project scoping and carry none, so this stays nullable
-		// rather than rejecting a caller with no active project.
-		projectID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		if authCtx.ProjectID != nil {
-			projectID = uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+		// Project binding is an explicit choice, as it is for API keys: the
+		// caller asks for an organization-wide agent by omitting it, rather
+		// than having whatever project the dashboard happened to be in
+		// silently attached. It narrows nothing by itself — policy grants
+		// remain the only thing that decides what an agent can reach.
+		projectID, err := parseAgentProjectID(payload.ProjectID)
+		if err != nil {
+			return err
 		}
 		agent, err := repo.New(tx).CreateAgentWithID(ctx, repo.CreateAgentWithIDParams{
 			ID:             agentID,
@@ -389,6 +391,7 @@ func managedAgentView(agent repo.Agent, permissions AgentPermissions, ownerProfi
 		OwnerReassignmentRequiredAt: nil,
 		OwnerReassignmentReason:     nil,
 		Name:                        agent.Name,
+		ProjectID:                   nil,
 		Lifecycle:                   gen.AgentLifecycle(agents.DeriveLifecycle(agent)),
 		Permissions: &gen.AgentPermissions{
 			Read:      permissions.Read,
@@ -398,6 +401,10 @@ func managedAgentView(agent repo.Agent, permissions AgentPermissions, ownerProfi
 		},
 		CreatedAt: agent.CreatedAt.Time.Format(time.RFC3339Nano),
 		UpdatedAt: agent.UpdatedAt.Time.Format(time.RFC3339Nano),
+	}
+	if agent.ProjectID.Valid {
+		value := agent.ProjectID.UUID.String()
+		result.ProjectID = &value
 	}
 	if agent.OwnerReassignmentRequiredAt.Valid {
 		value := agent.OwnerReassignmentRequiredAt.Time.Format(time.RFC3339Nano)
@@ -412,6 +419,20 @@ func managedAgentView(agent repo.Agent, permissions AgentPermissions, ownerProfi
 
 func agentAuditSnapshot(agent repo.Agent) *audit.AgentSnapshot {
 	return agentownership.AgentAuditSnapshot(agent)
+}
+
+// parseAgentProjectID turns the optional project binding on a create payload
+// into a nullable column value. An empty string is treated as omitted so a
+// cleared form field means organization-wide rather than a parse error.
+func parseAgentProjectID(raw *string) (uuid.NullUUID, error) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+	projectID, err := uuid.Parse(strings.TrimSpace(*raw))
+	if err != nil || projectID == uuid.Nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, err, "invalid project id")
+	}
+	return uuid.NullUUID{UUID: projectID, Valid: true}, nil
 }
 
 func parseAgentID(raw string) (uuid.UUID, error) {

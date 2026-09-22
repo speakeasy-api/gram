@@ -24,6 +24,9 @@ var Permissions = Type("AgentPermissions", func() {
 
 var CreateForm = Type("CreateAgentForm", func() {
 	Attribute("name", String, func() { MinLength(1); MaxLength(120) })
+	Attribute("project_id", String, "Optional project binding. Omit for an organization-wide agent; independent of policy grants and the Gram-Project header.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("owner_user_id", String, "Eligible same-organization human owner; defaults to the caller")
 	Attribute("policy_grants", ArrayOf(PolicyGrantForm), "Optional initial allow-only agent policy ceilings, created atomically with the agent. Effective credential permissions remain limited by the live owner and authorizer.")
 	Required("name")
@@ -110,6 +113,7 @@ var Agent = Type("ManagedAgent", func() {
 	Attribute("owner_reassignment_required_at", String, "When owner loss durably blocked this agent", func() { Format(FormatDateTime) })
 	Attribute("owner_reassignment_reason", String, "Stable reason that explicit reassignment is required")
 	Attribute("name", String)
+	Attribute("project_id", String, "The optional project this agent is scoped to; absent for an organization-wide agent", func() { Format(FormatUUID) })
 	Attribute("lifecycle", Lifecycle)
 	Attribute("permissions", Permissions)
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
