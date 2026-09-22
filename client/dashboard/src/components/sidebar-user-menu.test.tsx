@@ -22,9 +22,9 @@ const hasAnyScope = vi.hoisted(() =>
 
 vi.mock("@/contexts/Auth", () => ({
   useUser: () => ({
-    id: "user_01h8x",
-    displayName: "Sagar",
-    email: "s@x.dev",
+    id: "user_demo_sidebar",
+    displayName: "Example User",
+    email: "user@example.invalid",
     photoUrl: "",
   }),
   useSession: () => ({ organizations: [{ id: "o1" }] }),
@@ -145,28 +145,30 @@ describe("SidebarUserMenu", () => {
   it("renders the inline theme switcher and the user name", () => {
     render(<SidebarUserMenu />);
     expect(screen.getByTestId("theme-switcher")).toBeTruthy();
-    expect(screen.getAllByText("Sagar").length).toBeGreaterThan(0);
+    expect(screen.getByText("Example User")).toBeTruthy();
   });
 
-  it("links View user profile to the signed-in user's identity page", () => {
+  it("links the account name to the signed-in user's identity page", () => {
     render(<SidebarUserMenu />);
 
     expect(
       screen
-        .getByRole("link", { name: "View user profile" })
+        .getByRole("link", { name: "Example User user@example.invalid" })
         .getAttribute("href"),
-    ).toBe("/identities/user%3Auser_01h8x");
+    ).toBe("/identities/user%3Auser_demo_sidebar");
+    expect(screen.queryByText("View user profile")).toBeNull();
   });
 
-  it("hides View user profile from a reader without org:read", () => {
+  it("keeps the account name as plain text without org:read", () => {
     hasAnyScope.mockReturnValue(
       (scopes: string[]) => !scopes.includes("org:read"),
     );
     render(<SidebarUserMenu />);
 
     expect(
-      screen.queryByRole("link", { name: "View user profile" }),
+      screen.queryByRole("link", { name: "Example User user@example.invalid" }),
     ).toBeNull();
+    expect(screen.getByText("Example User")).toBeTruthy();
   });
 
   it("links the crown icon to Platform admin in a new tab", () => {

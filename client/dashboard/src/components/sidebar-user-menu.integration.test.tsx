@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 
 vi.mock("@/contexts/Auth", () => ({
@@ -31,15 +31,6 @@ vi.mock("@/routes", () => ({
   }),
   useOrgRoutes: () => ({ billing: { goTo: vi.fn() } }),
 }));
-vi.mock("react-router", () => ({
-  useNavigate: () => vi.fn(),
-  useLocation: () => ({ search: "" }),
-  Link: ({ to, children, ...props }: { to: string; children: ReactNode }) => (
-    <a href={to} {...props}>
-      {children}
-    </a>
-  ),
-}));
 vi.mock("@/components/ui/ThemeSwitcher", () => ({ ThemeSwitcher: () => null }));
 
 import { SidebarUserMenu } from "./sidebar-user-menu";
@@ -55,7 +46,11 @@ it("keyboard navigation focuses and activates the real Platform admin menu item"
   meta.content = "https://admin.example.invalid";
   document.head.append(meta);
   const user = userEvent.setup();
-  render(<SidebarUserMenu />);
+  render(
+    <MemoryRouter>
+      <SidebarUserMenu />
+    </MemoryRouter>,
+  );
 
   const trigger = screen.getByRole("button", { name: "Account menu" });
   trigger.focus();
@@ -64,6 +59,7 @@ it("keyboard navigation focuses and activates the real Platform admin menu item"
   const adminLink = await screen.findByRole("menuitem", {
     name: "Platform admin",
   });
+  await user.keyboard("{ArrowDown}");
   expect(document.activeElement).toBe(adminLink);
   expect(adminLink.getAttribute("href")).toBe("https://admin.example.invalid");
   expect(adminLink.className).toContain("focus-visible:ring-2");
@@ -73,4 +69,37 @@ it("keyboard navigation focuses and activates the real Platform admin menu item"
   adminLink.addEventListener("click", activated);
   await user.keyboard("{Enter}");
   expect(activated).toHaveBeenCalledOnce();
+});
+
+it("opens the account name as the first keyboard-accessible profile link", async () => {
+  const user = userEvent.setup();
+  render(
+    <MemoryRouter>
+      <SidebarUserMenu />
+      <Routes>
+        <Route path="/" element={null} />
+        <Route
+          path="/identities/:identity"
+          element={<h1>Identity overview</h1>}
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+
+  screen.getByRole("button", { name: "Account menu" }).focus();
+  await user.keyboard("{ArrowDown}");
+
+  const profileLink = await screen.findByRole("menuitem", {
+    name: "Admin User admin@example.invalid",
+  });
+  expect(document.activeElement).toBe(profileLink);
+  expect(profileLink.getAttribute("href")).toBe(
+    "/identities/user%3Auser_admin",
+  );
+
+  await user.keyboard("{Enter}");
+  expect(
+    await screen.findByRole("heading", { name: "Identity overview" }),
+  ).toBeTruthy();
+  expect(screen.queryByRole("menu")).toBeNull();
 });
