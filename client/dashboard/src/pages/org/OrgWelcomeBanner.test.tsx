@@ -307,19 +307,35 @@ describe("OrgWelcomeBanner", () => {
     });
   });
 
-  it("does not show the member card when connected, unauthorized, or setup fails", () => {
+  it("does not show the member card without grants or a usable scope", () => {
     isAdmin.current = false;
     setupEligible.current = false;
     member.enabled = true;
-    member.allowed = false;
+    member.grantLoading = true;
     const { rerender } = render(<OrgWelcomeBanner />);
     expect(member.queryEnabled).toBe(false);
     expect(screen.queryByText("Use Speakeasy from your agent")).toBeNull();
 
-    member.allowed = true;
+    member.grantLoading = false;
+    member.grantError = true;
+    rerender(<OrgWelcomeBanner />);
+    expect(member.queryEnabled).toBe(false);
+    expect(screen.queryByText("Use Speakeasy from your agent")).toBeNull();
+
+    member.grantError = false;
+    member.allowed = false;
+    rerender(<OrgWelcomeBanner />);
+    expect(member.queryEnabled).toBe(false);
+    expect(screen.queryByText("Use Speakeasy from your agent")).toBeNull();
+  });
+
+  it("does not show the member card when connected or setup fails", () => {
+    isAdmin.current = false;
+    setupEligible.current = false;
+    member.enabled = true;
     member.connectionAuthorized = true;
     member.connectionAuthState = "active";
-    rerender(<OrgWelcomeBanner />);
+    const { rerender } = render(<OrgWelcomeBanner />);
     expect(screen.queryByText("Use Speakeasy from your agent")).toBeNull();
 
     member.connectionAuthorized = false;
