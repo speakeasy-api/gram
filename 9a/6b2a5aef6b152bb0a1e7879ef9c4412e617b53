@@ -1,0 +1,36 @@
+.changeset/risk-enforcement-content-limit.md
+  h_e404c1a6a54184 1-5
+server/cmd/tools/enforceload/main.go
+  h_e404c1a6a54184 649-650
+server/cmd/tools/enforceproto/main.go
+  h_e404c1a6a54184 142-143
+server/internal/attr/conventions.go
+  h_e404c1a6a54184 564,2381-2384
+server/internal/feature/flags.go
+  h_e404c1a6a54184 24-28
+server/internal/risk/enforcereply/dispatch.go
+  h_e404c1a6a54184 14,40-45,112-118,235,252-260,262-263,265,267-268,270,273
+server/internal/risk/enforcereply/dispatch_test.go
+  h_e404c1a6a54184 14,72,79-86,129-137,198-204,253-259,280-286,313-319,360-361,428-434,450-456,465,468,470,474-487,493,497-559,567,569,572-585,771,774,779-781,783-786,794-795,800,811-817
+server/internal/risk/policyflags/policyflags.go
+  h_e404c1a6a54184 5,13,24-28,31-33,36-39,41-45,86-125,141-154
+server/internal/risk/policyflags/policyflags_test.go
+  h_e404c1a6a54184 20,42-43,55-63,121-194
+server/internal/risk/scanner.go
+  h_e404c1a6a54184 1232-1234,1241-1242,1334-1336,1343-1344
+server/internal/risk/scanner_llm_test.go
+  h_e404c1a6a54184 138-140,163-164
+server/internal/risk/scanner_test.go
+  h_e404c1a6a54184 291-321
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9a6b2a5aef6b152bb0a1e7879ef9c4412e617b53",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
