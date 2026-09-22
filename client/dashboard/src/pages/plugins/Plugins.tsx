@@ -5,9 +5,6 @@ import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
 import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
-import { useOrganization } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { useOrganizationPlatformMCPOnboarding } from "@/hooks/useOrganizationPlatformMCPOnboarding";
 import { useFetcher } from "@/contexts/Fetcher";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
@@ -42,7 +39,7 @@ import { Switch } from "@/components/ui/Switch";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Activity, Network } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { PlatformInstrumentationSheet } from "../setup/components/platform-instrumentation-sheet";
@@ -776,38 +773,8 @@ function observabilityInstallHint(
 
 function PlatformMCPPluginCard(): JSX.Element | null {
   const [installOpen, setInstallOpen] = useState(false);
-  const { hasScope, isLoading, error } = useRBAC();
-  const organization = useOrganization();
-  const telemetry = useTelemetry();
-  const recordedImpression = useRef(false);
-  const isAdmin = hasScope("org:admin");
-  const eligible =
-    !isLoading &&
-    !error &&
-    !isAdmin &&
-    (hasScope("project:read") ||
-      hasScope("skill:read") ||
-      hasScope("mcp:read"));
-  const onboarding = useOrganizationPlatformMCPOnboarding(organization.id, {
-    enabled: eligible,
-    throwOnError: false,
-  });
-  const memberVisible =
-    eligible && !!onboarding.data?.enabled && !onboarding.isError;
-  useEffect(() => {
-    if (!memberVisible || recordedImpression.current) return;
-    recordedImpression.current = true;
-    telemetry.capture("platform_mcp_member_cta", {
-      action: "impression",
-      workflow: "plugins",
-    });
-  }, [memberVisible, telemetry]);
-  if (isLoading || error || (!isAdmin && !memberVisible)) return null;
-  const connected =
-    onboarding.data?.connectionAuthorized &&
-    onboarding.data.connectionAuthState === "active";
-  const reconnect =
-    onboarding.data?.connectionAuthState === "reauthorization_required";
+  const { hasScope } = useRBAC();
+  if (!hasScope("org:admin")) return null;
 
   return (
     <Card.Entity
@@ -829,38 +796,14 @@ function PlatformMCPPluginCard(): JSX.Element | null {
       </div>
 
       <Text small muted className="mb-3 line-clamp-3">
-        {isAdmin
-          ? "Manage MCPs, Risk Policies and explore logs in your favorite agent."
-          : "Find MCP servers, investigate issues and work with skills from your agent."}
+        Manage MCPs, Risk Policies and explore logs in your favorite agent.
       </Text>
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
         <Text small muted>
-          {isAdmin
-            ? "Available from the public Speakeasy marketplace"
-            : "Use Platform MCP from your own agent"}
+          Available from the public Speakeasy marketplace
         </Text>
-        {isAdmin ? (
-          <PluginInstallButton size="sm" onClick={() => setInstallOpen(true)} />
-        ) : connected ? (
-          <Text small muted>
-            Connected to your agent
-          </Text>
-        ) : (
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => {
-              telemetry.capture("platform_mcp_member_cta", {
-                action: "selected",
-                workflow: "plugins",
-              });
-              setInstallOpen(true);
-            }}
-          >
-            {reconnect ? "Reconnect your agent" : "Connect your agent"}
-          </Button>
-        )}
+        <PluginInstallButton size="sm" onClick={() => setInstallOpen(true)} />
       </div>
 
       <PlatformMCPOnboardingContent

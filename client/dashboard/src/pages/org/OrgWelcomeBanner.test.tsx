@@ -336,11 +336,13 @@ describe("OrgWelcomeBanner", () => {
     member.connectionAuthorized = true;
     member.connectionAuthState = "active";
     const { rerender } = render(<OrgWelcomeBanner />);
+    expect(member.queryEnabled).toBe(true);
     expect(screen.queryByText("Use Speakeasy from your agent")).toBeNull();
 
     member.connectionAuthorized = false;
     member.isError = true;
     rerender(<OrgWelcomeBanner />);
+    expect(member.queryEnabled).toBe(true);
     expect(screen.queryByText("Use Speakeasy from your agent")).toBeNull();
   });
 
