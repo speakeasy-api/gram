@@ -1315,10 +1315,11 @@ BEGIN
   -- Reserved .invalid endpoints, an invalid ciphertext and no refresh token
   -- prevent this display fixture from becoming a usable upstream credential.
   INSERT INTO remote_session_issuers
-    (id, project_id, organization_id, slug, issuer, name)
+    (id, project_id, organization_id, slug, issuer, name, authorization_grant_profiles_supported)
   VALUES (demo.det_uuid('gram-demo-attachment-issuer'), proj_a, demo_org,
           'fictional-release-account', 'https://release.example.invalid',
-          'Fictional release account');
+          -- Administrator-declared capability only: not a discovery visit or client grant.
+          'Fictional release account', ARRAY['urn:ietf:params:oauth:grant-profile:id-jag']);
 
   INSERT INTO remote_session_clients
     (id, project_id, organization_id, remote_session_issuer_id, client_id,

@@ -5208,6 +5208,11 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_grant_profiles_supported:
+          type: array
+          items:
+            type: string
+          description: Advertised grant profiles; metadata evidence is not client authorization or user access.
         authorization_response_iss_parameter_supported:
           type: boolean
           description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null ("not captured").
@@ -5726,6 +5731,11 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_grant_profiles_supported:
+          type: array
+          items:
+            type: string
+          description: Advertised grant profiles; metadata evidence is not client authorization or user access.
         authorization_response_iss_parameter_supported:
           type: boolean
           description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Null until discovery captures the field.
@@ -5879,6 +5889,11 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_grant_profiles_supported:
+          type: array
+          items:
+            type: string
+          description: Advertised grant profiles; metadata evidence is not client authorization or user access.
         authorization_response_iss_parameter_supported:
           type: boolean
           description: Whether the discovery document advertises the RFC 9207 iss parameter in authorization responses; false when the document omits the field.
@@ -6396,6 +6411,11 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_grant_profiles_supported:
+          type: array
+          items:
+            type: string
+          description: Advertised grant profiles; metadata evidence is not client authorization or user access.
         authorization_response_iss_parameter_supported:
           type: boolean
           description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field leaves the stored value unchanged.
