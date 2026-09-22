@@ -116,8 +116,7 @@ export default function IdentitySecurity(): JSX.Element {
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <IdentityPanel
           title="Risk findings"
-          // Findings is admin-only; everyone else keeps the link this panel
-          // had before it existed.
+          // Findings is admin-only.
           handoffLabel={canReadRisk ? "Findings" : "Risk Events"}
           handoffHref={canReadRisk ? findingsHref({}) : handoffs.riskEvents}
           loading={riskQuery.isLoading}

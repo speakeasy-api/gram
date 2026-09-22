@@ -12,15 +12,10 @@ export type FindingsFilter = { category?: string; ruleId?: string };
 export const RISK_UNAVAILABLE =
   "Risk and shadow MCP findings need the org:admin permission.";
 
-// The filter lives in the URL so the Security summaries can link straight to
-// a slice of the list, and a filtered view can be shared.
 export const CATEGORY_PARAM = "category";
 export const RULE_PARAM = "rule";
 
-/**
- * Writes `filter` into `params`, replacing any earlier one. A rule belongs to
- * one category, so a rule filter drops the category rather than stacking both.
- */
+/** Writes `filter` into `params`; a rule filter drops the category. */
 export function setFindingsFilterParams(
   params: URLSearchParams,
   filter: FindingsFilter,
@@ -32,10 +27,7 @@ export function setFindingsFilterParams(
   return params;
 }
 
-/**
- * The Findings sub-page for this identity, narrowed to `filter`. Keeps the
- * reader's window and other params.
- */
+/** This identity's Findings page, narrowed to `filter`, keeping other params. */
 export function identityFindingsHref(
   routes: ReturnType<typeof useRoutes>,
   urn: string,

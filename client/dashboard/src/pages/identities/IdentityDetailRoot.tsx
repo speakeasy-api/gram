@@ -193,8 +193,7 @@ function IdentityDetailContent(): JSX.Element {
               routes,
               encodedUrn ?? "",
               location.search,
-              // A registered agent's sections render the agent profile, which
-              // has no Findings view.
+              // Agents render the agent profile, which has no Findings view.
               canReadRisk && !identity.agent,
             )}
             // Narrow, the rail is a scrollable row above the content: hiding

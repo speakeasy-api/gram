@@ -314,10 +314,8 @@ export type IdentityRisk = {
 };
 
 /**
- * This identity's findings by category and rule, across every agent id it
- * reports. The breakdown endpoint takes one id, so each is asked separately
- * and the results summed: a finding belongs to one id, so none is counted
- * twice.
+ * Findings by category and rule across every agent id. The endpoint takes one
+ * id; a finding belongs to one id, so summing counts each once.
  */
 export function useIdentityRisk(
   identity: IdentityModel,
@@ -328,8 +326,6 @@ export function useIdentityRisk(
   const { slug: gramProject } = useIdentityProject();
   const canReadRisk = useCanReadRisk();
   return useQueries({
-    // Every id, uncapped: the findings list filters on all of them, and a
-    // capped count would disagree with it.
     queries: identity.externalUserIds.map((externalUserId) => ({
       ...buildRiskUserBreakdownQuery(client, {
         externalUserId,

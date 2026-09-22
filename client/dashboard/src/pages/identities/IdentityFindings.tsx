@@ -58,11 +58,7 @@ import {
 const PAGE_SIZE = 20;
 const ALL = "all";
 
-/**
- * Every finding this person triggered, newest first. Each row expands to the
- * message that was flagged. Matched on every identifier the identity reports,
- * so a person known by more than one agent id sees all of their findings.
- */
+/** Every finding this person triggered, newest first, across all their agent ids. */
 export default function IdentityFindingsPage(): JSX.Element {
   const canReadRisk = useCanReadRisk();
   const { identity } = useIdentityOutlet();
@@ -80,7 +76,6 @@ export default function IdentityFindingsPage(): JSX.Element {
   );
   const [searchParams, setSearchParams] = useSearchParams();
   const ruleId = searchParams.get(RULE_PARAM) ?? undefined;
-  // A rule replaces a category, even in a hand-edited address carrying both.
   const filter: FindingsFilter = ruleId
     ? { ruleId }
     : { category: searchParams.get(CATEGORY_PARAM) ?? undefined };
@@ -94,7 +89,6 @@ export default function IdentityFindingsPage(): JSX.Element {
   const categories = riskQuery.data?.categories ?? [];
   const findings = categories.reduce((sum, c) => sum + Number(c.findings), 0);
 
-  // Reached by address: the nav leaves the entry out without org:admin.
   if (!canReadRisk) {
     return (
       <IdentitySection title="Findings">
@@ -154,8 +148,7 @@ function FindingsFilterControls({
         </Button>
       )}
       {categories.length > 1 && (
-        // A dropdown rather than segments: a person can trip a dozen
-        // categories, which would run a segmented track off the page.
+        // A dropdown: a dozen categories would overflow a segmented control.
         <Select
           value={category ?? ALL}
           onValueChange={(value) =>
@@ -199,9 +192,7 @@ function FindingsTable({
   const client = useSdkClient();
   const routes = useRoutes();
   const { hasScope } = useRBAC();
-  // The Watchdog evidence rule: a session's transcript, links and flagged
-  // message need chat:read on that chat. Without it the title is plain text
-  // and the chat is never requested.
+  // Same rule as Watchdog evidence: chat:read on the finding's own chat.
   const canReadChat = (
     result: RiskResult,
   ): result is RiskResult & {
@@ -243,8 +234,7 @@ function FindingsTable({
     enabled: externalUserIds.length > 0,
   });
 
-  // The endpoint matches rule ids as substrings, so one rule id that prefixes
-  // another would pull in the other's findings. Kept exact here.
+  // The endpoint matches rule ids as substrings; keep exact matches only.
   const results = useMemo(
     () =>
       (query.data?.pages.flatMap((page) => page.results) ?? []).filter(
@@ -276,7 +266,7 @@ function FindingsTable({
       width: "1.2fr",
       render: (result) =>
         canReadChat(result) ? (
-          // Its own clicks, not the row's: the row click expands the message.
+          // Keep these clicks from expanding the row.
           <div
             className="flex min-w-0 items-center gap-1.5"
             onClick={(e) => e.stopPropagation()}
@@ -317,8 +307,7 @@ function FindingsTable({
       width: "1.2fr",
       render: (result) =>
         isJudgeSource(result.source) ? (
-          // A judge finding's match is the whole event; its rationale says
-          // what it saw, and the expanded row shows the message itself.
+          // A judge finding has no matched span; show its rationale.
           <span className="text-muted-foreground line-clamp-2 text-xs">
             {result.description}
           </span>
@@ -368,8 +357,6 @@ function FindingsTable({
         columns={columns}
         data={results}
         rowKey={(result) => result.id}
-        // No expander without chat:read on the session: there is no message
-        // this viewer may load.
         renderExpandedContent={(result) =>
           canReadChat(result) ? <FindingDetail result={result} /> : null
         }
@@ -396,7 +383,7 @@ function FindingsTable({
 function RuleCell({ result }: { result: RiskResult }): JSX.Element {
   const category = getCategoryForFinding(result.source, result.ruleId);
   const categoryName = category ? categoryLabel(category) : "Flagged";
-  // A judge finding's single rule restates its category, so it gets one line.
+  // A judge's rule restates its category.
   const judge = isJudgeSource(result.source);
   return (
     <div className="min-w-0">
@@ -412,10 +399,7 @@ function RuleCell({ result }: { result: RiskResult }): JSX.Element {
   );
 }
 
-/**
- * The expanded row. Mounted with the row but collapsed, so the message is only
- * requested once the row is open.
- */
+/** Mounted collapsed, so the message loads only once the row opens. */
 function FindingDetail({ result }: { result: RiskResult }): JSX.Element {
   const { expandedRowKeys } = useTable();
   const open = expandedRowKeys.has(result.id);

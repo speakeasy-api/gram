@@ -194,11 +194,7 @@ export function MaskedMatch({
 }: {
   resultId: string | undefined;
   matchRedacted: string | undefined;
-  /**
-   * The finding's chat. When given, reveal needs chat:read on that chat rather
-   * than on any chat, so a grant for other sessions doesn't offer a reveal the
-   * server will refuse.
-   */
+  /** The finding's chat; when set, reveal needs chat:read on it. */
   chatId?: string;
   /**
    * "contrast" renders for a dark code-block backdrop (the Watchdog drawer's
@@ -287,8 +283,7 @@ export function MaskedMatch({
       )}
     >
       <SimpleTooltip tooltip={value}>
-        {/* Clicking the value masks it again, the same gesture that revealed
-            it, unless the click ended a text selection for copying. */}
+        {/* Clicking the value hides it, unless the click ended a text selection. */}
         <span
           className={cn(
             "min-w-0 cursor-pointer font-mono text-xs",
@@ -336,10 +331,8 @@ function prettyJSON(s: string): string {
   }
 }
 
-// What callers who lack chat:read see in place of a match: the permission they
-// need, rather than a fingerprint that reads like a bug. The fingerprint (the
-// match_redacted token the list endpoints ship) moves to the tooltip, where a
-// reviewer can still compare two findings before suppressing them.
+// Without chat:read: the permission needed, with the fingerprint in the tooltip
+// so reviewers can still compare findings.
 function LockedRedactedMatch({
   matchRedacted,
   contrast = false,

@@ -111,8 +111,7 @@ describe("EventMatchDialog", () => {
   });
 });
 
-// Focus rather than hover: the trigger is focusable so keyboard users can
-// reach the fingerprint, and focus opens the tooltip without pointer events.
+// Focus opens the tooltip without pointer events.
 async function expectFingerprintInTooltip() {
   const trigger = screen.getByText("chat:read").closest("[tabindex]");
   expect(trigger).toBeTruthy();

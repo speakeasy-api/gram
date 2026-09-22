@@ -28,10 +28,7 @@ export function ShareBar({
 }: {
   segments: ShareBarSegment[];
   ariaLabel: string;
-  /**
-   * Makes each legend entry a button that reports its segment key. The folded
-   * "N more" entry stays inert, since it stands for several segments.
-   */
+  /** Makes legend entries buttons; the folded "N more" entry stays inert. */
   onSelect?: (key: string) => void;
 }): JSX.Element | null {
   const colors = useSeriesColors();

@@ -141,11 +141,7 @@ export function EvidenceTitle({
   );
 }
 
-/**
- * The flagged message for one finding, loaded while `enabled`. For surfaces
- * that open the message themselves, like an expandable table row. Says why
- * when the message can't be shown.
- */
+/** One finding's flagged message, loaded while `enabled`, or why it can't be shown. */
 export function FlaggedMessage({
   chatId: findingChatId,
   chatMessageId,
