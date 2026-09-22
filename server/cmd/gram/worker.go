@@ -341,6 +341,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, functionsFlags()...)
 	flags = append(flags, pulseMCPFlags()...)
 	flags = append(flags, assistantRuntimeFlags()...)
+	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskReconcileFlags()...)
@@ -812,6 +813,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("build kms signing client factory: %w", err)
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
+			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:               guardianPolicy,

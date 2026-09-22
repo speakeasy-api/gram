@@ -114,6 +114,10 @@ func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *a
 	if err != nil {
 		return nil, err
 	}
+	exempt, err := s.platformOwnProjectExemption(ctx, logger, cols.ImpersonateServiceAccount)
+	if err != nil {
+		return nil, err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -134,10 +138,6 @@ func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *a
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating platform external credential").LogError(ctx, logger)
 	}
 
-	exempt, err := s.platformOwnProjectExemption(ctx, logger, cols.ImpersonateServiceAccount)
-	if err != nil {
-		return nil, err
-	}
 	gcp, err := q.CreateGcpIamCredential(ctx, repo.CreateGcpIamCredentialParams{
 		ExternalCredentialID:      ec.ID,
 		ImpersonateServiceAccount: cols.ImpersonateServiceAccount,
@@ -155,6 +155,9 @@ func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *a
 	}
 
 	logPlatformMutation(ctx, logger, authCtx, "create", "gcp_iam_credential", ec.ID.String())
+	if exempt {
+		logExemptionGranted(ctx, logger, authCtx, ec.ID, cols.ImpersonateServiceAccount.String)
+	}
 
 	return mv.BuildPlatformGcpIamCredentialView(ec, gcp), nil
 }
@@ -183,6 +186,11 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 		wifProviderID:             payload.WifProviderID,
 		wifProjectNumber:          payload.WifProjectNumber,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	exempt, err := s.platformOwnProjectExemption(ctx, logger, cols.ImpersonateServiceAccount)
 	if err != nil {
 		return nil, err
 	}
@@ -230,10 +238,6 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating platform external credential").LogError(ctx, logger)
 	}
 
-	exempt, err := s.platformOwnProjectExemption(ctx, logger, cols.ImpersonateServiceAccount)
-	if err != nil {
-		return nil, err
-	}
 	gcp, err := q.UpdateGcpIamCredential(ctx, repo.UpdateGcpIamCredentialParams{
 		ImpersonateServiceAccount: cols.ImpersonateServiceAccount,
 		WifPoolID:                 cols.WifPoolID,
@@ -251,6 +255,9 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 	}
 
 	logPlatformMutation(ctx, logger, authCtx, "update", "gcp_iam_credential", ec.ID.String())
+	if exempt {
+		logExemptionGranted(ctx, logger, authCtx, id, cols.ImpersonateServiceAccount.String)
+	}
 
 	return mv.BuildPlatformGcpIamCredentialView(ec, gcp), nil
 }

@@ -586,6 +586,7 @@ func mcpRuntimeFlags() []cli.Flag {
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, gcpFlags()...)
+	flags = append(flags, identityProviderConnectionFlags()...)
 	return flags
 }
 
@@ -626,7 +627,6 @@ func serverFlags() []cli.Flag {
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, pulseMCPFlags()...)
 	flags = append(flags, svixFlags()...)
-	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, riskReconcileFlags()...)
 	flags = append(flags, riskLLMFlags()...)
 	return flags
@@ -1072,6 +1072,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("build kms signing client factory: %w", err)
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
+			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
 
 			tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, redisClient)
 			if err != nil {

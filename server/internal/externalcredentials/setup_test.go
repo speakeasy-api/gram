@@ -77,14 +77,6 @@ func orgAdmin(t *testing.T, ctx context.Context) context.Context {
 	return authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource))
 }
 
-// withAdmin returns ctx with the auth context's IsAdmin flag flipped to true.
-// Admin-only endpoints opt in explicitly so non-admin paths exercise the
-// realistic default produced by authztest.InitAuthContext.
-//
-// The flag is set on a copy. The context holds a pointer, so flipping it in
-// place would raise the caller's own context to admin as well, and a test that
-// went on to act as an ordinary administrator would silently keep the staff
-// privileges it meant to drop.
 // withFreshAdmin marks the test user a durable platform admin and returns a
 // validated session context, which is what the mutating platform handlers gate on.
 func withFreshAdmin(t *testing.T, ctx context.Context, ti *testInstance) context.Context {
@@ -99,6 +91,14 @@ func withFreshAdmin(t *testing.T, ctx context.Context, ti *testInstance) context
 	return contextvalues.WithValidatedGramSession(ctx, &elevated, false)
 }
 
+// withAdmin returns ctx with the auth context's IsAdmin flag flipped to true.
+// Admin-only endpoints opt in explicitly so non-admin paths exercise the
+// realistic default produced by authztest.InitAuthContext.
+//
+// The flag is set on a copy. The context holds a pointer, so flipping it in
+// place would raise the caller's own context to admin as well, and a test that
+// went on to act as an ordinary administrator would silently keep the staff
+// privileges it meant to drop.
 func withAdmin(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

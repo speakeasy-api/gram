@@ -1064,8 +1064,10 @@ func (p *Provisioner) resolveSigningCredential(ctx context.Context, logger *slog
 		return nil, fmt.Errorf("load platform signing credential: %w", err)
 	}
 
-	if want := p.cfg.SigningServiceAccount; want != "" && !strings.EqualFold(strings.TrimSpace(row.GcpIamCredential.ImpersonateServiceAccount.String), want) {
-		return nil, fmt.Errorf("%w: credential impersonates a service account other than the configured signer", ErrSigningCredentialUnusable)
+	if want := p.cfg.SigningServiceAccount; want != "" {
+		if got := strings.TrimSpace(row.GcpIamCredential.ImpersonateServiceAccount.String); got != "" && !strings.EqualFold(got, want) {
+			return nil, fmt.Errorf("%w: credential impersonates %s, configured signer is %s", ErrSigningCredentialUnusable, got, want)
+		}
 	}
 	credential, problem, detail, err := p.gcpIdentity.ScreenStoredCredential(ctx, logger, gcpauth.StoredCredential{
 		Present:                   true,

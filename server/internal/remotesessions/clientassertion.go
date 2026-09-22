@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
@@ -49,15 +50,25 @@ type KMSClientAssertionSigner struct {
 	gcpIdentity *gcpauth.Identity
 	kmsClients  gcpkms.SigningClientFactory
 	now         func() time.Time
+	// managedSigner, when set, is the only service account a provisioner-managed
+	// key's credential may impersonate.
+	managedSigner string
+}
+
+// PinManagedSigner refuses to sign with a managed key whose credential
+// impersonates any service account other than the given one.
+func (s *KMSClientAssertionSigner) PinManagedSigner(serviceAccount string) {
+	s.managedSigner = strings.TrimSpace(serviceAccount)
 }
 
 func NewKMSClientAssertionSigner(logger *slog.Logger, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsClients gcpkms.SigningClientFactory) *KMSClientAssertionSigner {
 	return &KMSClientAssertionSigner{
-		logger:      logger.With(attr.SlogComponent("remotesessions_client_assertion")),
-		db:          db,
-		gcpIdentity: gcpIdentity,
-		kmsClients:  kmsClients,
-		now:         time.Now,
+		logger:        logger.With(attr.SlogComponent("remotesessions_client_assertion")),
+		db:            db,
+		gcpIdentity:   gcpIdentity,
+		kmsClients:    kmsClients,
+		now:           time.Now,
+		managedSigner: "",
 	}
 }
 
@@ -88,6 +99,11 @@ func (s *KMSClientAssertionSigner) SignClientAssertion(ctx context.Context, requ
 	}
 	if !backing.ResourceName.Valid || backing.ResourceName.String == "" {
 		return "", fmt.Errorf("active client assertion key is not backed by GCP KMS")
+	}
+	if s.managedSigner != "" && backing.ExternalKey.IdentityProviderConnectionID.Valid {
+		if got := strings.TrimSpace(backing.ImpersonateServiceAccount.String); got != "" && !strings.EqualFold(got, s.managedSigner) {
+			return "", fmt.Errorf("client assertion credential impersonates %s, configured signer is %s", got, s.managedSigner)
+		}
 	}
 
 	credential, problem, detail, err := s.gcpIdentity.ScreenStoredCredential(ctx, logger, gcpauth.StoredCredential{

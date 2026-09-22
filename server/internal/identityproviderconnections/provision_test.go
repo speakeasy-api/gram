@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -956,4 +957,31 @@ func TestProbeSigningCredential_RefusesUnpinnedServiceAccount(t *testing.T) {
 
 	other := provisiontest.NewProvisionerPinnedTo(t, ti.conn, kms.Factory, testServerURL, credentialID, "someone-else@example.iam.gserviceaccount.com")
 	require.ErrorIs(t, other.ProbeSigningCredential(ctx), identityproviderconnections.ErrSigningCredentialUnusable)
+}
+
+func TestSignClientAssertion_RefusesManagedKeyWithUnpinnedSigner(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestDB(t)
+	issuerID := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, tokenEndpoint)
+	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
+	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
+	kms := provisiontest.NewKMSClients(t)
+	client, err := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID).ProvisionClient(ctx, identityproviderconnections.ProvisionClientParams{
+		OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta, IssuerID: issuerID,
+	})
+	require.NoError(t, err)
+	factory := func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.SigningClient, error) {
+		return kms.Factory(ctx, ts)
+	}
+	request := remotesessions.ClientAssertionRequest{RemoteSessionClientID: client.ClientRowID, OrganizationID: ti.orgID, JSONWebKeySetID: client.JSONWebKeySetID, ClientID: "0oaclient", Audience: tokenEndpoint}
+
+	signer := remotesessions.NewKMSClientAssertionSigner(testenv.NewLogger(t), ti.conn, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory)
+	signer.PinManagedSigner(provisiontest.SigningServiceAccount())
+	_, err = signer.SignClientAssertion(ctx, request)
+	require.NoError(t, err)
+
+	other := remotesessions.NewKMSClientAssertionSigner(testenv.NewLogger(t), ti.conn, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory)
+	other.PinManagedSigner("someone-else@example.iam.gserviceaccount.com")
+	_, err = other.SignClientAssertion(ctx, request)
+	require.ErrorContains(t, err, "configured signer")
 }

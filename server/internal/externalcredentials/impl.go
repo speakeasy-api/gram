@@ -62,7 +62,7 @@ type Service struct {
 	authz           *authz.Engine
 	audit           *audit.Logger
 	gcpIdentity     *gcpauth.Identity
-	sessions        *sessions.Manager
+	sessions        auth.PlatformAdminEntitlementReader
 	productFeatures *productfeatures.Client
 	verifyLimiter   *ratelimit.Limiter
 }
