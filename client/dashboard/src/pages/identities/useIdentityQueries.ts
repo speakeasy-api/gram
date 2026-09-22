@@ -339,7 +339,13 @@ export function useIdentityRisk(
     combine: (results) => {
       const loaded = results.flatMap((r) => (r.data ? [r.data] : []));
       return {
-        data: loaded.length > 0 ? sumBreakdowns(loaded) : undefined,
+        // Only once every id has answered: a sum missing one would pass for
+        // the whole count. A failed refresh keeps its earlier data, so a
+        // total that went stale still shows, flagged as such.
+        data:
+          loaded.length > 0 && loaded.length === results.length
+            ? sumBreakdowns(loaded)
+            : undefined,
         isLoading: results.some((r) => r.isLoading),
         isError: results.some((r) => r.isError),
         // Only the failed reads: see retryFailed.

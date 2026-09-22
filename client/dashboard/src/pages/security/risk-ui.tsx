@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import { CodeBlock } from "@/components/code";
@@ -235,9 +236,8 @@ export function MaskedMatch({
 
   if (!resultId || !matchRedacted) return <span>-</span>;
 
-  // Without chat:read the plaintext can never be revealed — keep the
-  // fingerprint on screen so a reviewer can still correlate and inspect the
-  // finding before suppressing it. Reveal-all must not flip this open.
+  // Without chat:read the plaintext can never be revealed, so say which
+  // permission is missing. Reveal-all must not flip this open.
   if (!canReveal) {
     return (
       <LockedRedactedMatch
@@ -275,6 +275,11 @@ export function MaskedMatch({
     );
   }
 
+  const hide = (e: MouseEvent) => {
+    e.stopPropagation();
+    setRevealed(false);
+  };
+
   return (
     <span
       className={cn(
@@ -293,9 +298,8 @@ export function MaskedMatch({
             contrast && "text-background",
           )}
           onClick={(e) => {
-            e.stopPropagation();
-            if (window.getSelection()?.toString()) return;
-            setRevealed(false);
+            if (window.getSelection()?.toString()) e.stopPropagation();
+            else hide(e);
           }}
         >
           {value}
@@ -311,10 +315,7 @@ export function MaskedMatch({
               ? "text-background/60 hover:text-background"
               : "text-muted-foreground hover:text-foreground",
           )}
-          onClick={(e) => {
-            e.stopPropagation();
-            setRevealed(false);
-          }}
+          onClick={hide}
         >
           <Eye className="h-3 w-3" />
         </button>

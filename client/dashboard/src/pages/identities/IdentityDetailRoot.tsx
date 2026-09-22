@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/Button";
 import { Link, Navigate, Outlet, useLocation, useParams } from "react-router";
 import type { IdentityOutletContext } from "./identityRoute";
 import { useCanReadRisk, useIdentityIsKnown } from "./useIdentityQueries";
+import { withoutFindingsFilter } from "./identityFindingsLink";
 
 /** How each resolved subject kind reads in the header chip. */
 /**
@@ -192,7 +193,9 @@ function IdentityDetailContent(): JSX.Element {
             items={identityRailItems(
               routes,
               encodedUrn ?? "",
-              location.search,
+              // The Findings filter is that page's own, not a setting to
+              // carry into the other sections and back.
+              withoutFindingsFilter(location.search),
               // Agents render the agent profile, which has no Findings view.
               canReadRisk && !identity.agent,
             )}

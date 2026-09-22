@@ -11,28 +11,24 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { useTable } from "@/components/ui/Table/context/context";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useRBAC } from "@/hooks/useRBAC";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { agentSessionHref } from "@/pages/chatLogs/agentSessionLink";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
-import {
-  RULE_CATEGORY_META,
-  type RuleCategory,
-} from "@/pages/security/policy-data";
+import { ruleCategoryLabel } from "@/pages/security/policy-data";
 import { MaskedMatch, RevealAllProvider } from "@/pages/security/risk-ui";
 import {
   getCategoryForFinding,
   getRuleTitleFallback,
   isJudgeSource,
 } from "@/pages/security/risk-utils";
-import { REVEAL_SCOPE } from "@/pages/security/unmask";
+import { useCanReadFindingChat } from "@/pages/security/unmask";
 import { FlaggedMessage } from "@/pages/security/watchdog/EvidenceTitle";
 import type { RiskOverviewCategory } from "@gram/client/models/components/riskoverviewcategory.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
 import { identityHandoffs } from "./identityHandoffs";
 import {
@@ -147,8 +143,10 @@ function FindingsFilterControls({
           <X className="size-3.5" />
         </Button>
       )}
-      {categories.length > 1 && (
+      {(categories.length > 1 || category) && (
         // A dropdown: a dozen categories would overflow a segmented control.
+        // Kept while a category is set, even the only one, so it can be
+        // cleared.
         <Select
           value={category ?? ALL}
           onValueChange={(value) =>
@@ -162,9 +160,15 @@ function FindingsFilterControls({
             <SelectItem value={ALL}>All categories</SelectItem>
             {categories.map((c) => (
               <SelectItem key={c.category} value={c.category}>
-                {`${categoryLabel(c.category)} (${Number(c.findings).toLocaleString()})`}
+                {`${ruleCategoryLabel(c.category)} (${Number(c.findings).toLocaleString()})`}
               </SelectItem>
             ))}
+            {/* A linked category with nothing in this window. */}
+            {category && !categories.some((c) => c.category === category) && (
+              <SelectItem value={category}>
+                {`${ruleCategoryLabel(category)} (0)`}
+              </SelectItem>
+            )}
           </SelectContent>
         </Select>
       )}
@@ -191,13 +195,8 @@ function FindingsTable({
 }): JSX.Element {
   const client = useSdkClient();
   const routes = useRoutes();
-  const { hasScope } = useRBAC();
   // Same rule as Watchdog evidence: chat:read on the finding's own chat.
-  const canReadChat = (
-    result: RiskResult,
-  ): result is RiskResult & {
-    chatId: string;
-  } => Boolean(result.chatId) && hasScope(REVEAL_SCOPE, result.chatId);
+  const canReadChat = useCanReadFindingChat();
   const { slug: gramProject } = useIdentityProject();
   const [openChat, setOpenChat] = useState<{
     chatId: string;
@@ -242,6 +241,18 @@ function FindingsTable({
       ),
     [query.data, ruleId],
   );
+  // A page that only held those near-misses would show as empty, or as "No
+  // findings" with more to load, so skip on to the next one.
+  const lastPage = query.data?.pages.at(-1);
+  const skipPage =
+    !!ruleId &&
+    !!lastPage &&
+    !lastPage.results.some((result) => result.ruleId === ruleId) &&
+    query.hasNextPage;
+  const { isFetchingNextPage, fetchNextPage } = query;
+  useEffect(() => {
+    if (skipPage && !isFetchingNextPage) void fetchNextPage();
+  }, [skipPage, isFetchingNextPage, fetchNextPage]);
 
   const columns: Column<RiskResult>[] = [
     {
@@ -264,8 +275,8 @@ function FindingsTable({
       key: "session",
       header: "Session",
       width: "1.2fr",
-      render: (result) =>
-        canReadChat(result) ? (
+      render: ({ chatId, chatMessageId, chatTitle }) =>
+        canReadChat(chatId) ? (
           // Keep these clicks from expanding the row.
           <div
             className="flex min-w-0 items-center gap-1.5"
@@ -275,17 +286,12 @@ function FindingsTable({
               type="button"
               title="Open session"
               className="hover:text-foreground truncate text-left text-sm"
-              onClick={() =>
-                setOpenChat({
-                  chatId: result.chatId,
-                  chatMessageId: result.chatMessageId,
-                })
-              }
+              onClick={() => setOpenChat({ chatId, chatMessageId })}
             >
-              {result.chatTitle || "Untitled session"}
+              {chatTitle || "Untitled session"}
             </button>
             <Link
-              to={agentSessionHref(routes.agentSessions.href(), result.chatId)}
+              to={agentSessionHref(routes.agentSessions.href(), chatId)}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Open session in Agent Sessions"
@@ -296,9 +302,7 @@ function FindingsTable({
             </Link>
           </div>
         ) : (
-          <span className="block truncate text-sm">
-            {result.chatTitle || "-"}
-          </span>
+          <span className="block truncate text-sm">{chatTitle || "-"}</span>
         ),
     },
     {
@@ -333,7 +337,9 @@ function FindingsTable({
       </IdentityPanel>
     );
   }
-  if (query.isLoading) return <SkeletonTable />;
+  if (query.isLoading || (skipPage && results.length === 0)) {
+    return <SkeletonTable />;
+  }
   if (query.isError && results.length === 0) {
     return (
       <div className="flex items-center gap-2">
@@ -358,7 +364,7 @@ function FindingsTable({
         data={results}
         rowKey={(result) => result.id}
         renderExpandedContent={(result) =>
-          canReadChat(result) ? <FindingDetail result={result} /> : null
+          canReadChat(result.chatId) ? <FindingDetail result={result} /> : null
         }
         hasMore={query.hasNextPage}
         onLoadMore={async () => {
@@ -382,7 +388,7 @@ function FindingsTable({
 
 function RuleCell({ result }: { result: RiskResult }): JSX.Element {
   const category = getCategoryForFinding(result.source, result.ruleId);
-  const categoryName = category ? categoryLabel(category) : "Flagged";
+  const categoryName = category ? ruleCategoryLabel(category) : "Flagged";
   // A judge's rule restates its category.
   const judge = isJudgeSource(result.source);
   return (
@@ -416,8 +422,4 @@ function FindingDetail({ result }: { result: RiskResult }): JSX.Element {
       </p>
     </div>
   );
-}
-
-function categoryLabel(category: string): string {
-  return RULE_CATEGORY_META[category as RuleCategory]?.label ?? category;
 }

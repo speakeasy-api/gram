@@ -1,10 +1,7 @@
 import { HumanizeDateTime } from "@/lib/dates";
 import { useLocation, useNavigate } from "react-router";
 import { useOrgRoutes, useRoutes } from "@/routes";
-import {
-  RULE_CATEGORY_META,
-  type RuleCategory,
-} from "@/pages/security/policy-data";
+import { ruleCategoryLabel } from "@/pages/security/policy-data";
 import { getRuleTitleFallback } from "@/pages/security/risk-utils";
 import {
   IdentityPanel,
@@ -139,9 +136,7 @@ export default function IdentitySecurity(): JSX.Element {
               <ShareBar
                 segments={categories.map((category) => ({
                   key: category.category,
-                  label:
-                    RULE_CATEGORY_META[category.category as RuleCategory]
-                      ?.label ?? category.category,
+                  label: ruleCategoryLabel(category.category),
                   value: Number(category.findings),
                   valueLabel: Number(category.findings).toLocaleString(),
                 }))}
@@ -182,10 +177,10 @@ export default function IdentitySecurity(): JSX.Element {
                     ? getRuleTitleFallback(rule.ruleId)
                     : "(no rule_id)",
                   value: Number(rule.findings),
+                  onSelect: rule.ruleId
+                    ? () => showFindings({ ruleId: rule.ruleId })
+                    : undefined,
                 }))}
-                onSelect={(key) => {
-                  if (!key.startsWith("__none_")) showFindings({ ruleId: key });
-                }}
               />
             </div>
           )}

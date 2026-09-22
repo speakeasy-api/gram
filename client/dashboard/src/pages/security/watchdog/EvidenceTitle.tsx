@@ -1,6 +1,5 @@
 import { Icon } from "@/components/ui/Icon";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { agentSessionHref } from "@/pages/chatLogs/agentSessionLink";
 import {
@@ -27,7 +26,7 @@ import { formatDistanceToNow } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { REVEAL_SCOPE } from "../unmask";
+import { useCanReadFindingChat } from "../unmask";
 import { collectChatFindings } from "./collect-findings";
 
 /**
@@ -51,13 +50,9 @@ export function EvidenceTitle({
   onOpenChat: (chatId: string, chatMessageId?: string) => void;
 }): JSX.Element {
   const routes = useRoutes();
-  const { hasScope } = useRBAC();
-  // Chat content needs chat:read on this chat. An unscoped check would pass on
-  // a grant for any chat. Without it, the chat is never requested.
-  const chatId =
-    findingChatId && hasScope(REVEAL_SCOPE, findingChatId)
-      ? findingChatId
-      : undefined;
+  const canReadChat = useCanReadFindingChat();
+  // Without chat:read on this chat, the chat is never requested.
+  const chatId = canReadChat(findingChatId) ? findingChatId : undefined;
   const [expanded, setExpanded] = useState(false);
   const [clipped, setClipped] = useState(false);
   const titleRef = useRef<HTMLElement>(null);
@@ -151,12 +146,8 @@ export function FlaggedMessage({
   chatMessageId: string | undefined;
   enabled: boolean;
 }): JSX.Element {
-  const { hasScope } = useRBAC();
-  // Same check as the header: chat:read on this chat, or no request at all.
-  const chatId =
-    findingChatId && hasScope(REVEAL_SCOPE, findingChatId)
-      ? findingChatId
-      : undefined;
+  const canReadChat = useCanReadFindingChat();
+  const chatId = canReadChat(findingChatId) ? findingChatId : undefined;
   const message = useFlaggedMessage(chatId, chatMessageId, enabled);
   if (!findingChatId || !chatMessageId) {
     return (

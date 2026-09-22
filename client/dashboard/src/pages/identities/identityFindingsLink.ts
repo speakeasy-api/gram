@@ -27,6 +27,15 @@ export function setFindingsFilterParams(
   return params;
 }
 
+/** `search` without a Findings filter, as a `?`-prefixed string or "". */
+export function withoutFindingsFilter(search: string): string {
+  const query = setFindingsFilterParams(
+    new URLSearchParams(search),
+    {},
+  ).toString();
+  return query ? `?${query}` : "";
+}
+
 /** This identity's Findings page, narrowed to `filter`, keeping other params. */
 export function identityFindingsHref(
   routes: ReturnType<typeof useRoutes>,
