@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
@@ -50,9 +51,9 @@ type ResolveIssuerParams struct {
 // tenant's own project or organization, so no shared catalog exists that a
 // customer could silently land on.
 func ResolveIssuerByURL(ctx context.Context, db repo.DBTX, params ResolveIssuerParams) (repo.WorkloadIssuer, error) {
-	canonical, err := ParseIssuerURL(params.IssuerURL)
+	canonical, err := issuerurl.ParseHTTPSOnly(params.IssuerURL)
 	if err != nil {
-		return repo.WorkloadIssuer{}, err
+		return repo.WorkloadIssuer{}, fmt.Errorf("%w: %w", ErrIssuerURLInvalid, err)
 	}
 
 	// Checked after the parse and before the store, so a caller with no

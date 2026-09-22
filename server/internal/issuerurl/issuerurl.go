@@ -1,6 +1,7 @@
 package issuerurl
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"slices"
@@ -53,6 +54,23 @@ type Canonical struct {
 	port string
 	// path has trailing slashes stripped and may be empty.
 	path string
+}
+
+// ErrNotHTTPS reports an issuer identifier that is well formed but not https.
+var ErrNotHTTPS = errors.New("issuer url must use https")
+
+// ParseHTTPSOnly is Parse for callers that trust only https issuers, as
+// SEP-1933 requires of workload issuers. A well-formed http identifier fails
+// with ErrNotHTTPS; any other failure is Parse's.
+func ParseHTTPSOnly(raw string) (Canonical, error) {
+	canonical, err := Parse(raw)
+	if err != nil {
+		return Canonical{}, err
+	}
+	if canonical.scheme != "https" {
+		return Canonical{}, ErrNotHTTPS
+	}
+	return canonical, nil
 }
 
 // Parse validates raw as an issuer identifier and reduces it

@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
@@ -53,7 +53,7 @@ func TestWorkloadIssuerKeySource_RefusesPlainHTTPJwksURI(t *testing.T) {
 		workloadTestIssuer("gh-actions", "http://example.test/keys"),
 	)
 
-	require.ErrorIs(t, err, workloadidentity.ErrJWKSURINotHTTPS, "plain http must not become a key source, and must be named as such")
+	require.ErrorIs(t, err, jwks.ErrURINotHTTPS, "plain http must not become a key source, and must be named as such")
 	require.ErrorContains(t, err, "gh-actions")
 }
 
@@ -66,7 +66,7 @@ func TestWorkloadIssuerKeySource_RejectsMalformedHTTPSJwksURI(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	require.NotErrorIs(t, err, workloadidentity.ErrJWKSURINotHTTPS)
+	require.NotErrorIs(t, err, jwks.ErrURINotHTTPS)
 	require.ErrorContains(t, err, "gh-actions")
 }
 
