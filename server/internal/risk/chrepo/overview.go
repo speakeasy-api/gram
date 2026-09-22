@@ -34,11 +34,14 @@ type RiskOverviewWindowParams struct {
 // ORDER BY latestCopyOrderSQL — state-change copies outrank finding copies,
 // latest inserted within a rank); dead-letter sentinels and
 // exclusion/dismissal annotations are then filtered on that latest state.
+// The shadow marker is immutable across copies, so it is filtered with the
+// tenancy scope before the dedup.
 func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.SelectBuilder {
 	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+latestCopyOrderSQL+") AS rn").
 		From("risk_findings").
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
+		Where(notShadowCond).
 		Where("created_at >= ?", p.From).
 		Where("created_at < ?", p.To)
 

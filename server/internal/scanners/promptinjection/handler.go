@@ -99,6 +99,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		OrganizationID:    m.GetOrganizationId(),
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
+		Shadow:            false,
 	}, findings, "prompt injection")
 	if err != nil {
 		err = fmt.Errorf("publish prompt injection findings: %w", err)

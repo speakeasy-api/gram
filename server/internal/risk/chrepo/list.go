@@ -124,8 +124,8 @@ func (r *RiskFindingListRow) scanTargets() []any {
 }
 
 // listRiskFindingsBase applies the filters shared by the list and count reads
-// that are immutable across an id's copies: tenancy, dead-letter sentinels and
-// the enabled-policy pushdown. The exclusion / false-positive state is
+// that are immutable across an id's copies: tenancy, dead-letter sentinels,
+// the shadow marker and the enabled-policy pushdown. The exclusion / false-positive state is
 // deliberately NOT here: those flags change by appending a newer copy of the
 // row (the retroactive reconcile, the false-positive mirror), so filtering
 // them before the latest-copy-per-id dedup would drop the flagged copy and
@@ -140,9 +140,25 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
 		Where("dead_letter_reason = ''").
+		Where(notShadowCond).
 		Where(squirrel.Eq{"risk_policy_id": p.PolicyIDs})
 	return sb, nil
 }
+
+// notShadowCond hides engine-comparison rows. Findings the LLM analyzer
+// produced under the shadow risk engine mode are stored with shadow = 1 so
+// the two engines' verdicts can be compared per message, but they were never
+// enforced and must never surface to users: every read path serving the Risk
+// Events listing, the Dismissed listing, the overview, signals, the Watchdog,
+// reveal and the retroactive exclusion reconcile applies this condition.
+//
+// Unlike the suppression state the marker is immutable across an id's copies:
+// the scanner stamps it, the retroactive reconcile's INSERT ... SELECT passes
+// it through verbatim, and the manual-dismissal mirror republishes Postgres
+// risk_results rows only, which never hold shadow findings. It is therefore
+// safe to apply BEFORE the per-id dedup, next to the tenancy filters, where it
+// also prunes the scan.
+const notShadowCond = "shadow = 0"
 
 // liveStateCond gates the latest copy of a finding to live rows only — not
 // suppressed, not marked a false positive. Applied after the per-id dedup.

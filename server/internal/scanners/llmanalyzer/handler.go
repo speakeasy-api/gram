@@ -36,9 +36,10 @@ const asyncExecutionPath = "async"
 // model's verdict is recorded for comparison only.
 //
 // Findings are ClickHouse-only: nothing writes them to the Postgres
-// risk_results table. Shadow requests are evaluated and metered like every
-// other request but their findings are withheld from the Finding topic until
-// the findings store can mark shadow rows and hide them by default.
+// risk_results table. Shadow requests are evaluated, metered and published
+// like every other request, with the shadow marker stamped on each finding so
+// the findings store records them for engine comparison and hides them from
+// users.
 type Handler struct {
 	logger       *slog.Logger
 	findingsPub  gcp.Publisher[*riskv1.Finding]
@@ -122,27 +123,22 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 		result.Findings = FindingsForSources(result.Findings, sources)
 	}
 
-	var err error
-	if m.GetShadow() {
-		h.logger.DebugContext(ctx, "llm analyzer shadow findings withheld from the finding topic",
-			attr.SlogRiskScanRequestID(m.GetRequestId()),
-			attr.SlogOrganizationID(m.GetOrganizationId()),
-			attr.SlogRiskPolicyID(m.GetRiskPolicyId()),
-			attr.SlogRiskLLMFindingCount(len(result.Findings)),
-		)
-	} else {
-		_, _, err = scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
-			RequestID:         m.GetRequestId(),
-			ChatMessageID:     m.GetChatMessageId(),
-			ContentPartID:     m.GetContentPartId(),
-			ProjectID:         m.GetProjectId(),
-			OrganizationID:    m.GetOrganizationId(),
-			RiskPolicyID:      m.GetRiskPolicyId(),
-			RiskPolicyVersion: m.GetRiskPolicyVersion(),
-		}, result.Findings, "llm analyzer")
-		if err != nil {
-			err = fmt.Errorf("publish llm analyzer findings: %w", err)
-		}
+	// A shadow request publishes exactly like an enforcing one; the marker on
+	// each finding is what keeps the rows out of every user-facing read path
+	// while the comparison query can still join them with the legacy
+	// engines' rows for the same message.
+	_, _, err := scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
+		RequestID:         m.GetRequestId(),
+		ChatMessageID:     m.GetChatMessageId(),
+		ContentPartID:     m.GetContentPartId(),
+		ProjectID:         m.GetProjectId(),
+		OrganizationID:    m.GetOrganizationId(),
+		RiskPolicyID:      m.GetRiskPolicyId(),
+		RiskPolicyVersion: m.GetRiskPolicyVersion(),
+		Shadow:            m.GetShadow(),
+	}, result.Findings, "llm analyzer")
+	if err != nil {
+		err = fmt.Errorf("publish llm analyzer findings: %w", err)
 	}
 
 	if result.Completed {
@@ -164,7 +160,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 
 	outcome := scanners.AsyncScanOutcomeOK
 	if m.GetShadow() {
-		outcome = scanners.AsyncScanOutcomeShadowUnpublished
+		outcome = scanners.AsyncScanOutcomeShadowPublished
 	}
 	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, outcome, scanners.AsyncShadowGateReasonNotGated)
 	return nil

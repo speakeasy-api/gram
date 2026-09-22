@@ -205,6 +205,30 @@ func TestFindingCHWriter_ProcessBatch_MapsAllFields(t *testing.T) {
 	require.Equal(t, "tool.args", row.Field)
 	require.Equal(t, "command.0", row.Path)
 	require.Equal(t, "call_abc123", row.ToolCallID)
+
+	// An enforcing finding never carries the engine-comparison marker.
+	require.False(t, row.Shadow)
+}
+
+// TestFindingCHWriter_ProcessBatch_MapsShadow pins the engine-comparison
+// marker: a shadow finding (the LLM analyzer's verdict recorded under the
+// shadow risk engine mode) is persisted with the flag set, so the read paths
+// can hide it, while an enforcing finding in the same batch stays unmarked.
+func TestFindingCHWriter_ProcessBatch_MapsShadow(t *testing.T) {
+	t.Parallel()
+
+	w, ins := newCHWriter(t)
+
+	enforcing := chFinding()
+	shadow := chFinding()
+	shadow.SetShadow(true)
+
+	requireNoRejects(t, processBatch(t, w, context.Background(), []*riskv1.Finding{enforcing, shadow}))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 2)
+	require.False(t, rows[0].Shadow)
+	require.True(t, rows[1].Shadow)
 }
 
 // match_redacted is the shared maskdisplay partial mask, per source: an

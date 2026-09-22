@@ -373,6 +373,7 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			Path:                     message.GetPath(),
 			ToolCallID:               message.GetToolCallId(),
 			EventKind:                eventKind,
+			Shadow:                   message.GetShadow(),
 		})
 	}
 

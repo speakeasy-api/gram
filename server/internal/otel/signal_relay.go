@@ -43,6 +43,7 @@ const (
 	relayReasonExcluded           relayReason = "excluded"
 	relayReasonDeadLetter         relayReason = "dead-letter"
 	relayReasonStateChange        relayReason = "state-change"
+	relayReasonShadow             relayReason = "shadow"
 )
 
 // signalRelay resolves and caches customer-defined OTLP destinations, then

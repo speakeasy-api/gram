@@ -917,6 +917,7 @@ pubsub:
           string excluded_reason = 25;
           string excluded_detail = 26;
           string event_kind = 27;
+          bool shadow = 28;
         }
       type: PROTOCOL_BUFFER
   - labels:

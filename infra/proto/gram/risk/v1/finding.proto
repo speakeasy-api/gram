@@ -77,6 +77,16 @@ message Finding {
   // excluded_at/false_positive_at is carried and "finding" otherwise.
   string event_kind = 27;
 
+  // Engine-comparison marker. True on findings the LLM analyzer produced
+  // while the organization's risk engine mode was shadow, where the legacy
+  // engines enforce the same batch and the model's verdict is recorded only
+  // to be compared with theirs per message. A shadow finding is never
+  // enforced and the ClickHouse writer persists it as shadow = 1, which every
+  // user-facing read path filters out, so it is hidden from Risk Events, the
+  // overview, signals and the Watchdog by default. False on every finding the
+  // enforcing engines produce.
+  bool shadow = 28;
+
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {
       seconds: 604800 /* 7 days */
