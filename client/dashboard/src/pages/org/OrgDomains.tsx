@@ -52,12 +52,10 @@ import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
 import { invalidateAllListDomains } from "@gram/client/react-query/listDomains";
-import { shouldShowNetworkAccessPage } from "./networkAccessPageVisibility";
 import { toast } from "sonner";
 import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
 import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
-import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useOrganization } from "@/contexts/Auth";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useQueryClient } from "@tanstack/react-query";
@@ -619,12 +617,6 @@ function OrgDomainsInner() {
   const productTier = useProductTier();
   const { hasScope } = useRBAC();
   const canManageDomains = hasScope("org:admin");
-  const { status: networkIngressRolloutStatus, canManageIngress } =
-    useNetworkIngressRollout();
-  const showNetworkAccess = shouldShowNetworkAccessPage(
-    networkIngressRolloutStatus,
-    canManageIngress,
-  );
   const queryClient = useQueryClient();
   const [isAddDomainDialogOpen, setIsAddDomainDialogOpen] = useState(false);
   const [copiedRecordValue, setCopiedRecordValue] = useState<string | null>(
@@ -851,29 +843,23 @@ function OrgDomainsInner() {
   }, [domain?.isUpdating, domainRefetch]);
 
   useEffect(() => {
-    document.title = `${showNetworkAccess ? "Network Access" : "Custom Domain"} | Speakeasy`;
-  }, [showNetworkAccess]);
+    document.title = "Network Access | Speakeasy";
+  }, []);
 
   return (
     <SettingsPage
-      title={showNetworkAccess ? "Network Access" : "Custom Domain"}
-      description={
-        showNetworkAccess
-          ? "Configure the public and private network surfaces used to reach your organization's hosted MCP servers."
-          : "Connect a custom domain to serve your MCP servers from your own branded URL instead of the default platform domain."
-      }
+      title="Network Access"
+      description="Configure the public and private network surfaces used to reach your organization's hosted MCP servers."
     >
       <PrivateNetworkSection />
       <SettingsSection>
-        {showNetworkAccess && (
-          <SettingsSection.Header>
-            <SettingsSection.Title>Custom domain</SettingsSection.Title>
-            <SettingsSection.Description>
-              Connect a custom domain to serve your MCP servers from your own
-              branded URL instead of the default platform domain.
-            </SettingsSection.Description>
-          </SettingsSection.Header>
-        )}
+        <SettingsSection.Header>
+          <SettingsSection.Title>Custom domain</SettingsSection.Title>
+          <SettingsSection.Description>
+            Connect a custom domain to serve your MCP servers from your own
+            branded URL instead of the default platform domain.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
         {domain?.domain ? (
           <div className="border-border bg-card border p-4">
             <Stack direction="horizontal" justify="space-between" align="start">

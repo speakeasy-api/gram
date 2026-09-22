@@ -245,6 +245,11 @@ describe("NetworkAccessSection", () => {
         <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
       );
       expect(screen.getByText(/available on the Enterprise plan/)).toBeTruthy();
+      expect(
+        screen
+          .getByRole("link", { name: "Talk to our team about upgrading" })
+          .getAttribute("href"),
+      ).toBe("https://www.speakeasy.com/book-demo");
       fireEvent.click(
         screen.getByRole("combobox", { name: "Network access mode" }),
       );

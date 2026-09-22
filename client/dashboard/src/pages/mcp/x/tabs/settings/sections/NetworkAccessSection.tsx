@@ -350,9 +350,21 @@ function NetworkAccessSectionContent({
           <SettingsSection.FooterHint>
             {!enterprise &&
             mcpServer.networkAccessMode ===
-              McpServerNetworkAccessMode.PublicOnly
-              ? "Tailscale private access is available on the Enterprise plan. Talk to our team about upgrading from Network Access settings."
-              : footerHint}
+              McpServerNetworkAccessMode.PublicOnly ? (
+              <>
+                Tailscale private access is available on the Enterprise plan.{" "}
+                <a
+                  href="https://www.speakeasy.com/book-demo"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  Talk to our team about upgrading
+                </a>
+              </>
+            ) : (
+              footerHint
+            )}
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope
