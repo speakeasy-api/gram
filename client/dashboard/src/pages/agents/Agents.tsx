@@ -36,7 +36,7 @@ import { useAgentsSuspendMutation } from "@gram/client/react-query/agentsSuspend
 import { useCreateAgentMutation } from "@gram/client/react-query/createAgent.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Bot, Plus } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -245,12 +245,16 @@ function CreateAgent({
   disabled: boolean;
   onCreated: (id: string) => void;
 }) {
-  const [name, setName] = useState("");
-  const [scope, setScope] = useState<AgentScope>("organization");
-  const [draft, setDraft] = useState<AgentPolicyDraft>({});
-  const [error, setError] = useState<string | null>(null);
   const organization = useOrganization();
   const project = useProject();
+  const [name, setName] = useState("");
+  // Project is the common case, so it leads — but only once a project has
+  // resolved, since the Project option is unselectable until then.
+  const [scope, setScope] = useState<AgentScope>(
+    project.id ? "project" : "organization",
+  );
+  const [draft, setDraft] = useState<AgentPolicyDraft>({});
+  const [error, setError] = useState<string | null>(null);
   const { user } = useSession();
   const queryClient = useQueryClient();
   const create = useCreateAgentMutation({
@@ -301,23 +305,17 @@ function CreateAgent({
 
   return (
     <FormPage
-      title="Agents"
-      description="Create a first-class nonhuman principal with ownership and an independent lifecycle."
+      // The scope cards sit side by side and the permissions table carries a
+      // tab strip and a button on one row; both are cramped at form measure.
+      width="wide"
+      title="Agents · Create"
+      description={
+        disabled
+          ? "Agent management is unavailable in the shared demo because it requires active organization membership."
+          : "You will be the owner. Ownership gives you intrinsic setup access without creating a reusable permission grant."
+      }
     >
-      <form onSubmit={onSubmit} className="border bg-card p-6">
-        <div className="mb-6 flex items-start gap-4">
-          <div className="border p-2">
-            <Bot className="size-5" aria-hidden="true" />
-          </div>
-          <div>
-            <Text className="font-medium">Create an agent</Text>
-            <Text muted small className="mt-1">
-              {disabled
-                ? "Agent management is unavailable in the shared demo because it requires active organization membership."
-                : "You will be the owner. Ownership gives you intrinsic setup access without creating a reusable permission grant."}
-            </Text>
-          </div>
-        </div>
+      <form onSubmit={onSubmit} className="w-full">
         <div className="space-y-2">
           <Label htmlFor="agent-name">Agent name</Label>
           <Input
@@ -330,11 +328,11 @@ function CreateAgent({
             autoFocus
           />
         </div>
-        <div className="mt-6 space-y-2">
+        <div className="mt-8 space-y-2">
           <Label>Scope</Label>
           <Text muted small>
-            Where this agent belongs. Scope does not grant or withhold access on
-            its own — permissions below are what decide what it can reach.
+            Where this agent is listed and managed. Scope does not change what
+            it can reach — permissions below decide that.
           </Text>
           <RadioCardGroup
             orientation="horizontal"
@@ -343,21 +341,22 @@ function CreateAgent({
             disabled={disabled || create.isPending}
             aria-label="Agent scope"
           >
-            <RadioCard value="organization" title="Organization">
-              <Text muted small>
-                Belongs to {organization.name}, not to any one project.
-              </Text>
-            </RadioCard>
             <RadioCard value="project" title="Project" disabled={!project.id}>
               <Text muted small>
                 {project.id
-                  ? `Belongs to ${project.name}.`
+                  ? `Sits with ${project.name}, so the team working there finds and manages it alongside their own servers.`
                   : "Select a project first."}
+              </Text>
+            </RadioCard>
+            <RadioCard value="organization" title="Organization">
+              <Text muted small>
+                Sits above every project in {organization.name}. Use this for a
+                shared agent that serves more than one team.
               </Text>
             </RadioCard>
           </RadioCardGroup>
         </div>
-        <div className="mt-6 space-y-2">
+        <div className="mt-8 space-y-2">
           <Label>Permissions</Label>
           <Text muted small>
             The most this agent may ever be delegated. An agent with no
@@ -365,11 +364,13 @@ function CreateAgent({
             Each key is narrowed again at issuance, against your live
             permissions and the owner's.
           </Text>
-          <AgentPolicyEditor
-            draft={draft}
-            onChange={setDraft}
-            disabled={disabled || create.isPending}
-          />
+          <div className="pt-2">
+            <AgentPolicyEditor
+              draft={draft}
+              onChange={setDraft}
+              disabled={disabled || create.isPending}
+            />
+          </div>
         </div>
         {error && (
           <p role="alert" className="mt-4 text-sm">

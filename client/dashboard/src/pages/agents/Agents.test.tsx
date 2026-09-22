@@ -439,12 +439,10 @@ describe("Agent scope", () => {
     });
   }
 
-  it("defaults to organization scope and sends no project binding", () => {
+  it("defaults to project scope and sends the active project", () => {
     openCreateForm();
     expect(
-      screen
-        .getByRole("radio", { name: /Organization/ })
-        .getAttribute("data-state"),
+      screen.getByRole("radio", { name: /Project/ }).getAttribute("data-state"),
     ).toBe("checked");
 
     fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
@@ -452,19 +450,19 @@ describe("Agent scope", () => {
     expect(mocks.createMutate).toHaveBeenCalledTimes(1);
     const form = mocks.createMutate.mock.calls[0]![0].request.createAgentForm;
     expect(form.name).toBe("Scoped agent");
-    // Omitted rather than blank: the server reads a missing binding as
-    // organization-wide.
-    expect("projectId" in form).toBe(false);
+    expect(form.projectId).toBe(mocks.projectId);
   });
 
-  it("sends the active project when project scope is chosen", () => {
+  it("sends no project binding when organization scope is chosen", () => {
     openCreateForm();
-    fireEvent.click(screen.getByRole("radio", { name: /Project/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Organization/ }));
     fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
 
     expect(mocks.createMutate).toHaveBeenCalledTimes(1);
     const form = mocks.createMutate.mock.calls[0]![0].request.createAgentForm;
-    expect(form.projectId).toBe(mocks.projectId);
+    // Omitted rather than blank: the server reads a missing binding as
+    // organization-wide.
+    expect("projectId" in form).toBe(false);
   });
 });
 
