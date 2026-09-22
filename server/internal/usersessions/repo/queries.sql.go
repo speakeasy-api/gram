@@ -331,7 +331,7 @@ type CreateUserSessionParams struct {
 	DelegatedGrants        []byte
 	DelegatedGrantsVersion pgtype.Int4
 	Jti                    string
-	RefreshTokenHash       string
+	RefreshTokenHash       pgtype.Text
 	RefreshExpiresAt       pgtype.Timestamptz
 	ExpiresAt              pgtype.Timestamptz
 	ToolSelection          []byte
@@ -1083,7 +1083,7 @@ const getUserSessionByRefreshTokenHash = `-- name: GetUserSessionByRefreshTokenH
 SELECT id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
 FROM user_sessions
 WHERE user_session_issuer_id = $1
-  AND refresh_token_hash = $2
+  AND refresh_token_hash = $2::text
   AND deleted IS FALSE
 `
 
@@ -2807,7 +2807,7 @@ const revokeUserSessionByRefreshTokenHash = `-- name: RevokeUserSessionByRefresh
 UPDATE user_sessions
 SET deleted_at = clock_timestamp()
 WHERE user_session_issuer_id = $1
-  AND refresh_token_hash = $2
+  AND refresh_token_hash = $2::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
 `

@@ -3465,7 +3465,7 @@ type UserSession struct {
 	DelegatedGrants        []byte
 	DelegatedGrantsVersion pgtype.Int4
 	Jti                    string
-	RefreshTokenHash       string
+	RefreshTokenHash       pgtype.Text
 	RefreshExpiresAt       pgtype.Timestamptz
 	ExpiresAt              pgtype.Timestamptz
 	ToolSelection          []byte

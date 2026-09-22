@@ -88,7 +88,7 @@ func TestMintUserSessionForServerAllowsMCPConnect(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, row.UserSessionClientID.Valid)
-	require.True(t, strings.HasPrefix(row.RefreshTokenHash, "dashboard-mint:"))
+	require.True(t, strings.HasPrefix(row.RefreshTokenHash.String, "dashboard-mint:"))
 }
 
 func TestMintUserSessionForServerRejectsUngatedServer(t *testing.T) {
