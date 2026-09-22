@@ -24,11 +24,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
@@ -284,38 +282,15 @@ func admitWorkloadAssertion(
 	return presented, nil
 }
 
-// workloadAssertionGrantEnabled evaluates the grant's own rollout flag for the
-// endpoint's organization. It fails closed: anything but an explicit enable is
-// off.
-func (s *Service) workloadAssertionGrantEnabled(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
-	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, endpoint.OrganizationID)
-	if err != nil {
-		return false, fmt.Errorf("read organization metadata: %w", err)
-	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagWorkloadAssertionGrant, endpoint.OrganizationID, feature.OrgProjectGroups(organization.Slug, ""))
-	if err != nil {
-		return false, fmt.Errorf("evaluate flag %s: %w", feature.FlagWorkloadAssertionGrant, err)
-	}
-	return evaluation == feature.EvaluationEnabled, nil
-}
-
 // workloadAssertionGrantAdvertised reports whether the endpoint's metadata
 // lists the grant, which it does only where the grant would be accepted. A
-// flag or rollout state that cannot be read counts as off: the metadata is
-// advisory, and the token endpoint makes its own decision on every request.
+// rollout state that cannot be read counts as off: the metadata is advisory,
+// and the token endpoint makes its own decision on every request.
 func (s *Service) workloadAssertionGrantAdvertised(ctx context.Context, endpoint *ResolvedMcpEndpoint) bool {
 	if s.workloadGrant == nil {
 		return false
 	}
 	if _, ok := agentAuthorizationTarget(endpoint); !ok {
-		return false
-	}
-	enabled, err := s.workloadAssertionGrantEnabled(ctx, endpoint)
-	if err != nil {
-		s.logger.WarnContext(ctx, "workload assertion grant flag unavailable, not advertising the grant", attr.SlogError(err))
-		return false
-	}
-	if !enabled {
 		return false
 	}
 	rolloutEnabled, _, err := s.agentAuthorizationRollout(ctx, s.logger, endpoint)
@@ -342,18 +317,11 @@ func (s *Service) handleWorkloadAssertionGrant(
 ) error {
 	presented := presentedWorkload{issuerURL: "", subject: "", issuerID: uuid.Nil}
 
-	// While the grant is off, the answer is indistinguishable from a
-	// deployment without it.
+	// A deployment without the grant's dependencies answers as it did before
+	// the grant existed. Reaching the workload path at all still takes the
+	// agent authorization rollout below, a trusted issuer row and an admitted
+	// subject.
 	if s.workloadGrant == nil {
-		return refuseClientlessTokenGrant(ctx, w, r, creds, logger)
-	}
-	enabled, err := s.workloadAssertionGrantEnabled(ctx, endpoint)
-	if err != nil {
-		// Fails closed to the answer the endpoint gives with the grant off.
-		logger.WarnContext(ctx, "workload assertion grant flag unavailable, refusing as disabled", attr.SlogError(err))
-		return refuseClientlessTokenGrant(ctx, w, r, creds, logger)
-	}
-	if !enabled {
 		return refuseClientlessTokenGrant(ctx, w, r, creds, logger)
 	}
 	// A workload acts through its assigned agent's policy, which the MCP side

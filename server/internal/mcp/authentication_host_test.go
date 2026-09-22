@@ -286,9 +286,9 @@ func TestAuthenticationHost_IDJAGExchangeRefused(t *testing.T) {
 	require.Contains(t, w.Body.String(), "unsupported_grant_type")
 }
 
-// A JWT bearer request presenting no client reaches the clientless branch on
-// the authentication host and gets that branch's answer, not
-// unsupported_grant_type.
+// A JWT bearer request presenting no client reaches the workload grant on the
+// authentication host and is refused on the assertion, not turned away as
+// unsupported_grant_type by the host.
 func TestAuthenticationHost_ClientlessAssertionGrantReachesClientlessBranch(t *testing.T) {
 	t.Parallel()
 
@@ -303,8 +303,8 @@ func TestAuthenticationHost_ClientlessAssertionGrantReachesClientlessBranch(t *t
 	form.Set("assertion", "header.payload.signature")
 	form.Set("resource", "http://0.0.0.0/mcp/"+slug)
 	w := harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", form)
-	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
-	require.Contains(t, w.Body.String(), "invalid_client")
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), "invalid_grant")
 	require.NotContains(t, w.Body.String(), "unsupported_grant_type")
 }
 

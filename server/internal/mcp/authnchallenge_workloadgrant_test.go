@@ -73,7 +73,6 @@ func newWorkloadGrantFixtureWithLogger(t *testing.T, logger *slog.Logger) worklo
 		MaxRequestLifetime: 0,
 	}, nil, guardian.WithTLSRootCAs(issuer.RootCAs()))
 	fx := newAgentConsentFixture(t, ctx, ti)
-	ti.features.SetFlag(feature.FlagWorkloadAssertionGrant, fx.orgID, true)
 
 	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
@@ -312,17 +311,19 @@ func TestWorkloadAssertionGrant_ResourceRequiredAndBound(t *testing.T) {
 	require.Contains(t, w.Body.String(), "invalid_target")
 }
 
-// With the grant's flag off, a clientless JWT bearer request gets the
-// missing-client answer and mints nothing.
-func TestWorkloadAssertionGrant_FlagOffAnswersAsBefore(t *testing.T) {
+// Without the agent authorization rollout, a clientless JWT bearer request
+// gets the missing-client answer and mints nothing: a workload acts through
+// its assigned agent's policy, which the MCP side honours only under that
+// rollout.
+func TestWorkloadAssertionGrant_RolloutOffAnswersAsBefore(t *testing.T) {
 	t.Parallel()
 
 	f := newWorkloadGrantFixture(t)
-	f.ti.features.SetFlag(feature.FlagWorkloadAssertionGrant, f.fx.orgID, false)
+	f.ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, f.fx.orgID, false)
 
 	w := f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource)
-	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
-	require.Contains(t, w.Body.String(), "invalid_client")
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), "invalid_grant")
 	require.Empty(t, f.workloadSessions(t))
 }
 
@@ -467,6 +468,5 @@ func TestWorkloadAssertionGrant_AdvertisedOnlyWhenAccepted(t *testing.T) {
 	require.ElementsMatch(t, []any{"authorization_code", "refresh_token"}, advertised(), "not advertised while the agent rollout is off")
 
 	f.ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, f.fx.orgID, true)
-	f.ti.features.SetFlag(feature.FlagWorkloadAssertionGrant, f.fx.orgID, false)
-	require.ElementsMatch(t, []any{"authorization_code", "refresh_token"}, advertised(), "not advertised while the grant's flag is off")
+	require.ElementsMatch(t, []any{"authorization_code", "refresh_token", workloadGrantJWTBearer}, advertised(), "advertised again once the rollout is back on")
 }
