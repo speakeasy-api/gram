@@ -120,6 +120,9 @@ type Service struct {
 	auth                      *auth.Auth
 	env                       toolconfig.EnvironmentLoader
 	serverURL                 *url.URL
+	// authenticationHostBaseURL is the authentication host's base URL, empty
+	// when none is configured. Set by AttachAuthenticationHost.
+	authenticationHostBaseURL string
 	siteURL                   *url.URL
 	posthog                   *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	// features resolves flag-controlled behavior (the managed assistant's
@@ -445,6 +448,7 @@ func NewService(
 		auth:                      auth.New(logger, db, sessions, authzEngine),
 		env:                       env,
 		serverURL:                 serverURL,
+		authenticationHostBaseURL: "",
 		siteURL:                   siteURL,
 		posthog:                   posthog,
 		features:                  features,

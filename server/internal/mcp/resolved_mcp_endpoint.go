@@ -108,6 +108,11 @@ type ResolvedMcpEndpoint struct {
 	// resolutions. Used for telemetry / log attribution.
 	ToolsetID uuid.NullUUID
 
+	// useAuthenticationHost mirrors the issuer's use_authentication_host: the
+	// endpoint announces the authentication host, when one is configured, as
+	// its issuer. Stamped by RequireUserSessionIssuer.
+	useAuthenticationHost bool
+
 	// UpstreamResource is the RFC 8707 resource indicator for the
 	// endpoint's upstream — the remote backend URL for remote-backed
 	// servers, empty otherwise.
@@ -414,19 +419,20 @@ func NewResolvedMcpEndpointFromMcpServer(
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewUserSessionIssuer(mcpServer.UserSessionIssuerID.UUID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
-		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
-		CustomDomainID:       mcpEndpoint.CustomDomainID,
-		IsPublic:             mcpServer.Visibility == mcpservers.VisibilityPublic,
-		idJAGConfigured:      false,
-		McpServerID:          uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
-		MetaMcpServerID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:       organizationID,
-		ProjectID:            mcpEndpoint.ProjectID,
-		RouteBase:            routeBase,
-		Slug:                 mcpEndpoint.Slug,
-		ToolsetID:            mcpServer.ToolsetID,
-		UpstreamResource:     "",
-		UserSessionIssuerID:  mcpServer.UserSessionIssuerID.UUID,
+		CIMDAdmissionModeRaw:  pgtype.Text{String: "", Valid: false},
+		CustomDomainID:        mcpEndpoint.CustomDomainID,
+		IsPublic:              mcpServer.Visibility == mcpservers.VisibilityPublic,
+		idJAGConfigured:       false,
+		useAuthenticationHost: false,
+		McpServerID:           uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
+		MetaMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:        organizationID,
+		ProjectID:             mcpEndpoint.ProjectID,
+		RouteBase:             routeBase,
+		Slug:                  mcpEndpoint.Slug,
+		ToolsetID:             mcpServer.ToolsetID,
+		UpstreamResource:      "",
+		UserSessionIssuerID:   mcpServer.UserSessionIssuerID.UUID,
 	}
 }
 
@@ -469,19 +475,20 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewUserSessionIssuer(metaServer.UserSessionIssuerID.UUID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
-		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
-		CustomDomainID:       mcpEndpoint.CustomDomainID,
-		IsPublic:             false,
-		idJAGConfigured:      false,
-		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		MetaMcpServerID:      uuid.NullUUID{UUID: metaServer.ID, Valid: true},
-		OrganizationID:       organizationID,
-		ProjectID:            mcpEndpoint.ProjectID,
-		RouteBase:            routeBase,
-		Slug:                 mcpEndpoint.Slug,
-		ToolsetID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UpstreamResource:     "",
-		UserSessionIssuerID:  metaServer.UserSessionIssuerID.UUID,
+		CIMDAdmissionModeRaw:  pgtype.Text{String: "", Valid: false},
+		CustomDomainID:        mcpEndpoint.CustomDomainID,
+		IsPublic:              false,
+		idJAGConfigured:       false,
+		useAuthenticationHost: false,
+		McpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID:       uuid.NullUUID{UUID: metaServer.ID, Valid: true},
+		OrganizationID:        organizationID,
+		ProjectID:             mcpEndpoint.ProjectID,
+		RouteBase:             routeBase,
+		Slug:                  mcpEndpoint.Slug,
+		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UpstreamResource:      "",
+		UserSessionIssuerID:   metaServer.UserSessionIssuerID.UUID,
 	}
 }
 
@@ -496,19 +503,20 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewToolset(toolset.ID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
-		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
-		CustomDomainID:       toolset.CustomDomainID,
-		IsPublic:             toolset.McpIsPublic,
-		idJAGConfigured:      false,
-		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		MetaMcpServerID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:       toolset.OrganizationID,
-		ProjectID:            toolset.ProjectID,
-		RouteBase:            routeBase,
-		Slug:                 conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), ""),
-		ToolsetID:            uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		UpstreamResource:     "",
-		UserSessionIssuerID:  toolset.UserSessionIssuerID.UUID,
+		CIMDAdmissionModeRaw:  pgtype.Text{String: "", Valid: false},
+		CustomDomainID:        toolset.CustomDomainID,
+		IsPublic:              toolset.McpIsPublic,
+		idJAGConfigured:       false,
+		useAuthenticationHost: false,
+		McpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:        toolset.OrganizationID,
+		ProjectID:             toolset.ProjectID,
+		RouteBase:             routeBase,
+		Slug:                  conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), ""),
+		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		UpstreamResource:      "",
+		UserSessionIssuerID:   toolset.UserSessionIssuerID.UUID,
 	}
 }
 

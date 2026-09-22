@@ -131,7 +131,7 @@ func TestWorkloadIssuer_AssertionFromALiveIssuerVerifies(t *testing.T) {
 	t.Parallel()
 
 	issuer, jwksURI := launchWorkloadIssuer(t)
-	assertion := oauthtest.MintWorkloadAssertion(t, issuer, oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
+	assertion := oauthtest.MintWorkloadAssertion(t, issuer, "JWT", oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
 
 	result, err := newLiveVerifier(t, issuer).Verify(t.Context(), assertion, liveExpectationFor(t, issuer, jwksURI))
 
@@ -152,8 +152,8 @@ func TestWorkloadIssuer_RetiredKeyIsRejectedOnceTheCurrentSetIsHeld(t *testing.T
 
 	issuer, jwksURI := launchWorkloadIssuer(t)
 
-	proof := oauthtest.MintWorkloadAssertion(t, issuer, oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
-	retired := oauthtest.MintWorkloadAssertion(t, issuer, oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
+	proof := oauthtest.MintWorkloadAssertion(t, issuer, "JWT", oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
+	retired := oauthtest.MintWorkloadAssertion(t, issuer, "JWT", oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
 
 	_, err := newLiveVerifier(t, issuer).Verify(t.Context(), proof, liveExpectationFor(t, issuer, jwksURI))
 	require.NoError(t, err, "the retiring key must work before the rotation, or the test proves nothing")
@@ -165,7 +165,7 @@ func TestWorkloadIssuer_RetiredKeyIsRejectedOnceTheCurrentSetIsHeld(t *testing.T
 	requireRejected(t, err, workload.ReasonKeyUnknown)
 
 	// The issuer itself is still healthy.
-	current := oauthtest.MintWorkloadAssertion(t, issuer, oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
+	current := oauthtest.MintWorkloadAssertion(t, issuer, "JWT", oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
 	_, err = newLiveVerifier(t, issuer).Verify(t.Context(), current, liveExpectationFor(t, issuer, jwksURI))
 	require.NoError(t, err, "the republished key must verify against a resolver that fetched it")
 }
@@ -176,7 +176,7 @@ func TestWorkloadIssuer_UnreachableKeySetIsRefused(t *testing.T) {
 
 	issuer, jwksURI := launchWorkloadIssuer(t)
 	// Minted while the issuer is up, so only the key set is missing.
-	assertion := oauthtest.MintWorkloadAssertion(t, issuer, oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
+	assertion := oauthtest.MintWorkloadAssertion(t, issuer, "JWT", oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
 
 	issuer.Stop()
 
@@ -192,7 +192,7 @@ func TestWorkloadIssuer_SubjectOtherThanTheAdmittedOneIsRejected(t *testing.T) {
 
 	issuer, jwksURI := launchWorkloadIssuer(t)
 	// Another workload on the same issuer.
-	assertion := oauthtest.MintWorkloadAssertion(t, issuer, oauthtest.WorkloadClaims(issuer, "repo:someone-else/their-api:ref:refs/heads/main", testAudience))
+	assertion := oauthtest.MintWorkloadAssertion(t, issuer, "JWT", oauthtest.WorkloadClaims(issuer, "repo:someone-else/their-api:ref:refs/heads/main", testAudience))
 
 	_, err := newLiveVerifier(t, issuer).Verify(t.Context(), assertion, liveExpectationFor(t, issuer, jwksURI))
 
@@ -204,7 +204,7 @@ func TestWorkloadIssuer_AudienceForAnotherServerIsRejected(t *testing.T) {
 	t.Parallel()
 
 	issuer, jwksURI := launchWorkloadIssuer(t)
-	assertion := oauthtest.MintWorkloadAssertion(t, issuer, oauthtest.WorkloadClaims(issuer, testExternalSubject, "https://gram.example.com/mcp/someone-else"))
+	assertion := oauthtest.MintWorkloadAssertion(t, issuer, "JWT", oauthtest.WorkloadClaims(issuer, testExternalSubject, "https://gram.example.com/mcp/someone-else"))
 
 	_, err := newLiveVerifier(t, issuer).Verify(t.Context(), assertion, liveExpectationFor(t, issuer, jwksURI))
 
@@ -219,11 +219,52 @@ func TestWorkloadIssuer_ReplayedAssertionIsRejected(t *testing.T) {
 	expectation := liveExpectationFor(t, issuer, jwksURI)
 	verifier := newLiveVerifier(t, issuer)
 
-	assertion := oauthtest.MintWorkloadAssertion(t, issuer, oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
+	assertion := oauthtest.MintWorkloadAssertion(t, issuer, "JWT", oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
 
 	_, err := verifier.Verify(t.Context(), assertion, expectation)
 	require.NoError(t, err)
 
 	_, err = verifier.Verify(t.Context(), assertion, expectation)
 	requireRejected(t, err, workload.ReasonReplayed)
+}
+
+// A WIMSE Workload Identity Token is proof-of-possession only, so it is
+// refused as a bearer grant. The issuer is stopped first: the refusal must not
+// depend on fetching its key set.
+func TestWorkloadIssuer_WorkloadIdentityTokenIsRefusedWithoutAKeyFetch(t *testing.T) {
+	t.Parallel()
+
+	issuer, jwksURI := launchWorkloadIssuer(t)
+	assertion := oauthtest.MintWorkloadAssertion(t, issuer, "application/wit+jwt", oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
+
+	issuer.Stop()
+
+	_, err := newLiveVerifier(t, issuer).Verify(t.Context(), assertion, liveExpectationFor(t, issuer, jwksURI))
+
+	requireRejected(t, err, workload.ReasonTypeNotBearer)
+}
+
+// An access token from another authorization server is not a grant.
+func TestWorkloadIssuer_AccessTokenIsRefused(t *testing.T) {
+	t.Parallel()
+
+	issuer, jwksURI := launchWorkloadIssuer(t)
+	assertion := oauthtest.MintWorkloadAssertion(t, issuer, "at+jwt", oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
+
+	_, err := newLiveVerifier(t, issuer).Verify(t.Context(), assertion, liveExpectationFor(t, issuer, jwksURI))
+
+	requireRejected(t, err, workload.ReasonTypeNotBearer)
+}
+
+// The typing the WIMSE practices draft recommends for grant assertions still
+// verifies.
+func TestWorkloadIssuer_AuthorizationGrantTypeVerifies(t *testing.T) {
+	t.Parallel()
+
+	issuer, jwksURI := launchWorkloadIssuer(t)
+	assertion := oauthtest.MintWorkloadAssertion(t, issuer, "authorization-grant+jwt", oauthtest.WorkloadClaims(issuer, testExternalSubject, testAudience))
+
+	_, err := newLiveVerifier(t, issuer).Verify(t.Context(), assertion, liveExpectationFor(t, issuer, jwksURI))
+
+	require.NoError(t, err)
 }

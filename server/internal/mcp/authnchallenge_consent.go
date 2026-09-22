@@ -747,7 +747,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// return leg re-enters consent on the platform origin, so a POST carrying
 	// a custom-domain context can still be completing a flow the client
 	// recorded under a different origin (or vice versa).
-	issuer, err := endpoint.RootURL(challengeState.mintOriginOr(s.BaseURLForRequest(r)))
+	issuer, err := s.issuerURL(endpoint, challengeState.mintOriginOr(s.BaseURLForRequest(r)))
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "build authorization response issuer").LogError(ctx, logger)

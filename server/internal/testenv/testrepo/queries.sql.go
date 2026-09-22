@@ -684,6 +684,55 @@ func (q *Queries) CreateToolsetFixture(ctx context.Context, arg CreateToolsetFix
 	return id, err
 }
 
+const createWorkloadIdentityAdmissionFixture = `-- name: CreateWorkloadIdentityAdmissionFixture :exec
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject)
+VALUES ($1, $2, $3, $4)
+`
+
+type CreateWorkloadIdentityAdmissionFixtureParams struct {
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+}
+
+func (q *Queries) CreateWorkloadIdentityAdmissionFixture(ctx context.Context, arg CreateWorkloadIdentityAdmissionFixtureParams) error {
+	_, err := q.db.Exec(ctx, createWorkloadIdentityAdmissionFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+	)
+	return err
+}
+
+const createWorkloadIssuerFixture = `-- name: CreateWorkloadIssuerFixture :one
+INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+`
+
+type CreateWorkloadIssuerFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+	Issuer         string
+	JwksUri        string
+}
+
+func (q *Queries) CreateWorkloadIssuerFixture(ctx context.Context, arg CreateWorkloadIssuerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createWorkloadIssuerFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Issuer,
+		arg.JwksUri,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec
 UPDATE device_integration_syncs s
 SET next_poll_after = clock_timestamp() + interval '1 hour'
@@ -4019,6 +4068,32 @@ func (q *Queries) SetUserSessionIssuerOrganizationID(ctx context.Context, arg Se
 	return err
 }
 
+const setUserSessionIssuerUseAuthenticationHostFixture = `-- name: SetUserSessionIssuerUseAuthenticationHostFixture :execrows
+UPDATE user_session_issuers AS issuer
+SET use_authentication_host = $1
+WHERE issuer.id = $2
+  AND COALESCE(
+    issuer.organization_id,
+    (SELECT p.organization_id FROM projects AS p WHERE p.id = issuer.project_id)
+  ) = $3::text
+`
+
+type SetUserSessionIssuerUseAuthenticationHostFixtureParams struct {
+	UseAuthenticationHost bool
+	IssuerID              uuid.UUID
+	OrganizationID        string
+}
+
+// Project-scoped issuers carry no organization_id, so their tenancy is read
+// through the project.
+func (q *Queries) SetUserSessionIssuerUseAuthenticationHostFixture(ctx context.Context, arg SetUserSessionIssuerUseAuthenticationHostFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserSessionIssuerUseAuthenticationHostFixture, arg.UseAuthenticationHost, arg.IssuerID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setWorkosLastEventIDFixture = `-- name: SetWorkosLastEventIDFixture :exec
 UPDATE organization_metadata
 SET workos_last_event_id = $1
@@ -4194,6 +4269,26 @@ WHERE json_web_key_set_id = $1
 // shown to ignore them.
 func (q *Queries) SoftDeleteRemoteSessionClientsForKeySetFixture(ctx context.Context, jsonWebKeySetID uuid.NullUUID) (int64, error) {
 	result, err := q.db.Exec(ctx, softDeleteRemoteSessionClientsForKeySetFixture, jsonWebKeySetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const softDeleteWorkloadIssuerFixture = `-- name: SoftDeleteWorkloadIssuerFixture :execrows
+UPDATE workload_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+`
+
+type SoftDeleteWorkloadIssuerFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) SoftDeleteWorkloadIssuerFixture(ctx context.Context, arg SoftDeleteWorkloadIssuerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteWorkloadIssuerFixture, arg.ID, arg.OrganizationID)
 	if err != nil {
 		return 0, err
 	}

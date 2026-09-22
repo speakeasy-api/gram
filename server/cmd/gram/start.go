@@ -317,6 +317,11 @@ const probeDrainTimeout = 20 * time.Second
 
 func mcpRuntimeFlags() []cli.Flag {
 	flags := []cli.Flag{
+		&cli.StringFlag{
+			Name:    "authentication-host-url",
+			Usage:   "Base URL of the alternate authentication host. It serves the per-server MCP OAuth authorization server, kept apart from MCP traffic. Issuers opt in to announcing it. Empty disables it.",
+			EnvVars: []string{"GRAM_AUTHENTICATION_HOST_URL"},
+		},
 		&cli.BoolFlag{
 			Name:    "network-ingress-enabled",
 			Usage:   "Enable private network ingress rollout entry points",
@@ -829,6 +834,11 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("invalid server url: %w", err)
 			}
 
+			mcpAuthenticationHost, err := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, c.String("environment"))
+			if err != nil {
+				return fmt.Errorf("invalid authentication host url: %w", err)
+			}
+
 			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, siteURL.String())
@@ -1249,6 +1259,12 @@ func newStartCommand() *cli.Command {
 						w.WriteHeader(http.StatusOK)
 						return
 					}
+					// The marketplace and hooks proxies stay on the platform
+					// host; the authentication host serves OAuth routes alone.
+					if mcpAuthenticationHost.Matches(r) {
+						h.ServeHTTP(w, r)
+						return
+					}
 					if localMarketplaceServer != nil && isLocalPlatformMCPMarketplaceRoute(r) {
 						localMarketplaceRoutes.ServeHTTP(w, r)
 						return
@@ -1305,6 +1321,11 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("configure mcp security middleware: %w", err)
 			}
+			// Below CORS, which browser OAuth clients need on the authentication
+			// host too. Above MCPSecurity, so MCP endpoint paths answer 404 there like
+			// every route the host does not serve, and above customdomains.Middleware,
+			// which refuses hosts it does not know.
+			mux.Use(mcpAuthenticationHost.Middleware)
 			mux.Use(mcpSecurity)
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 			// Ordering invariant: recovery and context-enrichment middleware stay
@@ -1631,6 +1652,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("build MCP server runtime: %w", err)
 			}
 			xmcp.Attach(mux, mcpRuntime.XMCP, mcpRuntime.Metadata)
+			xmcp.AttachAuthenticationHost(mcpAuthenticationHost, mcpRuntime.XMCP)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
@@ -1730,6 +1752,7 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 			mcp.Attach(mux, mcpRuntime.MCP, mcpRuntime.Metadata)
+			mcp.AttachAuthenticationHost(mcpAuthenticationHost, mcpRuntime.MCP)
 
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))

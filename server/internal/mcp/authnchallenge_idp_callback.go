@@ -210,7 +210,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
 			return oops.E(oops.CodeUnexpected, nil, "idp returned an error: %s", idpErr).LogError(ctx, logger)
 		}
-		issuer, err := endpoint.RootURL(baseURL)
+		issuer, err := s.issuerURL(endpoint, baseURL)
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			return oops.E(oops.CodeUnexpected, err, "build authorization response issuer").LogError(ctx, logger)
@@ -351,8 +351,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	// The mint-time origin puts the consent page back on the host the user
-	// started on, without a fresh custom_domains lookup.
-	consentURL, err := endpoint.ConsentURL(baseURL, challengeState.ID)
+	// started on, without a fresh custom_domains lookup, or on the
+	// authentication host when the endpoint's issuer lives there.
+	consentURL, err := endpoint.ConsentURL(s.authorizationServerBaseURL(endpoint, baseURL), challengeState.ID)
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
