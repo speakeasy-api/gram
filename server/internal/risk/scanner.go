@@ -1229,14 +1229,12 @@ func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance meteri
 	}
 
 	presidioThreshold := presidioDispatchThreshold(policies)
-	maxContentBytes := policyflags.EnforcementMaxContentBytes(ctx, s.logger, s.repo, s.flags, baseProvenance.OrganizationID, baseProvenance.ProjectID)
 	outcome, err := s.dispatcher.Dispatch(ctx, enforcereply.DispatchRequest{
 		OrganizationID:         baseProvenance.OrganizationID,
 		OrganizationSlug:       "",
 		ProjectID:              baseProvenance.ProjectID.String(),
 		Content:                text,
 		Body:                   "",
-		MaxContentBytes:        maxContentBytes,
 		ToolName:               "",
 		MessageType:            "",
 		ToolCalls:              nil,
@@ -1328,14 +1326,12 @@ func (s *Scanner) dispatchLLMEnforcement(ctx context.Context, request RealtimeSc
 		body = ""
 		toolCalls = []enforcereply.ToolCall{{ID: request.ToolCallID, Name: request.ToolName, Arguments: request.Text}}
 	}
-	maxContentBytes := policyflags.EnforcementMaxContentBytes(ctx, s.logger, s.repo, s.flags, request.Provenance.OrganizationID, request.Provenance.ProjectID)
 	outcome, err := s.dispatcher.Dispatch(ctx, enforcereply.DispatchRequest{
 		OrganizationID:         request.Provenance.OrganizationID,
 		OrganizationSlug:       orgSlug,
 		ProjectID:              request.Provenance.ProjectID.String(),
 		Content:                request.Text,
 		Body:                   body,
-		MaxContentBytes:        maxContentBytes,
 		ToolName:               request.ToolName,
 		MessageType:            request.MessageType,
 		ToolCalls:              toolCalls,

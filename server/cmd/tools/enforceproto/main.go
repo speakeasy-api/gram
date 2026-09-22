@@ -118,7 +118,7 @@ func run() error {
 		return <-receiveDone
 	}
 
-	dispatcher, err := enforcereply.NewDispatcher(ctx, logger, otel.GetMeterProvider(), broker, inbox, enforcereply.DispatcherConfig{WaitTimeout: enforcereply.DefaultWaitTimeout, LaneWaitTimeout: nil})
+	dispatcher, err := enforcereply.NewDispatcher(ctx, logger, otel.GetMeterProvider(), broker, inbox, enforcereply.DispatcherConfig{WaitTimeout: enforcereply.DefaultWaitTimeout, LaneWaitTimeout: nil, Flags: nil})
 	if err != nil {
 		_ = stopAndWait()
 		return fmt.Errorf("create enforcement dispatcher: %w", err)
@@ -139,7 +139,6 @@ func run() error {
 		ProjectID:              prototypeProjectID,
 		Content:                "AccessKeyId: " + fakeAccessKeyID + ", SecretAccessKey: " + fakeSecret,
 		Body:                   "",
-		MaxContentBytes:        0,
 		ToolName:               "",
 		MessageType:            "",
 		ToolCalls:              nil,

@@ -2,6 +2,7 @@ package enforcereply
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -24,6 +25,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/redisinbox"
 	"github.com/speakeasy-api/gram/server/internal/requestreply"
 )
@@ -44,6 +46,10 @@ const (
 	// MaxContentBytes is the hard ceiling below Pub/Sub's transport limit.
 	// It applies independently to Content and to the LLM lane's Body.
 	MaxContentBytes = 1 * 1024 * 1024
+
+	// contentLimitDistinctID keys the global content limit flag; the flag
+	// carries no targeting so any stable id resolves the same payload.
+	contentLimitDistinctID = "gram-server"
 )
 
 // EnforcementLane is the non-generic request seam used by enforcement fan-out.
@@ -76,6 +82,10 @@ type DispatcherConfig struct {
 	// LaneWaitTimeout overrides WaitTimeout per scanner. Scanners without an
 	// entry, or with a non-positive entry, use WaitTimeout.
 	LaneWaitTimeout map[riskv1.EnforcementScanner]time.Duration
+
+	// Flags resolves the global content limit override. Nil applies
+	// DefaultMaxContentBytes.
+	Flags feature.Provider
 }
 
 // ToolCall is one tool invocation carried to the LLM analyzer lane.
@@ -109,10 +119,6 @@ type DispatchRequest struct {
 	// truncated to MaxContentBytes independently of Content.
 	Body string
 
-	// MaxContentBytes truncates Content and Body independently. Zero means
-	// DefaultMaxContentBytes; values above MaxContentBytes are capped.
-	MaxContentBytes int
-
 	// ToolName is the tool the LLM lane attributes the message to. When empty,
 	// the lane falls back to the origin's ToolName.
 	ToolName string
@@ -145,6 +151,7 @@ type Dispatcher struct {
 	llm         EnforcementLane
 	close       func(context.Context) error
 	waitTimeout time.Duration
+	flags       feature.Provider
 	// laneWaitTimeout overrides waitTimeout for the scanners it names.
 	laneWaitTimeout map[riskv1.EnforcementScanner]time.Duration
 	logger          *slog.Logger
@@ -184,6 +191,7 @@ func NewDispatcher(ctx context.Context, logger *slog.Logger, meterProvider metri
 	presidioReq := redisinbox.NewRequestBroker(inbox, presidioPub)
 	llmReq := redisinbox.NewRequestBroker(inbox, llmPub)
 	return &Dispatcher{
+		flags:    cfg.Flags,
 		gitleaks: &typedEnforcementLane[*riskv1.GitleaksEnforcement]{broker: gitleaksReq},
 		presidio: &typedEnforcementLane[*riskv1.PresidioEnforcement]{broker: presidioReq},
 		llm:      &typedEnforcementLane[*riskv1.LLMEnforcement]{broker: llmReq},
@@ -236,6 +244,26 @@ func newTruncationCounter(meterProvider metric.MeterProvider) metric.Int64Counte
 }
 
 // Dispatch fans content out to distinct lanes and folds replies by lane.
+// contentLimit reads the global truncation limit from the flag payload,
+// falling back to DefaultMaxContentBytes when the flag carries none.
+func (d *Dispatcher) contentLimit(ctx context.Context) int {
+	if d.flags == nil {
+		return DefaultMaxContentBytes
+	}
+	payload, err := d.flags.FlagPayload(ctx, feature.FlagRiskEnforcementMaxContentBytes, contentLimitDistinctID, nil)
+	if err != nil {
+		d.logger.WarnContext(ctx, "resolve enforcement content limit", attr.SlogError(err))
+		return DefaultMaxContentBytes
+	}
+	var config struct {
+		MaxContentBytes int `json:"max_content_bytes"`
+	}
+	if payload == nil || json.Unmarshal(payload, &config) != nil || config.MaxContentBytes <= 0 {
+		return DefaultMaxContentBytes
+	}
+	return min(config.MaxContentBytes, MaxContentBytes)
+}
+
 func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Outcome, error) {
 	if request.OrganizationID == "" {
 		return Outcome{}, errors.New("enforcement organization id is required")
@@ -246,11 +274,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	if len(request.Lanes) == 0 {
 		return Outcome{ByLane: map[Lane]*riskv1.EnforcementReply{}, Failed: map[Lane]error{}, Complete: true, Deadline: false, Truncated: false}, nil
 	}
-	limit := request.MaxContentBytes
-	if limit == 0 {
-		limit = DefaultMaxContentBytes
-	}
-	limit = min(limit, MaxContentBytes)
+	limit := d.contentLimit(ctx)
 	truncated := false
 	truncate := func(field string, value string) string {
 		if len(value) <= limit {

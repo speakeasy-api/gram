@@ -288,36 +288,6 @@ func TestScanner_PubsubFlagOffUsesLocalScanner(t *testing.T) {
 	require.Equal(t, int32(1), pii.callCount.Load())
 }
 
-func TestScanner_PubsubPassesFlagContentLimitToDispatcher(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-	insertPresidioBlockPolicy(t, ti, ctx, "flag limit", []string{"EMAIL_ADDRESS"})
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	flags := pubsubEnforcementFlags(ctx)
-	flags.SetFlagPayload(feature.FlagRiskEnforcementMaxContentBytes, authCtx.ActiveOrganizationID, []byte(`{"max_content_bytes":4096}`))
-	dispatcher := &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
-		require.Equal(t, 4096, request.MaxContentBytes)
-		lane := request.Lanes[0]
-		reply := riskv1.EnforcementReply_builder{
-			Scanner: new(lane.Scanner),
-			Status:  new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
-		}.Build()
-		return enforcereply.Outcome{
-			ByLane:    map[enforcereply.Lane]*riskv1.EnforcementReply{lane: reply},
-			Failed:    nil,
-			Complete:  true,
-			Deadline:  false,
-			Truncated: false,
-		}, nil
-	}}
-	scanner := newScannerWithDispatcher(t, ti, &instrumentedPIIScanner{}, flags, dispatcher)
-
-	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "clean", message.User, ""))
-	require.NoError(t, err)
-	require.Nil(t, result)
-	require.Equal(t, int32(1), dispatcher.calls.Load())
-}
-
 func TestScanner_PubsubFlagOnSharesLaneAndPreservesPolicyFiltering(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

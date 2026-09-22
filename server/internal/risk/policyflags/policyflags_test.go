@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
-	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -39,8 +38,7 @@ func TestMain(m *testing.M) {
 
 type countingProvider struct {
 	feature.Provider
-	calls        atomic.Int32
-	payloadCalls atomic.Int32
+	calls atomic.Int32
 }
 
 func (p *countingProvider) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (bool, error) {
@@ -52,34 +50,36 @@ func (p *countingProvider) IsFlagEnabled(ctx context.Context, flag feature.Flag,
 	return on, nil
 }
 
-func (p *countingProvider) FlagPayload(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) ([]byte, error) {
-	p.payloadCalls.Add(1)
-	payload, err := p.Provider.FlagPayload(ctx, flag, distinctID, groups)
-	if err != nil {
-		return nil, fmt.Errorf("counting provider: %w", err)
-	}
-	return payload, nil
-}
-
 func TestProjectFlagStateResolvesEachFlagOncePerRequest(t *testing.T) {
 	t.Parallel()
-	orgID, projectID, queries, flags, provider := newFlagTestProject(t, "policyflagstest")
+	db, err := infra.CloneTestDatabase(t, "policyflagstest")
+	require.NoError(t, err)
+	orgID := "org_" + uuid.NewString()
+	_, err = orgrepo.New(db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
+		ID: orgID, Name: "Flags Example", Slug: orgID, WorkosID: pgtype.Text{String: orgID, Valid: true}, Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+	project, err := projectsrepo.New(db).CreateProject(t.Context(), projectsrepo.CreateProjectParams{Name: "Flags Example", Slug: "example", OrganizationID: orgID})
+	require.NoError(t, err)
+	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagRiskLLMAnalyzer, orgID, true)
+	provider := &countingProvider{Provider: flags}
 	logger := testenv.NewLogger(t)
+	queries := repo.New(db)
 
 	ctx := WithRequestMemo(t.Context())
 	for range 3 {
-		on, slug := ProjectFlagState(ctx, logger, queries, provider, orgID, projectID, feature.FlagRiskLLMAnalyzer)
+		on, slug := ProjectFlagState(ctx, logger, queries, provider, orgID, project.ID, feature.FlagRiskLLMAnalyzer)
 		require.True(t, on)
 		require.Equal(t, orgID, slug)
 	}
 	require.EqualValues(t, 1, provider.calls.Load())
-	require.False(t, ProjectFlagEnabled(ctx, logger, queries, provider, orgID, projectID, feature.FlagRiskEnforcementPubsub))
-	require.False(t, ProjectFlagEnabled(ctx, logger, queries, provider, orgID, projectID, feature.FlagRiskEnforcementPubsub))
+	require.False(t, ProjectFlagEnabled(ctx, logger, queries, provider, orgID, project.ID, feature.FlagRiskEnforcementPubsub))
+	require.False(t, ProjectFlagEnabled(ctx, logger, queries, provider, orgID, project.ID, feature.FlagRiskEnforcementPubsub))
 	require.EqualValues(t, 2, provider.calls.Load())
 
-	require.True(t, ProjectFlagEnabled(t.Context(), logger, queries, provider, orgID, projectID, feature.FlagRiskLLMAnalyzer))
-	require.True(t, ProjectFlagEnabled(t.Context(), logger, queries, provider, orgID, projectID, feature.FlagRiskLLMAnalyzer))
+	require.True(t, ProjectFlagEnabled(t.Context(), logger, queries, provider, orgID, project.ID, feature.FlagRiskLLMAnalyzer))
+	require.True(t, ProjectFlagEnabled(t.Context(), logger, queries, provider, orgID, project.ID, feature.FlagRiskLLMAnalyzer))
 	require.EqualValues(t, 4, provider.calls.Load())
 
 	// Concurrent scans sharing one memo still resolve each flag once.
@@ -88,7 +88,7 @@ func TestProjectFlagStateResolvesEachFlagOncePerRequest(t *testing.T) {
 	var group sync.WaitGroup
 	for range 8 {
 		for _, flag := range []feature.Flag{feature.FlagRiskLLMAnalyzer, feature.FlagRiskEnforcementPubsub} {
-			group.Go(func() { _ = ProjectFlagEnabled(ctx, logger, queries, provider, orgID, projectID, flag) })
+			group.Go(func() { _ = ProjectFlagEnabled(ctx, logger, queries, provider, orgID, project.ID, flag) })
 		}
 	}
 	group.Wait()
@@ -97,8 +97,8 @@ func TestProjectFlagStateResolvesEachFlagOncePerRequest(t *testing.T) {
 	// A failed lookup is not remembered; the next scan retries it.
 	failing := &countingProvider{Provider: failingProvider{}}
 	ctx = WithRequestMemo(t.Context())
-	require.False(t, ProjectFlagEnabled(ctx, logger, queries, failing, orgID, projectID, feature.FlagRiskLLMAnalyzer))
-	require.False(t, ProjectFlagEnabled(ctx, logger, queries, failing, orgID, projectID, feature.FlagRiskLLMAnalyzer))
+	require.False(t, ProjectFlagEnabled(ctx, logger, queries, failing, orgID, project.ID, feature.FlagRiskLLMAnalyzer))
+	require.False(t, ProjectFlagEnabled(ctx, logger, queries, failing, orgID, project.ID, feature.FlagRiskLLMAnalyzer))
 	require.EqualValues(t, 2, failing.calls.Load())
 }
 
@@ -106,70 +106,4 @@ type failingProvider struct{ feature.Provider }
 
 func (failingProvider) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
 	return false, errors.New("flag service unavailable")
-}
-
-func newFlagTestProject(t *testing.T, databaseName string) (string, uuid.UUID, *repo.Queries, *feature.InMemory, *countingProvider) {
-	t.Helper()
-	db, err := infra.CloneTestDatabase(t, databaseName)
-	require.NoError(t, err)
-	orgID := "org_" + uuid.NewString()
-	_, err = orgrepo.New(db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
-		ID: orgID, Name: "Flags Example", Slug: orgID, WorkosID: pgtype.Text{String: orgID, Valid: true}, Whitelisted: pgtype.Bool{Bool: false, Valid: false},
-	})
-	require.NoError(t, err)
-	project, err := projectsrepo.New(db).CreateProject(t.Context(), projectsrepo.CreateProjectParams{Name: "Flags Example", Slug: "payload", OrganizationID: orgID})
-	require.NoError(t, err)
-	flags := &feature.InMemory{}
-	provider := &countingProvider{Provider: flags}
-	return orgID, project.ID, repo.New(db), flags, provider
-}
-
-func TestProjectFlagPayloadResolvesEachFlagOncePerRequest(t *testing.T) {
-	t.Parallel()
-	orgID, projectID, queries, flags, provider := newFlagTestProject(t, "policyflagpayloadmemo")
-	flags.SetFlagPayload(feature.FlagRiskEnforcementMaxContentBytes, orgID, []byte(`{"max_content_bytes":2048}`))
-	logger := testenv.NewLogger(t)
-	ctx := WithRequestMemo(t.Context())
-
-	for range 3 {
-		payload := ProjectFlagPayload(ctx, logger, queries, provider, orgID, projectID, feature.FlagRiskEnforcementMaxContentBytes)
-		require.JSONEq(t, `{"max_content_bytes":2048}`, string(payload))
-	}
-	require.EqualValues(t, 1, provider.payloadCalls.Load())
-
-	for range 2 {
-		require.Nil(t, ProjectFlagPayload(ctx, logger, queries, provider, orgID, projectID, feature.FlagRiskEnforcementPubsub))
-	}
-	require.EqualValues(t, 2, provider.payloadCalls.Load())
-}
-
-func TestEnforcementMaxContentBytesParsesAndClampsPayload(t *testing.T) {
-	t.Parallel()
-	orgID, projectID, queries, flags, _ := newFlagTestProject(t, "policyflagpayloadlimits")
-	logger := testenv.NewLogger(t)
-	cases := []struct {
-		payload string
-		want    int
-	}{
-		{payload: `{"max_content_bytes":2048}`, want: 2048},
-		{payload: fmt.Sprintf(`{"max_content_bytes":%d}`, enforcereply.MaxContentBytes*2), want: enforcereply.MaxContentBytes},
-	}
-	for _, test := range cases {
-		flags.SetFlagPayload(feature.FlagRiskEnforcementMaxContentBytes, orgID, []byte(test.payload))
-		require.Equal(t, test.want, EnforcementMaxContentBytes(t.Context(), logger, queries, flags, orgID, projectID))
-	}
-}
-
-func TestEnforcementMaxContentBytesDefaultsForInvalidPayload(t *testing.T) {
-	t.Parallel()
-	orgID, projectID, queries, flags, _ := newFlagTestProject(t, "policyflagpayloadinvalid")
-	logger := testenv.NewLogger(t)
-	for _, payload := range []string{
-		`{`,
-		`{"max_content_bytes":-1}`,
-		`{}`,
-	} {
-		flags.SetFlagPayload(feature.FlagRiskEnforcementMaxContentBytes, orgID, []byte(payload))
-		require.Equal(t, enforcereply.DefaultMaxContentBytes, EnforcementMaxContentBytes(t.Context(), logger, queries, flags, orgID, projectID))
-	}
 }

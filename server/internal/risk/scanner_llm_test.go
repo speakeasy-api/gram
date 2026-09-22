@@ -135,9 +135,7 @@ func TestScanner_LLMModeDispatchesSingleLaneForToolRequest(t *testing.T) {
 	engine := &recordingPIEngine{}
 	var captured enforcereply.DispatchRequest
 	dispatcher := llmReplyDispatcher(t, &captured, nil)
-	flags := llmEnforcementFlags(ctx)
-	flags.SetFlagPayload(feature.FlagRiskEnforcementMaxContentBytes, authCtx.ActiveOrganizationID, []byte(`{"max_content_bytes":3072}`))
-	scanner := newLLMModeScanner(t, ti, pii, engine, flags, dispatcher)
+	scanner := newLLMModeScanner(t, ti, pii, engine, llmEnforcementFlags(ctx), dispatcher)
 
 	const toolInput = `{"command":"cat ~/.aws/credentials"}`
 	request := realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, toolInput, message.ToolRequest, "Bash")
@@ -160,7 +158,6 @@ func TestScanner_LLMModeDispatchesSingleLaneForToolRequest(t *testing.T) {
 	require.Equal(t, []enforcereply.ToolCall{{ID: "toolu_realtime_1", Name: "Bash", Arguments: toolInput}}, captured.ToolCalls)
 	require.Nil(t, captured.PresidioEntities)
 	require.Nil(t, captured.PresidioScoreThreshold)
-	require.Equal(t, 3072, captured.MaxContentBytes)
 	lane := captured.Lanes[0]
 	origin, ok := captured.Origins[lane]
 	require.True(t, ok)

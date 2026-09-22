@@ -3,6 +3,8 @@ package enforcereply
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"maps"
 	"strings"
 	"testing"
@@ -88,13 +90,26 @@ func int64CounterValue(metrics metricdata.ResourceMetrics, name string) int64 {
 	return 0
 }
 
+func contentLimitFlags(t *testing.T, limit int) *feature.InMemory {
+	t.Helper()
+	flags := &feature.InMemory{}
+	flags.SetFlagPayload(feature.FlagRiskEnforcementMaxContentBytes, contentLimitDistinctID, fmt.Appendf(nil, `{"max_content_bytes":%d}`, limit))
+	return flags
+}
+
+func testDispatcherWithFlags(te *inboxTestEnv, publisher *captureEnforcementPublisher, flags feature.Provider) *Dispatcher {
+	presidioPub := &capturePresidioPublisher{messages: nil, attributes: nil, onPublish: nil}
+	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
+	return testDispatcherWithLanes(te, publisher, presidioPub, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: flags})
+}
+
 func testDispatcher(te *inboxTestEnv, publisher *captureEnforcementPublisher, waitTimeout time.Duration) *Dispatcher {
 	return testDispatcherWithPresidio(te, publisher, &capturePresidioPublisher{messages: nil, attributes: nil, onPublish: nil}, waitTimeout)
 }
 
 func testDispatcherWithPresidio(te *inboxTestEnv, gitleaksPub *captureEnforcementPublisher, presidioPub *capturePresidioPublisher, waitTimeout time.Duration) *Dispatcher {
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
-	return testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{WaitTimeout: waitTimeout, LaneWaitTimeout: nil})
+	return testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{WaitTimeout: waitTimeout, LaneWaitTimeout: nil, Flags: nil})
 }
 
 func testDispatcherWithLanes(te *inboxTestEnv, gitleaksPub *captureEnforcementPublisher, presidioPub *capturePresidioPublisher, llmPub *captureLLMPublisher, cfg DispatcherConfig) *Dispatcher {
@@ -110,6 +125,7 @@ func testDispatcherWithLanes(te *inboxTestEnv, gitleaksPub *captureEnforcementPu
 		},
 		waitTimeout:     cfg.WaitTimeout,
 		laneWaitTimeout: cfg.LaneWaitTimeout,
+		flags:           cfg.Flags,
 		logger:          newTestLogger(),
 		truncations:     newTruncationCounter(te.meterProvider),
 		stokenCodec:     stokens.NewCodec(),
@@ -129,7 +145,6 @@ func llmDispatchRequest(lanes []Lane, origins map[Lane]metering.RiskProvenance) 
 		ProjectID:        "project-llm",
 		Content:          "raw scanned content",
 		Body:             "please run the deploy",
-		MaxContentBytes:  0,
 		ToolName:         "bash",
 		MessageType:      "tool_request",
 		ToolCalls: []ToolCall{
@@ -192,12 +207,11 @@ func TestDispatchPublishesTenantContextAndReplyMetadata(t *testing.T) {
 	dispatcher := testDispatcher(te, publisher, time.Second)
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:  "org-dispatch",
-		ProjectID:       "project-dispatch",
-		Content:         "safe content",
-		MaxContentBytes: 0,
-		Lanes:           []Lane{gitleaksLane},
-		Origins:         testOrigins(gitleaksLane),
+		OrganizationID: "org-dispatch",
+		ProjectID:      "project-dispatch",
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane},
+		Origins:        testOrigins(gitleaksLane),
 	})
 	require.NoError(t, err)
 	require.True(t, outcome.Complete)
@@ -246,12 +260,11 @@ func TestDispatchAcceptsOpaqueOperationID(t *testing.T) {
 	origins[gitleaksLane] = origin
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:  "org-dispatch",
-		ProjectID:       "project-dispatch",
-		Content:         "safe content",
-		MaxContentBytes: 0,
-		Lanes:           []Lane{gitleaksLane},
-		Origins:         origins,
+		OrganizationID: "org-dispatch",
+		ProjectID:      "project-dispatch",
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane},
+		Origins:        origins,
 	})
 	require.NoError(t, err)
 	require.True(t, outcome.Complete)
@@ -272,12 +285,11 @@ func TestDispatchRejectsEmptyOperationID(t *testing.T) {
 	origins[gitleaksLane] = origin
 
 	_, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:  "org-dispatch",
-		ProjectID:       "project-dispatch",
-		Content:         "safe content",
-		MaxContentBytes: 0,
-		Lanes:           []Lane{gitleaksLane},
-		Origins:         origins,
+		OrganizationID: "org-dispatch",
+		ProjectID:      "project-dispatch",
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane},
+		Origins:        origins,
 	})
 	require.ErrorContains(t, err, "operation id is required")
 }
@@ -304,12 +316,11 @@ func TestDispatchPreservesExplicitNoPolicyGitleaksOrigin(t *testing.T) {
 	origins[gitleaksLane] = origin
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:  "org-no-policy",
-		ProjectID:       origin.ProjectID.String(),
-		Content:         "safe content",
-		MaxContentBytes: 0,
-		Lanes:           []Lane{gitleaksLane},
-		Origins:         origins,
+		OrganizationID: "org-no-policy",
+		ProjectID:      origin.ProjectID.String(),
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane},
+		Origins:        origins,
 	})
 	require.NoError(t, err)
 	require.True(t, outcome.Complete)
@@ -350,7 +361,6 @@ func TestDispatchFansOutGitleaksAndPresidioLanes(t *testing.T) {
 		OrganizationID:         "org-presidio",
 		ProjectID:              "project-presidio",
 		Content:                "safe content",
-		MaxContentBytes:        0,
 		PresidioEntities:       []string{"EMAIL_ADDRESS", "PHONE_NUMBER"},
 		PresidioScoreThreshold: &threshold,
 		Lanes:                  []Lane{gitleaksLane, presidioLane},
@@ -417,12 +427,11 @@ func TestDispatchPreservesSuccessfulSiblingOnLaneFailure(t *testing.T) {
 	dispatcher := testDispatcherWithPresidio(te, gitleaksPub, presidioPub, time.Second)
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:  "org-partial",
-		ProjectID:       "project-partial",
-		Content:         "safe content",
-		MaxContentBytes: 0,
-		Lanes:           []Lane{gitleaksLane, presidioLane},
-		Origins:         testOrigins(gitleaksLane, presidioLane),
+		OrganizationID: "org-partial",
+		ProjectID:      "project-partial",
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane, presidioLane},
+		Origins:        testOrigins(gitleaksLane, presidioLane),
 	})
 	require.NoError(t, err)
 	require.False(t, outcome.Complete)
@@ -438,12 +447,11 @@ func TestDispatchDeadlineIsNormalPartialOutcome(t *testing.T) {
 	dispatcher := testDispatcher(te, publisher, 25*time.Millisecond)
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:  "org-deadline",
-		ProjectID:       "project-deadline",
-		Content:         "safe content",
-		MaxContentBytes: 0,
-		Lanes:           []Lane{gitleaksLane},
-		Origins:         testOrigins(gitleaksLane),
+		OrganizationID: "org-deadline",
+		ProjectID:      "project-deadline",
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane},
+		Origins:        testOrigins(gitleaksLane),
 	})
 	require.NoError(t, err)
 	require.False(t, outcome.Complete)
@@ -466,7 +474,6 @@ func TestDispatchUsesDefaultContentLimit(t *testing.T) {
 		ProjectID:              "project-default-limit",
 		Content:                strings.Repeat("x", DefaultMaxContentBytes+10),
 		Body:                   "",
-		MaxContentBytes:        0,
 		ToolName:               "",
 		MessageType:            "",
 		ToolCalls:              nil,
@@ -492,7 +499,7 @@ func TestDispatchClampsContentLimitAboveCeiling(t *testing.T) {
 	te := setupInboxTest(t, "replica-dispatch-limit-ceiling")
 	publisher := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
 	publisher.onPublish = replyOK[*riskv1.GitleaksEnforcement](te, gitleaksLane)
-	dispatcher := testDispatcher(te, publisher, time.Second)
+	dispatcher := testDispatcherWithFlags(te, publisher, contentLimitFlags(t, MaxContentBytes*2))
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
 		OrganizationID:         "org-limit-ceiling",
@@ -500,7 +507,6 @@ func TestDispatchClampsContentLimitAboveCeiling(t *testing.T) {
 		ProjectID:              "project-limit-ceiling",
 		Content:                strings.Repeat("x", MaxContentBytes+10),
 		Body:                   "",
-		MaxContentBytes:        MaxContentBytes * 2,
 		ToolName:               "",
 		MessageType:            "",
 		ToolCalls:              nil,
@@ -531,7 +537,6 @@ func TestDispatchTruncatesAtMultibyteRuneBoundary(t *testing.T) {
 		ProjectID:              "project-multibyte",
 		Content:                expected + "€tail",
 		Body:                   "",
-		MaxContentBytes:        0,
 		ToolName:               "",
 		MessageType:            "",
 		ToolCalls:              nil,
@@ -555,7 +560,7 @@ func TestDispatchPublishesLLMLaneFields(t *testing.T) {
 	te := setupInboxTest(t, "replica-dispatch-llm")
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
-	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
 
 	origins := testOrigins(llmLane)
 	origin := origins[llmLane]
@@ -625,7 +630,7 @@ func TestDispatchLLMLaneFallsBackToOriginMessageFields(t *testing.T) {
 	te := setupInboxTest(t, "replica-dispatch-llm-fallback")
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
-	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
 
 	origins := testOrigins(llmLane)
 	origin := origins[llmLane]
@@ -656,7 +661,7 @@ func TestDispatchFansOutGitleaksAndLLMLanes(t *testing.T) {
 	presidioPub := &capturePresidioPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
-	dispatcher := testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
+	dispatcher := testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
 
 	origins := testOrigins(gitleaksLane, llmLane)
 	outcome, err := dispatcher.Dispatch(t.Context(), llmDispatchRequest([]Lane{gitleaksLane, llmLane}, origins))
@@ -694,6 +699,7 @@ func TestDispatchHonoursLaneWaitTimeoutOverride(t *testing.T) {
 		LaneWaitTimeout: map[riskv1.EnforcementScanner]time.Duration{ //nolint:exhaustive // only the LLM lane is overridden
 			riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER: 25 * time.Millisecond,
 		},
+		Flags: nil,
 	})
 
 	origins := testOrigins(gitleaksLane, llmLane)
@@ -716,7 +722,7 @@ func TestDispatchRejectsLLMLaneWithPolicyID(t *testing.T) {
 
 	te := setupInboxTest(t, "replica-dispatch-llm-policy")
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
-	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
 
 	policyLane := Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER, PolicyID: uuid.NewString()}
 	_, err := dispatcher.Dispatch(t.Context(), llmDispatchRequest([]Lane{policyLane}, testOrigins(policyLane)))
@@ -724,21 +730,20 @@ func TestDispatchRejectsLLMLaneWithPolicyID(t *testing.T) {
 	require.Empty(t, llmPub.messages)
 }
 
-func TestDispatchHonorsRequestLimitForContentAndBody(t *testing.T) {
+func TestDispatchHonorsFlagLimitForContentAndBody(t *testing.T) {
 	t.Parallel()
 
 	te := setupInboxTest(t, "replica-dispatch-request-limit")
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
-	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
-
 	const limit = 2048
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: contentLimitFlags(t, limit)})
+
 	expectedContent := strings.Repeat("c", limit)
 	expectedBody := strings.Repeat("b", limit-1)
 	request := llmDispatchRequest([]Lane{llmLane}, testOrigins(llmLane))
 	request.Content = expectedContent + "tail"
 	request.Body = expectedBody + "€tail"
-	request.MaxContentBytes = limit
 
 	outcome, err := dispatcher.Dispatch(t.Context(), request)
 	require.NoError(t, err)
@@ -763,12 +768,11 @@ func TestDispatchRejectsDuplicateLane(t *testing.T) {
 	dispatcher := testDispatcher(te, publisher, time.Second)
 
 	_, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:  "org-duplicate",
-		ProjectID:       "project-duplicate",
-		Content:         "safe content",
-		MaxContentBytes: 0,
-		Lanes:           []Lane{gitleaksLane, gitleaksLane},
-		Origins:         testOrigins(gitleaksLane, gitleaksLane),
+		OrganizationID: "org-duplicate",
+		ProjectID:      "project-duplicate",
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane, gitleaksLane},
+		Origins:        testOrigins(gitleaksLane, gitleaksLane),
 	})
 	require.ErrorContains(t, err, "duplicate enforcement lane")
 	require.Empty(t, publisher.messages)

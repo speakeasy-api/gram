@@ -21,10 +21,10 @@ const (
 	FlagBudgets Flag = "gram-budgets"
 	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
-	// FlagRiskEnforcementMaxContentBytes configures the realtime enforcement
-	// truncation limit. Evaluated server-side; targeted by PostHog organization
-	// and slug groups. The payload is {"max_content_bytes": <int>}; missing or
-	// invalid payloads use the default limit.
+	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement
+	// truncation limit globally. Evaluated server-side with no targeting. The
+	// payload is {"max_content_bytes": <int>}; a missing or invalid payload
+	// keeps the default limit.
 	FlagRiskEnforcementMaxContentBytes Flag = "risk-enforcement-max-content-bytes"
 
 	// FlagAgentManagement gates the first-class agent management API. It is
