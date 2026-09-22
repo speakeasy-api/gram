@@ -16,7 +16,7 @@ func TestUpdateGcpIamPlatformCredential_ReplacesConfig(t *testing.T) {
 
 	created := createPlatformGCPAmbientCredential(t, ctx, ti, "platform-update")
 
-	updated, err := ti.service.UpdateGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
+	updated, err := ti.service.UpdateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
 		ID:                        created.ID,
 		SessionToken:              nil,
 		Name:                      "platform-update-renamed",
@@ -48,7 +48,7 @@ func TestUpdateGcpIamPlatformCredential_NameRequired(t *testing.T) {
 
 	created := createPlatformGCPAmbientCredential(t, ctx, ti, "platform-update-noname")
 
-	_, err := ti.service.UpdateGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
+	_, err := ti.service.UpdateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
 		ID:                        created.ID,
 		SessionToken:              nil,
 		Name:                      "   ",
@@ -64,7 +64,7 @@ func TestUpdateGcpIamPlatformCredential_NotFound(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	_, err := ti.service.UpdateGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
+	_, err := ti.service.UpdateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
 		ID:                        uuid.NewString(),
 		SessionToken:              nil,
 		Name:                      "nope",
@@ -83,7 +83,7 @@ func TestUpdateGcpIamPlatformCredential_ExcludesOrgCredential(t *testing.T) {
 
 	orgCred := createGCPImpersonationCredential(t, ctx, ti, "org-scoped")
 
-	_, err := ti.service.UpdateGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
+	_, err := ti.service.UpdateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
 		ID:                        orgCred.ID,
 		SessionToken:              nil,
 		Name:                      "hijack",

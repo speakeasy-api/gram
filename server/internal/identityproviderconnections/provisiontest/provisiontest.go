@@ -167,6 +167,13 @@ func (k *KMSClients) Factory(_ context.Context, _ oauth2.TokenSource) (gcpkms.Pr
 // GCP identity and the given KMS factory.
 func NewProvisioner(t *testing.T, conn *pgxpool.Pool, kmsClients gcpkms.ProvisioningClientFactory, serverURL string, credentialID uuid.UUID) *identityproviderconnections.Provisioner {
 	t.Helper()
+	return NewProvisionerPinnedTo(t, conn, kmsClients, serverURL, credentialID, "")
+}
+
+// NewProvisionerPinnedTo is NewProvisioner with the signing service account the
+// credential must impersonate; empty means unpinned.
+func NewProvisionerPinnedTo(t *testing.T, conn *pgxpool.Pool, kmsClients gcpkms.ProvisioningClientFactory, serverURL string, credentialID uuid.UUID, signingServiceAccount string) *identityproviderconnections.Provisioner {
+	t.Helper()
 
 	base, err := url.Parse(serverURL)
 	require.NoError(t, err)
@@ -178,9 +185,10 @@ func NewProvisioner(t *testing.T, conn *pgxpool.Pool, kmsClients gcpkms.Provisio
 		kmsClients,
 		audit.NewLogger(),
 		identityproviderconnections.Config{
-			KeyRing:             KeyRing,
-			SigningCredentialID: credentialID,
-			ServerURL:           base,
+			KeyRing:               KeyRing,
+			SigningCredentialID:   credentialID,
+			SigningServiceAccount: signingServiceAccount,
+			ServerURL:             base,
 		},
 	)
 	require.NoError(t, err)

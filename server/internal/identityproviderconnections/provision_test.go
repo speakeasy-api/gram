@@ -928,9 +928,10 @@ func TestNewProvisioner_RejectsPlaintextServerURL(t *testing.T) {
 			provisiontest.NewKMSClients(t).Factory,
 			audit.NewLogger(),
 			identityproviderconnections.Config{
-				KeyRing:             provisiontest.KeyRing,
-				SigningCredentialID: uuid.New(),
-				ServerURL:           mustURL(t, serverURL),
+				KeyRing:               provisiontest.KeyRing,
+				SigningCredentialID:   uuid.New(),
+				SigningServiceAccount: "",
+				ServerURL:             mustURL(t, serverURL),
 			},
 		)
 		if err != nil {
@@ -942,4 +943,17 @@ func TestNewProvisioner_RejectsPlaintextServerURL(t *testing.T) {
 	require.Error(t, build("http://app.getgram.ai"))
 	require.NoError(t, build("https://app.getgram.ai"))
 	require.NoError(t, build("http://localhost:8080"))
+}
+
+func TestProbeSigningCredential_RefusesUnpinnedServiceAccount(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestDB(t)
+	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
+	kms := provisiontest.NewKMSClients(t)
+
+	pinned := provisiontest.NewProvisionerPinnedTo(t, ti.conn, kms.Factory, testServerURL, credentialID, provisiontest.SigningServiceAccount())
+	require.NoError(t, pinned.ProbeSigningCredential(ctx))
+
+	other := provisiontest.NewProvisionerPinnedTo(t, ti.conn, kms.Factory, testServerURL, credentialID, "someone-else@example.iam.gserviceaccount.com")
+	require.ErrorIs(t, other.ProbeSigningCredential(ctx), identityproviderconnections.ErrSigningCredentialUnusable)
 }

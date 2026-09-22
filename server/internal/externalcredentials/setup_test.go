@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -84,6 +85,20 @@ func orgAdmin(t *testing.T, ctx context.Context) context.Context {
 // place would raise the caller's own context to admin as well, and a test that
 // went on to act as an ordinary administrator would silently keep the staff
 // privileges it meant to drop.
+// withFreshAdmin marks the test user a durable platform admin and returns a
+// validated session context, which is what the mutating platform handlers gate on.
+func withFreshAdmin(t *testing.T, ctx context.Context, ti *testInstance) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	require.NoError(t, testrepo.New(ti.conn).SetUserPlatformAdminFixture(ctx, testrepo.SetUserPlatformAdminFixtureParams{Admin: true, ID: authCtx.UserID}))
+
+	elevated := *authCtx
+	elevated.IsAdmin = true
+	return contextvalues.WithValidatedGramSession(ctx, &elevated, false)
+}
+
 func withAdmin(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -433,7 +448,7 @@ func createGCPCredentialDirect(t *testing.T, ctx context.Context, ti *testInstan
 func createPlatformGCPAmbientCredential(t *testing.T, ctx context.Context, ti *testInstance, name string) *adminecgen.GcpIamCredential {
 	t.Helper()
 
-	cred, err := ti.service.CreateGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.CreateGcpIamPlatformCredentialPayload{
+	cred, err := ti.service.CreateGcpIamPlatformCredential(withFreshAdmin(t, ctx, ti), &adminecgen.CreateGcpIamPlatformCredentialPayload{
 		SessionToken:              nil,
 		Name:                      name,
 		ImpersonateServiceAccount: nil,
