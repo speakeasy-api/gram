@@ -161,7 +161,6 @@ func TestScanner_LLMModeDispatchesSingleLaneForToolRequest(t *testing.T) {
 	require.Nil(t, captured.PresidioEntities)
 	require.Nil(t, captured.PresidioScoreThreshold)
 	require.Equal(t, 3072, captured.MaxContentBytes)
-	require.Equal(t, "flag", captured.MaxContentBytesSource)
 	lane := captured.Lanes[0]
 	origin, ok := captured.Origins[lane]
 	require.True(t, ok)

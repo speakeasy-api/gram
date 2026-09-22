@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
@@ -109,12 +109,9 @@ type DispatchRequest struct {
 	// truncated to MaxContentBytes independently of Content.
 	Body string
 
-	// MaxContentBytes controls independent Content and Body truncation. Zero
-	// uses DefaultMaxContentBytes; other values are clamped to the safe range.
+	// MaxContentBytes truncates Content and Body independently. Zero means
+	// DefaultMaxContentBytes; values above MaxContentBytes are capped.
 	MaxContentBytes int
-
-	// MaxContentBytesSource labels truncation metrics as "flag" or "default".
-	MaxContentBytesSource string
 
 	// ToolName is the tool the LLM lane attributes the message to. When empty,
 	// the lane falls back to the origin's ToolName.
@@ -253,24 +250,25 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	if limit == 0 {
 		limit = DefaultMaxContentBytes
 	}
-	limit = min(max(limit, 1024), MaxContentBytes)
-	limitSource := request.MaxContentBytesSource
-	if limitSource != "flag" {
-		limitSource = "default"
-	}
+	limit = min(limit, MaxContentBytes)
 	truncated := false
-	if originalSize := len(request.Content); originalSize > limit {
-		request.Content = truncateAtRuneBoundary(request.Content, limit)
+	truncate := func(field string, value string) string {
+		if len(value) <= limit {
+			return value
+		}
 		truncated = true
-		d.logger.WarnContext(ctx, "truncating oversized enforcement content", attr.SlogRiskScanTextSize(originalSize), attr.SlogRiskScanLimitBytes(limit))
+		d.logger.WarnContext(ctx, "truncating oversized enforcement "+field, attr.SlogRiskScanTextSize(len(value)), attr.SlogRiskScanLimitBytes(limit))
+		return truncateAtRuneBoundary(value, limit)
 	}
-	if originalSize := len(request.Body); originalSize > limit {
-		request.Body = truncateAtRuneBoundary(request.Body, limit)
-		truncated = true
-		d.logger.WarnContext(ctx, "truncating oversized enforcement body", attr.SlogRiskScanTextSize(originalSize), attr.SlogRiskScanLimitBytes(limit))
+	request.Content = truncate("content", request.Content)
+	request.Body = truncate("body", request.Body)
+	// Copy before truncating so the caller's tool calls stay intact.
+	request.ToolCalls = slices.Clone(request.ToolCalls)
+	for i := range request.ToolCalls {
+		request.ToolCalls[i].Arguments = truncate("tool call arguments", request.ToolCalls[i].Arguments)
 	}
 	if truncated && d.truncations != nil {
-		d.truncations.Add(ctx, 1, metric.WithAttributes(attribute.String("limit_source", limitSource)))
+		d.truncations.Add(ctx, 1)
 	}
 	seen := make(map[Lane]struct{}, len(request.Lanes))
 	for _, lane := range request.Lanes {

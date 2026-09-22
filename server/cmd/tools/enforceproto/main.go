@@ -140,7 +140,6 @@ func run() error {
 		Content:                "AccessKeyId: " + fakeAccessKeyID + ", SecretAccessKey: " + fakeSecret,
 		Body:                   "",
 		MaxContentBytes:        0,
-		MaxContentBytesSource:  "",
 		ToolName:               "",
 		MessageType:            "",
 		ToolCalls:              nil,

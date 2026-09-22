@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"google.golang.org/protobuf/proto"
 
@@ -69,7 +68,7 @@ func replyOK[T proto.Message](te *inboxTestEnv, lane Lane) func(context.Context,
 	}
 }
 
-func int64CounterValue(metrics metricdata.ResourceMetrics, name, limitSource string) int64 {
+func int64CounterValue(metrics metricdata.ResourceMetrics, name string) int64 {
 	for _, scope := range metrics.ScopeMetrics {
 		for _, candidate := range scope.Metrics {
 			if candidate.Name != name {
@@ -79,12 +78,11 @@ func int64CounterValue(metrics metricdata.ResourceMetrics, name, limitSource str
 			if !ok {
 				continue
 			}
+			var total int64
 			for _, point := range sum.DataPoints {
-				source, ok := point.Attributes.Value(attribute.Key("limit_source"))
-				if ok && source.AsString() == limitSource {
-					return point.Value
-				}
+				total += point.Value
 			}
+			return total
 		}
 	}
 	return 0
@@ -126,15 +124,14 @@ func testLLMDispatcher(te *inboxTestEnv, llmPub *captureLLMPublisher, cfg Dispat
 
 func llmDispatchRequest(lanes []Lane, origins map[Lane]metering.RiskProvenance) DispatchRequest {
 	return DispatchRequest{
-		OrganizationID:        "org-llm",
-		OrganizationSlug:      "org-llm-slug",
-		ProjectID:             "project-llm",
-		Content:               "raw scanned content",
-		Body:                  "please run the deploy",
-		MaxContentBytes:       0,
-		MaxContentBytesSource: "",
-		ToolName:              "bash",
-		MessageType:           "tool_request",
+		OrganizationID:   "org-llm",
+		OrganizationSlug: "org-llm-slug",
+		ProjectID:        "project-llm",
+		Content:          "raw scanned content",
+		Body:             "please run the deploy",
+		MaxContentBytes:  0,
+		ToolName:         "bash",
+		MessageType:      "tool_request",
 		ToolCalls: []ToolCall{
 			{ID: "toolu_1", Name: "bash", Arguments: `{"command":"git reset --hard"}`},
 			{ID: "toolu_2", Name: "read_file", Arguments: `{"path":".env"}`},
@@ -195,13 +192,12 @@ func TestDispatchPublishesTenantContextAndReplyMetadata(t *testing.T) {
 	dispatcher := testDispatcher(te, publisher, time.Second)
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:        "org-dispatch",
-		ProjectID:             "project-dispatch",
-		Content:               "safe content",
-		MaxContentBytes:       0,
-		MaxContentBytesSource: "",
-		Lanes:                 []Lane{gitleaksLane},
-		Origins:               testOrigins(gitleaksLane),
+		OrganizationID:  "org-dispatch",
+		ProjectID:       "project-dispatch",
+		Content:         "safe content",
+		MaxContentBytes: 0,
+		Lanes:           []Lane{gitleaksLane},
+		Origins:         testOrigins(gitleaksLane),
 	})
 	require.NoError(t, err)
 	require.True(t, outcome.Complete)
@@ -250,13 +246,12 @@ func TestDispatchAcceptsOpaqueOperationID(t *testing.T) {
 	origins[gitleaksLane] = origin
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:        "org-dispatch",
-		ProjectID:             "project-dispatch",
-		Content:               "safe content",
-		MaxContentBytes:       0,
-		MaxContentBytesSource: "",
-		Lanes:                 []Lane{gitleaksLane},
-		Origins:               origins,
+		OrganizationID:  "org-dispatch",
+		ProjectID:       "project-dispatch",
+		Content:         "safe content",
+		MaxContentBytes: 0,
+		Lanes:           []Lane{gitleaksLane},
+		Origins:         origins,
 	})
 	require.NoError(t, err)
 	require.True(t, outcome.Complete)
@@ -277,13 +272,12 @@ func TestDispatchRejectsEmptyOperationID(t *testing.T) {
 	origins[gitleaksLane] = origin
 
 	_, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:        "org-dispatch",
-		ProjectID:             "project-dispatch",
-		Content:               "safe content",
-		MaxContentBytes:       0,
-		MaxContentBytesSource: "",
-		Lanes:                 []Lane{gitleaksLane},
-		Origins:               origins,
+		OrganizationID:  "org-dispatch",
+		ProjectID:       "project-dispatch",
+		Content:         "safe content",
+		MaxContentBytes: 0,
+		Lanes:           []Lane{gitleaksLane},
+		Origins:         origins,
 	})
 	require.ErrorContains(t, err, "operation id is required")
 }
@@ -310,13 +304,12 @@ func TestDispatchPreservesExplicitNoPolicyGitleaksOrigin(t *testing.T) {
 	origins[gitleaksLane] = origin
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:        "org-no-policy",
-		ProjectID:             origin.ProjectID.String(),
-		Content:               "safe content",
-		MaxContentBytes:       0,
-		MaxContentBytesSource: "",
-		Lanes:                 []Lane{gitleaksLane},
-		Origins:               origins,
+		OrganizationID:  "org-no-policy",
+		ProjectID:       origin.ProjectID.String(),
+		Content:         "safe content",
+		MaxContentBytes: 0,
+		Lanes:           []Lane{gitleaksLane},
+		Origins:         origins,
 	})
 	require.NoError(t, err)
 	require.True(t, outcome.Complete)
@@ -358,7 +351,6 @@ func TestDispatchFansOutGitleaksAndPresidioLanes(t *testing.T) {
 		ProjectID:              "project-presidio",
 		Content:                "safe content",
 		MaxContentBytes:        0,
-		MaxContentBytesSource:  "",
 		PresidioEntities:       []string{"EMAIL_ADDRESS", "PHONE_NUMBER"},
 		PresidioScoreThreshold: &threshold,
 		Lanes:                  []Lane{gitleaksLane, presidioLane},
@@ -425,13 +417,12 @@ func TestDispatchPreservesSuccessfulSiblingOnLaneFailure(t *testing.T) {
 	dispatcher := testDispatcherWithPresidio(te, gitleaksPub, presidioPub, time.Second)
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:        "org-partial",
-		ProjectID:             "project-partial",
-		Content:               "safe content",
-		MaxContentBytes:       0,
-		MaxContentBytesSource: "",
-		Lanes:                 []Lane{gitleaksLane, presidioLane},
-		Origins:               testOrigins(gitleaksLane, presidioLane),
+		OrganizationID:  "org-partial",
+		ProjectID:       "project-partial",
+		Content:         "safe content",
+		MaxContentBytes: 0,
+		Lanes:           []Lane{gitleaksLane, presidioLane},
+		Origins:         testOrigins(gitleaksLane, presidioLane),
 	})
 	require.NoError(t, err)
 	require.False(t, outcome.Complete)
@@ -447,13 +438,12 @@ func TestDispatchDeadlineIsNormalPartialOutcome(t *testing.T) {
 	dispatcher := testDispatcher(te, publisher, 25*time.Millisecond)
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:        "org-deadline",
-		ProjectID:             "project-deadline",
-		Content:               "safe content",
-		MaxContentBytes:       0,
-		MaxContentBytesSource: "",
-		Lanes:                 []Lane{gitleaksLane},
-		Origins:               testOrigins(gitleaksLane),
+		OrganizationID:  "org-deadline",
+		ProjectID:       "project-deadline",
+		Content:         "safe content",
+		MaxContentBytes: 0,
+		Lanes:           []Lane{gitleaksLane},
+		Origins:         testOrigins(gitleaksLane),
 	})
 	require.NoError(t, err)
 	require.False(t, outcome.Complete)
@@ -477,7 +467,6 @@ func TestDispatchUsesDefaultContentLimit(t *testing.T) {
 		Content:                strings.Repeat("x", DefaultMaxContentBytes+10),
 		Body:                   "",
 		MaxContentBytes:        0,
-		MaxContentBytesSource:  "",
 		ToolName:               "",
 		MessageType:            "",
 		ToolCalls:              nil,
@@ -494,7 +483,7 @@ func TestDispatchUsesDefaultContentLimit(t *testing.T) {
 	require.True(t, publisher.messages[0].GetContentTruncated())
 	var metrics metricdata.ResourceMetrics
 	require.NoError(t, te.reader.Collect(t.Context(), &metrics))
-	require.Equal(t, int64(1), int64CounterValue(metrics, "risk.enforcement.truncations", "default"))
+	require.Equal(t, int64(1), int64CounterValue(metrics, "risk.enforcement.truncations"))
 }
 
 func TestDispatchClampsContentLimitAboveCeiling(t *testing.T) {
@@ -512,7 +501,6 @@ func TestDispatchClampsContentLimitAboveCeiling(t *testing.T) {
 		Content:                strings.Repeat("x", MaxContentBytes+10),
 		Body:                   "",
 		MaxContentBytes:        MaxContentBytes * 2,
-		MaxContentBytesSource:  "flag",
 		ToolName:               "",
 		MessageType:            "",
 		ToolCalls:              nil,
@@ -526,37 +514,6 @@ func TestDispatchClampsContentLimitAboveCeiling(t *testing.T) {
 	require.True(t, outcome.Truncated)
 	require.Len(t, publisher.messages, 1)
 	require.Equal(t, strings.Repeat("x", MaxContentBytes), publisher.messages[0].GetContent())
-}
-
-func TestDispatchClampsContentLimitBelowFloor(t *testing.T) {
-	t.Parallel()
-
-	te := setupInboxTest(t, "replica-dispatch-limit-floor")
-	publisher := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
-	publisher.onPublish = replyOK[*riskv1.GitleaksEnforcement](te, gitleaksLane)
-	dispatcher := testDispatcher(te, publisher, time.Second)
-
-	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:         "org-limit-floor",
-		OrganizationSlug:       "",
-		ProjectID:              "project-limit-floor",
-		Content:                strings.Repeat("x", 1025),
-		Body:                   "",
-		MaxContentBytes:        10,
-		MaxContentBytesSource:  "flag",
-		ToolName:               "",
-		MessageType:            "",
-		ToolCalls:              nil,
-		PresidioEntities:       nil,
-		PresidioScoreThreshold: nil,
-		Lanes:                  []Lane{gitleaksLane},
-		Origins:                testOrigins(gitleaksLane),
-	})
-	require.NoError(t, err)
-	require.True(t, outcome.Complete)
-	require.True(t, outcome.Truncated)
-	require.Len(t, publisher.messages, 1)
-	require.Equal(t, strings.Repeat("x", 1024), publisher.messages[0].GetContent())
 }
 
 func TestDispatchTruncatesAtMultibyteRuneBoundary(t *testing.T) {
@@ -575,7 +532,6 @@ func TestDispatchTruncatesAtMultibyteRuneBoundary(t *testing.T) {
 		Content:                expected + "€tail",
 		Body:                   "",
 		MaxContentBytes:        0,
-		MaxContentBytesSource:  "",
 		ToolName:               "",
 		MessageType:            "",
 		ToolCalls:              nil,
@@ -783,7 +739,6 @@ func TestDispatchHonorsRequestLimitForContentAndBody(t *testing.T) {
 	request.Content = expectedContent + "tail"
 	request.Body = expectedBody + "€tail"
 	request.MaxContentBytes = limit
-	request.MaxContentBytesSource = "flag"
 
 	outcome, err := dispatcher.Dispatch(t.Context(), request)
 	require.NoError(t, err)
@@ -797,7 +752,7 @@ func TestDispatchHonorsRequestLimitForContentAndBody(t *testing.T) {
 	require.True(t, message.GetContentTruncated())
 	var metrics metricdata.ResourceMetrics
 	require.NoError(t, te.reader.Collect(t.Context(), &metrics))
-	require.Equal(t, int64(1), int64CounterValue(metrics, "risk.enforcement.truncations", "flag"))
+	require.Equal(t, int64(1), int64CounterValue(metrics, "risk.enforcement.truncations"))
 }
 
 func TestDispatchRejectsDuplicateLane(t *testing.T) {
@@ -808,13 +763,12 @@ func TestDispatchRejectsDuplicateLane(t *testing.T) {
 	dispatcher := testDispatcher(te, publisher, time.Second)
 
 	_, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID:        "org-duplicate",
-		ProjectID:             "project-duplicate",
-		Content:               "safe content",
-		MaxContentBytes:       0,
-		MaxContentBytesSource: "",
-		Lanes:                 []Lane{gitleaksLane, gitleaksLane},
-		Origins:               testOrigins(gitleaksLane, gitleaksLane),
+		OrganizationID:  "org-duplicate",
+		ProjectID:       "project-duplicate",
+		Content:         "safe content",
+		MaxContentBytes: 0,
+		Lanes:           []Lane{gitleaksLane, gitleaksLane},
+		Origins:         testOrigins(gitleaksLane, gitleaksLane),
 	})
 	require.ErrorContains(t, err, "duplicate enforcement lane")
 	require.Empty(t, publisher.messages)

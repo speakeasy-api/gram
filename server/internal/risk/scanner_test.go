@@ -297,7 +297,6 @@ func TestScanner_PubsubPassesFlagContentLimitToDispatcher(t *testing.T) {
 	flags.SetFlagPayload(feature.FlagRiskEnforcementMaxContentBytes, authCtx.ActiveOrganizationID, []byte(`{"max_content_bytes":4096}`))
 	dispatcher := &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
 		require.Equal(t, 4096, request.MaxContentBytes)
-		require.Equal(t, "flag", request.MaxContentBytesSource)
 		lane := request.Lanes[0]
 		reply := riskv1.EnforcementReply_builder{
 			Scanner: new(lane.Scanner),

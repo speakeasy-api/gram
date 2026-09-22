@@ -21,16 +21,11 @@ type flagState struct {
 	orgSlug string
 }
 
-type flagPayloadState struct {
-	payload []byte
-	found   bool
-}
-
 // requestMemo remembers each project flag resolved while serving one request.
 type requestMemo struct {
 	mu       sync.Mutex
 	states   map[string]flagState
-	payloads map[string]flagPayloadState
+	payloads map[string][]byte
 }
 
 // WithRequestMemo makes every project flag lookup under ctx resolve once.
@@ -41,7 +36,7 @@ func WithRequestMemo(ctx context.Context) context.Context {
 	return context.WithValue(ctx, memoKey{}, &requestMemo{
 		mu:       sync.Mutex{},
 		states:   map[string]flagState{},
-		payloads: map[string]flagPayloadState{},
+		payloads: map[string][]byte{},
 	})
 }
 
@@ -83,44 +78,38 @@ func ProjectFlagState(ctx context.Context, logger *slog.Logger, queries *repo.Qu
 	return state.enabled, state.orgSlug
 }
 
-// ProjectFlagPayload resolves the payload for the project's organization and
-// project groups. Missing, disabled, and failed lookups report not found.
-func ProjectFlagPayload(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) ([]byte, bool) {
+// ProjectFlagPayload resolves the flag payload for the project's organization
+// and project groups, memoized per request. Nil means no payload.
+func ProjectFlagPayload(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) []byte {
 	if flags == nil {
-		return nil, false
+		return nil
 	}
 	memo, _ := ctx.Value(memoKey{}).(*requestMemo)
 	if memo == nil {
-		state, _ := resolveProjectFlagPayload(ctx, logger, queries, flags, orgID, projectID, flag)
-		return state.payload, state.found
+		return resolveProjectFlagPayload(ctx, logger, queries, flags, orgID, projectID, flag)
 	}
 	memo.mu.Lock()
 	defer memo.mu.Unlock()
 	key := projectID.String() + ":" + string(flag)
-	state, ok := memo.payloads[key]
+	payload, ok := memo.payloads[key]
 	if !ok {
-		var resolved bool
-		state, resolved = resolveProjectFlagPayload(ctx, logger, queries, flags, orgID, projectID, flag)
-		if resolved {
-			memo.payloads[key] = state
-		}
+		payload = resolveProjectFlagPayload(ctx, logger, queries, flags, orgID, projectID, flag)
+		memo.payloads[key] = payload
 	}
-	return state.payload, state.found
+	return payload
 }
 
-// EnforcementMaxContentBytes resolves the enforcement dispatch limit.
-func EnforcementMaxContentBytes(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID) (limit int, source string) {
-	payload, found := ProjectFlagPayload(ctx, logger, queries, flags, orgID, projectID, feature.FlagRiskEnforcementMaxContentBytes)
-	if !found {
-		return enforcereply.DefaultMaxContentBytes, "default"
-	}
+// EnforcementMaxContentBytes resolves the enforcement dispatch limit from the
+// flag payload, falling back to the default when the flag carries none.
+func EnforcementMaxContentBytes(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID) int {
 	var config struct {
 		MaxContentBytes int `json:"max_content_bytes"`
 	}
-	if err := json.Unmarshal(payload, &config); err != nil || config.MaxContentBytes <= 0 {
-		return enforcereply.DefaultMaxContentBytes, "default"
+	payload := ProjectFlagPayload(ctx, logger, queries, flags, orgID, projectID, feature.FlagRiskEnforcementMaxContentBytes)
+	if payload == nil || json.Unmarshal(payload, &config) != nil || config.MaxContentBytes <= 0 {
+		return enforcereply.DefaultMaxContentBytes
 	}
-	return min(max(config.MaxContentBytes, 1024), enforcereply.MaxContentBytes), "flag"
+	return min(config.MaxContentBytes, enforcereply.MaxContentBytes)
 }
 
 // resolveProjectFlag reports false as its second result when the lookup
@@ -139,16 +128,16 @@ func resolveProjectFlag(ctx context.Context, logger *slog.Logger, queries *repo.
 	return flagState{enabled: on, orgSlug: groups.OrganizationSlug}, true
 }
 
-func resolveProjectFlagPayload(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) (flagPayloadState, bool) {
+func resolveProjectFlagPayload(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) []byte {
 	groups, err := queries.GetProjectFlagGroups(ctx, projectID)
 	if err != nil {
 		logger.WarnContext(ctx, "resolve project flag groups failed", attr.SlogError(err), attr.SlogOrganizationID(orgID), attr.SlogProjectID(projectID.String()))
-		return flagPayloadState{payload: nil, found: false}, false
+		return nil
 	}
 	payload, err := flags.FlagPayload(ctx, flag, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug))
 	if err != nil {
 		logger.WarnContext(ctx, "project flag payload check failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
-		return flagPayloadState{payload: nil, found: false}, false
+		return nil
 	}
-	return flagPayloadState{payload: payload, found: payload != nil}, true
+	return payload
 }

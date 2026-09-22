@@ -647,7 +647,6 @@ func runFullPoint(
 				Content:                content,
 				Body:                   "",
 				MaxContentBytes:        0,
-				MaxContentBytesSource:  "",
 				ToolName:               "",
 				MessageType:            "",
 				ToolCalls:              nil,
