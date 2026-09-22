@@ -2657,6 +2657,9 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   -- Gram's upstream IdP registration, not a downstream-client attachment.
   -- Must be a live, same-organization client of the trusted issuer.
   trusted_remote_session_client_id uuid,
+  -- Announces the deployment's authentication host, rather than the MCP host,
+  -- as the OAuth issuer and endpoint origin for this issuer's servers.
+  use_authentication_host boolean NOT NULL DEFAULT false,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

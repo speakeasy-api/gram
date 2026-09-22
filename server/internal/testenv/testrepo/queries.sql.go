@@ -3171,6 +3171,32 @@ func (q *Queries) SetUserSessionIssuerOrganizationID(ctx context.Context, arg Se
 	return err
 }
 
+const setUserSessionIssuerUseAuthenticationHostFixture = `-- name: SetUserSessionIssuerUseAuthenticationHostFixture :execrows
+UPDATE user_session_issuers AS issuer
+SET use_authentication_host = $1
+WHERE issuer.id = $2
+  AND COALESCE(
+    issuer.organization_id,
+    (SELECT p.organization_id FROM projects AS p WHERE p.id = issuer.project_id)
+  ) = $3::text
+`
+
+type SetUserSessionIssuerUseAuthenticationHostFixtureParams struct {
+	UseAuthenticationHost bool
+	IssuerID              uuid.UUID
+	OrganizationID        string
+}
+
+// Project-scoped issuers carry no organization_id, so their tenancy is read
+// through the project.
+func (q *Queries) SetUserSessionIssuerUseAuthenticationHostFixture(ctx context.Context, arg SetUserSessionIssuerUseAuthenticationHostFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserSessionIssuerUseAuthenticationHostFixture, arg.UseAuthenticationHost, arg.IssuerID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setWorkosLastEventIDFixture = `-- name: SetWorkosLastEventIDFixture :exec
 UPDATE organization_metadata
 SET workos_last_event_id = $1

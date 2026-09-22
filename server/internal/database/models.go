@@ -3444,6 +3444,7 @@ type UserSessionIssuer struct {
 	ClientIDMetadataAdmissionMode pgtype.Text
 	TrustedRemoteSessionIssuerID  uuid.NullUUID
 	TrustedRemoteSessionClientID  uuid.NullUUID
+	UseAuthenticationHost         bool
 	CreatedAt                     pgtype.Timestamptz
 	UpdatedAt                     pgtype.Timestamptz
 	DeletedAt                     pgtype.Timestamptz
