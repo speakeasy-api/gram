@@ -15,15 +15,60 @@ import { useState, type JSX } from "react";
  * snippets below are the same pair rendered in the shape each runtime accepts.
  */
 function agentGatewayURL(agentID: string): string {
-  return `${getServerURL()}/agent-mcp/${agentID}`;
+  // Absolute, always: an agent runs outside the browser, so a path relative to
+  // the dashboard is not an address it can dial. getServerURL can be empty
+  // when the build left it unset, in which case the current origin is what is
+  // serving MCP.
+  const base = getServerURL() || window.location.origin;
+  return new URL(`/agent-mcp/${agentID}`, base).toString();
 }
 
 /** Stands in for the key on the runtimes that read it from the environment. */
 const KEY_ENV = "GRAM_AGENT_KEY";
 
+/**
+ * Whether an endpoint may carry a bearer key. HTTPS everywhere, except
+ * loopback, where the request never reaches a network. An unparseable URL is
+ * treated as unsafe rather than assumed fine.
+ */
+function isCredentialSafe(raw: string): boolean {
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol === "https:") return true;
+  return (
+    parsed.protocol === "http:" &&
+    ["localhost", "127.0.0.1", "[::1]", "::1"].includes(parsed.hostname)
+  );
+}
+
 type Recipe = { id: string; label: string; body: string };
 
-function recipes(url: string, key: string): Recipe[] {
+/**
+ * Single-quoted for the shell so a key is pasted as written. Keys are
+ * generated from a restricted alphabet, but a recipe that is copied straight
+ * into a terminal should not depend on that.
+ */
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+/**
+ * The export line that makes the env-var recipes work. Without it they name a
+ * variable nothing has set, so a copied recipe connects to nothing. Omitted
+ * once the secret is gone, since there is nothing left to export.
+ */
+function exportLine(secret: string | null): string[] {
+  if (!secret) {
+    return [`# Set ${KEY_ENV} to the key you saved when it was issued.`, ""];
+  }
+  return [`export ${KEY_ENV}=${shellQuote(secret)}`, ""];
+}
+
+function recipes(url: string, key: string, secret: string | null): Recipe[] {
   return [
     {
       id: "url",
@@ -34,6 +79,7 @@ function recipes(url: string, key: string): Recipe[] {
       id: "cli",
       label: "CLI",
       body: [
+        ...exportLine(secret),
         "# Claude Code",
         `claude mcp add --transport http gram ${url} \\`,
         `  --header "Authorization: Bearer $${KEY_ENV}"`,
@@ -65,6 +111,7 @@ function recipes(url: string, key: string): Recipe[] {
       id: "code",
       label: "Code",
       body: [
+        ...exportLine(secret).map((line) => (line ? `// ${line}` : "")),
         "// Mastra, Vercel AI SDK, LangGraph, CrewAI and the OpenAI Agents SDK",
         "// all take the same pair; this is the TypeScript shape.",
         "const gram = {",
@@ -79,6 +126,7 @@ function recipes(url: string, key: string): Recipe[] {
       id: "api",
       label: "API",
       body: [
+        ...exportLine(secret),
         "# Claude API, OpenAI Responses and the Grok API take it per request.",
         "mcp_servers=[{",
         '  "type": "url",',
@@ -104,7 +152,23 @@ export function AgentGatewayInstall({
   // shape, with a placeholder where the key goes.
   const key = secret ?? `<your ${KEY_ENV}>`;
   const url = agentGatewayURL(agentID);
-  const all = recipes(url, key);
+  const all = recipes(url, key, secret);
+
+  // These recipes put a bearer credential on the wire, so a plaintext endpoint
+  // would hand the key to anyone on the path. Loopback is exempt: it never
+  // leaves the machine, and local development runs there.
+  if (!isCredentialSafe(url)) {
+    return (
+      <div className="space-y-2">
+        <h2 className="text-lg font-semibold">Connect your agent</h2>
+        <Text role="alert">
+          This deployment serves MCP over plaintext HTTP at {url}. Connection
+          instructions are withheld because they would send the agent key
+          unencrypted. Configure an HTTPS server URL and reload.
+        </Text>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
@@ -151,7 +215,10 @@ export function AgentGatewayInstall({
             </PageTabsList>
           </div>
           {all.map((recipe) => (
-            <TabsContent key={recipe.id} value={recipe.id}>
+            // forceMount: every recipe stays in the DOM so switching tabs does
+            // not re-render a snippet, and so the copy target exists whichever
+            // tab is showing.
+            <TabsContent key={recipe.id} value={recipe.id} forceMount>
               <div className="space-y-3 p-4">
                 <pre className="overflow-x-auto text-xs">
                   <code>{recipe.body}</code>
