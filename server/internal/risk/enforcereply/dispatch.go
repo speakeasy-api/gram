@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
@@ -36,8 +37,12 @@ const (
 	// below the LLMEnforcer subscription's 30 s ack deadline.
 	DefaultLLMAnalyzerWaitTimeout = 20 * time.Second
 
-	// MaxContentBytes bounds enforcement scan cost below Pub/Sub's transport
-	// limit. It applies independently to Content and to the LLM lane's Body.
+	// DefaultMaxContentBytes is the enforcement dispatch limit when callers do
+	// not provide one.
+	DefaultMaxContentBytes = 50 * 1024
+
+	// MaxContentBytes is the hard ceiling below Pub/Sub's transport limit.
+	// It applies independently to Content and to the LLM lane's Body.
 	MaxContentBytes = 1 * 1024 * 1024
 )
 
@@ -103,6 +108,13 @@ type DispatchRequest struct {
 	// Body is the message text the LLM lane renders into its prompt. It is
 	// truncated to MaxContentBytes independently of Content.
 	Body string
+
+	// MaxContentBytes controls independent Content and Body truncation. Zero
+	// uses DefaultMaxContentBytes; other values are clamped to the safe range.
+	MaxContentBytes int
+
+	// MaxContentBytesSource labels truncation metrics as "flag" or "default".
+	MaxContentBytesSource string
 
 	// ToolName is the tool the LLM lane attributes the message to. When empty,
 	// the lane falls back to the origin's ToolName.
@@ -220,7 +232,7 @@ func NewDispatcher(ctx context.Context, logger *slog.Logger, meterProvider metri
 func newTruncationCounter(meterProvider metric.MeterProvider) metric.Int64Counter {
 	truncations, _ := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/risk/enforcereply").Int64Counter(
 		"risk.enforcement.truncations",
-		metric.WithDescription("Number of enforcement requests truncated to the 1 MiB limit before publication"),
+		metric.WithDescription("Number of enforcement requests truncated to the configured byte limit before publication"),
 		metric.WithUnit("{message}"),
 	)
 	return truncations
@@ -237,19 +249,28 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	if len(request.Lanes) == 0 {
 		return Outcome{ByLane: map[Lane]*riskv1.EnforcementReply{}, Failed: map[Lane]error{}, Complete: true, Deadline: false, Truncated: false}, nil
 	}
-	truncated := false
-	if originalSize := len(request.Content); originalSize > MaxContentBytes {
-		request.Content = truncateAtRuneBoundary(request.Content, MaxContentBytes)
-		truncated = true
-		d.logger.WarnContext(ctx, "truncating oversized enforcement content", attr.SlogRiskScanTextSize(originalSize))
+	limit := request.MaxContentBytes
+	if limit == 0 {
+		limit = DefaultMaxContentBytes
 	}
-	if originalSize := len(request.Body); originalSize > MaxContentBytes {
-		request.Body = truncateAtRuneBoundary(request.Body, MaxContentBytes)
+	limit = min(max(limit, 1024), MaxContentBytes)
+	limitSource := request.MaxContentBytesSource
+	if limitSource != "flag" {
+		limitSource = "default"
+	}
+	truncated := false
+	if originalSize := len(request.Content); originalSize > limit {
+		request.Content = truncateAtRuneBoundary(request.Content, limit)
 		truncated = true
-		d.logger.WarnContext(ctx, "truncating oversized enforcement body", attr.SlogRiskScanTextSize(originalSize))
+		d.logger.WarnContext(ctx, "truncating oversized enforcement content", attr.SlogRiskScanTextSize(originalSize), attr.SlogRiskScanLimitBytes(limit))
+	}
+	if originalSize := len(request.Body); originalSize > limit {
+		request.Body = truncateAtRuneBoundary(request.Body, limit)
+		truncated = true
+		d.logger.WarnContext(ctx, "truncating oversized enforcement body", attr.SlogRiskScanTextSize(originalSize), attr.SlogRiskScanLimitBytes(limit))
 	}
 	if truncated && d.truncations != nil {
-		d.truncations.Add(ctx, 1)
+		d.truncations.Add(ctx, 1, metric.WithAttributes(attribute.String("limit_source", limitSource)))
 	}
 	seen := make(map[Lane]struct{}, len(request.Lanes))
 	for _, lane := range request.Lanes {

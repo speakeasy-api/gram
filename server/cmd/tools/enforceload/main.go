@@ -646,6 +646,8 @@ func runFullPoint(
 				ProjectID:              loadProjectID.String(),
 				Content:                content,
 				Body:                   "",
+				MaxContentBytes:        0,
+				MaxContentBytesSource:  "",
 				ToolName:               "",
 				MessageType:            "",
 				ToolCalls:              nil,

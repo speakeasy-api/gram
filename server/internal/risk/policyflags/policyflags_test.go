@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -38,7 +39,8 @@ func TestMain(m *testing.M) {
 
 type countingProvider struct {
 	feature.Provider
-	calls atomic.Int32
+	calls        atomic.Int32
+	payloadCalls atomic.Int32
 }
 
 func (p *countingProvider) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (bool, error) {
@@ -48,6 +50,15 @@ func (p *countingProvider) IsFlagEnabled(ctx context.Context, flag feature.Flag,
 		return false, fmt.Errorf("counting provider: %w", err)
 	}
 	return on, nil
+}
+
+func (p *countingProvider) FlagPayload(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) ([]byte, error) {
+	p.payloadCalls.Add(1)
+	payload, err := p.Provider.FlagPayload(ctx, flag, distinctID, groups)
+	if err != nil {
+		return nil, fmt.Errorf("counting provider: %w", err)
+	}
+	return payload, nil
 }
 
 func TestProjectFlagStateResolvesEachFlagOncePerRequest(t *testing.T) {
@@ -106,4 +117,78 @@ type failingProvider struct{ feature.Provider }
 
 func (failingProvider) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
 	return false, errors.New("flag service unavailable")
+}
+
+func newPayloadTestProject(t *testing.T, databaseName string) (string, uuid.UUID, *repo.Queries, *feature.InMemory, *countingProvider) {
+	t.Helper()
+	db, err := infra.CloneTestDatabase(t, databaseName)
+	require.NoError(t, err)
+	orgID := "org_" + uuid.NewString()
+	_, err = orgrepo.New(db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
+		ID: orgID, Name: "Payload Example", Slug: orgID, WorkosID: pgtype.Text{String: orgID, Valid: true}, Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+	project, err := projectsrepo.New(db).CreateProject(t.Context(), projectsrepo.CreateProjectParams{Name: "Payload Example", Slug: "payload", OrganizationID: orgID})
+	require.NoError(t, err)
+	flags := &feature.InMemory{}
+	provider := &countingProvider{Provider: flags}
+	return orgID, project.ID, repo.New(db), flags, provider
+}
+
+func TestProjectFlagPayloadResolvesEachFlagOncePerRequest(t *testing.T) {
+	t.Parallel()
+	orgID, projectID, queries, flags, provider := newPayloadTestProject(t, "policyflagpayloadmemo")
+	flags.SetFlagPayload(feature.FlagRiskEnforcementMaxContentBytes, orgID, []byte(`{"max_content_bytes":2048}`))
+	logger := testenv.NewLogger(t)
+	ctx := WithRequestMemo(t.Context())
+
+	for range 3 {
+		payload, found := ProjectFlagPayload(ctx, logger, queries, provider, orgID, projectID, feature.FlagRiskEnforcementMaxContentBytes)
+		require.True(t, found)
+		require.JSONEq(t, `{"max_content_bytes":2048}`, string(payload))
+	}
+	require.EqualValues(t, 1, provider.payloadCalls.Load())
+
+	for range 2 {
+		payload, found := ProjectFlagPayload(ctx, logger, queries, provider, orgID, projectID, feature.FlagRiskEnforcementPubsub)
+		require.False(t, found)
+		require.Nil(t, payload)
+	}
+	require.EqualValues(t, 2, provider.payloadCalls.Load())
+}
+
+func TestEnforcementMaxContentBytesParsesAndClampsPayload(t *testing.T) {
+	t.Parallel()
+	orgID, projectID, queries, flags, _ := newPayloadTestProject(t, "policyflagpayloadlimits")
+	logger := testenv.NewLogger(t)
+	cases := []struct {
+		payload string
+		want    int
+	}{
+		{payload: `{"max_content_bytes":2048}`, want: 2048},
+		{payload: `{"max_content_bytes":100}`, want: 1024},
+		{payload: fmt.Sprintf(`{"max_content_bytes":%d}`, enforcereply.MaxContentBytes*2), want: enforcereply.MaxContentBytes},
+	}
+	for _, test := range cases {
+		flags.SetFlagPayload(feature.FlagRiskEnforcementMaxContentBytes, orgID, []byte(test.payload))
+		limit, source := EnforcementMaxContentBytes(t.Context(), logger, queries, flags, orgID, projectID)
+		require.Equal(t, test.want, limit)
+		require.Equal(t, "flag", source)
+	}
+}
+
+func TestEnforcementMaxContentBytesDefaultsForInvalidPayload(t *testing.T) {
+	t.Parallel()
+	orgID, projectID, queries, flags, _ := newPayloadTestProject(t, "policyflagpayloadinvalid")
+	logger := testenv.NewLogger(t)
+	for _, payload := range []string{
+		`{`,
+		`{"max_content_bytes":-1}`,
+		`{}`,
+	} {
+		flags.SetFlagPayload(feature.FlagRiskEnforcementMaxContentBytes, orgID, []byte(payload))
+		limit, source := EnforcementMaxContentBytes(t.Context(), logger, queries, flags, orgID, projectID)
+		require.Equal(t, enforcereply.DefaultMaxContentBytes, limit)
+		require.Equal(t, "default", source)
+	}
 }
