@@ -330,3 +330,11 @@ func checklistKeys(items []*gen.IdentityProviderConnectionChecklistItem) []strin
 	}
 	return keys
 }
+
+func checklistCompletion(items []*gen.IdentityProviderConnectionChecklistItem) map[string]*bool {
+	done := make(map[string]*bool, len(items))
+	for _, item := range items {
+		done[item.Key] = item.Completed
+	}
+	return done
+}

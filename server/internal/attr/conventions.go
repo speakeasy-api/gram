@@ -645,6 +645,22 @@ const (
 	HookDeviceHarnessVariantKey = attribute.Key("gram.hook.device.harness_variant")
 	HookDeviceHarnessVersionKey = attribute.Key("gram.hook.device.harness_version")
 	HookDeviceElapsedMsKey      = attribute.Key("gram.hook.device.elapsed_ms")
+	// Hardware identity the Speakeasy device agent (speakeasyd) reports via
+	// the Gram-Device-* headers, recorded on the request log for its
+	// endpoints so a fleet's requests can be counted and told apart per
+	// machine. Without them every device enrolled with an organization
+	// install key attributes to the key's owner, and the only way to
+	// distinguish two machines is a join against ingress logs by request id —
+	// which collapses machines sharing a NAT into one.
+	//
+	// Each is absent when the agent did not report it: agents predating the
+	// headers send none, and a machine with no readable serial (white-box
+	// hardware) sends no serial. Absent stays absent rather than becoming an
+	// empty string, so COUNT(DISTINCT serial) does not acquire a bucket of
+	// unidentified devices.
+	AgentDeviceSerialKey      = attribute.Key("gram.agent.device.serial")
+	AgentDeviceHostnameKey    = attribute.Key("gram.agent.device.hostname")
+	AgentDeviceEnvironmentKey = attribute.Key("gram.agent.device.environment")
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
@@ -1104,6 +1120,18 @@ func SlogHookHasPluginAuth(v bool) slog.Attr      { return slog.Bool(string(Hook
 
 func HookHostname(v string) attribute.KeyValue { return HookHostnameKey.String(v) }
 func SlogHookHostname(v string) slog.Attr      { return slog.String(string(HookHostnameKey), v) }
+
+func SlogAgentDeviceSerial(v string) slog.Attr {
+	return slog.String(string(AgentDeviceSerialKey), v)
+}
+
+func SlogAgentDeviceHostname(v string) slog.Attr {
+	return slog.String(string(AgentDeviceHostnameKey), v)
+}
+
+func SlogAgentDeviceEnvironment(v string) slog.Attr {
+	return slog.String(string(AgentDeviceEnvironmentKey), v)
+}
 
 func HookReplayed(v bool) attribute.KeyValue { return HookReplayedKey.Bool(v) }
 func SlogHookReplayed(v bool) slog.Attr      { return slog.Bool(string(HookReplayedKey), v) }

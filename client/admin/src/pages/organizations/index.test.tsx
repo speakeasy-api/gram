@@ -31,6 +31,7 @@ import {
   type AdminOrganizationStats,
   type BulkUpdateAccountTypeRequest,
   type BulkUpdateAccountTypeResult,
+  type CreateOrganizationRequest,
   type ListOrganizationsParams,
   type ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
@@ -76,7 +77,7 @@ const mocks = vi.hoisted(() => ({
       ) => Promise<BulkUpdateAccountTypeResult>
     >(),
   createOrganization:
-    vi.fn<(body: { name: string }) => Promise<AdminOrganization>>(),
+    vi.fn<(body: CreateOrganizationRequest) => Promise<AdminOrganization>>(),
 }));
 
 // Only the endpoints this page's route tree reaches are replaced. The rest of
@@ -452,9 +453,7 @@ beforeEach(() => {
     Promise.resolve({ updated_ids: [...ids].reverse(), missing_ids: [] }),
   );
   mocks.createOrganization.mockReset();
-  mocks.createOrganization.mockImplementation(({ name }) =>
-    Promise.resolve({ ...CREATED_ORG, name }),
-  );
+  mocks.createOrganization.mockResolvedValue(CREATED_ORG);
 });
 
 afterEach(cleanup);
@@ -4012,9 +4011,10 @@ describe("organizations list create organization", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Create organization" }),
     );
-    fireEvent.change(await screen.findByLabelText("Organization name"), {
-      target: { value: CREATED_ORG.name },
+    fireEvent.change(await screen.findByLabelText("Company URL"), {
+      target: { value: "example.com" },
     });
+    fireEvent.click(screen.getByRole("checkbox", { name: /I have confirmed/ }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Create" }));
     });
@@ -4048,9 +4048,10 @@ describe("organizations list create organization: a refusal", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Create organization" }),
     );
-    fireEvent.change(await screen.findByLabelText("Organization name"), {
-      target: { value: CREATED_ORG.name },
+    fireEvent.change(await screen.findByLabelText("Company URL"), {
+      target: { value: "example.com" },
     });
+    fireEvent.click(screen.getByRole("checkbox", { name: /I have confirmed/ }));
     mocks.createOrganization.mockRejectedValueOnce(
       new GramAdminError(422, { message: "no" }, "Unprocessable Entity"),
     );

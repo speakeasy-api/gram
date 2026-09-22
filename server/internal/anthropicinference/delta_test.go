@@ -24,26 +24,18 @@ func chainIdentities(messages ...Message) []messageIdentity {
 	return stored
 }
 
-func frameHashes(messages ...Message) [][]byte {
-	hashes := make([][]byte, 0, len(messages))
-	for _, msg := range messages {
-		hashes = append(hashes, contentHash(msg))
-	}
-	return hashes
-}
-
 func TestAlignTranscriptContinuesStoredHistory(t *testing.T) {
 	t.Parallel()
 	prompt, reply, next := textMessage("user", "EXAMPLE prompt"), textMessage("assistant", "EXAMPLE reply"), textMessage("user", "EXAMPLE next")
 	stored := chainIdentities(prompt, reply)
 
-	start, prev, ok := alignTranscript(stored, frameHashes(prompt, reply, next))
+	start, prev, ok := alignTranscript(stored, []Message{prompt, reply, next})
 	require.True(t, ok)
 	require.Equal(t, 2, start)
 	require.Equal(t, stored[1].chain, prev)
 
 	// A redelivery of stored history adds nothing.
-	start, _, ok = alignTranscript(stored, frameHashes(prompt, reply))
+	start, _, ok = alignTranscript(stored, []Message{prompt, reply})
 	require.True(t, ok)
 	require.Equal(t, 2, start)
 }
@@ -62,23 +54,36 @@ func TestAlignTranscriptSkipsCompactedHistory(t *testing.T) {
 	frame := append([]Message{summary}, history[15:]...)
 	frame = append(frame, next)
 
-	start, prev, ok := alignTranscript(stored, frameHashes(frame...))
+	start, prev, ok := alignTranscript(stored, frame)
 	require.True(t, ok)
 	require.Equal(t, len(frame)-1, start)
 	require.Equal(t, stored[len(stored)-1].chain, prev)
 }
 
-func TestAlignTranscriptDistinguishesRepeatedMessages(t *testing.T) {
+func TestAlignTranscriptStopsAtNewestRepeatedAnchor(t *testing.T) {
 	t.Parallel()
 	first, again := textMessage("user", "start"), textMessage("user", "continue")
 	stored := chainIdentities(first, again, again)
 
-	start, _, ok := alignTranscript(stored, frameHashes(first, again, again, again))
+	start, _, ok := alignTranscript(stored, []Message{first, again, again, again})
 	require.True(t, ok)
-	require.Equal(t, 3, start)
+	require.Equal(t, 4, start)
 
 	// Identical messages at different positions carry different identities.
 	require.NotEqual(t, stored[1].chain, stored[2].chain)
+}
+
+func TestAlignTranscriptIgnoresHistoryBeforeFirstAnchor(t *testing.T) {
+	t.Parallel()
+	old, anchor := textMessage("user", "old"), textMessage("assistant", "anchor")
+	stored := chainIdentities(old, anchor)
+	frame := []Message{old, anchor, textMessage("user", "rewritten"), anchor, textMessage("user", "new")}
+
+	start, prev, ok := alignTranscript(stored, frame)
+	require.True(t, ok)
+	// The earlier anchor has a longer history match, but the newest wins.
+	require.Equal(t, 4, start)
+	require.Equal(t, stored[1].chain, prev)
 }
 
 func TestAlignTranscriptToleratesRewrittenNewestMessage(t *testing.T) {
@@ -88,7 +93,7 @@ func TestAlignTranscriptToleratesRewrittenNewestMessage(t *testing.T) {
 	truncated := textMessage("user", "tool output [truncated]")
 	next := textMessage("assistant", "EXAMPLE follow-up")
 
-	start, prev, ok := alignTranscript(stored, frameHashes(prompt, reply, truncated, next))
+	start, prev, ok := alignTranscript(stored, []Message{prompt, reply, truncated, next})
 	require.True(t, ok)
 	require.Equal(t, 2, start)
 	require.Equal(t, stored[1].chain, prev)
@@ -97,12 +102,12 @@ func TestAlignTranscriptToleratesRewrittenNewestMessage(t *testing.T) {
 func TestAlignTranscriptReportsUnrelatedFrames(t *testing.T) {
 	t.Parallel()
 	stored := chainIdentities(textMessage("user", "EXAMPLE prompt"))
-	_, _, ok := alignTranscript(stored, frameHashes(textMessage("user", "something else")))
+	_, _, ok := alignTranscript(stored, []Message{textMessage("user", "something else")})
 	require.False(t, ok)
-	_, _, ok = alignTranscript(nil, frameHashes(textMessage("user", "EXAMPLE prompt")))
+	_, _, ok = alignTranscript(nil, []Message{textMessage("user", "EXAMPLE prompt")})
 	require.False(t, ok)
 	// Rows stored before content hashing cannot anchor an alignment.
-	_, _, ok = alignTranscript([]messageIdentity{{content: nil, chain: nil}}, frameHashes(textMessage("user", "EXAMPLE prompt")))
+	_, _, ok = alignTranscript([]messageIdentity{{content: nil, chain: nil}}, []Message{textMessage("user", "EXAMPLE prompt")})
 	require.False(t, ok)
 }
 

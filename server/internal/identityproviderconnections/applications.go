@@ -65,7 +65,7 @@ func (s *Service) SyncApplications(ctx context.Context, payload *gen.SyncApplica
 	}
 
 	s.kickApplicationSync(ctx, logger)
-	return buildConnectionView(after), nil
+	return s.view(ctx, logger, s.db, after), nil
 }
 
 // kickApplicationSync nudges the coordinator off the request path; the

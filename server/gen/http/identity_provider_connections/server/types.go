@@ -2263,10 +2263,18 @@ type IdentityProviderConnectionActiveKeyResponseBody struct {
 type IdentityProviderConnectionChecklistItemResponseBody struct {
 	// Stable step identifier.
 	Key string `form:"key" json:"key" xml:"key"`
+	// Which phase the step belongs to: connect (the service app the connection
+	// authenticates with) or cross_app_access (the AI agent).
+	Group string `form:"group" json:"group" xml:"group"`
 	// Short step title.
 	Title string `form:"title" json:"title" xml:"title"`
 	// What to do in the console, including any value copied from this connection.
 	Description string `form:"description" json:"description" xml:"description"`
+	// Sub-steps, in order. Empty when the description says it all.
+	Details []string `form:"details" json:"details" xml:"details"`
+	// Whether the last verification observed this step done. Omitted for steps the
+	// server cannot observe; the administrator tracks those.
+	Completed *bool `form:"completed,omitempty" json:"completed,omitempty" xml:"completed,omitempty"`
 }
 
 // IdentityProviderConnectionApplicationsSyncResponseBody is used to define

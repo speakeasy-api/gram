@@ -63,7 +63,7 @@ func missingScopes(granted []string) []string {
 	return missing
 }
 
-func buildConnectionView(r connectionRows) *gen.OktaIdentityProviderConnection {
+func buildConnectionView(r connectionRows, agent AgentObservation) *gen.OktaIdentityProviderConnection {
 	var clientID *string
 	if r.clientIDSubmitted() {
 		clientID = conv.PtrEmpty(r.Managed.ClientID)
@@ -87,10 +87,25 @@ func buildConnectionView(r connectionRows) *gen.OktaIdentityProviderConnection {
 		missing = missingScopes(granted)
 	}
 
-	checklist := OktaChecklist(r.Okta.ListingMode, r.jwksURL())
+	checklist := OktaChecklist(r.Okta.ListingMode, r.jwksURL(), ChecklistSignal{
+		Checked:           r.checked() && r.lastError() == nil,
+		ClientIDSubmitted: r.clientIDSubmitted(),
+		DPoPBound:         r.Okta.DpopRequired,
+		MissingScopes:     missing,
+		Reasons:           r.reasons(),
+		AgentRecorded:     r.Okta.AgentID.Valid && r.Okta.AgentID.String != "",
+		Agent:             agent,
+	})
 	items := make([]*gen.IdentityProviderConnectionChecklistItem, 0, len(checklist))
 	for _, item := range checklist {
-		items = append(items, &gen.IdentityProviderConnectionChecklistItem{Key: item.Key, Title: item.Title, Description: item.Description})
+		items = append(items, &gen.IdentityProviderConnectionChecklistItem{
+			Key:         item.Key,
+			Group:       item.Group,
+			Title:       item.Title,
+			Description: item.Description,
+			Details:     item.Details,
+			Completed:   item.Completed,
+		})
 	}
 
 	return &gen.OktaIdentityProviderConnection{

@@ -2175,8 +2175,14 @@ func unmarshalIdentityProviderConnectionActiveKeyResponseBodyToIdentityproviderc
 func unmarshalIdentityProviderConnectionChecklistItemResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionChecklistItem(v *IdentityProviderConnectionChecklistItemResponseBody) *identityproviderconnections.IdentityProviderConnectionChecklistItem {
 	res := &identityproviderconnections.IdentityProviderConnectionChecklistItem{
 		Key:         *v.Key,
+		Group:       *v.Group,
 		Title:       *v.Title,
 		Description: *v.Description,
+		Completed:   v.Completed,
+	}
+	res.Details = make([]string, len(v.Details))
+	for i, val := range v.Details {
+		res.Details[i] = val
 	}
 
 	return res

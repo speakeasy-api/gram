@@ -3,26 +3,40 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreateOrganizationRequestBody = {
   /**
-   * Display name for the new organization.
+   * The operator confirms that domain ownership was established outside this form.
    */
-  name: string;
+  ownershipConfirmed: boolean;
+  /**
+   * Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.
+   */
+  url: string;
 };
 
 /** @internal */
 export type CreateOrganizationRequestBody$Outbound = {
-  name: string;
+  ownership_confirmed: boolean;
+  url: string;
 };
 
 /** @internal */
 export const CreateOrganizationRequestBody$outboundSchema: z.ZodMiniType<
   CreateOrganizationRequestBody$Outbound,
   CreateOrganizationRequestBody
-> = z.object({
-  name: z.string(),
-});
+> = z.pipe(
+  z.object({
+    ownershipConfirmed: z.boolean(),
+    url: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      ownershipConfirmed: "ownership_confirmed",
+    });
+  }),
+);
 
 export function createOrganizationRequestBodyToJSON(
   createOrganizationRequestBody: CreateOrganizationRequestBody,

@@ -1,12 +1,17 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { cn } from "@/lib/utils";
-import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
+import {
+  isLlmAnalyzerRuleId,
+  ruleIdCategoryLabel,
+} from "@/pages/security/rule-ids";
 import {
   getCategoryCodeForFinding,
   getRuleTitleFallback,
   isJudgeSource,
+  isLlmAnalyzerSource,
   JUDGE_SOURCES,
+  LLM_ANALYZER_SOURCE,
 } from "@/pages/security/risk-utils";
 import { useRevealAll } from "@/pages/security/reveal-all-context";
 
@@ -32,13 +37,41 @@ export function getRiskBadgeLabel(result: RiskResult): string {
 }
 
 /** Judge findings carry one rule per category, so their rule id only restates
- * the badge beside it ("prompt_injection" under PROMPT_INJECTION). */
+ * the badge beside it ("prompt_injection" under PROMPT_INJECTION). The LLM
+ * analyzer's do the same ("secret.llm" under SECRET) and would name the engine
+ * on top, so they stay hidden too. */
 export function shouldShowRiskRuleId(result: RiskResult): boolean {
-  return Boolean(result.ruleId) && !isJudgeSource(result.source);
+  return (
+    Boolean(result.ruleId) &&
+    !isJudgeSource(result.source) &&
+    !isLlmAnalyzerSource(result.source)
+  );
+}
+
+/** The short label a tool section shows beside a highlighted match: the rule
+ * id for scanner findings (it is what an exclusion expression names), the
+ * source for a judge verdict whose constant rule id adds nothing, and the
+ * rule's label for the LLM analyzer, whose ids name the engine. */
+export function sectionRiskLabel(result: RiskResult): string {
+  if (!result.ruleId || result.ruleId === "llm_judge") return result.source;
+  if (isLlmAnalyzerRuleId(result.ruleId)) {
+    return getRuleTitleFallback(result.ruleId);
+  }
+  return result.ruleId;
 }
 
 export function riskResultAnchorId(result: RiskResult): string | undefined {
   return result.chatContentPartId ?? result.chatMessageId;
+}
+
+/** Whether one finding flags a literal secret or personal datum: the scanner
+ * sources by construction, and the LLM analyzer when its rule id lands in the
+ * secret or PII category (its other rules describe behavior, not values). */
+function resultIsSensitive(result: RiskResult): boolean {
+  if (result.source === "gitleaks" || result.source === "presidio") return true;
+  if (!isLlmAnalyzerSource(result.source)) return false;
+  const ruleId = result.ruleId ?? "";
+  return ruleId.startsWith("secret.") || ruleId.startsWith("pii.");
 }
 
 /** A finding from gitleaks/presidio carries a literal secret; its match is
@@ -46,10 +79,25 @@ export function riskResultAnchorId(result: RiskResult): string | undefined {
 export function resultsAreSensitive(
   results: RiskResult[] | undefined,
 ): boolean {
-  return (
-    results?.some((r) => r.source === "gitleaks" || r.source === "presidio") ??
-    false
-  );
+  return results?.some(resultIsSensitive) ?? false;
+}
+
+/** A sensitive finding with no span the transcript could dot out on its own:
+ * the LLM analyzer reports secrets and personal data without locating them
+ * (its match is empty, its rationale may quote the value), so the only thing
+ * left to mask is the message as a whole. Scanner findings always carry a
+ * span and never qualify. */
+export function resultIsSpanlessSensitive(result: RiskResult): boolean {
+  return resultIsSensitive(result) && !matchIsMessageContent(result);
+}
+
+/** Whether a row must mask its whole body rather than individual spans, see
+ * `resultIsSpanlessSensitive`. Until the analyzer emits a redacted span the
+ * body is the smallest unit that provably covers the flagged value. */
+export function needsWholeMessageMask(
+  results: RiskResult[] | undefined,
+): boolean {
+  return results?.some(resultIsSpanlessSensitive) ?? false;
 }
 
 /** Count of distinct findings (by source/rule/match), matching the RiskBadge's
@@ -102,6 +150,10 @@ const MATCH_DISPLAY_OVERRIDES: Record<
   // description and shown on the message author chip, never message content.
   account_identity: { notMessageContent: true, shownInDescription: true },
   ...Object.fromEntries(JUDGE_SOURCES.map((s) => [s, JUDGE_MATCH_DISPLAY])),
+  // The LLM analyzer reports no spans: its match is empty and its description
+  // is the model's reasoning, which may quote the content it flagged. Same
+  // rendering as a judge verdict, so nothing tries to locate it in the text.
+  [LLM_ANALYZER_SOURCE]: JUDGE_MATCH_DISPLAY,
 };
 
 /** Whether a finding's match is a span of the message text — highlighted inline
@@ -146,6 +198,12 @@ export function maskValue(value: string): string {
   // Mask character-for-character so revealing/hiding doesn't change the text
   // length (and thus doesn't shift surrounding layout).
   return "•".repeat(value.length);
+}
+
+/** `maskValue` for a whole message body: line breaks survive so the masked
+ * block keeps the message's shape and revealing it doesn't reflow the row. */
+export function maskBlock(text: string): string {
+  return text.replace(/[^\n]/g, "•");
 }
 
 // Keep a per-row reveal toggle in sync with the panel-wide "reveal all" switch
@@ -290,7 +348,9 @@ export function collapseToMatchWindows(
 
 /** Wrap every occurrence of `matches` in `text` with a yellow highlight. When
  * `masked`, the matched characters are dotted out (the surrounding context
- * stays visible). */
+ * stays visible). With `maskWhole` the entire text is the sensitive value
+ * (see `needsWholeMessageMask`): it is dotted out as one block while masked
+ * and keeps the sensitive styling once revealed, any spans marked within. */
 export function highlightMatches(
   text: string,
   matches: string[],
@@ -298,7 +358,22 @@ export function highlightMatches(
   /** The spans are maskable (sensitive), so render them with the fixed-width
    * style in both states even when currently revealed — avoids reflow on toggle. */
   maskable = false,
+  maskWhole = false,
 ): ReactNode {
+  if (maskWhole) {
+    return (
+      <span
+        className={cn(
+          SENSITIVE_MARK_BASE,
+          masked ? SENSITIVE_MARK_MASKED : SENSITIVE_MARK_REVEALED,
+        )}
+      >
+        {masked
+          ? maskBlock(text)
+          : highlightMatches(text, matches, false, maskable)}
+      </span>
+    );
+  }
   if (matches.length === 0) return text;
 
   const merged = matchRanges(text, matches);
