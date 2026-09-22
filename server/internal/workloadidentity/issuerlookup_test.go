@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
@@ -51,7 +52,7 @@ func TestResolveIssuerByURL_PlainHTTPIssuerNeverReachesTheDatabase(t *testing.T)
 		IssuerURL:      "http://token.actions.githubusercontent.com",
 	})
 
-	require.ErrorIs(t, err, workloadidentity.ErrIssuerURLNotHTTPS)
+	require.ErrorIs(t, err, issuerurl.ErrNotHTTPS)
 	require.ErrorIs(t, err, workloadidentity.ErrIssuerURLInvalid)
 	require.NotErrorIs(t, err, workloadidentity.ErrIssuerNotFound)
 }
@@ -73,7 +74,7 @@ func TestResolveIssuerByURL_PlainHTTPRowNeverResolves(t *testing.T) {
 		ProjectID:      projectTier(tenant.projectID),
 		IssuerURL:      plainIssuer,
 	})
-	require.ErrorIs(t, err, workloadidentity.ErrIssuerURLNotHTTPS)
+	require.ErrorIs(t, err, issuerurl.ErrNotHTTPS)
 	require.NotErrorIs(t, err, workloadidentity.ErrIssuerNotFound)
 
 	// The https spelling of the same host is a different issuer, so the http
