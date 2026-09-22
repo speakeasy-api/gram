@@ -14,7 +14,7 @@ import { useState, type JSX } from "react";
  * an agent is one URL and one header rather than one entry per server. The
  * snippets below are the same pair rendered in the shape each runtime accepts.
  */
-export function agentGatewayURL(agentID: string): string {
+function agentGatewayURL(agentID: string): string {
   return `${getServerURL()}/agent-mcp/${agentID}`;
 }
 
