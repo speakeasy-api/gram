@@ -300,9 +300,6 @@ export function useIdentityAuditLogs(
   });
 }
 
-/** The most agent ids the risk panels ask about, one request each. */
-const MAX_RISK_IDENTIFIERS = 10;
-
 export type IdentityRisk = {
   data:
     | {
@@ -330,9 +327,10 @@ export function useIdentityRisk(
   const client = useGramContext();
   const { slug: gramProject } = useIdentityProject();
   const canReadRisk = useCanReadRisk();
-  const ids = identity.externalUserIds.slice(0, MAX_RISK_IDENTIFIERS);
   return useQueries({
-    queries: ids.map((externalUserId) => ({
+    // Every id, uncapped: the findings list filters on all of them, and a
+    // capped count would disagree with it.
+    queries: identity.externalUserIds.map((externalUserId) => ({
       ...buildRiskUserBreakdownQuery(client, {
         externalUserId,
         from,
