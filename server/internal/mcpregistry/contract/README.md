@@ -1,6 +1,8 @@
 # Registry record contract
 
-Source: `speakeasy-api/mcp-registry` revision
+The Gram registry validates records against the checked-in `record.schema.json`
+and its Go/browser format adapters. This contract originated from
+`speakeasy-api/mcp-registry` revision
 `c5873aaaad0a2988e39f1ed7c237006bbfb05826`,
 `packages/registry-api/src/Schema.ts`, `ServerResponse`.
 
@@ -16,8 +18,8 @@ without consulting a mutable leap-second table.
 
 Go callers use `Compile`; browser callers pass their imported `Validator` and
 `format` registry to `compile` in `formats.mjs`. Both reject unknown formats at
-initialization. These minimal adapters were brought forward from Task 2 because
-Task 0 must verify both validators; no application service is implemented here.
+initialization. Shared conformance fixtures exercise the checked-in contract in
+both implementations; normal development does not require the original repository.
 
 From the repository root:
 
@@ -33,20 +35,12 @@ The JS harness uses the existing dashboard dependency through its supported
 (their original `$id` values identify each standard resource). Browser compilation
 validates the schema itself against these offline resources before use.
 
-## Reproduce source parity
+## Provenance and baseline
 
-Supply an explicit checkout/archive of the pinned revision with its pinned
-Effect 4.0.0-rc.115 dependency installed using `aube` (outside Gram). Do not run
-Pulse acquisition scripts. Then run:
-
-```sh
-mise exec -- node server/internal/mcpregistry/contract/check-source.mjs /path/to/pinned-source
-```
-
-This checks the schema-source SHA-256, compares the canonical export structurally,
-checks all shared fixtures against the source decoder, and compares the two
-starter records to their source hashes. The export uses the source's model, not
-a second handwritten schema.
+The source revision above records the contract's provenance, not a dependency
+on an external checkout. The checked-in schema, adapters and conformance tests
+define the current Gram contract; these tests do not rerun the original source
+decoder or establish ongoing parity with changes in that repository.
 
 The baseline is only the user-approved Vercel/Linear starter, not the historical
 62-record source inventory or Stage B cutover evidence. Exact raw record bytes
