@@ -8,7 +8,6 @@ import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
 import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
-import { RequireScope } from "@/components/require-scope";
 import { useFetcher } from "@/contexts/Fetcher";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
@@ -526,9 +525,7 @@ function PluginsContent({
                     void handleObservabilityDownload(platform);
                   }}
                 />
-                <RequireScope scope="org:admin" level="section">
-                  <PlatformMCPPluginCard />
-                </RequireScope>
+                <PlatformMCPPluginCard />
               </div>
             </>
           )}
@@ -842,8 +839,10 @@ function observabilityInstallHint(
   return "Available as a direct download";
 }
 
-function PlatformMCPPluginCard(): JSX.Element {
+function PlatformMCPPluginCard(): JSX.Element | null {
   const [installOpen, setInstallOpen] = useState(false);
+  const { hasScope } = useRBAC();
+  if (!hasScope("org:admin")) return null;
 
   return (
     <Card.Entity
