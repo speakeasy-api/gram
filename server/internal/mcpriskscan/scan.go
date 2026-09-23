@@ -3,77 +3,62 @@ package mcpriskscan
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
-const (
-	SurfaceHostedMCP   = "hosted_mcp"
-	SurfacePlatformMCP = "platform_mcp"
-	SurfaceInstances   = "instances"
-	SurfaceRemoteMCP   = "remote_mcp"
-
-	MethodToolsCall     = "tools/call"
-	MethodResourcesRead = "resources/read"
-	MethodPromptsGet    = "prompts/get"
-
-	PhaseBeforeExecution = "before_execution"
-	PhaseBeforeRead      = "before_read"
-	PhaseBeforeRender    = "before_render"
-)
-
-// Event carries operation and target metadata, excluding credentials and payloads.
-// Response bodies are absent: every current seam runs before execution, reading,
-// or rendering.
-type Event struct {
-	// Surface identifies the observed serving route.
-	Surface string
-
-	// Method identifies the MCP operation, including equivalent direct tool invocations.
-	Method string
-
-	// OrganizationID identifies the organization owning the target.
-	OrganizationID string
-
-	// ProjectID identifies the project owning the target.
-	ProjectID string
-
-	// ServerID is the fronting mcp_servers row ID, empty when none exists.
-	ServerID string
-
-	// ToolsetID is the resolved toolset row ID, empty when unavailable.
-	ToolsetID string
-
-	// ToolName is the resolved name, or stable proxy URN name for external MCP; empty for resources and prompts.
-	ToolName string
-
-	// ResourceURI identifies a resource read, empty for other operations.
-	ResourceURI string
-
-	// PromptName identifies a prompt render, empty for other operations.
-	PromptName string
-
-	// Phase identifies the point reached for tracing, not a metric dimension or policy decision.
-	Phase string
+// Observer performs one bounded synchronous inspection. It cannot return a
+// decision, reject a request, or take ownership of borrowed payload bytes.
+type Observer interface {
+	Observe(ctx context.Context, subject Subject)
 }
 
-// Evaluator is the MCP-scoped risk-policy evaluation seam for both record-only
-// findings (flag policies, governance by record) and call gating (block policies).
-//
-// Scan deliberately returns no error during the observation-only phase, so an
-// observation cannot alter an outcome. Enforcement decisions and organization-wide
-// fail-open/fail-closed semantics are an AIS-688 contract, not a per-caller choice.
-// Payload readers borrow existing argument bytes independently of execution and
-// may be nil when a seam has no materialized argument bytes.
-type Evaluator interface {
-	Scan(ctx context.Context, payload io.Reader, event Event)
+// ObserverFunc adapts a function to Observer.
+type ObserverFunc func(context.Context, Subject)
+
+// Observe implements Observer.
+func (f ObserverFunc) Observe(ctx context.Context, subject Subject) {
+	f(ctx, subject)
+}
+
+// Evaluator is the final scan boundary held by mediation seams. It enforces the
+// Subject's single-owner, once-per-phase claim before invoking an Observer.
+type Evaluator struct {
+	observers []Observer
+}
+
+// NewEvaluator wraps observers with ownership and duplicate protection.
+func NewEvaluator(observers ...Observer) *Evaluator {
+	return &Evaluator{observers: observers}
+}
+
+// PrependObserver composes test or instrumentation observation without
+// exposing a second scan boundary that could bypass the subject claim.
+func PrependObserver(observer Observer, next *Evaluator) *Evaluator {
+	if next == nil {
+		return NewEvaluator(observer)
+	}
+	observers := make([]Observer, 0, len(next.observers)+1)
+	observers = append(observers, observer)
+	observers = append(observers, next.observers...)
+	return NewEvaluator(observers...)
+}
+
+// Scan synchronously evaluates an authoritative subject at most once.
+func (e *Evaluator) Scan(ctx context.Context, subject Subject) {
+	if e == nil || !subject.claimEvaluation() {
+		return
+	}
+	for _, observer := range e.observers {
+		if observer != nil {
+			observer.Observe(ctx, subject)
+		}
+	}
 }
 
 type noop struct {
@@ -84,7 +69,7 @@ type noop struct {
 
 // NewNoop returns an Evaluator that records reachability and the scan cost baseline,
 // without evaluating policies, recording findings, or gating calls.
-func NewNoop(tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) Evaluator {
+func NewNoop(tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) *Evaluator {
 	const scope = "github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	meter := meterProvider.Meter(scope)
 	scans, err := meter.Int64Counter(
@@ -104,21 +89,20 @@ func NewNoop(tracerProvider trace.TracerProvider, meterProvider metric.MeterProv
 	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName("mcp.risk.scan.duration"), attr.SlogError(err))
 	}
-	return &noop{
+	return NewEvaluator(&noop{
 		tracer:   tracerProvider.Tracer(scope),
 		scans:    scans,
 		duration: duration,
-	}
+	})
 }
 
-func (n *noop) Scan(ctx context.Context, _ io.Reader, event Event) {
+func (n *noop) Observe(ctx context.Context, subject Subject) {
+	event := subject.Event
 	start := time.Now()
 	surface := attribute.String("gram.mcp.risk.scan.surface", event.Surface)
 	method := attribute.String("gram.mcp.risk.scan.method", event.Method)
-	phase := attribute.String("gram.mcp.risk.scan.phase", event.Phase)
-	identity, stamped := mcpidentity.FromContext(ctx)
-	// Deliberately ignore the payload reader and select identifiers only.
-	// Never read or attach customer payloads to tracing.
+	phase := attribute.String("gram.mcp.risk.scan.phase", event.Phase())
+	// Deliberately select Event metadata only. Never read or attach Subject.Payload.
 	_, span := n.tracer.Start(ctx, "mcp.risk.scan", trace.WithAttributes(
 		surface,
 		method,
@@ -130,9 +114,12 @@ func (n *noop) Scan(ctx context.Context, _ io.Reader, event Event) {
 		attr.ToolName(event.ToolName),
 		attr.ResourceURI(event.ResourceURI),
 		attribute.String("gram.mcp.risk.scan.prompt_name", event.PromptName),
-		attribute.Bool("gram.mcp.risk.scan.identity_stamped", stamped),
-		attribute.String("gram.mcp.risk.scan.principal_kind", string(identity.Kind())),
-		attr.UserID(identity.UserID()),
+		attribute.String("gram.mcp.risk.scan.execution_id", event.ExecutionID()),
+		attribute.String("gram.mcp.risk.scan.meta_mcp_server_id", event.MetaServerID),
+		attribute.Bool("gram.mcp.risk.scan.evaluation_owner", subject.EvaluationOwner()),
+		attribute.Bool("gram.mcp.risk.scan.identity_stamped", event.IdentityStamped()),
+		attribute.String("gram.mcp.risk.scan.principal_kind", string(event.Principal().Kind())),
+		attr.UserID(event.Principal().UserID()),
 	))
 	span.End()
 

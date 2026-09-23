@@ -68,7 +68,7 @@ type ProxyManager struct {
 	authz          *authz.Engine
 	posthog        *posthog.Posthog
 	telemLogger    *tm.Logger
-	scanEvaluator  mcpriskscan.Evaluator
+	scanEvaluator  *mcpriskscan.Evaluator
 
 	proxyMetrics         *proxy.Metrics
 	mcpMetrics           *ProxyMetrics
@@ -294,11 +294,12 @@ func (f *ProxyManager) BuildTarget(
 			OrganizationID: organizationID,
 			ProjectID:      projectID,
 			ServerID:       identity.McpServerID,
+			MetaServerID:   identity.MetaMCPServerID,
 			ToolsetID:      "",
 			ToolName:       "",
 			ResourceURI:    "",
 			PromptName:     "",
-			Phase:          mcpriskscan.PhaseBeforeExecution,
+			ChatID:         "",
 		},
 	))
 
