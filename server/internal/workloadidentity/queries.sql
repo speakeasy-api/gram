@@ -44,16 +44,41 @@ ORDER BY created_at ASC, id ASC;
 -- organization, and the project arm is not true for a NULL @project_id, so an
 -- organization-scoped caller sees only organization-tier rows.
 --
--- Exact equality on subject, compared as the platform minted it. No expression
--- around the column, which would make the lookup index unusable.
+-- Two ways to match, chosen per row by match_kind. The exact arm compares the
+-- subject as the platform minted it, with no expression around the column, so it
+-- still rides workload_identity_admissions_lookup_idx. The prefix arm asks
+-- whether a stored value is a leading run of the presented subject, which is the
+-- opposite of what a btree on subject answers, so it scans instead — bounded by
+-- the (organization, issuer) columns above and by how few admissions an issuer
+-- has.
+--
+-- The prefix arm additionally requires the issuer to permit prefix matching, and
+-- that is checked HERE rather than trusted from write time. A write-side gate
+-- alone would be advisory: any future writer, a seed or a hand-run statement
+-- could leave a prefix row behind, and turning the issuer's permission off would
+-- not revoke rows already written. Enforced on read, clearing
+-- allow_prefix_admission is an immediate and complete kill switch for every
+-- prefix rule under that issuer.
+--
+-- The join also pins the issuer live. Resolution upstream already excludes a
+-- soft-deleted issuer, so this changes no outcome today; it means a caller that
+-- ever reaches admission another way cannot be admitted by an issuer the
+-- organization has stopped trusting.
 SELECT EXISTS (
   SELECT 1
-  FROM workload_identity_admissions
-  WHERE organization_id = @organization_id
-    AND workload_issuer_id = @workload_issuer_id
-    AND subject = @subject
-    AND (project_id = @project_id OR project_id IS NULL)
-    AND deleted IS FALSE
+  FROM workload_identity_admissions a
+  JOIN workload_issuers i
+    ON i.organization_id = a.organization_id
+    AND i.id = a.workload_issuer_id
+  WHERE a.organization_id = @organization_id
+    AND a.workload_issuer_id = @workload_issuer_id
+    AND (a.project_id = @project_id OR a.project_id IS NULL)
+    AND a.deleted IS FALSE
+    AND i.deleted IS FALSE
+    AND (
+      (a.match_kind = 'exact' AND a.subject = @subject)
+      OR (a.match_kind = 'prefix' AND i.allow_prefix_admission AND starts_with(@subject, a.subject))
+    )
 );
 
 -- name: ResolveWorkloadAgentAssignment :one
@@ -65,10 +90,23 @@ SELECT EXISTS (
 -- admission must not change what the workload may do under another. That is
 -- also why no project arm appears here, unlike WorkloadIdentityIsAdmitted.
 --
--- At most one row can match: workload_agent_assignments_workload_key is unique
--- on these three columns for live rows, which is where "one agent per workload"
--- is enforced. Unassigning is a soft delete, so deleted rows are excluded or the
--- workload would keep the authority an administrator believes they removed.
+-- More than one row can match, so "one agent per workload" is RESOLVED here
+-- rather than enforced by uniqueness. A prefix assignment covering an issuer's
+-- whole fleet and an exact assignment naming one principal can both cover the
+-- same subject, which is the point: a default for everything, with individual
+-- principals pinned elsewhere. The ORDER BY picks the most specific — exact
+-- before prefix, and a longer prefix before a shorter one — and LIMIT 1 makes
+-- the answer deterministic. workload_agent_assignments_workload_key still stops
+-- the same rule being written twice.
+--
+-- Unassigning is a soft delete, so deleted rows are excluded or the workload
+-- would keep the authority an administrator believes they removed.
+--
+-- The prefix arm requires the issuer to permit prefix matching, checked here for
+-- the same reason as in WorkloadIdentityIsAdmitted: clearing
+-- allow_prefix_admission must revoke prefix rules already written, not just stop
+-- new ones. Admission and assignment have to agree on this, or a subject admitted
+-- by prefix would resolve to no agent and be refused for the wrong reason.
 --
 -- The issuer must be live too. Deleting an issuer soft-deletes only its own
 -- row, so without the join a session minted before the delete would keep the
@@ -80,6 +118,11 @@ JOIN workload_issuers i
   AND i.id = a.workload_issuer_id
 WHERE a.organization_id = @organization_id
   AND a.workload_issuer_id = @workload_issuer_id
-  AND a.subject = @subject
   AND a.deleted IS FALSE
-  AND i.deleted IS FALSE;
+  AND i.deleted IS FALSE
+  AND (
+    (a.match_kind = 'exact' AND a.subject = @subject)
+    OR (a.match_kind = 'prefix' AND i.allow_prefix_admission AND starts_with(@subject, a.subject))
+  )
+ORDER BY (a.match_kind = 'exact') DESC, length(a.subject) DESC
+LIMIT 1;

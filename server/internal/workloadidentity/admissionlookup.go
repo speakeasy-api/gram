@@ -32,6 +32,12 @@ type AdmissionParams struct {
 // assertion says only that the platform minted it. Presence here is what makes
 // the machine ours.
 //
+// An admission matches the whole subject, or a leading run of it when the row
+// says prefix and its issuer permits prefix matching. Prefix exists for
+// platforms that mint an identity per resource, where the subject cannot be
+// known before the first assertion arrives; see MatchKind for where it is sound
+// and where it is not.
+//
 // False and an error must never be collapsed: false is a decision, an error is
 // the absence of one.
 func IsAdmitted(ctx context.Context, db repo.DBTX, params AdmissionParams) (bool, error) {
