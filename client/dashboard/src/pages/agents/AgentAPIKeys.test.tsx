@@ -239,9 +239,7 @@ function setup(current = agent) {
   };
 }
 async function beginCreate() {
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Create API key" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Issue a key" }));
   if (!screen.queryByRole("button", { name: "Choose fixture server" })) return;
   fireEvent.click(
     screen.getByRole("button", { name: "Choose fixture server" }),
@@ -470,7 +468,7 @@ describe("Agent API keys", () => {
     });
     expect(mocks.list).not.toHaveBeenCalled();
     expect(screen.getByText(/do not have permission/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Create API key" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Issue a key" })).toBeNull();
   });
   it.each(["suspended", "revoked"] as const)(
     "keeps list and revoke usable for %s agents but blocks issuance",
@@ -480,12 +478,12 @@ describe("Agent API keys", () => {
       expect(
         (
           screen.getByRole("button", {
-            name: "Create API key",
+            name: "Issue a key",
           }) as HTMLButtonElement
         ).disabled,
       ).toBe(true);
       expect(
-        screen.getByRole("button", { name: "Revoke API key" }),
+        screen.getByRole("button", { name: /^Revoke API key/ }),
       ).toBeTruthy();
     },
   );
@@ -495,7 +493,7 @@ describe("Agent API keys", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Create API key",
+          name: "Issue a key",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -503,7 +501,7 @@ describe("Agent API keys", () => {
   it("lists by agent and confirms revocation by credential id", async () => {
     setup();
     fireEvent.click(
-      await screen.findByRole("button", { name: "Revoke API key" }),
+      await screen.findByRole("button", { name: /^Revoke API key/ }),
     );
     expect(mocks.revoke).not.toHaveBeenCalled();
     mocks.list.mockResolvedValue({ keys: [] });
@@ -514,7 +512,7 @@ describe("Agent API keys", () => {
         expect.anything(),
       ),
     );
-    expect(await screen.findByText("No API keys yet")).toBeTruthy();
+    expect(await screen.findByText(/No key issued yet/)).toBeTruthy();
     expect(mocks.list).toHaveBeenCalledWith(
       { agentId: agent.id },
       { sessionHeaderGramSession: "" },
@@ -652,7 +650,7 @@ describe("Agent API keys", () => {
     async (kind) => {
       const { change } = setup();
       fireEvent.click(
-        await screen.findByRole("button", { name: "Revoke API key" }),
+        await screen.findByRole("button", { name: /^Revoke API key/ }),
       );
       mocks.flag = "disabled";
       change();
@@ -720,9 +718,7 @@ describe("Agent API keys", () => {
     async (status) => {
       mocks.flag = status;
       setup();
-      expect(
-        screen.queryByRole("button", { name: "Create API key" }),
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: "Issue a key" })).toBeNull();
       expect(mocks.listDelegableGrants).not.toHaveBeenCalled();
       expect(mocks.list).not.toHaveBeenCalled();
     },
@@ -738,7 +734,7 @@ describe("Agent API keys", () => {
           statusCode === 404 ? "unavailable" : "Could not load",
         ),
       );
-      expect(screen.queryByText("No API keys yet")).toBeNull();
+      expect(screen.queryByText(/No key issued yet/)).toBeNull();
     },
   );
   it("explains issuance validation failures without displaying server secrets", async () => {
@@ -756,7 +752,7 @@ describe("Agent API keys", () => {
     mocks.revoke.mockRejectedValue(new Error("failed"));
     setup();
     fireEvent.click(
-      await screen.findByRole("button", { name: "Revoke API key" }),
+      await screen.findByRole("button", { name: /^Revoke API key/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Confirm revoke" }));
     expect(await screen.findByRole("alert")).toHaveProperty(
@@ -915,15 +911,21 @@ describe("Agent API keys", () => {
     const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
     mocks.list.mockResolvedValue({ keys: [{ ...key, expiresAt }] });
     setup();
-    const rendered = await screen.findByText(expiresAt.toLocaleString());
-    expect(rendered.getAttribute("datetime")).toBe(expiresAt.toISOString());
+    await screen.findByText(key.name);
+    const rendered = document.querySelector(
+      `time[datetime="${expiresAt.toISOString()}"]`,
+    );
+    expect(rendered).toBeTruthy();
+    // A day-precision label, and never an elapsed-time one: a 90-day key read
+    // "3 months ago" when this column was relative.
+    expect(rendered?.textContent).toContain(String(expiresAt.getFullYear()));
     expect(screen.queryByText(/ago/)).toBeNull();
   });
   it("shows loading separately from an empty list", () => {
     mocks.list.mockImplementation(() => new Promise(() => {}));
     setup();
     expect(screen.getByText("Loading API keys…")).toBeTruthy();
-    expect(screen.queryByText("No API keys yet")).toBeNull();
+    expect(screen.queryByText(/No key issued yet/)).toBeNull();
   });
   it("requests inventory-scoped candidates and issues only selected MCP connect grants", async () => {
     mocks.serverScoping = true;
@@ -1005,7 +1007,7 @@ describe("Agent API keys", () => {
       if (state === "empty") mocks.listDelegableGrants.mockResolvedValue([]);
       setup();
       fireEvent.click(
-        await screen.findByRole("button", { name: "Create API key" }),
+        await screen.findByRole("button", { name: "Issue a key" }),
       );
       fireEvent.click(
         screen.getByRole("button", { name: "Choose fixture server" }),
@@ -1032,7 +1034,7 @@ describe("Agent API keys", () => {
     mocks.flag = "disabled";
     change();
     expect(screen.queryByText("Example key")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Create API key" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Issue a key" })).toBeNull();
     expect(mocks.listDelegableGrants).not.toHaveBeenCalled();
   });
   it.each([403, 500])(

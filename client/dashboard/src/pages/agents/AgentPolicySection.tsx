@@ -41,9 +41,8 @@ export function AgentPolicySection({
       <SettingsSection.Header>
         <SettingsSection.Title>Permissions</SettingsSection.Title>
         <SettingsSection.Description>
-          The most this agent may ever be delegated. Adding a permission here
-          grants nothing on its own — each API key is narrowed again at
-          issuance, against the owner's live permissions and your own.
+          The ceiling for this agent. Each key is narrowed again when it is
+          issued, so adding a permission here grants nothing on its own.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>

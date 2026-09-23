@@ -3,13 +3,13 @@ import {
   FormPage,
   ResourceListPage,
   SettingsPage,
-  SettingsSection,
 } from "@/components/page-templates";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/Avatar";
 import { Table, type Column } from "@/components/ui/Table";
 import { useSdkClient } from "@/contexts/Sdk";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
@@ -39,7 +39,6 @@ import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AgentAPIKeys } from "./AgentAPIKeys";
-import { AgentGatewayInstall } from "./AgentGatewayInstall";
 import {
   agentPolicyGrantsFromDraft,
   invalidateAgentPolicy,
@@ -426,7 +425,7 @@ function AgentSettings({
   if (searchParams.get("credential") === "new")
     return (
       <FormPage
-        title="Create API key"
+        title="Issue a key"
         description={`Choose what ${agentQuery.data.name} can access.`}
         width="wide"
         primaryAction={
@@ -451,29 +450,29 @@ function AgentSettings({
   return (
     <SettingsPage
       title={agentQuery.data.name}
-      description="Manage this agent's identity and lifecycle."
+      description={<AgentSummary agent={agentQuery.data} />}
       primaryAction={
-        <Button variant="secondary" onClick={onBack}>
-          <Button.LeftIcon>
-            <ArrowLeft className="size-4" />
-          </Button.LeftIcon>
-          <Button.Text>All agents</Button.Text>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={onBack}>
+            <Button.LeftIcon>
+              <ArrowLeft className="size-4" />
+            </Button.LeftIcon>
+            <Button.Text>All agents</Button.Text>
+          </Button>
+          <RenameAgentButton agent={agentQuery.data} refresh={refresh} />
+        </div>
       }
     >
-      <AgentIdentity
-        key={`identity-${agentQuery.data.id}`}
+      {/* Four sections, in the order the work happens: point a runtime at
+          this identity, decide what it may reach, see who is acting as it,
+          and end it. What used to be an Identity card is in the header. */}
+      <AgentAPIKeys
         agent={agentQuery.data}
-        refresh={refresh}
+        onCreate={() => setSearchParams({ id: agentID, credential: "new" })}
       />
       <AgentPolicySection
         key={`policy-${agentQuery.data.id}`}
         agent={agentQuery.data}
-      />
-      <AgentConnect agent={agentQuery.data} />
-      <AgentAPIKeys
-        agent={agentQuery.data}
-        onCreate={() => setSearchParams({ id: agentID, credential: "new" })}
       />
       <ManagedAgentSessions
         key={`sessions-${agentQuery.data.id}`}
@@ -489,84 +488,80 @@ function AgentSettings({
 }
 
 /**
- * The gateway address is not a secret, so it belongs on the agent page rather
- * than only on the screen that issues a key. Someone reconnecting a machine
- * needs the URL and the shape their runtime wants; they should not have to
- * mint a credential to read them again.
+ * The durable facts about the identity — who owns it, what principal it is,
+ * whether it is live. They belong beside the name, not in a section of their
+ * own: nobody comes to this page to read them.
  */
-function AgentConnect({ agent }: { agent: ManagedAgent }) {
+function AgentSummary({ agent }: { agent: ManagedAgent }) {
   return (
-    <SettingsSection>
-      <SettingsSection.Header>
-        <SettingsSection.Title>Connect</SettingsSection.Title>
-        <SettingsSection.Description>
-          Where this agent's runtime points. Its key is shown only when issued.
-        </SettingsSection.Description>
-      </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body>
-          <AgentGatewayInstall agentID={agent.id} secret={null} />
-        </SettingsSection.Body>
-      </SettingsSection.Panel>
-    </SettingsSection>
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <LifecycleBadge lifecycle={agent.lifecycle} />
+      <AgentOwner agent={agent} />
+      <code className="text-muted-foreground text-xs">agent:{agent.id}</code>
+    </span>
   );
 }
 
-function AgentIdentity({
+/** Renaming is rare and never the reason for the visit, so it is a dialog
+ * rather than a form the page carries at all times. */
+function RenameAgentButton({
   agent,
   refresh,
 }: {
   agent: ManagedAgent;
   refresh: () => void;
 }) {
+  const [open, setOpen] = useState(false);
   const [name, setName] = useState(agent.name);
   const rename = useRenameAgentMutation({
     onSuccess: () => {
       toast.success("Agent renamed");
+      setOpen(false);
       refresh();
     },
     onError: (error) => toast.error(error.message || "Unable to rename agent"),
   });
 
+  if (!agent.permissions.write) return null;
   return (
-    <SettingsSection>
-      <SettingsSection.Header>
-        <SettingsSection.Title>Identity</SettingsSection.Title>
-        <SettingsSection.Description>
-          The principal ID and owner are durable. The display name can change.
-        </SettingsSection.Description>
-      </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body>
-          <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-3 text-sm">
-            <dt className="text-muted-foreground">Principal</dt>
-            <dd className="font-mono">agent:{agent.id}</dd>
-            <dt className="text-muted-foreground">Owner</dt>
-            <dd>
-              <AgentOwner agent={agent} />
-            </dd>
-            <dt className="text-muted-foreground">Lifecycle</dt>
-            <dd>
-              <LifecycleBadge lifecycle={agent.lifecycle} />
-            </dd>
-          </dl>
-          <div className="max-w-xl space-y-2 pt-2">
-            <Label htmlFor="managed-agent-name">Name</Label>
-            <Input
-              id="managed-agent-name"
-              value={name}
-              onChange={setName}
-              maxLength={120}
-              disabled={!agent.permissions.write || rename.isPending}
-            />
-          </div>
-        </SettingsSection.Body>
-        <SettingsSection.Footer>
-          <Text muted small>
-            {agent.permissions.write
-              ? "Name changes are recorded in the organization audit log."
-              : "You have read-only access to this agent."}
-          </Text>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (rename.isPending) return;
+        setOpen(next);
+        if (next) setName(agent.name);
+      }}
+    >
+      <Dialog.Trigger asChild>
+        <Button variant="secondary">Rename</Button>
+      </Dialog.Trigger>
+      <Dialog.Content>
+        <Dialog.Header>
+          <Dialog.Title>Rename agent</Dialog.Title>
+          <Dialog.Description>
+            The principal ID and its issued keys are unaffected. The change is
+            recorded in the organization audit log.
+          </Dialog.Description>
+        </Dialog.Header>
+        <div className="space-y-2">
+          <Label htmlFor="managed-agent-name">Name</Label>
+          <Input
+            id="managed-agent-name"
+            value={name}
+            onChange={setName}
+            maxLength={120}
+            disabled={rename.isPending}
+            autoFocus
+          />
+        </div>
+        <Dialog.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setOpen(false)}
+            disabled={rename.isPending}
+          >
+            Cancel
+          </Button>
           <Button
             onClick={() =>
               rename.mutate({
@@ -576,17 +571,14 @@ function AgentIdentity({
               })
             }
             disabled={
-              !agent.permissions.write ||
-              !name.trim() ||
-              name.trim() === agent.name ||
-              rename.isPending
+              !name.trim() || name.trim() === agent.name || rename.isPending
             }
           >
-            Save name
+            Save
           </Button>
-        </SettingsSection.Footer>
-      </SettingsSection.Panel>
-    </SettingsSection>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 
@@ -643,62 +635,55 @@ function AgentLifecycle({
 
   return (
     <>
-      <SettingsSection>
-        <SettingsSection.Header>
-          <SettingsSection.Title>Availability</SettingsSection.Title>
-          <SettingsSection.Description>
-            Suspension is reversible. It blocks credentials without changing the
-            owner or stored policy.
-          </SettingsSection.Description>
-        </SettingsSection.Header>
-        <SettingsSection.Panel>
-          <SettingsSection.Body className="flex items-center justify-between gap-6">
-            <div>
-              <Text className="font-medium">Agent is {agent.lifecycle}</Text>
-              <Text muted small className="mt-1">
-                {canWrite
-                  ? "Lifecycle changes take effect for new authorization immediately."
-                  : "You do not have permission to change this lifecycle."}
-              </Text>
-            </div>
-            {agent.lifecycle === "suspended" ? (
-              <Button
-                onClick={() =>
-                  resume.mutate({
-                    request: { agentIDForm: { agentId: agent.id } },
-                  })
-                }
-                disabled={!canWrite || pending}
-              >
-                Resume
-              </Button>
-            ) : agent.lifecycle === "active" ? (
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  suspend.mutate({
-                    request: { agentIDForm: { agentId: agent.id } },
-                  })
-                }
-                disabled={!canWrite || pending}
-              >
-                Suspend
-              </Button>
-            ) : null}
-          </SettingsSection.Body>
-        </SettingsSection.Panel>
-      </SettingsSection>
-
+      {/* Suspension used to carry a section of its own, which put a reversible
+          switch as far from revocation as the page allowed. All four lifecycle
+          moves now sit together, ordered by how final they are. */}
       <DangerSettingsSection>
         <DangerSettingsSection.Header>
-          <DangerSettingsSection.Title>Danger zone</DangerSettingsSection.Title>
+          <DangerSettingsSection.Title>Lifecycle</DangerSettingsSection.Title>
           <DangerSettingsSection.Description>
-            Revocation is terminal. Deletion releases the name but retains audit
-            history.
+            Suspension is reversible. Revocation is terminal, and deletion
+            releases the name while keeping the audit history.
           </DangerSettingsSection.Description>
         </DangerSettingsSection.Header>
         <DangerSettingsSection.Panel>
           <DangerSettingsSection.Body className="space-y-5">
+            {agent.lifecycle === "suspended" ? (
+              <LifecycleAction
+                title="Resume agent"
+                description="Let this agent authenticate again with its existing keys."
+                action={
+                  <Button
+                    onClick={() =>
+                      resume.mutate({
+                        request: { agentIDForm: { agentId: agent.id } },
+                      })
+                    }
+                    disabled={!canWrite || pending}
+                  >
+                    Resume
+                  </Button>
+                }
+              />
+            ) : agent.lifecycle === "active" ? (
+              <LifecycleAction
+                title="Suspend agent"
+                description="Block its credentials without changing the owner or stored policy. Reversible."
+                action={
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      suspend.mutate({
+                        request: { agentIDForm: { agentId: agent.id } },
+                      })
+                    }
+                    disabled={!canWrite || pending}
+                  >
+                    Suspend
+                  </Button>
+                }
+              />
+            ) : null}
             {agent.lifecycle !== "revoked" && (
               <DangerAction
                 title="Revoke agent"
@@ -733,6 +718,29 @@ function AgentLifecycle({
         </DangerSettingsSection.Panel>
       </DangerSettingsSection>
     </>
+  );
+}
+
+/** A lifecycle row: what it does, and the control that does it. */
+function LifecycleAction({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action: JSX.Element;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-6 border-b pb-5 last:border-b-0 last:pb-0">
+      <div>
+        <Text className="font-medium">{title}</Text>
+        <Text muted small className="mt-1">
+          {description}
+        </Text>
+      </div>
+      <div className="flex shrink-0 gap-2">{action}</div>
+    </div>
   );
 }
 

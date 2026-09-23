@@ -7,7 +7,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
-import { HumanizeDateTime } from "@/lib/dates";
+import { HumanizeDateTime, dateTimeFormatters } from "@/lib/dates";
 
 /** Presentation model, populated only by the agent-scoped sessions endpoint. */
 export type AgentSessionRow = {
@@ -35,6 +35,20 @@ export type AgentSessionsSectionProps = {
   loadMoreError?: boolean;
   onLoadMore?: () => void;
 };
+
+/** The day, with the exact moment on hover — the shape credential tables on
+ * the agent page share. */
+function SessionDate({ date }: { date: Date }): JSX.Element {
+  return (
+    <time
+      className="tabular-nums"
+      title={dateTimeFormatters.full.format(date)}
+      dateTime={date.toISOString()}
+    >
+      {dateTimeFormatters.day.format(date)}
+    </time>
+  );
+}
 
 export function AgentSessionsSection({
   sessions,
@@ -121,31 +135,41 @@ export function AgentSessionsSection({
     {
       key: "issuerSlug",
       header: "Issuer",
-      render: (session) => session.issuerSlug || "Unknown issuer",
+      // Issuer slugs are long and hyphenated; an auto column wrapped them
+      // down three lines and left the row taller than every other one.
+      width: "200px",
+      render: (session) => (
+        <span className="min-w-0 truncate" title={session.issuerSlug}>
+          {session.issuerSlug || "Unknown issuer"}
+        </span>
+      ),
     },
     {
       key: "createdAt",
       header: "Created",
-      render: (session) => <HumanizeDateTime date={session.createdAt} />,
+      width: "160px",
+      render: (session) => <SessionDate date={session.createdAt} />,
     },
     {
       key: "lastUsedAt",
       header: "Last used",
+      width: "140px",
+      // The one column where elapsed time is the answer: "2 days ago" says
+      // whether this session is still in use, which a date does not.
       render: (session) =>
         session.lastUsedAt ? (
           <HumanizeDateTime date={session.lastUsedAt} />
         ) : (
-          "Unknown"
+          "Never"
         ),
     },
     {
       key: "refreshExpiresAt",
       header: "Expires",
+      width: "160px",
       render: (session) =>
         session.refreshExpiresAt ? (
-          <time dateTime={session.refreshExpiresAt.toISOString()}>
-            {session.refreshExpiresAt.toLocaleString()}
-          </time>
+          <SessionDate date={session.refreshExpiresAt} />
         ) : (
           "Unknown"
         ),
@@ -153,6 +177,7 @@ export function AgentSessionsSection({
     {
       key: "status",
       header: "Status",
+      width: "110px",
       render: (session) => (
         <Badge
           size="sm"
@@ -196,8 +221,8 @@ export function AgentSessionsSection({
       <SettingsSection.Header>
         <SettingsSection.Title>Sessions</SettingsSection.Title>
         <SettingsSection.Description>
-          Sessions authorized to act as this agent. Revocation prevents further
-          use of a session.
+          The clients acting as this agent right now. Revoking one stops it
+          without touching the agent's keys.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>

@@ -29,6 +29,7 @@ import { Table, type Column } from "@/components/ui/Table";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { Key } from "@gram/client/models/components/key.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { dateTimeFormatters } from "@/lib/dates";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import {
   buildRequestedGrants,
@@ -78,17 +79,21 @@ export function AgentAPIKeys({
         onBusy={onBusy}
       />
     );
+  // The identity kept here is a stand-in for an agent that runs somewhere
+  // else, so the page's subject is provisioning: the endpoint to point that
+  // runtime at, the keys handed out to do it, and nothing in between.
   return (
     <SettingsSection>
       <SettingsSection.Header>
-        <SettingsSection.Title>API keys</SettingsSection.Title>
+        <SettingsSection.Title>Provision</SettingsSection.Title>
         <SettingsSection.Description>
-          Credentials delegated to this agent, limited by its policy, its
-          owner's live permissions, and your own.
+          Point the agent's runtime here, then issue it a key to authenticate
+          with.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
-        <SettingsSection.Body>
+        <SettingsSection.Body className="space-y-6">
+          <AgentGatewayInstall agentID={agent.id} secret={null} />
           <AgentAPIKeysContent
             key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.authorize}`}
             agent={agent}
@@ -100,6 +105,23 @@ export function AgentAPIKeys({
         </SettingsSection.Body>
       </SettingsSection.Panel>
     </SettingsSection>
+  );
+}
+
+/**
+ * One date shape for every credential column on this page: the day, with the
+ * exact moment on hover. The page previously mixed a numeric locale string, a
+ * truncated timestamp and a relative label in adjacent columns.
+ */
+function KeyDate({ date }: { date: Date }): JSX.Element {
+  return (
+    <time
+      className="tabular-nums"
+      title={dateTimeFormatters.full.format(date)}
+      dateTime={date.toISOString()}
+    >
+      {dateTimeFormatters.day.format(date)}
+    </time>
   );
 }
 
@@ -519,46 +541,28 @@ function AgentAPIKeysContent({
     {
       key: "createdAt",
       header: "Created",
+      width: "160px",
       // Which key a machine is holding is usually remembered as when it was
       // issued, so the age is part of telling two keys apart.
       render: (key) =>
         // The field is typed as always present, but an older row read back
         // without it must not take the whole table down with it.
-        key.createdAt ? (
-          <time
-            className="min-w-0 truncate"
-            title={key.createdAt.toLocaleString()}
-            dateTime={key.createdAt.toISOString()}
-          >
-            {key.createdAt.toLocaleDateString()}
-          </time>
-        ) : (
-          "—"
-        ),
+        key.createdAt ? <KeyDate date={key.createdAt} /> : "—",
     },
     {
       key: "expiresAt",
       header: "Expires",
+      width: "160px",
       // Absolute, like agent session expiry: a relative label reads a future
       // expiry as elapsed time, so a fresh 90-day key showed "3 months ago".
-      render: (key) =>
-        key.expiresAt ? (
-          // Table cells clip their overflow, so a long localized date needs a
-          // truncation and the full value on hover.
-          <time
-            className="min-w-0 truncate"
-            title={key.expiresAt.toLocaleString()}
-            dateTime={key.expiresAt.toISOString()}
-          >
-            {key.expiresAt.toLocaleString()}
-          </time>
-        ) : (
-          "—"
-        ),
+      render: (key) => (key.expiresAt ? <KeyDate date={key.expiresAt} /> : "—"),
     },
     {
       key: "id",
       header: "",
+      // A fixed action column, so the control never lands half-clipped at the
+      // table's edge the way an auto-sized one did.
+      width: "120px",
       render: (key) => (
         <Button
           size="sm"
@@ -567,8 +571,9 @@ function AgentAPIKeysContent({
             setError(null);
             setRevoke(key);
           }}
+          aria-label={`Revoke API key ${key.name}`}
         >
-          Revoke API key
+          Revoke
         </Button>
       ),
     },
@@ -598,6 +603,21 @@ function AgentAPIKeysContent({
               </Button>
             </div>
           ) : null}
+          <div className="flex items-center justify-between gap-4">
+            <Text small className="font-medium">
+              Keys
+            </Text>
+            <Button
+              size="sm"
+              variant={knownKeys?.length ? "secondary" : "primary"}
+              disabled={!canIssue || unavailable}
+              onClick={() => {
+                onCreate?.();
+              }}
+            >
+              Issue a key
+            </Button>
+          </div>
           {knownKeys?.length ? (
             <Table
               data={knownKeys}
@@ -605,22 +625,19 @@ function AgentAPIKeysContent({
               rowKey={(key) => key.id}
             />
           ) : keys.data ? (
-            <Text muted>No API keys yet</Text>
+            // The state that matters most on this page: an identity nothing
+            // is holding yet, and the one step that changes that.
+            <Text muted small>
+              No key issued yet. The agent cannot authenticate until you issue
+              one and install it where it runs.
+            </Text>
           ) : null}
           {!canIssue && (
-            <Text muted>
+            <Text muted small>
               Issuance requires an active agent with a valid owner and
               credential authorization. Existing keys can still be revoked.
             </Text>
           )}
-          <Button
-            disabled={!canIssue || unavailable}
-            onClick={() => {
-              onCreate?.();
-            }}
-          >
-            Create API key
-          </Button>
         </>
       )}
       {creation && open && enabled && (

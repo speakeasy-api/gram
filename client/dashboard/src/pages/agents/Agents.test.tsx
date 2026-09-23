@@ -53,7 +53,7 @@ vi.mock("./AgentAPIKeys", () => ({
       </>
     ) : (
       <div>
-        API keys<button onClick={onCreate}>Create API key</button>
+        Provision<button onClick={onCreate}>Issue a key</button>
       </div>
     ),
 }));
@@ -287,7 +287,8 @@ describe("Agent owner access", () => {
     const consoleError = vi.spyOn(console, "error");
     try {
       setup();
-      expect(screen.getByText("Identity")).toBeTruthy();
+      // The identity facts live in the page header now, not a section.
+      expect(screen.getByText("agent:agent_example")).toBeTruthy();
       expect(screen.getByText("Sessions")).toBeTruthy();
       expect(
         consoleError.mock.calls.filter((args) =>
@@ -398,9 +399,7 @@ describe("Agent owner access", () => {
   it("routes key creation to a dedicated page and returns to the agent", async () => {
     mocks.params = new URLSearchParams({ id: "agent_example" });
     const view = setup();
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Create API key" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Issue a key" }));
     expect(mocks.navigate).toHaveBeenCalledWith({
       id: "agent_example",
       credential: "new",
@@ -410,9 +409,7 @@ describe("Agent owner access", () => {
       credential: "new",
     });
     view.rerenderPage();
-    expect(
-      screen.getByRole("heading", { name: "Create API key" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Issue a key" })).toBeTruthy();
     expect(
       screen.getByText("Choose what Example agent can access."),
     ).toBeTruthy();
