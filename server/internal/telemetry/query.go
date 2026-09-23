@@ -176,14 +176,15 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 		canonicalOrg = authCtx.ActiveOrganizationID
 	}
 	params := repo.AttributeMetricsQueryParams{
-		ProjectIDs:           scope.projectIDs,
-		TimeStart:            timeStart,
-		TimeEnd:              timeEnd,
-		GroupBy:              groupBy,
-		SortBy:               sortBy,
-		Filters:              filters,
-		IntervalSeconds:      interval,
-		CanonicalIdentityOrg: canonicalOrg,
+		ProjectIDs:             scope.projectIDs,
+		TimeStart:              timeStart,
+		TimeEnd:                timeEnd,
+		GroupBy:                groupBy,
+		SortBy:                 sortBy,
+		Filters:                filters,
+		IntervalSeconds:        interval,
+		CanonicalIdentityOrg:   canonicalOrg,
+		IncludeDimensionValues: payload.IncludeDimensionValues == nil || *payload.IncludeDimensionValues,
 	}
 	useSkillVersions := groupBy == "skill_version"
 	for _, filter := range filters {

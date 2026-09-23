@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  activeAgentCoverageLabel,
   capabilities,
   methods,
   surfaceForHookSource,
@@ -13,16 +14,48 @@ describe("support matrix model", () => {
     ["claudecode", "cc"],
     ["claude", "chat"],
     ["claude-desktop", "chat"],
+    ["claude-chat", "chat"],
     ["claude-chat-web", "chat"],
+    ["claude-web", "chat"],
     ["cowork-desktop", "cowork"],
     ["cursor", "cursor"],
+    ["cursor-app", "cursor"],
     ["codex-cli", "codex"],
-    ["openai", "codex"],
-    ["chatgpt-web", "codex"],
+    ["chatgpt", "other"],
+    ["chatgpt-work", "other"],
     ["gemini", "other"],
+    ["opencode", "other"],
+    ["github_copilot", "other"],
   ])("maps %s to %s", (source, expected) => {
     expect(surfaceForHookSource(source)).toBe(expected);
   });
+
+  it.each([
+    "gram",
+    "openai",
+    "chatgpt-web",
+    "future-agent",
+    "cursor-internal",
+    "codex-experimental",
+  ])("does not classify unknown source %s", (source) => {
+    expect(surfaceForHookSource(source)).toBeNull();
+  });
+
+  it.each([
+    ["device", 60, "devices running the agent within 60 minutes"],
+    [
+      "user",
+      60,
+      "devices whose assigned user has an active agent within 60 minutes",
+    ],
+    ["device", undefined, "devices running the agent"],
+    [undefined, undefined, "devices whose assigned user has an active agent"],
+  ] as const)(
+    "formats %s attestation coverage",
+    (attestation, minutes, expected) => {
+      expect(activeAgentCoverageLabel(attestation, minutes)).toBe(expected);
+    },
+  );
 
   it("defines integration footprints using known surfaces and capabilities", () => {
     const surfaceIds = new Set(surfaces.map((surface) => surface.id));

@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
 import type { QueryResult } from "@gram/client/models/components/queryresult.js";
-import { useDeviceIntegrationCoverage } from "@gram/client/react-query/deviceIntegrationCoverage.js";
+import { buildDeviceIntegrationCoverageQuery } from "@gram/client/react-query/deviceIntegrationCoverage.js";
 import { unwrapAsync } from "@gram/client/types/fp.js";
 import { InternalAdminBadge } from "@/components/internal-admin-badge";
 import { Page } from "@/components/page-layout";
@@ -12,6 +12,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { PlatformAdminGate } from "./PlatformAdminGate";
 import {
+  activeAgentCoverageLabel,
   capabilities,
   methods,
   surfaceForHookSource,
@@ -81,13 +82,20 @@ function OrganizationSupportMatrix(): JSX.Element {
             sortBy: "total_chats",
             topN: 1000,
             granularitySeconds: 86_400,
+            includeDimensionValues: false,
           },
         }),
       ),
     staleTime: 60_000,
     throwOnError: false,
   });
-  const deviceCoverage = useDeviceIntegrationCoverage(undefined, undefined, {
+  const deviceCoverageQuery = buildDeviceIntegrationCoverageQuery(client);
+  const deviceCoverage = useQuery({
+    ...deviceCoverageQuery,
+    queryKey: [
+      ...deviceCoverageQuery.queryKey,
+      { organizationId: organization.id },
+    ],
     staleTime: 60_000,
     throwOnError: false,
   });
@@ -172,11 +180,10 @@ function OrganizationSupportMatrix(): JSX.Element {
                 ? "Unavailable"
                 : String(deviceCoverage.data?.agentActive ?? 0)
           }
-          label={
-            deviceCoverage.data?.activeWindowMinutes
-              ? `device agents active within ${deviceCoverage.data.activeWindowMinutes} minutes`
-              : "active device agents"
-          }
+          label={activeAgentCoverageLabel(
+            deviceCoverage.data?.attestation,
+            deviceCoverage.data?.activeWindowMinutes,
+          )}
         />
         <SummaryMetric
           value={`${WINDOW_DAYS} days`}
@@ -457,6 +464,7 @@ function buildEvidence(
     )
       continue;
     const surface = surfaceForHookSource(row.groupValue);
+    if (!surface) continue;
     const current = result.get(surface) ?? {
       sessions: 0,
       tokens: 0,

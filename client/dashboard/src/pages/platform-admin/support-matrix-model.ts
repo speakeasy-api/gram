@@ -106,22 +106,56 @@ export const methods: IntegrationMethod[] = [
   },
 ];
 
-export function surfaceForHookSource(value: string): SurfaceId {
-  const source = value.toLowerCase();
-  if (source.includes("cowork")) return "cowork";
-  if (source.includes("claude-code") || source === "claudecode") return "cc";
-  if (
-    source === "claude" ||
-    source.includes("claude-chat") ||
-    source.includes("claude-desktop")
-  )
-    return "chat";
-  if (source.includes("cursor")) return "cursor";
-  if (
-    source.includes("codex") ||
-    source.includes("openai") ||
-    source.includes("chatgpt")
-  )
-    return "codex";
-  return "other";
+const surfaceByHookSource: Readonly<Record<string, SurfaceId>> = {
+  claude: "chat",
+  "claude-desktop": "chat",
+  "claude-chat-desktop": "chat",
+  "claude-web": "chat",
+  "claude-chat": "chat",
+  "claude-chat-web": "chat",
+  claudecode: "cc",
+  "claude-code": "cc",
+  "claude-code-web": "cc",
+  "claude-code-desktop": "cc",
+  cowork: "cowork",
+  "claude-cowork": "cowork",
+  "cowork-desktop": "cowork",
+  cursor: "cursor",
+  "cursor-app": "cursor",
+  codex: "codex",
+  "codex-cli": "codex",
+  "codex-web": "codex",
+  chatgpt: "other",
+  "chatgpt-work": "other",
+  opencode: "other",
+  pi: "other",
+  openclaw: "other",
+  litellm: "other",
+  copilot: "other",
+  "github-copilot": "other",
+  gemini: "other",
+  glean: "other",
+  bedrock: "other",
+  "aws-bedrock": "other",
+};
+
+export function surfaceForHookSource(value: string): SurfaceId | null {
+  const source = value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-");
+  return surfaceByHookSource[source] ?? null;
+}
+
+export function activeAgentCoverageLabel(
+  attestation: "device" | "user" | undefined,
+  activeWindowMinutes: number | undefined,
+): string {
+  const subject =
+    attestation === "device"
+      ? "devices running the agent"
+      : "devices whose assigned user has an active agent";
+  return activeWindowMinutes
+    ? `${subject} within ${activeWindowMinutes} minutes`
+    : subject;
 }

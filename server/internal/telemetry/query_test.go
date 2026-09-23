@@ -537,6 +537,23 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	require.ElementsMatch(t, []string{"c@x.com"}, sales.DimensionValues["email"])
 	require.ElementsMatch(t, []string{""}, sales.DimensionValues["role"])
 
+	withoutDimensions, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:                   from,
+		To:                     to,
+		GroupBy:                conv.PtrEmpty("department_name"),
+		IncludeDimensionValues: new(false),
+		TopN:                   10,
+		SortBy:                 "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, withoutDimensions.Table, 2)
+	require.Equal(t, deptCost, tableCostByGroup(withoutDimensions.Table))
+	for _, row := range withoutDimensions.Table {
+		require.NotNil(t, row.DimensionValues)
+		require.Empty(t, row.DimensionValues)
+	}
+	require.Len(t, withoutDimensions.Timeseries, len(deptResult.Timeseries))
+
 	// Group by role: dev gets both Engineering rows ($0.35), admin one ($0.25),
 	// and Sales' role-less spend surfaces under the empty-string group ($0.50).
 	roleResult, err := ti.service.Query(ctx, &gen.QueryPayload{
@@ -661,6 +678,23 @@ func TestQuery_SkillVersionAttributesFullSessionsWithoutDuplicateMappings(t *tes
 	require.Equal(t, int64(2), versionOneRow.Measures.TotalChats, "tool-call-only sessions must not count as chats")
 	require.Equal(t, int64(2), versionTwoRow.Measures.TotalChats)
 	require.Equal(t, int64(1), versionOneRow.Measures.TotalToolCalls)
+
+	withoutDimensions, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:                   from,
+		To:                     to,
+		GroupBy:                conv.PtrEmpty("skill_version"),
+		IncludeDimensionValues: new(false),
+		TopN:                   10,
+		SortBy:                 "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, withoutDimensions.Table, 2)
+	require.Equal(t, costs, tableCostByGroup(withoutDimensions.Table))
+	for _, row := range withoutDimensions.Table {
+		require.NotNil(t, row.DimensionValues)
+		require.Empty(t, row.DimensionValues)
+	}
+	require.Len(t, withoutDimensions.Timeseries, len(grouped.Timeseries))
 
 	var versionTwoSeries *gen.QuerySeries
 	for _, series := range grouped.Timeseries {

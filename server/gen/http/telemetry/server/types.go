@@ -282,6 +282,9 @@ type QueryRequestBody struct {
 	// from the time range and is floored to 3600 (the source data is bucketed
 	// hourly).
 	GranularitySeconds *int64 `form:"granularity_seconds,omitempty" json:"granularity_seconds,omitempty" xml:"granularity_seconds,omitempty"`
+	// Whether to include distinct values for other dimensions in each table row.
+	// When omitted, defaults to true.
+	IncludeDimensionValues *bool `form:"include_dimension_values,omitempty" json:"include_dimension_values,omitempty" xml:"include_dimension_values,omitempty"`
 	// When group_by is set, keep at most this many groups (ranked by sort_by); the
 	// remainder are rolled into an 'Other' group. Defaults to 10.
 	TopN *int `form:"top_n,omitempty" json:"top_n,omitempty" xml:"top_n,omitempty"`
@@ -15384,10 +15387,11 @@ func NewGetUnproxiedMcpServerClientUsagePayload(body *GetUnproxiedMcpServerClien
 // NewQueryPayload builds a telemetry service query endpoint payload.
 func NewQueryPayload(body *QueryRequestBody, sessionToken *string) *telemetry.QueryPayload {
 	v := &telemetry.QueryPayload{
-		From:               *body.From,
-		To:                 *body.To,
-		GroupBy:            body.GroupBy,
-		GranularitySeconds: body.GranularitySeconds,
+		From:                   *body.From,
+		To:                     *body.To,
+		GroupBy:                body.GroupBy,
+		GranularitySeconds:     body.GranularitySeconds,
+		IncludeDimensionValues: body.IncludeDimensionValues,
 	}
 	if body.TopN != nil {
 		v.TopN = *body.TopN
