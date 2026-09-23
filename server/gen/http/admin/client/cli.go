@@ -1828,3 +1828,180 @@ func BuildUpdateSupportMatrixPayload(adminUpdateSupportMatrixBody string, adminU
 
 	return v, nil
 }
+
+// BuildGetWorkloadIdentityPayload builds the payload for the admin
+// getWorkloadIdentity endpoint from CLI flags.
+func BuildGetWorkloadIdentityPayload(adminGetWorkloadIdentityOrganizationID string, adminGetWorkloadIdentityAdminSessionToken string) (*admin.GetWorkloadIdentityPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetWorkloadIdentityOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetWorkloadIdentityAdminSessionToken != "" {
+			adminSessionToken = &adminGetWorkloadIdentityAdminSessionToken
+		}
+	}
+	v := &admin.GetWorkloadIdentityPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildCreateWorkloadIssuerPayload builds the payload for the admin
+// createWorkloadIssuer endpoint from CLI flags.
+func BuildCreateWorkloadIssuerPayload(adminCreateWorkloadIssuerBody string, adminCreateWorkloadIssuerAdminSessionToken string) (*admin.CreateWorkloadIssuerPayload, error) {
+	var err error
+	var body CreateWorkloadIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(adminCreateWorkloadIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"issuer\": \"aaa\",\n      \"jwks_uri\": \"aaa\",\n      \"name\": \"aa\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"abc123\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		}
+		if utf8.RuneCountInString(body.Name) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 100, false))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.issuer", body.Issuer, "^https://"))
+		if utf8.RuneCountInString(body.Issuer) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.issuer", body.Issuer, utf8.RuneCountInString(body.Issuer), 2048, false))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.jwks_uri", body.JwksURI, "^https://"))
+		if utf8.RuneCountInString(body.JwksURI) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.jwks_uri", body.JwksURI, utf8.RuneCountInString(body.JwksURI), 2048, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminCreateWorkloadIssuerAdminSessionToken != "" {
+			adminSessionToken = &adminCreateWorkloadIssuerAdminSessionToken
+		}
+	}
+	v := &admin.CreateWorkloadIssuerPayload{
+		OrganizationID: body.OrganizationID,
+		ProjectID:      body.ProjectID,
+		Name:           body.Name,
+		Issuer:         body.Issuer,
+		JwksURI:        body.JwksURI,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildAdmitWorkloadSubjectPayload builds the payload for the admin
+// admitWorkloadSubject endpoint from CLI flags.
+func BuildAdmitWorkloadSubjectPayload(adminAdmitWorkloadSubjectBody string, adminAdmitWorkloadSubjectAdminSessionToken string) (*admin.AdmitWorkloadSubjectPayload, error) {
+	var err error
+	var body AdmitWorkloadSubjectRequestBody
+	{
+		err = json.Unmarshal([]byte(adminAdmitWorkloadSubjectBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"organization_id\": \"abc123\",\n      \"subject\": \"aa\",\n      \"workload_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.workload_issuer_id", body.WorkloadIssuerID, goa.FormatUUID))
+		if utf8.RuneCountInString(body.Subject) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.subject", body.Subject, utf8.RuneCountInString(body.Subject), 1, true))
+		}
+		if utf8.RuneCountInString(body.Subject) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.subject", body.Subject, utf8.RuneCountInString(body.Subject), 2048, false))
+		}
+		if body.Name != nil {
+			if utf8.RuneCountInString(*body.Name) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+			}
+		}
+		if body.Name != nil {
+			if utf8.RuneCountInString(*body.Name) > 100 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 100, false))
+			}
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminAdmitWorkloadSubjectAdminSessionToken != "" {
+			adminSessionToken = &adminAdmitWorkloadSubjectAdminSessionToken
+		}
+	}
+	v := &admin.AdmitWorkloadSubjectPayload{
+		OrganizationID:   body.OrganizationID,
+		WorkloadIssuerID: body.WorkloadIssuerID,
+		Subject:          body.Subject,
+		Name:             body.Name,
+		AgentID:          body.AgentID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetWorkloadAuthenticationHostPayload builds the payload for the admin
+// setWorkloadAuthenticationHost endpoint from CLI flags.
+func BuildSetWorkloadAuthenticationHostPayload(adminSetWorkloadAuthenticationHostBody string, adminSetWorkloadAuthenticationHostAdminSessionToken string) (*admin.SetWorkloadAuthenticationHostPayload, error) {
+	var err error
+	var body SetWorkloadAuthenticationHostRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetWorkloadAuthenticationHostBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"organization_id\": \"abc123\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetWorkloadAuthenticationHostAdminSessionToken != "" {
+			adminSessionToken = &adminSetWorkloadAuthenticationHostAdminSessionToken
+		}
+	}
+	v := &admin.SetWorkloadAuthenticationHostPayload{
+		OrganizationID:      body.OrganizationID,
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		Enabled:             body.Enabled,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildTeardownWorkloadIssuerPayload builds the payload for the admin
+// teardownWorkloadIssuer endpoint from CLI flags.
+func BuildTeardownWorkloadIssuerPayload(adminTeardownWorkloadIssuerBody string, adminTeardownWorkloadIssuerAdminSessionToken string) (*admin.TeardownWorkloadIssuerPayload, error) {
+	var err error
+	var body TeardownWorkloadIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(adminTeardownWorkloadIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"workload_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.workload_issuer_id", body.WorkloadIssuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminTeardownWorkloadIssuerAdminSessionToken != "" {
+			adminSessionToken = &adminTeardownWorkloadIssuerAdminSessionToken
+		}
+	}
+	v := &admin.TeardownWorkloadIssuerPayload{
+		OrganizationID:   body.OrganizationID,
+		WorkloadIssuerID: body.WorkloadIssuerID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

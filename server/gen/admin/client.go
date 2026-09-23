@@ -70,10 +70,15 @@ type Client struct {
 	GetSpendBreakdownEndpoint                     goa.Endpoint
 	GetSupportMatrixEndpoint                      goa.Endpoint
 	UpdateSupportMatrixEndpoint                   goa.Endpoint
+	GetWorkloadIdentityEndpoint                   goa.Endpoint
+	CreateWorkloadIssuerEndpoint                  goa.Endpoint
+	AdmitWorkloadSubjectEndpoint                  goa.Endpoint
+	SetWorkloadAuthenticationHostEndpoint         goa.Endpoint
+	TeardownWorkloadIssuerEndpoint                goa.Endpoint
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getWorkloadIdentity, createWorkloadIssuer, admitWorkloadSubject, setWorkloadAuthenticationHost, teardownWorkloadIssuer goa.Endpoint) *Client {
 	return &Client{
 		LoginEndpoint:                                 login,
 		CallbackEndpoint:                              callback,
@@ -128,6 +133,11 @@ func NewClient(login, callback, logout, getSession, getOrganizationFeatures, set
 		GetSpendBreakdownEndpoint:                     getSpendBreakdown,
 		GetSupportMatrixEndpoint:                      getSupportMatrix,
 		UpdateSupportMatrixEndpoint:                   updateSupportMatrix,
+		GetWorkloadIdentityEndpoint:                   getWorkloadIdentity,
+		CreateWorkloadIssuerEndpoint:                  createWorkloadIssuer,
+		AdmitWorkloadSubjectEndpoint:                  admitWorkloadSubject,
+		SetWorkloadAuthenticationHostEndpoint:         setWorkloadAuthenticationHost,
+		TeardownWorkloadIssuerEndpoint:                teardownWorkloadIssuer,
 	}
 }
 
@@ -1350,4 +1360,119 @@ func (c *Client) UpdateSupportMatrix(ctx context.Context, p *UpdateSupportMatrix
 		return
 	}
 	return ires.(*SupportMatrix), nil
+}
+
+// GetWorkloadIdentity calls the "getWorkloadIdentity" endpoint of the "admin"
+// service.
+// GetWorkloadIdentity may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetWorkloadIdentity(ctx context.Context, p *GetWorkloadIdentityPayload) (res *AdminWorkloadIdentityState, err error) {
+	var ires any
+	ires, err = c.GetWorkloadIdentityEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminWorkloadIdentityState), nil
+}
+
+// CreateWorkloadIssuer calls the "createWorkloadIssuer" endpoint of the
+// "admin" service.
+// CreateWorkloadIssuer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateWorkloadIssuer(ctx context.Context, p *CreateWorkloadIssuerPayload) (res *AdminWorkloadIdentityState, err error) {
+	var ires any
+	ires, err = c.CreateWorkloadIssuerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminWorkloadIdentityState), nil
+}
+
+// AdmitWorkloadSubject calls the "admitWorkloadSubject" endpoint of the
+// "admin" service.
+// AdmitWorkloadSubject may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) AdmitWorkloadSubject(ctx context.Context, p *AdmitWorkloadSubjectPayload) (res *AdminWorkloadIdentityState, err error) {
+	var ires any
+	ires, err = c.AdmitWorkloadSubjectEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminWorkloadIdentityState), nil
+}
+
+// SetWorkloadAuthenticationHost calls the "setWorkloadAuthenticationHost"
+// endpoint of the "admin" service.
+// SetWorkloadAuthenticationHost may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetWorkloadAuthenticationHost(ctx context.Context, p *SetWorkloadAuthenticationHostPayload) (res *AdminWorkloadIdentityState, err error) {
+	var ires any
+	ires, err = c.SetWorkloadAuthenticationHostEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminWorkloadIdentityState), nil
+}
+
+// TeardownWorkloadIssuer calls the "teardownWorkloadIssuer" endpoint of the
+// "admin" service.
+// TeardownWorkloadIssuer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) TeardownWorkloadIssuer(ctx context.Context, p *TeardownWorkloadIssuerPayload) (res *AdminWorkloadIdentityState, err error) {
+	var ires any
+	ires, err = c.TeardownWorkloadIssuerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminWorkloadIdentityState), nil
 }

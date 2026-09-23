@@ -2395,6 +2395,404 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.workloadAdmission:
+        post:
+            description: Admit one exact subject under a trusted issuer and assign the agent whose policy it inherits. Trusting the issuer alone never admits a workload, so the subject must be the value the platform actually mints.
+            operationId: adminAdmitWorkloadSubject
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AdmitWorkloadSubjectRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminWorkloadIdentityState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: admitWorkloadSubject admin
+            tags:
+                - admin
+            x-speakeasy-name-override: admitWorkloadSubject
+            x-speakeasy-react-hook:
+                name: AdminAdmitWorkloadSubject
+    /admin/organization.workloadAuthenticationHost:
+        post:
+            description: Announce the deployment's authentication host as this issuer's OAuth issuer and endpoint origin. Required by clients that refuse a token endpoint sharing a host with the API it calls.
+            operationId: adminSetWorkloadAuthenticationHost
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetWorkloadAuthenticationHostRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminWorkloadIdentityState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: setWorkloadAuthenticationHost admin
+            tags:
+                - admin
+            x-speakeasy-name-override: setWorkloadAuthenticationHost
+            x-speakeasy-react-hook:
+                name: AdminSetWorkloadAuthenticationHost
+    /admin/organization.workloadIdentity:
+        get:
+            description: Read an organization's workload issuers, admitted subjects, and authentication host state.
+            operationId: adminGetWorkloadIdentity
+            parameters:
+                - allowEmptyValue: true
+                  description: Organization ID or canonical slug.
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    description: Organization ID or canonical slug.
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminWorkloadIdentityState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getWorkloadIdentity admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getWorkloadIdentity
+            x-speakeasy-react-hook:
+                name: AdminGetWorkloadIdentity
+    /admin/organization.workloadIdentityTeardown:
+        post:
+            description: Withdraw an issuer with its admissions and agent assignments in one step, so teardown cannot leave a subject admitted under an issuer that is gone.
+            operationId: adminTeardownWorkloadIssuer
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TeardownWorkloadIssuerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminWorkloadIdentityState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: teardownWorkloadIssuer admin
+            tags:
+                - admin
+            x-speakeasy-name-override: teardownWorkloadIssuer
+            x-speakeasy-react-hook:
+                name: AdminTeardownWorkloadIssuer
+    /admin/organization.workloadIssuer:
+        post:
+            description: Trust one workload assertion issuer for an organization. Both URLs must be https, which the grant enforces at verification time; rejecting them here avoids storing a row that can never admit anything.
+            operationId: adminCreateWorkloadIssuer
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateWorkloadIssuerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminWorkloadIdentityState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: createWorkloadIssuer admin
+            tags:
+                - admin
+            x-speakeasy-name-override: createWorkloadIssuer
+            x-speakeasy-react-hook:
+                name: AdminCreateWorkloadIssuer
     /admin/organizations.bulkUpdateAccountType:
         post:
             tags:
@@ -76102,6 +76500,111 @@ components:
                 - current_period_end
                 - cancel_at_period_end
                 - payment_failed
+        AdminWorkloadAuthenticationHost:
+            type: object
+            properties:
+                project_id:
+                    type: string
+                use_authentication_host:
+                    type: boolean
+                user_session_issuer_id:
+                    type: string
+            description: Whether one user session issuer announces the deployment's authentication host as its OAuth issuer.
+            required:
+                - user_session_issuer_id
+                - use_authentication_host
+        AdminWorkloadIdentityState:
+            type: object
+            properties:
+                authentication_hosts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminWorkloadAuthenticationHost'
+                issuers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminWorkloadIssuer'
+                organization_id:
+                    type: string
+                subjects:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminWorkloadSubject'
+            description: An organization's complete workload identity configuration. Every write returns it, so a caller never has to reassemble the state itself.
+            required:
+                - organization_id
+                - issuers
+                - subjects
+                - authentication_hosts
+        AdminWorkloadIssuer:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                issuer:
+                    type: string
+                jwks_uri:
+                    type: string
+                name:
+                    type: string
+                project_id:
+                    type: string
+                    description: Project the issuer is scoped to, absent when it is organization-wide.
+            description: A workload assertion issuer trusted by one organization.
+            required:
+                - id
+                - name
+                - issuer
+                - jwks_uri
+                - created_at
+        AdminWorkloadSubject:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: Assigned agent, absent when the subject is admitted but unassigned.
+                agent_name:
+                    type: string
+                name:
+                    type: string
+                subject:
+                    type: string
+                workload_issuer_id:
+                    type: string
+            description: An admitted workload subject and the agent supplying its policy. A subject with no assigned agent is refused at the token endpoint, so both are shown together.
+            required:
+                - workload_issuer_id
+                - subject
+        AdmitWorkloadSubjectRequestBody:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: Agent supplying the workload's policy.
+                    format: uuid
+                name:
+                    type: string
+                    minLength: 1
+                    maxLength: 100
+                organization_id:
+                    type: string
+                    description: Organization ID or canonical slug.
+                subject:
+                    type: string
+                    description: The assertion's sub claim, matched exactly.
+                    minLength: 1
+                    maxLength: 2048
+                workload_issuer_id:
+                    type: string
+                    format: uuid
+            required:
+                - organization_id
+                - workload_issuer_id
+                - subject
+                - agent_id
         AgentDelegatedGrant:
             type: object
             properties:
@@ -81024,6 +81527,34 @@ components:
                 - slug
                 - authn_challenge_mode
                 - session_duration_hours
+        CreateWorkloadIssuerRequestBody:
+            type: object
+            properties:
+                issuer:
+                    type: string
+                    description: The assertion's iss claim.
+                    pattern: ^https://
+                    maxLength: 2048
+                jwks_uri:
+                    type: string
+                    description: Where the issuer publishes its signing keys.
+                    pattern: ^https://
+                    maxLength: 2048
+                name:
+                    type: string
+                    minLength: 1
+                    maxLength: 100
+                organization_id:
+                    type: string
+                    description: Organization ID or canonical slug.
+                project_id:
+                    type: string
+                    description: Scope the issuer to one project. Omit for organization-wide.
+            required:
+                - organization_id
+                - name
+                - issuer
+                - jwks_uri
         CreditUsageResponseBody:
             type: object
             properties:
@@ -97716,6 +98247,21 @@ components:
                     type: string
                     description: The user_session_issuer id to link, or null to unlink.
                     format: uuid
+        SetWorkloadAuthenticationHostRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                organization_id:
+                    type: string
+                    description: Organization ID or canonical slug.
+                user_session_issuer_id:
+                    type: string
+                    format: uuid
+            required:
+                - organization_id
+                - user_session_issuer_id
+                - enabled
         SetupTask:
             type: object
             properties:
@@ -100096,6 +100642,18 @@ components:
             required:
                 - date
                 - tokens
+        TeardownWorkloadIssuerRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: Organization ID or canonical slug.
+                workload_issuer_id:
+                    type: string
+                    format: uuid
+            required:
+                - organization_id
+                - workload_issuer_id
         TelemetryFilter:
             type: object
             properties:

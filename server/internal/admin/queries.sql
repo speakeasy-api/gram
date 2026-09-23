@@ -609,3 +609,99 @@ SELECT m.id, c.id, sqlc.arg(status)::text, sqlc.arg(notes)::text, sqlc.arg(needs
 FROM support_matrix_integration_methods m, support_matrix_capabilities c
 WHERE m.slug = sqlc.arg(method_slug)::text AND c.slug = sqlc.arg(capability_slug)::text AND m.deleted_at IS NULL AND c.deleted_at IS NULL
 ON CONFLICT (integration_method_id, capability_id) DO UPDATE SET status = EXCLUDED.status, notes = EXCLUDED.notes, needs_verification = EXCLUDED.needs_verification, verified_at = NULL, updated_at = clock_timestamp(), deleted_at = NULL;
+
+-- name: AdminListWorkloadIssuers :many
+SELECT id, name, issuer, jwks_uri, project_id, created_at
+FROM workload_issuers
+WHERE organization_id = sqlc.arg(organization_id)::text AND deleted_at IS NULL
+ORDER BY created_at;
+
+-- name: AdminListWorkloadSubjects :many
+SELECT
+  a.workload_issuer_id,
+  a.subject,
+  a.name,
+  g.agent_id,
+  ag.name AS agent_name
+FROM workload_identity_admissions a
+LEFT JOIN workload_agent_assignments g
+  ON g.organization_id = a.organization_id
+  AND g.workload_issuer_id = a.workload_issuer_id
+  AND g.subject = a.subject
+  AND g.deleted_at IS NULL
+LEFT JOIN agents ag
+  ON ag.organization_id = g.organization_id AND ag.id = g.agent_id AND ag.deleted_at IS NULL
+WHERE a.organization_id = sqlc.arg(organization_id)::text AND a.deleted_at IS NULL
+ORDER BY a.created_at;
+
+-- name: AdminListWorkloadAuthenticationHosts :many
+SELECT id, project_id, use_authentication_host
+FROM user_session_issuers
+WHERE organization_id = sqlc.arg(organization_id)::text AND deleted_at IS NULL
+ORDER BY created_at;
+
+-- name: AdminCreateWorkloadIssuer :one
+INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri)
+VALUES (
+  sqlc.arg(organization_id)::text,
+  sqlc.narg(project_id)::uuid,
+  sqlc.arg(name)::text,
+  sqlc.arg(issuer)::text,
+  sqlc.arg(jwks_uri)::text
+)
+RETURNING id;
+
+-- name: AdminAdmitWorkloadSubject :one
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, name)
+SELECT
+  i.organization_id,
+  i.project_id,
+  i.id,
+  sqlc.arg(subject)::text,
+  sqlc.narg(name)::text
+FROM workload_issuers i
+WHERE i.organization_id = sqlc.arg(organization_id)::text
+  AND i.id = sqlc.arg(workload_issuer_id)::uuid
+  AND i.deleted_at IS NULL
+RETURNING id;
+
+-- name: AdminAssignWorkloadAgent :one
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
+SELECT
+  i.organization_id,
+  i.id,
+  sqlc.arg(subject)::text,
+  sqlc.arg(agent_id)::uuid
+FROM workload_issuers i
+WHERE i.organization_id = sqlc.arg(organization_id)::text
+  AND i.id = sqlc.arg(workload_issuer_id)::uuid
+  AND i.deleted_at IS NULL
+RETURNING id;
+
+-- name: AdminSetWorkloadAuthenticationHost :execrows
+UPDATE user_session_issuers
+SET use_authentication_host = sqlc.arg(enabled)::boolean, updated_at = clock_timestamp()
+WHERE organization_id = sqlc.arg(organization_id)::text
+  AND id = sqlc.arg(user_session_issuer_id)::uuid
+  AND deleted_at IS NULL;
+
+-- name: AdminWithdrawWorkloadIssuer :execrows
+UPDATE workload_issuers
+SET deleted_at = clock_timestamp()
+WHERE organization_id = sqlc.arg(organization_id)::text
+  AND id = sqlc.arg(workload_issuer_id)::uuid
+  AND deleted_at IS NULL;
+
+-- name: AdminWithdrawWorkloadIssuerAdmissions :exec
+UPDATE workload_identity_admissions
+SET deleted_at = clock_timestamp()
+WHERE organization_id = sqlc.arg(organization_id)::text
+  AND workload_issuer_id = sqlc.arg(workload_issuer_id)::uuid
+  AND deleted_at IS NULL;
+
+-- name: AdminWithdrawWorkloadIssuerAssignments :exec
+UPDATE workload_agent_assignments
+SET deleted_at = clock_timestamp()
+WHERE organization_id = sqlc.arg(organization_id)::text
+  AND workload_issuer_id = sqlc.arg(workload_issuer_id)::uuid
+  AND deleted_at IS NULL;

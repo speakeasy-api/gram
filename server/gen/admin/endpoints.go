@@ -70,6 +70,11 @@ type Endpoints struct {
 	GetSpendBreakdown                     goa.Endpoint
 	GetSupportMatrix                      goa.Endpoint
 	UpdateSupportMatrix                   goa.Endpoint
+	GetWorkloadIdentity                   goa.Endpoint
+	CreateWorkloadIssuer                  goa.Endpoint
+	AdmitWorkloadSubject                  goa.Endpoint
+	SetWorkloadAuthenticationHost         goa.Endpoint
+	TeardownWorkloadIssuer                goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -148,6 +153,11 @@ func NewEndpoints(s Service) *Endpoints {
 		GetSpendBreakdown:                     NewGetSpendBreakdownEndpoint(s, a.APIKeyAuth),
 		GetSupportMatrix:                      NewGetSupportMatrixEndpoint(s, a.APIKeyAuth),
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
+		GetWorkloadIdentity:                   NewGetWorkloadIdentityEndpoint(s, a.APIKeyAuth),
+		CreateWorkloadIssuer:                  NewCreateWorkloadIssuerEndpoint(s, a.APIKeyAuth),
+		AdmitWorkloadSubject:                  NewAdmitWorkloadSubjectEndpoint(s, a.APIKeyAuth),
+		SetWorkloadAuthenticationHost:         NewSetWorkloadAuthenticationHostEndpoint(s, a.APIKeyAuth),
+		TeardownWorkloadIssuer:                NewTeardownWorkloadIssuerEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -206,6 +216,11 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSpendBreakdown = m(e.GetSpendBreakdown)
 	e.GetSupportMatrix = m(e.GetSupportMatrix)
 	e.UpdateSupportMatrix = m(e.UpdateSupportMatrix)
+	e.GetWorkloadIdentity = m(e.GetWorkloadIdentity)
+	e.CreateWorkloadIssuer = m(e.CreateWorkloadIssuer)
+	e.AdmitWorkloadSubject = m(e.AdmitWorkloadSubject)
+	e.SetWorkloadAuthenticationHost = m(e.SetWorkloadAuthenticationHost)
+	e.TeardownWorkloadIssuer = m(e.TeardownWorkloadIssuer)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -1385,5 +1400,120 @@ func NewUpdateSupportMatrixEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return s.UpdateSupportMatrix(ctx, p)
+	}
+}
+
+// NewGetWorkloadIdentityEndpoint returns an endpoint function that calls the
+// method "getWorkloadIdentity" of service "admin".
+func NewGetWorkloadIdentityEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetWorkloadIdentityPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetWorkloadIdentity(ctx, p)
+	}
+}
+
+// NewCreateWorkloadIssuerEndpoint returns an endpoint function that calls the
+// method "createWorkloadIssuer" of service "admin".
+func NewCreateWorkloadIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateWorkloadIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateWorkloadIssuer(ctx, p)
+	}
+}
+
+// NewAdmitWorkloadSubjectEndpoint returns an endpoint function that calls the
+// method "admitWorkloadSubject" of service "admin".
+func NewAdmitWorkloadSubjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*AdmitWorkloadSubjectPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.AdmitWorkloadSubject(ctx, p)
+	}
+}
+
+// NewSetWorkloadAuthenticationHostEndpoint returns an endpoint function that
+// calls the method "setWorkloadAuthenticationHost" of service "admin".
+func NewSetWorkloadAuthenticationHostEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetWorkloadAuthenticationHostPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetWorkloadAuthenticationHost(ctx, p)
+	}
+}
+
+// NewTeardownWorkloadIssuerEndpoint returns an endpoint function that calls
+// the method "teardownWorkloadIssuer" of service "admin".
+func NewTeardownWorkloadIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*TeardownWorkloadIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.TeardownWorkloadIssuer(ctx, p)
 	}
 }

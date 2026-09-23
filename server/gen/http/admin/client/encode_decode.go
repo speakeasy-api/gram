@@ -12903,6 +12903,1180 @@ func DecodeUpdateSupportMatrixResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildGetWorkloadIdentityRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "getWorkloadIdentity"
+// endpoint
+func (c *Client) BuildGetWorkloadIdentityRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetWorkloadIdentityAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getWorkloadIdentity", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetWorkloadIdentityRequest returns an encoder for requests sent to the
+// admin getWorkloadIdentity server.
+func EncodeGetWorkloadIdentityRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetWorkloadIdentityPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getWorkloadIdentity", "*admin.GetWorkloadIdentityPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetWorkloadIdentityResponse returns a decoder for responses returned
+// by the admin getWorkloadIdentity endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetWorkloadIdentityResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetWorkloadIdentityResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetWorkloadIdentityResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getWorkloadIdentity", err)
+			}
+			err = ValidateGetWorkloadIdentityResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getWorkloadIdentity", err)
+			}
+			res := NewGetWorkloadIdentityAdminWorkloadIdentityStateOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetWorkloadIdentityUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getWorkloadIdentity", err)
+			}
+			err = ValidateGetWorkloadIdentityUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getWorkloadIdentity", err)
+			}
+			return nil, NewGetWorkloadIdentityUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetWorkloadIdentityForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getWorkloadIdentity", err)
+			}
+			err = ValidateGetWorkloadIdentityForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getWorkloadIdentity", err)
+			}
+			return nil, NewGetWorkloadIdentityForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetWorkloadIdentityBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getWorkloadIdentity", err)
+			}
+			err = ValidateGetWorkloadIdentityBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getWorkloadIdentity", err)
+			}
+			return nil, NewGetWorkloadIdentityBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetWorkloadIdentityNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getWorkloadIdentity", err)
+			}
+			err = ValidateGetWorkloadIdentityNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getWorkloadIdentity", err)
+			}
+			return nil, NewGetWorkloadIdentityNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetWorkloadIdentityConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getWorkloadIdentity", err)
+			}
+			err = ValidateGetWorkloadIdentityConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getWorkloadIdentity", err)
+			}
+			return nil, NewGetWorkloadIdentityConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetWorkloadIdentityUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getWorkloadIdentity", err)
+			}
+			err = ValidateGetWorkloadIdentityUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getWorkloadIdentity", err)
+			}
+			return nil, NewGetWorkloadIdentityUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetWorkloadIdentityInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getWorkloadIdentity", err)
+			}
+			err = ValidateGetWorkloadIdentityInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getWorkloadIdentity", err)
+			}
+			return nil, NewGetWorkloadIdentityInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetWorkloadIdentityInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getWorkloadIdentity", err)
+				}
+				err = ValidateGetWorkloadIdentityInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getWorkloadIdentity", err)
+				}
+				return nil, NewGetWorkloadIdentityInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetWorkloadIdentityUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getWorkloadIdentity", err)
+				}
+				err = ValidateGetWorkloadIdentityUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getWorkloadIdentity", err)
+				}
+				return nil, NewGetWorkloadIdentityUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getWorkloadIdentity", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetWorkloadIdentityGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getWorkloadIdentity", err)
+			}
+			err = ValidateGetWorkloadIdentityGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getWorkloadIdentity", err)
+			}
+			return nil, NewGetWorkloadIdentityGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getWorkloadIdentity", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCreateWorkloadIssuerRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "createWorkloadIssuer"
+// endpoint
+func (c *Client) BuildCreateWorkloadIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateWorkloadIssuerAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "createWorkloadIssuer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateWorkloadIssuerRequest returns an encoder for requests sent to
+// the admin createWorkloadIssuer server.
+func EncodeCreateWorkloadIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.CreateWorkloadIssuerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "createWorkloadIssuer", "*admin.CreateWorkloadIssuerPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewCreateWorkloadIssuerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "createWorkloadIssuer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateWorkloadIssuerResponse returns a decoder for responses returned
+// by the admin createWorkloadIssuer endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeCreateWorkloadIssuerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateWorkloadIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateWorkloadIssuerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createWorkloadIssuer", err)
+			}
+			err = ValidateCreateWorkloadIssuerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createWorkloadIssuer", err)
+			}
+			res := NewCreateWorkloadIssuerAdminWorkloadIdentityStateOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateWorkloadIssuerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createWorkloadIssuer", err)
+			}
+			err = ValidateCreateWorkloadIssuerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createWorkloadIssuer", err)
+			}
+			return nil, NewCreateWorkloadIssuerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateWorkloadIssuerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createWorkloadIssuer", err)
+			}
+			err = ValidateCreateWorkloadIssuerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createWorkloadIssuer", err)
+			}
+			return nil, NewCreateWorkloadIssuerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateWorkloadIssuerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createWorkloadIssuer", err)
+			}
+			err = ValidateCreateWorkloadIssuerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createWorkloadIssuer", err)
+			}
+			return nil, NewCreateWorkloadIssuerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateWorkloadIssuerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createWorkloadIssuer", err)
+			}
+			err = ValidateCreateWorkloadIssuerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createWorkloadIssuer", err)
+			}
+			return nil, NewCreateWorkloadIssuerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateWorkloadIssuerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createWorkloadIssuer", err)
+			}
+			err = ValidateCreateWorkloadIssuerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createWorkloadIssuer", err)
+			}
+			return nil, NewCreateWorkloadIssuerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateWorkloadIssuerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createWorkloadIssuer", err)
+			}
+			err = ValidateCreateWorkloadIssuerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createWorkloadIssuer", err)
+			}
+			return nil, NewCreateWorkloadIssuerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateWorkloadIssuerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createWorkloadIssuer", err)
+			}
+			err = ValidateCreateWorkloadIssuerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createWorkloadIssuer", err)
+			}
+			return nil, NewCreateWorkloadIssuerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateWorkloadIssuerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "createWorkloadIssuer", err)
+				}
+				err = ValidateCreateWorkloadIssuerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "createWorkloadIssuer", err)
+				}
+				return nil, NewCreateWorkloadIssuerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateWorkloadIssuerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "createWorkloadIssuer", err)
+				}
+				err = ValidateCreateWorkloadIssuerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "createWorkloadIssuer", err)
+				}
+				return nil, NewCreateWorkloadIssuerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "createWorkloadIssuer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateWorkloadIssuerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createWorkloadIssuer", err)
+			}
+			err = ValidateCreateWorkloadIssuerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createWorkloadIssuer", err)
+			}
+			return nil, NewCreateWorkloadIssuerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "createWorkloadIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildAdmitWorkloadSubjectRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "admitWorkloadSubject"
+// endpoint
+func (c *Client) BuildAdmitWorkloadSubjectRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AdmitWorkloadSubjectAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "admitWorkloadSubject", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeAdmitWorkloadSubjectRequest returns an encoder for requests sent to
+// the admin admitWorkloadSubject server.
+func EncodeAdmitWorkloadSubjectRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.AdmitWorkloadSubjectPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "admitWorkloadSubject", "*admin.AdmitWorkloadSubjectPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewAdmitWorkloadSubjectRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "admitWorkloadSubject", err)
+		}
+		return nil
+	}
+}
+
+// DecodeAdmitWorkloadSubjectResponse returns a decoder for responses returned
+// by the admin admitWorkloadSubject endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeAdmitWorkloadSubjectResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeAdmitWorkloadSubjectResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body AdmitWorkloadSubjectResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "admitWorkloadSubject", err)
+			}
+			err = ValidateAdmitWorkloadSubjectResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "admitWorkloadSubject", err)
+			}
+			res := NewAdmitWorkloadSubjectAdminWorkloadIdentityStateOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body AdmitWorkloadSubjectUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "admitWorkloadSubject", err)
+			}
+			err = ValidateAdmitWorkloadSubjectUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "admitWorkloadSubject", err)
+			}
+			return nil, NewAdmitWorkloadSubjectUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body AdmitWorkloadSubjectForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "admitWorkloadSubject", err)
+			}
+			err = ValidateAdmitWorkloadSubjectForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "admitWorkloadSubject", err)
+			}
+			return nil, NewAdmitWorkloadSubjectForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body AdmitWorkloadSubjectBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "admitWorkloadSubject", err)
+			}
+			err = ValidateAdmitWorkloadSubjectBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "admitWorkloadSubject", err)
+			}
+			return nil, NewAdmitWorkloadSubjectBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body AdmitWorkloadSubjectNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "admitWorkloadSubject", err)
+			}
+			err = ValidateAdmitWorkloadSubjectNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "admitWorkloadSubject", err)
+			}
+			return nil, NewAdmitWorkloadSubjectNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body AdmitWorkloadSubjectConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "admitWorkloadSubject", err)
+			}
+			err = ValidateAdmitWorkloadSubjectConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "admitWorkloadSubject", err)
+			}
+			return nil, NewAdmitWorkloadSubjectConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body AdmitWorkloadSubjectUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "admitWorkloadSubject", err)
+			}
+			err = ValidateAdmitWorkloadSubjectUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "admitWorkloadSubject", err)
+			}
+			return nil, NewAdmitWorkloadSubjectUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body AdmitWorkloadSubjectInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "admitWorkloadSubject", err)
+			}
+			err = ValidateAdmitWorkloadSubjectInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "admitWorkloadSubject", err)
+			}
+			return nil, NewAdmitWorkloadSubjectInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body AdmitWorkloadSubjectInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "admitWorkloadSubject", err)
+				}
+				err = ValidateAdmitWorkloadSubjectInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "admitWorkloadSubject", err)
+				}
+				return nil, NewAdmitWorkloadSubjectInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body AdmitWorkloadSubjectUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "admitWorkloadSubject", err)
+				}
+				err = ValidateAdmitWorkloadSubjectUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "admitWorkloadSubject", err)
+				}
+				return nil, NewAdmitWorkloadSubjectUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "admitWorkloadSubject", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body AdmitWorkloadSubjectGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "admitWorkloadSubject", err)
+			}
+			err = ValidateAdmitWorkloadSubjectGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "admitWorkloadSubject", err)
+			}
+			return nil, NewAdmitWorkloadSubjectGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "admitWorkloadSubject", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetWorkloadAuthenticationHostRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "setWorkloadAuthenticationHost" endpoint
+func (c *Client) BuildSetWorkloadAuthenticationHostRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetWorkloadAuthenticationHostAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "setWorkloadAuthenticationHost", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetWorkloadAuthenticationHostRequest returns an encoder for requests
+// sent to the admin setWorkloadAuthenticationHost server.
+func EncodeSetWorkloadAuthenticationHostRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.SetWorkloadAuthenticationHostPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "setWorkloadAuthenticationHost", "*admin.SetWorkloadAuthenticationHostPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewSetWorkloadAuthenticationHostRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "setWorkloadAuthenticationHost", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetWorkloadAuthenticationHostResponse returns a decoder for responses
+// returned by the admin setWorkloadAuthenticationHost endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetWorkloadAuthenticationHostResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetWorkloadAuthenticationHostResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetWorkloadAuthenticationHostResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			err = ValidateSetWorkloadAuthenticationHostResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			res := NewSetWorkloadAuthenticationHostAdminWorkloadIdentityStateOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetWorkloadAuthenticationHostUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			err = ValidateSetWorkloadAuthenticationHostUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			return nil, NewSetWorkloadAuthenticationHostUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetWorkloadAuthenticationHostForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			err = ValidateSetWorkloadAuthenticationHostForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			return nil, NewSetWorkloadAuthenticationHostForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetWorkloadAuthenticationHostBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			err = ValidateSetWorkloadAuthenticationHostBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			return nil, NewSetWorkloadAuthenticationHostBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetWorkloadAuthenticationHostNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			err = ValidateSetWorkloadAuthenticationHostNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			return nil, NewSetWorkloadAuthenticationHostNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetWorkloadAuthenticationHostConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			err = ValidateSetWorkloadAuthenticationHostConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			return nil, NewSetWorkloadAuthenticationHostConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetWorkloadAuthenticationHostUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			err = ValidateSetWorkloadAuthenticationHostUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			return nil, NewSetWorkloadAuthenticationHostUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetWorkloadAuthenticationHostInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			err = ValidateSetWorkloadAuthenticationHostInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			return nil, NewSetWorkloadAuthenticationHostInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetWorkloadAuthenticationHostInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setWorkloadAuthenticationHost", err)
+				}
+				err = ValidateSetWorkloadAuthenticationHostInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setWorkloadAuthenticationHost", err)
+				}
+				return nil, NewSetWorkloadAuthenticationHostInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetWorkloadAuthenticationHostUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setWorkloadAuthenticationHost", err)
+				}
+				err = ValidateSetWorkloadAuthenticationHostUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setWorkloadAuthenticationHost", err)
+				}
+				return nil, NewSetWorkloadAuthenticationHostUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "setWorkloadAuthenticationHost", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetWorkloadAuthenticationHostGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			err = ValidateSetWorkloadAuthenticationHostGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setWorkloadAuthenticationHost", err)
+			}
+			return nil, NewSetWorkloadAuthenticationHostGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "setWorkloadAuthenticationHost", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildTeardownWorkloadIssuerRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "teardownWorkloadIssuer"
+// endpoint
+func (c *Client) BuildTeardownWorkloadIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: TeardownWorkloadIssuerAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "teardownWorkloadIssuer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeTeardownWorkloadIssuerRequest returns an encoder for requests sent to
+// the admin teardownWorkloadIssuer server.
+func EncodeTeardownWorkloadIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.TeardownWorkloadIssuerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "teardownWorkloadIssuer", "*admin.TeardownWorkloadIssuerPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewTeardownWorkloadIssuerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "teardownWorkloadIssuer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeTeardownWorkloadIssuerResponse returns a decoder for responses
+// returned by the admin teardownWorkloadIssuer endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeTeardownWorkloadIssuerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeTeardownWorkloadIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body TeardownWorkloadIssuerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "teardownWorkloadIssuer", err)
+			}
+			err = ValidateTeardownWorkloadIssuerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "teardownWorkloadIssuer", err)
+			}
+			res := NewTeardownWorkloadIssuerAdminWorkloadIdentityStateOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body TeardownWorkloadIssuerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "teardownWorkloadIssuer", err)
+			}
+			err = ValidateTeardownWorkloadIssuerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "teardownWorkloadIssuer", err)
+			}
+			return nil, NewTeardownWorkloadIssuerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body TeardownWorkloadIssuerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "teardownWorkloadIssuer", err)
+			}
+			err = ValidateTeardownWorkloadIssuerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "teardownWorkloadIssuer", err)
+			}
+			return nil, NewTeardownWorkloadIssuerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body TeardownWorkloadIssuerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "teardownWorkloadIssuer", err)
+			}
+			err = ValidateTeardownWorkloadIssuerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "teardownWorkloadIssuer", err)
+			}
+			return nil, NewTeardownWorkloadIssuerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body TeardownWorkloadIssuerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "teardownWorkloadIssuer", err)
+			}
+			err = ValidateTeardownWorkloadIssuerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "teardownWorkloadIssuer", err)
+			}
+			return nil, NewTeardownWorkloadIssuerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body TeardownWorkloadIssuerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "teardownWorkloadIssuer", err)
+			}
+			err = ValidateTeardownWorkloadIssuerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "teardownWorkloadIssuer", err)
+			}
+			return nil, NewTeardownWorkloadIssuerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body TeardownWorkloadIssuerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "teardownWorkloadIssuer", err)
+			}
+			err = ValidateTeardownWorkloadIssuerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "teardownWorkloadIssuer", err)
+			}
+			return nil, NewTeardownWorkloadIssuerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body TeardownWorkloadIssuerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "teardownWorkloadIssuer", err)
+			}
+			err = ValidateTeardownWorkloadIssuerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "teardownWorkloadIssuer", err)
+			}
+			return nil, NewTeardownWorkloadIssuerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body TeardownWorkloadIssuerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "teardownWorkloadIssuer", err)
+				}
+				err = ValidateTeardownWorkloadIssuerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "teardownWorkloadIssuer", err)
+				}
+				return nil, NewTeardownWorkloadIssuerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body TeardownWorkloadIssuerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "teardownWorkloadIssuer", err)
+				}
+				err = ValidateTeardownWorkloadIssuerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "teardownWorkloadIssuer", err)
+				}
+				return nil, NewTeardownWorkloadIssuerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "teardownWorkloadIssuer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body TeardownWorkloadIssuerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "teardownWorkloadIssuer", err)
+			}
+			err = ValidateTeardownWorkloadIssuerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "teardownWorkloadIssuer", err)
+			}
+			return nil, NewTeardownWorkloadIssuerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "teardownWorkloadIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -13532,6 +14706,50 @@ func marshalSupportFactRequestBodyToAdminSupportFact(v *SupportFactRequestBody) 
 		Status: v.Status,
 		Note:   v.Note,
 		Verify: v.Verify,
+	}
+
+	return res
+}
+
+// unmarshalAdminWorkloadIssuerResponseBodyToAdminAdminWorkloadIssuer builds a
+// value of type *admin.AdminWorkloadIssuer from a value of type
+// *AdminWorkloadIssuerResponseBody.
+func unmarshalAdminWorkloadIssuerResponseBodyToAdminAdminWorkloadIssuer(v *AdminWorkloadIssuerResponseBody) *admin.AdminWorkloadIssuer {
+	res := &admin.AdminWorkloadIssuer{
+		ID:        *v.ID,
+		Name:      *v.Name,
+		Issuer:    *v.Issuer,
+		JwksURI:   *v.JwksURI,
+		ProjectID: v.ProjectID,
+		CreatedAt: *v.CreatedAt,
+	}
+
+	return res
+}
+
+// unmarshalAdminWorkloadSubjectResponseBodyToAdminAdminWorkloadSubject builds
+// a value of type *admin.AdminWorkloadSubject from a value of type
+// *AdminWorkloadSubjectResponseBody.
+func unmarshalAdminWorkloadSubjectResponseBodyToAdminAdminWorkloadSubject(v *AdminWorkloadSubjectResponseBody) *admin.AdminWorkloadSubject {
+	res := &admin.AdminWorkloadSubject{
+		WorkloadIssuerID: *v.WorkloadIssuerID,
+		Subject:          *v.Subject,
+		Name:             v.Name,
+		AgentID:          v.AgentID,
+		AgentName:        v.AgentName,
+	}
+
+	return res
+}
+
+// unmarshalAdminWorkloadAuthenticationHostResponseBodyToAdminAdminWorkloadAuthenticationHost
+// builds a value of type *admin.AdminWorkloadAuthenticationHost from a value
+// of type *AdminWorkloadAuthenticationHostResponseBody.
+func unmarshalAdminWorkloadAuthenticationHostResponseBodyToAdminAdminWorkloadAuthenticationHost(v *AdminWorkloadAuthenticationHostResponseBody) *admin.AdminWorkloadAuthenticationHost {
+	res := &admin.AdminWorkloadAuthenticationHost{
+		UserSessionIssuerID:   *v.UserSessionIssuerID,
+		ProjectID:             v.ProjectID,
+		UseAuthenticationHost: *v.UseAuthenticationHost,
 	}
 
 	return res

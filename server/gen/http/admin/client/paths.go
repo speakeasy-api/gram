@@ -271,3 +271,28 @@ func GetSupportMatrixAdminPath() string {
 func UpdateSupportMatrixAdminPath() string {
 	return "/admin/supportMatrix.update"
 }
+
+// GetWorkloadIdentityAdminPath returns the URL path to the admin service getWorkloadIdentity HTTP endpoint.
+func GetWorkloadIdentityAdminPath() string {
+	return "/admin/organization.workloadIdentity"
+}
+
+// CreateWorkloadIssuerAdminPath returns the URL path to the admin service createWorkloadIssuer HTTP endpoint.
+func CreateWorkloadIssuerAdminPath() string {
+	return "/admin/organization.workloadIssuer"
+}
+
+// AdmitWorkloadSubjectAdminPath returns the URL path to the admin service admitWorkloadSubject HTTP endpoint.
+func AdmitWorkloadSubjectAdminPath() string {
+	return "/admin/organization.workloadAdmission"
+}
+
+// SetWorkloadAuthenticationHostAdminPath returns the URL path to the admin service setWorkloadAuthenticationHost HTTP endpoint.
+func SetWorkloadAuthenticationHostAdminPath() string {
+	return "/admin/organization.workloadAuthenticationHost"
+}
+
+// TeardownWorkloadIssuerAdminPath returns the URL path to the admin service teardownWorkloadIssuer HTTP endpoint.
+func TeardownWorkloadIssuerAdminPath() string {
+	return "/admin/organization.workloadIdentityTeardown"
+}

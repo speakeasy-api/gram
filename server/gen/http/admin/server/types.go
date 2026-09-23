@@ -370,6 +370,50 @@ type UpdateSupportMatrixRequestBody struct {
 	Draft    *SupportDraftRequestBody `form:"draft,omitempty" json:"draft,omitempty" xml:"draft,omitempty"`
 }
 
+// CreateWorkloadIssuerRequestBody is the type of the "admin" service
+// "createWorkloadIssuer" endpoint HTTP request body.
+type CreateWorkloadIssuerRequestBody struct {
+	// Organization ID or canonical slug.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Scope the issuer to one project. Omit for organization-wide.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Name      *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The assertion's iss claim.
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Where the issuer publishes its signing keys.
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+}
+
+// AdmitWorkloadSubjectRequestBody is the type of the "admin" service
+// "admitWorkloadSubject" endpoint HTTP request body.
+type AdmitWorkloadSubjectRequestBody struct {
+	// Organization ID or canonical slug.
+	OrganizationID   *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	WorkloadIssuerID *string `form:"workload_issuer_id,omitempty" json:"workload_issuer_id,omitempty" xml:"workload_issuer_id,omitempty"`
+	// The assertion's sub claim, matched exactly.
+	Subject *string `form:"subject,omitempty" json:"subject,omitempty" xml:"subject,omitempty"`
+	Name    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Agent supplying the workload's policy.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+}
+
+// SetWorkloadAuthenticationHostRequestBody is the type of the "admin" service
+// "setWorkloadAuthenticationHost" endpoint HTTP request body.
+type SetWorkloadAuthenticationHostRequestBody struct {
+	// Organization ID or canonical slug.
+	OrganizationID      *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	Enabled             *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
+// TeardownWorkloadIssuerRequestBody is the type of the "admin" service
+// "teardownWorkloadIssuer" endpoint HTTP request body.
+type TeardownWorkloadIssuerRequestBody struct {
+	// Organization ID or canonical slug.
+	OrganizationID   *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	WorkloadIssuerID *string `form:"workload_issuer_id,omitempty" json:"workload_issuer_id,omitempty" xml:"workload_issuer_id,omitempty"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -1561,6 +1605,51 @@ type UpdateSupportMatrixResponseBody struct {
 	Capabilities []*SupportCapabilityResponseBody `json:"capabilities"`
 	Draft        *SupportDraftResponseBody        `json:"draft"`
 	Revision     string                           `json:"revision"`
+}
+
+// GetWorkloadIdentityResponseBody is the type of the "admin" service
+// "getWorkloadIdentity" endpoint HTTP response body.
+type GetWorkloadIdentityResponseBody struct {
+	OrganizationID      string                                         `json:"organization_id"`
+	Issuers             []*AdminWorkloadIssuerResponseBody             `json:"issuers"`
+	Subjects            []*AdminWorkloadSubjectResponseBody            `json:"subjects"`
+	AuthenticationHosts []*AdminWorkloadAuthenticationHostResponseBody `json:"authentication_hosts"`
+}
+
+// CreateWorkloadIssuerResponseBody is the type of the "admin" service
+// "createWorkloadIssuer" endpoint HTTP response body.
+type CreateWorkloadIssuerResponseBody struct {
+	OrganizationID      string                                         `json:"organization_id"`
+	Issuers             []*AdminWorkloadIssuerResponseBody             `json:"issuers"`
+	Subjects            []*AdminWorkloadSubjectResponseBody            `json:"subjects"`
+	AuthenticationHosts []*AdminWorkloadAuthenticationHostResponseBody `json:"authentication_hosts"`
+}
+
+// AdmitWorkloadSubjectResponseBody is the type of the "admin" service
+// "admitWorkloadSubject" endpoint HTTP response body.
+type AdmitWorkloadSubjectResponseBody struct {
+	OrganizationID      string                                         `json:"organization_id"`
+	Issuers             []*AdminWorkloadIssuerResponseBody             `json:"issuers"`
+	Subjects            []*AdminWorkloadSubjectResponseBody            `json:"subjects"`
+	AuthenticationHosts []*AdminWorkloadAuthenticationHostResponseBody `json:"authentication_hosts"`
+}
+
+// SetWorkloadAuthenticationHostResponseBody is the type of the "admin" service
+// "setWorkloadAuthenticationHost" endpoint HTTP response body.
+type SetWorkloadAuthenticationHostResponseBody struct {
+	OrganizationID      string                                         `json:"organization_id"`
+	Issuers             []*AdminWorkloadIssuerResponseBody             `json:"issuers"`
+	Subjects            []*AdminWorkloadSubjectResponseBody            `json:"subjects"`
+	AuthenticationHosts []*AdminWorkloadAuthenticationHostResponseBody `json:"authentication_hosts"`
+}
+
+// TeardownWorkloadIssuerResponseBody is the type of the "admin" service
+// "teardownWorkloadIssuer" endpoint HTTP response body.
+type TeardownWorkloadIssuerResponseBody struct {
+	OrganizationID      string                                         `json:"organization_id"`
+	Issuers             []*AdminWorkloadIssuerResponseBody             `json:"issuers"`
+	Subjects            []*AdminWorkloadSubjectResponseBody            `json:"subjects"`
+	AuthenticationHosts []*AdminWorkloadAuthenticationHostResponseBody `json:"authentication_hosts"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -11788,6 +11877,942 @@ type UpdateSupportMatrixGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetWorkloadIdentityUnauthorizedResponseBody is the type of the "admin"
+// service "getWorkloadIdentity" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetWorkloadIdentityUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkloadIdentityForbiddenResponseBody is the type of the "admin" service
+// "getWorkloadIdentity" endpoint HTTP response body for the "forbidden" error.
+type GetWorkloadIdentityForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkloadIdentityBadRequestResponseBody is the type of the "admin" service
+// "getWorkloadIdentity" endpoint HTTP response body for the "bad_request"
+// error.
+type GetWorkloadIdentityBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkloadIdentityNotFoundResponseBody is the type of the "admin" service
+// "getWorkloadIdentity" endpoint HTTP response body for the "not_found" error.
+type GetWorkloadIdentityNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkloadIdentityConflictResponseBody is the type of the "admin" service
+// "getWorkloadIdentity" endpoint HTTP response body for the "conflict" error.
+type GetWorkloadIdentityConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkloadIdentityUnsupportedMediaResponseBody is the type of the "admin"
+// service "getWorkloadIdentity" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetWorkloadIdentityUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkloadIdentityInvalidResponseBody is the type of the "admin" service
+// "getWorkloadIdentity" endpoint HTTP response body for the "invalid" error.
+type GetWorkloadIdentityInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkloadIdentityInvariantViolationResponseBody is the type of the "admin"
+// service "getWorkloadIdentity" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetWorkloadIdentityInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkloadIdentityUnexpectedResponseBody is the type of the "admin" service
+// "getWorkloadIdentity" endpoint HTTP response body for the "unexpected" error.
+type GetWorkloadIdentityUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkloadIdentityGatewayErrorResponseBody is the type of the "admin"
+// service "getWorkloadIdentity" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetWorkloadIdentityGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateWorkloadIssuerUnauthorizedResponseBody is the type of the "admin"
+// service "createWorkloadIssuer" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateWorkloadIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateWorkloadIssuerForbiddenResponseBody is the type of the "admin" service
+// "createWorkloadIssuer" endpoint HTTP response body for the "forbidden" error.
+type CreateWorkloadIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateWorkloadIssuerBadRequestResponseBody is the type of the "admin"
+// service "createWorkloadIssuer" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateWorkloadIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateWorkloadIssuerNotFoundResponseBody is the type of the "admin" service
+// "createWorkloadIssuer" endpoint HTTP response body for the "not_found" error.
+type CreateWorkloadIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateWorkloadIssuerConflictResponseBody is the type of the "admin" service
+// "createWorkloadIssuer" endpoint HTTP response body for the "conflict" error.
+type CreateWorkloadIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateWorkloadIssuerUnsupportedMediaResponseBody is the type of the "admin"
+// service "createWorkloadIssuer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateWorkloadIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateWorkloadIssuerInvalidResponseBody is the type of the "admin" service
+// "createWorkloadIssuer" endpoint HTTP response body for the "invalid" error.
+type CreateWorkloadIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateWorkloadIssuerInvariantViolationResponseBody is the type of the
+// "admin" service "createWorkloadIssuer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateWorkloadIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateWorkloadIssuerUnexpectedResponseBody is the type of the "admin"
+// service "createWorkloadIssuer" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateWorkloadIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateWorkloadIssuerGatewayErrorResponseBody is the type of the "admin"
+// service "createWorkloadIssuer" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateWorkloadIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AdmitWorkloadSubjectUnauthorizedResponseBody is the type of the "admin"
+// service "admitWorkloadSubject" endpoint HTTP response body for the
+// "unauthorized" error.
+type AdmitWorkloadSubjectUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AdmitWorkloadSubjectForbiddenResponseBody is the type of the "admin" service
+// "admitWorkloadSubject" endpoint HTTP response body for the "forbidden" error.
+type AdmitWorkloadSubjectForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AdmitWorkloadSubjectBadRequestResponseBody is the type of the "admin"
+// service "admitWorkloadSubject" endpoint HTTP response body for the
+// "bad_request" error.
+type AdmitWorkloadSubjectBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AdmitWorkloadSubjectNotFoundResponseBody is the type of the "admin" service
+// "admitWorkloadSubject" endpoint HTTP response body for the "not_found" error.
+type AdmitWorkloadSubjectNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AdmitWorkloadSubjectConflictResponseBody is the type of the "admin" service
+// "admitWorkloadSubject" endpoint HTTP response body for the "conflict" error.
+type AdmitWorkloadSubjectConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AdmitWorkloadSubjectUnsupportedMediaResponseBody is the type of the "admin"
+// service "admitWorkloadSubject" endpoint HTTP response body for the
+// "unsupported_media" error.
+type AdmitWorkloadSubjectUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AdmitWorkloadSubjectInvalidResponseBody is the type of the "admin" service
+// "admitWorkloadSubject" endpoint HTTP response body for the "invalid" error.
+type AdmitWorkloadSubjectInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AdmitWorkloadSubjectInvariantViolationResponseBody is the type of the
+// "admin" service "admitWorkloadSubject" endpoint HTTP response body for the
+// "invariant_violation" error.
+type AdmitWorkloadSubjectInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AdmitWorkloadSubjectUnexpectedResponseBody is the type of the "admin"
+// service "admitWorkloadSubject" endpoint HTTP response body for the
+// "unexpected" error.
+type AdmitWorkloadSubjectUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AdmitWorkloadSubjectGatewayErrorResponseBody is the type of the "admin"
+// service "admitWorkloadSubject" endpoint HTTP response body for the
+// "gateway_error" error.
+type AdmitWorkloadSubjectGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetWorkloadAuthenticationHostUnauthorizedResponseBody is the type of the
+// "admin" service "setWorkloadAuthenticationHost" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetWorkloadAuthenticationHostUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetWorkloadAuthenticationHostForbiddenResponseBody is the type of the
+// "admin" service "setWorkloadAuthenticationHost" endpoint HTTP response body
+// for the "forbidden" error.
+type SetWorkloadAuthenticationHostForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetWorkloadAuthenticationHostBadRequestResponseBody is the type of the
+// "admin" service "setWorkloadAuthenticationHost" endpoint HTTP response body
+// for the "bad_request" error.
+type SetWorkloadAuthenticationHostBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetWorkloadAuthenticationHostNotFoundResponseBody is the type of the "admin"
+// service "setWorkloadAuthenticationHost" endpoint HTTP response body for the
+// "not_found" error.
+type SetWorkloadAuthenticationHostNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetWorkloadAuthenticationHostConflictResponseBody is the type of the "admin"
+// service "setWorkloadAuthenticationHost" endpoint HTTP response body for the
+// "conflict" error.
+type SetWorkloadAuthenticationHostConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetWorkloadAuthenticationHostUnsupportedMediaResponseBody is the type of the
+// "admin" service "setWorkloadAuthenticationHost" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetWorkloadAuthenticationHostUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetWorkloadAuthenticationHostInvalidResponseBody is the type of the "admin"
+// service "setWorkloadAuthenticationHost" endpoint HTTP response body for the
+// "invalid" error.
+type SetWorkloadAuthenticationHostInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetWorkloadAuthenticationHostInvariantViolationResponseBody is the type of
+// the "admin" service "setWorkloadAuthenticationHost" endpoint HTTP response
+// body for the "invariant_violation" error.
+type SetWorkloadAuthenticationHostInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetWorkloadAuthenticationHostUnexpectedResponseBody is the type of the
+// "admin" service "setWorkloadAuthenticationHost" endpoint HTTP response body
+// for the "unexpected" error.
+type SetWorkloadAuthenticationHostUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetWorkloadAuthenticationHostGatewayErrorResponseBody is the type of the
+// "admin" service "setWorkloadAuthenticationHost" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetWorkloadAuthenticationHostGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TeardownWorkloadIssuerUnauthorizedResponseBody is the type of the "admin"
+// service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "unauthorized" error.
+type TeardownWorkloadIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TeardownWorkloadIssuerForbiddenResponseBody is the type of the "admin"
+// service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "forbidden" error.
+type TeardownWorkloadIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TeardownWorkloadIssuerBadRequestResponseBody is the type of the "admin"
+// service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "bad_request" error.
+type TeardownWorkloadIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TeardownWorkloadIssuerNotFoundResponseBody is the type of the "admin"
+// service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "not_found" error.
+type TeardownWorkloadIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TeardownWorkloadIssuerConflictResponseBody is the type of the "admin"
+// service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "conflict" error.
+type TeardownWorkloadIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TeardownWorkloadIssuerUnsupportedMediaResponseBody is the type of the
+// "admin" service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type TeardownWorkloadIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TeardownWorkloadIssuerInvalidResponseBody is the type of the "admin" service
+// "teardownWorkloadIssuer" endpoint HTTP response body for the "invalid" error.
+type TeardownWorkloadIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TeardownWorkloadIssuerInvariantViolationResponseBody is the type of the
+// "admin" service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type TeardownWorkloadIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TeardownWorkloadIssuerUnexpectedResponseBody is the type of the "admin"
+// service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "unexpected" error.
+type TeardownWorkloadIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TeardownWorkloadIssuerGatewayErrorResponseBody is the type of the "admin"
+// service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "gateway_error" error.
+type TeardownWorkloadIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -12206,6 +13231,37 @@ type SupportMappingResponseBody struct {
 	Applicability string                              `json:"applicability"`
 	Conditions    string                              `json:"conditions"`
 	Facts         map[string]*SupportFactResponseBody `json:"facts"`
+}
+
+// AdminWorkloadIssuerResponseBody is used to define fields on response body
+// types.
+type AdminWorkloadIssuerResponseBody struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Issuer  string `json:"issuer"`
+	JwksURI string `json:"jwks_uri"`
+	// Project the issuer is scoped to, absent when it is organization-wide.
+	ProjectID *string `json:"project_id"`
+	CreatedAt string  `json:"created_at"`
+}
+
+// AdminWorkloadSubjectResponseBody is used to define fields on response body
+// types.
+type AdminWorkloadSubjectResponseBody struct {
+	WorkloadIssuerID string  `json:"workload_issuer_id"`
+	Subject          string  `json:"subject"`
+	Name             *string `json:"name"`
+	// Assigned agent, absent when the subject is admitted but unassigned.
+	AgentID   *string `json:"agent_id"`
+	AgentName *string `json:"agent_name"`
+}
+
+// AdminWorkloadAuthenticationHostResponseBody is used to define fields on
+// response body types.
+type AdminWorkloadAuthenticationHostResponseBody struct {
+	UserSessionIssuerID   string  `json:"user_session_issuer_id"`
+	ProjectID             *string `json:"project_id"`
+	UseAuthenticationHost bool    `json:"use_authentication_host"`
 }
 
 // SupportDraftRequestBody is used to define fields on request body types.
@@ -13478,6 +14534,232 @@ func NewUpdateSupportMatrixResponseBody(res *admin.SupportMatrix) *UpdateSupport
 	}
 	if res.Draft != nil {
 		body.Draft = marshalAdminSupportDraftToSupportDraftResponseBody(res.Draft)
+	}
+	return body
+}
+
+// NewGetWorkloadIdentityResponseBody builds the HTTP response body from the
+// result of the "getWorkloadIdentity" endpoint of the "admin" service.
+func NewGetWorkloadIdentityResponseBody(res *admin.AdminWorkloadIdentityState) *GetWorkloadIdentityResponseBody {
+	body := &GetWorkloadIdentityResponseBody{
+		OrganizationID: res.OrganizationID,
+	}
+	if res.Issuers != nil {
+		body.Issuers = make([]*AdminWorkloadIssuerResponseBody, len(res.Issuers))
+		for i, val := range res.Issuers {
+			if val == nil {
+				body.Issuers[i] = nil
+				continue
+			}
+			body.Issuers[i] = marshalAdminAdminWorkloadIssuerToAdminWorkloadIssuerResponseBody(val)
+		}
+	} else {
+		body.Issuers = []*AdminWorkloadIssuerResponseBody{}
+	}
+	if res.Subjects != nil {
+		body.Subjects = make([]*AdminWorkloadSubjectResponseBody, len(res.Subjects))
+		for i, val := range res.Subjects {
+			if val == nil {
+				body.Subjects[i] = nil
+				continue
+			}
+			body.Subjects[i] = marshalAdminAdminWorkloadSubjectToAdminWorkloadSubjectResponseBody(val)
+		}
+	} else {
+		body.Subjects = []*AdminWorkloadSubjectResponseBody{}
+	}
+	if res.AuthenticationHosts != nil {
+		body.AuthenticationHosts = make([]*AdminWorkloadAuthenticationHostResponseBody, len(res.AuthenticationHosts))
+		for i, val := range res.AuthenticationHosts {
+			if val == nil {
+				body.AuthenticationHosts[i] = nil
+				continue
+			}
+			body.AuthenticationHosts[i] = marshalAdminAdminWorkloadAuthenticationHostToAdminWorkloadAuthenticationHostResponseBody(val)
+		}
+	} else {
+		body.AuthenticationHosts = []*AdminWorkloadAuthenticationHostResponseBody{}
+	}
+	return body
+}
+
+// NewCreateWorkloadIssuerResponseBody builds the HTTP response body from the
+// result of the "createWorkloadIssuer" endpoint of the "admin" service.
+func NewCreateWorkloadIssuerResponseBody(res *admin.AdminWorkloadIdentityState) *CreateWorkloadIssuerResponseBody {
+	body := &CreateWorkloadIssuerResponseBody{
+		OrganizationID: res.OrganizationID,
+	}
+	if res.Issuers != nil {
+		body.Issuers = make([]*AdminWorkloadIssuerResponseBody, len(res.Issuers))
+		for i, val := range res.Issuers {
+			if val == nil {
+				body.Issuers[i] = nil
+				continue
+			}
+			body.Issuers[i] = marshalAdminAdminWorkloadIssuerToAdminWorkloadIssuerResponseBody(val)
+		}
+	} else {
+		body.Issuers = []*AdminWorkloadIssuerResponseBody{}
+	}
+	if res.Subjects != nil {
+		body.Subjects = make([]*AdminWorkloadSubjectResponseBody, len(res.Subjects))
+		for i, val := range res.Subjects {
+			if val == nil {
+				body.Subjects[i] = nil
+				continue
+			}
+			body.Subjects[i] = marshalAdminAdminWorkloadSubjectToAdminWorkloadSubjectResponseBody(val)
+		}
+	} else {
+		body.Subjects = []*AdminWorkloadSubjectResponseBody{}
+	}
+	if res.AuthenticationHosts != nil {
+		body.AuthenticationHosts = make([]*AdminWorkloadAuthenticationHostResponseBody, len(res.AuthenticationHosts))
+		for i, val := range res.AuthenticationHosts {
+			if val == nil {
+				body.AuthenticationHosts[i] = nil
+				continue
+			}
+			body.AuthenticationHosts[i] = marshalAdminAdminWorkloadAuthenticationHostToAdminWorkloadAuthenticationHostResponseBody(val)
+		}
+	} else {
+		body.AuthenticationHosts = []*AdminWorkloadAuthenticationHostResponseBody{}
+	}
+	return body
+}
+
+// NewAdmitWorkloadSubjectResponseBody builds the HTTP response body from the
+// result of the "admitWorkloadSubject" endpoint of the "admin" service.
+func NewAdmitWorkloadSubjectResponseBody(res *admin.AdminWorkloadIdentityState) *AdmitWorkloadSubjectResponseBody {
+	body := &AdmitWorkloadSubjectResponseBody{
+		OrganizationID: res.OrganizationID,
+	}
+	if res.Issuers != nil {
+		body.Issuers = make([]*AdminWorkloadIssuerResponseBody, len(res.Issuers))
+		for i, val := range res.Issuers {
+			if val == nil {
+				body.Issuers[i] = nil
+				continue
+			}
+			body.Issuers[i] = marshalAdminAdminWorkloadIssuerToAdminWorkloadIssuerResponseBody(val)
+		}
+	} else {
+		body.Issuers = []*AdminWorkloadIssuerResponseBody{}
+	}
+	if res.Subjects != nil {
+		body.Subjects = make([]*AdminWorkloadSubjectResponseBody, len(res.Subjects))
+		for i, val := range res.Subjects {
+			if val == nil {
+				body.Subjects[i] = nil
+				continue
+			}
+			body.Subjects[i] = marshalAdminAdminWorkloadSubjectToAdminWorkloadSubjectResponseBody(val)
+		}
+	} else {
+		body.Subjects = []*AdminWorkloadSubjectResponseBody{}
+	}
+	if res.AuthenticationHosts != nil {
+		body.AuthenticationHosts = make([]*AdminWorkloadAuthenticationHostResponseBody, len(res.AuthenticationHosts))
+		for i, val := range res.AuthenticationHosts {
+			if val == nil {
+				body.AuthenticationHosts[i] = nil
+				continue
+			}
+			body.AuthenticationHosts[i] = marshalAdminAdminWorkloadAuthenticationHostToAdminWorkloadAuthenticationHostResponseBody(val)
+		}
+	} else {
+		body.AuthenticationHosts = []*AdminWorkloadAuthenticationHostResponseBody{}
+	}
+	return body
+}
+
+// NewSetWorkloadAuthenticationHostResponseBody builds the HTTP response body
+// from the result of the "setWorkloadAuthenticationHost" endpoint of the
+// "admin" service.
+func NewSetWorkloadAuthenticationHostResponseBody(res *admin.AdminWorkloadIdentityState) *SetWorkloadAuthenticationHostResponseBody {
+	body := &SetWorkloadAuthenticationHostResponseBody{
+		OrganizationID: res.OrganizationID,
+	}
+	if res.Issuers != nil {
+		body.Issuers = make([]*AdminWorkloadIssuerResponseBody, len(res.Issuers))
+		for i, val := range res.Issuers {
+			if val == nil {
+				body.Issuers[i] = nil
+				continue
+			}
+			body.Issuers[i] = marshalAdminAdminWorkloadIssuerToAdminWorkloadIssuerResponseBody(val)
+		}
+	} else {
+		body.Issuers = []*AdminWorkloadIssuerResponseBody{}
+	}
+	if res.Subjects != nil {
+		body.Subjects = make([]*AdminWorkloadSubjectResponseBody, len(res.Subjects))
+		for i, val := range res.Subjects {
+			if val == nil {
+				body.Subjects[i] = nil
+				continue
+			}
+			body.Subjects[i] = marshalAdminAdminWorkloadSubjectToAdminWorkloadSubjectResponseBody(val)
+		}
+	} else {
+		body.Subjects = []*AdminWorkloadSubjectResponseBody{}
+	}
+	if res.AuthenticationHosts != nil {
+		body.AuthenticationHosts = make([]*AdminWorkloadAuthenticationHostResponseBody, len(res.AuthenticationHosts))
+		for i, val := range res.AuthenticationHosts {
+			if val == nil {
+				body.AuthenticationHosts[i] = nil
+				continue
+			}
+			body.AuthenticationHosts[i] = marshalAdminAdminWorkloadAuthenticationHostToAdminWorkloadAuthenticationHostResponseBody(val)
+		}
+	} else {
+		body.AuthenticationHosts = []*AdminWorkloadAuthenticationHostResponseBody{}
+	}
+	return body
+}
+
+// NewTeardownWorkloadIssuerResponseBody builds the HTTP response body from the
+// result of the "teardownWorkloadIssuer" endpoint of the "admin" service.
+func NewTeardownWorkloadIssuerResponseBody(res *admin.AdminWorkloadIdentityState) *TeardownWorkloadIssuerResponseBody {
+	body := &TeardownWorkloadIssuerResponseBody{
+		OrganizationID: res.OrganizationID,
+	}
+	if res.Issuers != nil {
+		body.Issuers = make([]*AdminWorkloadIssuerResponseBody, len(res.Issuers))
+		for i, val := range res.Issuers {
+			if val == nil {
+				body.Issuers[i] = nil
+				continue
+			}
+			body.Issuers[i] = marshalAdminAdminWorkloadIssuerToAdminWorkloadIssuerResponseBody(val)
+		}
+	} else {
+		body.Issuers = []*AdminWorkloadIssuerResponseBody{}
+	}
+	if res.Subjects != nil {
+		body.Subjects = make([]*AdminWorkloadSubjectResponseBody, len(res.Subjects))
+		for i, val := range res.Subjects {
+			if val == nil {
+				body.Subjects[i] = nil
+				continue
+			}
+			body.Subjects[i] = marshalAdminAdminWorkloadSubjectToAdminWorkloadSubjectResponseBody(val)
+		}
+	} else {
+		body.Subjects = []*AdminWorkloadSubjectResponseBody{}
+	}
+	if res.AuthenticationHosts != nil {
+		body.AuthenticationHosts = make([]*AdminWorkloadAuthenticationHostResponseBody, len(res.AuthenticationHosts))
+		for i, val := range res.AuthenticationHosts {
+			if val == nil {
+				body.AuthenticationHosts[i] = nil
+				continue
+			}
+			body.AuthenticationHosts[i] = marshalAdminAdminWorkloadAuthenticationHostToAdminWorkloadAuthenticationHostResponseBody(val)
+		}
+	} else {
+		body.AuthenticationHosts = []*AdminWorkloadAuthenticationHostResponseBody{}
 	}
 	return body
 }
@@ -21482,6 +22764,748 @@ func NewUpdateSupportMatrixGatewayErrorResponseBody(res *goa.ServiceError) *Upda
 	return body
 }
 
+// NewGetWorkloadIdentityUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getWorkloadIdentity" endpoint of the "admin" service.
+func NewGetWorkloadIdentityUnauthorizedResponseBody(res *goa.ServiceError) *GetWorkloadIdentityUnauthorizedResponseBody {
+	body := &GetWorkloadIdentityUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkloadIdentityForbiddenResponseBody builds the HTTP response body
+// from the result of the "getWorkloadIdentity" endpoint of the "admin" service.
+func NewGetWorkloadIdentityForbiddenResponseBody(res *goa.ServiceError) *GetWorkloadIdentityForbiddenResponseBody {
+	body := &GetWorkloadIdentityForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkloadIdentityBadRequestResponseBody builds the HTTP response body
+// from the result of the "getWorkloadIdentity" endpoint of the "admin" service.
+func NewGetWorkloadIdentityBadRequestResponseBody(res *goa.ServiceError) *GetWorkloadIdentityBadRequestResponseBody {
+	body := &GetWorkloadIdentityBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkloadIdentityNotFoundResponseBody builds the HTTP response body
+// from the result of the "getWorkloadIdentity" endpoint of the "admin" service.
+func NewGetWorkloadIdentityNotFoundResponseBody(res *goa.ServiceError) *GetWorkloadIdentityNotFoundResponseBody {
+	body := &GetWorkloadIdentityNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkloadIdentityConflictResponseBody builds the HTTP response body
+// from the result of the "getWorkloadIdentity" endpoint of the "admin" service.
+func NewGetWorkloadIdentityConflictResponseBody(res *goa.ServiceError) *GetWorkloadIdentityConflictResponseBody {
+	body := &GetWorkloadIdentityConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkloadIdentityUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getWorkloadIdentity" endpoint of the "admin"
+// service.
+func NewGetWorkloadIdentityUnsupportedMediaResponseBody(res *goa.ServiceError) *GetWorkloadIdentityUnsupportedMediaResponseBody {
+	body := &GetWorkloadIdentityUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkloadIdentityInvalidResponseBody builds the HTTP response body from
+// the result of the "getWorkloadIdentity" endpoint of the "admin" service.
+func NewGetWorkloadIdentityInvalidResponseBody(res *goa.ServiceError) *GetWorkloadIdentityInvalidResponseBody {
+	body := &GetWorkloadIdentityInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkloadIdentityInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getWorkloadIdentity" endpoint of the
+// "admin" service.
+func NewGetWorkloadIdentityInvariantViolationResponseBody(res *goa.ServiceError) *GetWorkloadIdentityInvariantViolationResponseBody {
+	body := &GetWorkloadIdentityInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkloadIdentityUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getWorkloadIdentity" endpoint of the "admin" service.
+func NewGetWorkloadIdentityUnexpectedResponseBody(res *goa.ServiceError) *GetWorkloadIdentityUnexpectedResponseBody {
+	body := &GetWorkloadIdentityUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkloadIdentityGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getWorkloadIdentity" endpoint of the "admin" service.
+func NewGetWorkloadIdentityGatewayErrorResponseBody(res *goa.ServiceError) *GetWorkloadIdentityGatewayErrorResponseBody {
+	body := &GetWorkloadIdentityGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateWorkloadIssuerUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "createWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewCreateWorkloadIssuerUnauthorizedResponseBody(res *goa.ServiceError) *CreateWorkloadIssuerUnauthorizedResponseBody {
+	body := &CreateWorkloadIssuerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateWorkloadIssuerForbiddenResponseBody builds the HTTP response body
+// from the result of the "createWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewCreateWorkloadIssuerForbiddenResponseBody(res *goa.ServiceError) *CreateWorkloadIssuerForbiddenResponseBody {
+	body := &CreateWorkloadIssuerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateWorkloadIssuerBadRequestResponseBody builds the HTTP response body
+// from the result of the "createWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewCreateWorkloadIssuerBadRequestResponseBody(res *goa.ServiceError) *CreateWorkloadIssuerBadRequestResponseBody {
+	body := &CreateWorkloadIssuerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateWorkloadIssuerNotFoundResponseBody builds the HTTP response body
+// from the result of the "createWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewCreateWorkloadIssuerNotFoundResponseBody(res *goa.ServiceError) *CreateWorkloadIssuerNotFoundResponseBody {
+	body := &CreateWorkloadIssuerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateWorkloadIssuerConflictResponseBody builds the HTTP response body
+// from the result of the "createWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewCreateWorkloadIssuerConflictResponseBody(res *goa.ServiceError) *CreateWorkloadIssuerConflictResponseBody {
+	body := &CreateWorkloadIssuerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateWorkloadIssuerUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewCreateWorkloadIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateWorkloadIssuerUnsupportedMediaResponseBody {
+	body := &CreateWorkloadIssuerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateWorkloadIssuerInvalidResponseBody builds the HTTP response body
+// from the result of the "createWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewCreateWorkloadIssuerInvalidResponseBody(res *goa.ServiceError) *CreateWorkloadIssuerInvalidResponseBody {
+	body := &CreateWorkloadIssuerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateWorkloadIssuerInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createWorkloadIssuer" endpoint of the
+// "admin" service.
+func NewCreateWorkloadIssuerInvariantViolationResponseBody(res *goa.ServiceError) *CreateWorkloadIssuerInvariantViolationResponseBody {
+	body := &CreateWorkloadIssuerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateWorkloadIssuerUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewCreateWorkloadIssuerUnexpectedResponseBody(res *goa.ServiceError) *CreateWorkloadIssuerUnexpectedResponseBody {
+	body := &CreateWorkloadIssuerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateWorkloadIssuerGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "createWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewCreateWorkloadIssuerGatewayErrorResponseBody(res *goa.ServiceError) *CreateWorkloadIssuerGatewayErrorResponseBody {
+	body := &CreateWorkloadIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAdmitWorkloadSubjectUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "admitWorkloadSubject" endpoint of the "admin"
+// service.
+func NewAdmitWorkloadSubjectUnauthorizedResponseBody(res *goa.ServiceError) *AdmitWorkloadSubjectUnauthorizedResponseBody {
+	body := &AdmitWorkloadSubjectUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAdmitWorkloadSubjectForbiddenResponseBody builds the HTTP response body
+// from the result of the "admitWorkloadSubject" endpoint of the "admin"
+// service.
+func NewAdmitWorkloadSubjectForbiddenResponseBody(res *goa.ServiceError) *AdmitWorkloadSubjectForbiddenResponseBody {
+	body := &AdmitWorkloadSubjectForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAdmitWorkloadSubjectBadRequestResponseBody builds the HTTP response body
+// from the result of the "admitWorkloadSubject" endpoint of the "admin"
+// service.
+func NewAdmitWorkloadSubjectBadRequestResponseBody(res *goa.ServiceError) *AdmitWorkloadSubjectBadRequestResponseBody {
+	body := &AdmitWorkloadSubjectBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAdmitWorkloadSubjectNotFoundResponseBody builds the HTTP response body
+// from the result of the "admitWorkloadSubject" endpoint of the "admin"
+// service.
+func NewAdmitWorkloadSubjectNotFoundResponseBody(res *goa.ServiceError) *AdmitWorkloadSubjectNotFoundResponseBody {
+	body := &AdmitWorkloadSubjectNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAdmitWorkloadSubjectConflictResponseBody builds the HTTP response body
+// from the result of the "admitWorkloadSubject" endpoint of the "admin"
+// service.
+func NewAdmitWorkloadSubjectConflictResponseBody(res *goa.ServiceError) *AdmitWorkloadSubjectConflictResponseBody {
+	body := &AdmitWorkloadSubjectConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAdmitWorkloadSubjectUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "admitWorkloadSubject" endpoint of the "admin"
+// service.
+func NewAdmitWorkloadSubjectUnsupportedMediaResponseBody(res *goa.ServiceError) *AdmitWorkloadSubjectUnsupportedMediaResponseBody {
+	body := &AdmitWorkloadSubjectUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAdmitWorkloadSubjectInvalidResponseBody builds the HTTP response body
+// from the result of the "admitWorkloadSubject" endpoint of the "admin"
+// service.
+func NewAdmitWorkloadSubjectInvalidResponseBody(res *goa.ServiceError) *AdmitWorkloadSubjectInvalidResponseBody {
+	body := &AdmitWorkloadSubjectInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAdmitWorkloadSubjectInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "admitWorkloadSubject" endpoint of the
+// "admin" service.
+func NewAdmitWorkloadSubjectInvariantViolationResponseBody(res *goa.ServiceError) *AdmitWorkloadSubjectInvariantViolationResponseBody {
+	body := &AdmitWorkloadSubjectInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAdmitWorkloadSubjectUnexpectedResponseBody builds the HTTP response body
+// from the result of the "admitWorkloadSubject" endpoint of the "admin"
+// service.
+func NewAdmitWorkloadSubjectUnexpectedResponseBody(res *goa.ServiceError) *AdmitWorkloadSubjectUnexpectedResponseBody {
+	body := &AdmitWorkloadSubjectUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAdmitWorkloadSubjectGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "admitWorkloadSubject" endpoint of the "admin"
+// service.
+func NewAdmitWorkloadSubjectGatewayErrorResponseBody(res *goa.ServiceError) *AdmitWorkloadSubjectGatewayErrorResponseBody {
+	body := &AdmitWorkloadSubjectGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetWorkloadAuthenticationHostUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "setWorkloadAuthenticationHost"
+// endpoint of the "admin" service.
+func NewSetWorkloadAuthenticationHostUnauthorizedResponseBody(res *goa.ServiceError) *SetWorkloadAuthenticationHostUnauthorizedResponseBody {
+	body := &SetWorkloadAuthenticationHostUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetWorkloadAuthenticationHostForbiddenResponseBody builds the HTTP
+// response body from the result of the "setWorkloadAuthenticationHost"
+// endpoint of the "admin" service.
+func NewSetWorkloadAuthenticationHostForbiddenResponseBody(res *goa.ServiceError) *SetWorkloadAuthenticationHostForbiddenResponseBody {
+	body := &SetWorkloadAuthenticationHostForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetWorkloadAuthenticationHostBadRequestResponseBody builds the HTTP
+// response body from the result of the "setWorkloadAuthenticationHost"
+// endpoint of the "admin" service.
+func NewSetWorkloadAuthenticationHostBadRequestResponseBody(res *goa.ServiceError) *SetWorkloadAuthenticationHostBadRequestResponseBody {
+	body := &SetWorkloadAuthenticationHostBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetWorkloadAuthenticationHostNotFoundResponseBody builds the HTTP
+// response body from the result of the "setWorkloadAuthenticationHost"
+// endpoint of the "admin" service.
+func NewSetWorkloadAuthenticationHostNotFoundResponseBody(res *goa.ServiceError) *SetWorkloadAuthenticationHostNotFoundResponseBody {
+	body := &SetWorkloadAuthenticationHostNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetWorkloadAuthenticationHostConflictResponseBody builds the HTTP
+// response body from the result of the "setWorkloadAuthenticationHost"
+// endpoint of the "admin" service.
+func NewSetWorkloadAuthenticationHostConflictResponseBody(res *goa.ServiceError) *SetWorkloadAuthenticationHostConflictResponseBody {
+	body := &SetWorkloadAuthenticationHostConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetWorkloadAuthenticationHostUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setWorkloadAuthenticationHost"
+// endpoint of the "admin" service.
+func NewSetWorkloadAuthenticationHostUnsupportedMediaResponseBody(res *goa.ServiceError) *SetWorkloadAuthenticationHostUnsupportedMediaResponseBody {
+	body := &SetWorkloadAuthenticationHostUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetWorkloadAuthenticationHostInvalidResponseBody builds the HTTP response
+// body from the result of the "setWorkloadAuthenticationHost" endpoint of the
+// "admin" service.
+func NewSetWorkloadAuthenticationHostInvalidResponseBody(res *goa.ServiceError) *SetWorkloadAuthenticationHostInvalidResponseBody {
+	body := &SetWorkloadAuthenticationHostInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetWorkloadAuthenticationHostInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "setWorkloadAuthenticationHost"
+// endpoint of the "admin" service.
+func NewSetWorkloadAuthenticationHostInvariantViolationResponseBody(res *goa.ServiceError) *SetWorkloadAuthenticationHostInvariantViolationResponseBody {
+	body := &SetWorkloadAuthenticationHostInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetWorkloadAuthenticationHostUnexpectedResponseBody builds the HTTP
+// response body from the result of the "setWorkloadAuthenticationHost"
+// endpoint of the "admin" service.
+func NewSetWorkloadAuthenticationHostUnexpectedResponseBody(res *goa.ServiceError) *SetWorkloadAuthenticationHostUnexpectedResponseBody {
+	body := &SetWorkloadAuthenticationHostUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetWorkloadAuthenticationHostGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "setWorkloadAuthenticationHost"
+// endpoint of the "admin" service.
+func NewSetWorkloadAuthenticationHostGatewayErrorResponseBody(res *goa.ServiceError) *SetWorkloadAuthenticationHostGatewayErrorResponseBody {
+	body := &SetWorkloadAuthenticationHostGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTeardownWorkloadIssuerUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "teardownWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewTeardownWorkloadIssuerUnauthorizedResponseBody(res *goa.ServiceError) *TeardownWorkloadIssuerUnauthorizedResponseBody {
+	body := &TeardownWorkloadIssuerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTeardownWorkloadIssuerForbiddenResponseBody builds the HTTP response body
+// from the result of the "teardownWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewTeardownWorkloadIssuerForbiddenResponseBody(res *goa.ServiceError) *TeardownWorkloadIssuerForbiddenResponseBody {
+	body := &TeardownWorkloadIssuerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTeardownWorkloadIssuerBadRequestResponseBody builds the HTTP response
+// body from the result of the "teardownWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewTeardownWorkloadIssuerBadRequestResponseBody(res *goa.ServiceError) *TeardownWorkloadIssuerBadRequestResponseBody {
+	body := &TeardownWorkloadIssuerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTeardownWorkloadIssuerNotFoundResponseBody builds the HTTP response body
+// from the result of the "teardownWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewTeardownWorkloadIssuerNotFoundResponseBody(res *goa.ServiceError) *TeardownWorkloadIssuerNotFoundResponseBody {
+	body := &TeardownWorkloadIssuerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTeardownWorkloadIssuerConflictResponseBody builds the HTTP response body
+// from the result of the "teardownWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewTeardownWorkloadIssuerConflictResponseBody(res *goa.ServiceError) *TeardownWorkloadIssuerConflictResponseBody {
+	body := &TeardownWorkloadIssuerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTeardownWorkloadIssuerUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "teardownWorkloadIssuer" endpoint of
+// the "admin" service.
+func NewTeardownWorkloadIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *TeardownWorkloadIssuerUnsupportedMediaResponseBody {
+	body := &TeardownWorkloadIssuerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTeardownWorkloadIssuerInvalidResponseBody builds the HTTP response body
+// from the result of the "teardownWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewTeardownWorkloadIssuerInvalidResponseBody(res *goa.ServiceError) *TeardownWorkloadIssuerInvalidResponseBody {
+	body := &TeardownWorkloadIssuerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTeardownWorkloadIssuerInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "teardownWorkloadIssuer" endpoint of
+// the "admin" service.
+func NewTeardownWorkloadIssuerInvariantViolationResponseBody(res *goa.ServiceError) *TeardownWorkloadIssuerInvariantViolationResponseBody {
+	body := &TeardownWorkloadIssuerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTeardownWorkloadIssuerUnexpectedResponseBody builds the HTTP response
+// body from the result of the "teardownWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewTeardownWorkloadIssuerUnexpectedResponseBody(res *goa.ServiceError) *TeardownWorkloadIssuerUnexpectedResponseBody {
+	body := &TeardownWorkloadIssuerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTeardownWorkloadIssuerGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "teardownWorkloadIssuer" endpoint of the "admin"
+// service.
+func NewTeardownWorkloadIssuerGatewayErrorResponseBody(res *goa.ServiceError) *TeardownWorkloadIssuerGatewayErrorResponseBody {
+	body := &TeardownWorkloadIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -22221,6 +24245,71 @@ func NewUpdateSupportMatrixPayload(body *UpdateSupportMatrixRequestBody, adminSe
 	return v
 }
 
+// NewGetWorkloadIdentityPayload builds a admin service getWorkloadIdentity
+// endpoint payload.
+func NewGetWorkloadIdentityPayload(organizationID string, adminSessionToken *string) *admin.GetWorkloadIdentityPayload {
+	v := &admin.GetWorkloadIdentityPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewCreateWorkloadIssuerPayload builds a admin service createWorkloadIssuer
+// endpoint payload.
+func NewCreateWorkloadIssuerPayload(body *CreateWorkloadIssuerRequestBody, adminSessionToken *string) *admin.CreateWorkloadIssuerPayload {
+	v := &admin.CreateWorkloadIssuerPayload{
+		OrganizationID: *body.OrganizationID,
+		ProjectID:      body.ProjectID,
+		Name:           *body.Name,
+		Issuer:         *body.Issuer,
+		JwksURI:        *body.JwksURI,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewAdmitWorkloadSubjectPayload builds a admin service admitWorkloadSubject
+// endpoint payload.
+func NewAdmitWorkloadSubjectPayload(body *AdmitWorkloadSubjectRequestBody, adminSessionToken *string) *admin.AdmitWorkloadSubjectPayload {
+	v := &admin.AdmitWorkloadSubjectPayload{
+		OrganizationID:   *body.OrganizationID,
+		WorkloadIssuerID: *body.WorkloadIssuerID,
+		Subject:          *body.Subject,
+		Name:             body.Name,
+		AgentID:          *body.AgentID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewSetWorkloadAuthenticationHostPayload builds a admin service
+// setWorkloadAuthenticationHost endpoint payload.
+func NewSetWorkloadAuthenticationHostPayload(body *SetWorkloadAuthenticationHostRequestBody, adminSessionToken *string) *admin.SetWorkloadAuthenticationHostPayload {
+	v := &admin.SetWorkloadAuthenticationHostPayload{
+		OrganizationID:      *body.OrganizationID,
+		UserSessionIssuerID: *body.UserSessionIssuerID,
+		Enabled:             *body.Enabled,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewTeardownWorkloadIssuerPayload builds a admin service
+// teardownWorkloadIssuer endpoint payload.
+func NewTeardownWorkloadIssuerPayload(body *TeardownWorkloadIssuerRequestBody, adminSessionToken *string) *admin.TeardownWorkloadIssuerPayload {
+	v := &admin.TeardownWorkloadIssuerPayload{
+		OrganizationID:   *body.OrganizationID,
+		WorkloadIssuerID: *body.WorkloadIssuerID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
 // SetOrganizationFeatureRequestBody
 func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureRequestBody) (err error) {
@@ -22650,6 +24739,127 @@ func ValidateUpdateSupportMatrixRequestBody(body *UpdateSupportMatrixRequestBody
 		if err2 := ValidateSupportDraftRequestBody(body.Draft); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateCreateWorkloadIssuerRequestBody runs the validations defined on
+// CreateWorkloadIssuerRequestBody
+func ValidateCreateWorkloadIssuerRequestBody(body *CreateWorkloadIssuerRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.JwksURI == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("jwks_uri", "body"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 100, false))
+		}
+	}
+	if body.Issuer != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.issuer", *body.Issuer, "^https://"))
+	}
+	if body.Issuer != nil {
+		if utf8.RuneCountInString(*body.Issuer) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.issuer", *body.Issuer, utf8.RuneCountInString(*body.Issuer), 2048, false))
+		}
+	}
+	if body.JwksURI != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.jwks_uri", *body.JwksURI, "^https://"))
+	}
+	if body.JwksURI != nil {
+		if utf8.RuneCountInString(*body.JwksURI) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.jwks_uri", *body.JwksURI, utf8.RuneCountInString(*body.JwksURI), 2048, false))
+		}
+	}
+	return
+}
+
+// ValidateAdmitWorkloadSubjectRequestBody runs the validations defined on
+// AdmitWorkloadSubjectRequestBody
+func ValidateAdmitWorkloadSubjectRequestBody(body *AdmitWorkloadSubjectRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.WorkloadIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workload_issuer_id", "body"))
+	}
+	if body.Subject == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject", "body"))
+	}
+	if body.AgentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))
+	}
+	if body.WorkloadIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.workload_issuer_id", *body.WorkloadIssuerID, goa.FormatUUID))
+	}
+	if body.Subject != nil {
+		if utf8.RuneCountInString(*body.Subject) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.subject", *body.Subject, utf8.RuneCountInString(*body.Subject), 1, true))
+		}
+	}
+	if body.Subject != nil {
+		if utf8.RuneCountInString(*body.Subject) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.subject", *body.Subject, utf8.RuneCountInString(*body.Subject), 2048, false))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 100, false))
+		}
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSetWorkloadAuthenticationHostRequestBody runs the validations
+// defined on SetWorkloadAuthenticationHostRequestBody
+func ValidateSetWorkloadAuthenticationHostRequestBody(body *SetWorkloadAuthenticationHostRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateTeardownWorkloadIssuerRequestBody runs the validations defined on
+// TeardownWorkloadIssuerRequestBody
+func ValidateTeardownWorkloadIssuerRequestBody(body *TeardownWorkloadIssuerRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.WorkloadIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workload_issuer_id", "body"))
+	}
+	if body.WorkloadIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.workload_issuer_id", *body.WorkloadIssuerID, goa.FormatUUID))
 	}
 	return
 }

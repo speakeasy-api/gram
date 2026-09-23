@@ -7,6 +7,7 @@ import {
   CreditCardIcon,
   FolderIcon,
   HistoryIcon,
+  KeyRoundIcon,
   SlidersHorizontalIcon,
   UsersIcon,
 } from "lucide-react";
@@ -109,6 +110,10 @@ export function RecordNav({
   });
   const onFeatures = !!matchRoute({
     to: "/organizations/$idOrSlug/features",
+    params: { idOrSlug },
+  });
+  const onWorkloadIdentity = !!matchRoute({
+    to: "/organizations/$idOrSlug/workload-identity",
     params: { idOrSlug },
   });
 
@@ -254,6 +259,23 @@ export function RecordNav({
                 >
                   <SlidersHorizontalIcon />
                   <span>Features</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onWorkloadIdentity}
+                tooltip="Workload identity"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/workload-identity"
+                  params={{ idOrSlug }}
+                  {...currentProps(onWorkloadIdentity)}
+                >
+                  <KeyRoundIcon />
+                  <span>Workload identity</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

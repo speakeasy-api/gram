@@ -205,6 +205,24 @@ type Service interface {
 	GetSupportMatrix(context.Context, *GetSupportMatrixPayload) (res *SupportMatrix, err error)
 	// Save coverage against the last read revision; rejects concurrent changes.
 	UpdateSupportMatrix(context.Context, *UpdateSupportMatrixPayload) (res *SupportMatrix, err error)
+	// Read an organization's workload issuers, admitted subjects, and
+	// authentication host state.
+	GetWorkloadIdentity(context.Context, *GetWorkloadIdentityPayload) (res *AdminWorkloadIdentityState, err error)
+	// Trust one workload assertion issuer for an organization. Both URLs must be
+	// https, which the grant enforces at verification time; rejecting them here
+	// avoids storing a row that can never admit anything.
+	CreateWorkloadIssuer(context.Context, *CreateWorkloadIssuerPayload) (res *AdminWorkloadIdentityState, err error)
+	// Admit one exact subject under a trusted issuer and assign the agent whose
+	// policy it inherits. Trusting the issuer alone never admits a workload, so
+	// the subject must be the value the platform actually mints.
+	AdmitWorkloadSubject(context.Context, *AdmitWorkloadSubjectPayload) (res *AdminWorkloadIdentityState, err error)
+	// Announce the deployment's authentication host as this issuer's OAuth issuer
+	// and endpoint origin. Required by clients that refuse a token endpoint
+	// sharing a host with the API it calls.
+	SetWorkloadAuthenticationHost(context.Context, *SetWorkloadAuthenticationHostPayload) (res *AdminWorkloadIdentityState, err error)
+	// Withdraw an issuer with its admissions and agent assignments in one step, so
+	// teardown cannot leave a subject admitted under an issuer that is gone.
+	TeardownWorkloadIssuer(context.Context, *TeardownWorkloadIssuerPayload) (res *AdminWorkloadIdentityState, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -227,7 +245,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [53]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix"}
+var MethodNames = [58]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getWorkloadIdentity", "createWorkloadIssuer", "admitWorkloadSubject", "setWorkloadAuthenticationHost", "teardownWorkloadIssuer"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -536,6 +554,60 @@ type AdminStripeSubscription struct {
 	PaymentFailed      bool
 }
 
+// Whether one user session issuer announces the deployment's authentication
+// host as its OAuth issuer.
+type AdminWorkloadAuthenticationHost struct {
+	UserSessionIssuerID   string  `json:"user_session_issuer_id"`
+	ProjectID             *string `json:"project_id"`
+	UseAuthenticationHost bool    `json:"use_authentication_host"`
+}
+
+// AdminWorkloadIdentityState is the result type of the admin service
+// getWorkloadIdentity method.
+type AdminWorkloadIdentityState struct {
+	OrganizationID      string                             `json:"organization_id"`
+	Issuers             []*AdminWorkloadIssuer             `json:"issuers"`
+	Subjects            []*AdminWorkloadSubject            `json:"subjects"`
+	AuthenticationHosts []*AdminWorkloadAuthenticationHost `json:"authentication_hosts"`
+}
+
+// A workload assertion issuer trusted by one organization.
+type AdminWorkloadIssuer struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Issuer  string `json:"issuer"`
+	JwksURI string `json:"jwks_uri"`
+	// Project the issuer is scoped to, absent when it is organization-wide.
+	ProjectID *string `json:"project_id"`
+	CreatedAt string  `json:"created_at"`
+}
+
+// An admitted workload subject and the agent supplying its policy. A subject
+// with no assigned agent is refused at the token endpoint, so both are shown
+// together.
+type AdminWorkloadSubject struct {
+	WorkloadIssuerID string  `json:"workload_issuer_id"`
+	Subject          string  `json:"subject"`
+	Name             *string `json:"name"`
+	// Assigned agent, absent when the subject is admitted but unassigned.
+	AgentID   *string `json:"agent_id"`
+	AgentName *string `json:"agent_name"`
+}
+
+// AdmitWorkloadSubjectPayload is the payload type of the admin service
+// admitWorkloadSubject method.
+type AdmitWorkloadSubjectPayload struct {
+	AdminSessionToken *string
+	// Organization ID or canonical slug.
+	OrganizationID   string
+	WorkloadIssuerID string
+	// The assertion's sub claim, matched exactly.
+	Subject string
+	Name    *string
+	// Agent supplying the workload's policy.
+	AgentID string
+}
+
 type Asset struct {
 	// The ID of the asset
 	ID   string
@@ -738,6 +810,21 @@ type CreateOrganizationPayload struct {
 	OwnershipConfirmed bool
 }
 
+// CreateWorkloadIssuerPayload is the payload type of the admin service
+// createWorkloadIssuer method.
+type CreateWorkloadIssuerPayload struct {
+	AdminSessionToken *string
+	// Organization ID or canonical slug.
+	OrganizationID string
+	// Scope the issuer to one project. Omit for organization-wide.
+	ProjectID *string
+	Name      string
+	// The assertion's iss claim.
+	Issuer string
+	// Where the issuer publishes its signing keys.
+	JwksURI string
+}
+
 // DeleteGlobalIssuerPayload is the payload type of the admin service
 // deleteGlobalIssuer method.
 type DeleteGlobalIssuerPayload struct {
@@ -920,6 +1007,14 @@ type GetStripeSubscriptionPayload struct {
 // getSupportMatrix method.
 type GetSupportMatrixPayload struct {
 	AdminSessionToken *string
+}
+
+// GetWorkloadIdentityPayload is the payload type of the admin service
+// getWorkloadIdentity method.
+type GetWorkloadIdentityPayload struct {
+	AdminSessionToken *string
+	// Organization ID or canonical slug.
+	OrganizationID string
 }
 
 // GlobalRemoteSessionIssuer is the result type of the admin service
@@ -1338,6 +1433,16 @@ type SetStripeCustomerPayload struct {
 	StripeCustomerID  string
 }
 
+// SetWorkloadAuthenticationHostPayload is the payload type of the admin
+// service setWorkloadAuthenticationHost method.
+type SetWorkloadAuthenticationHostPayload struct {
+	AdminSessionToken *string
+	// Organization ID or canonical slug.
+	OrganizationID      string
+	UserSessionIssuerID string
+	Enabled             bool
+}
+
 type SpendBucket struct {
 	// Inclusive bucket boundary
 	From string
@@ -1421,6 +1526,15 @@ type SupportPlatform struct {
 	Vendor  string `json:"vendor"`
 	Family  string `json:"family"`
 	Surface string `json:"surface"`
+}
+
+// TeardownWorkloadIssuerPayload is the payload type of the admin service
+// teardownWorkloadIssuer method.
+type TeardownWorkloadIssuerPayload struct {
+	AdminSessionToken *string
+	// Organization ID or canonical slug.
+	OrganizationID   string
+	WorkloadIssuerID string
 }
 
 // TriggerOrganizationChatAnalysisPayload is the payload type of the admin

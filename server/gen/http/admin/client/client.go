@@ -228,6 +228,26 @@ type Client struct {
 	// updateSupportMatrix endpoint.
 	UpdateSupportMatrixDoer goahttp.Doer
 
+	// GetWorkloadIdentity Doer is the HTTP client used to make requests to the
+	// getWorkloadIdentity endpoint.
+	GetWorkloadIdentityDoer goahttp.Doer
+
+	// CreateWorkloadIssuer Doer is the HTTP client used to make requests to the
+	// createWorkloadIssuer endpoint.
+	CreateWorkloadIssuerDoer goahttp.Doer
+
+	// AdmitWorkloadSubject Doer is the HTTP client used to make requests to the
+	// admitWorkloadSubject endpoint.
+	AdmitWorkloadSubjectDoer goahttp.Doer
+
+	// SetWorkloadAuthenticationHost Doer is the HTTP client used to make requests
+	// to the setWorkloadAuthenticationHost endpoint.
+	SetWorkloadAuthenticationHostDoer goahttp.Doer
+
+	// TeardownWorkloadIssuer Doer is the HTTP client used to make requests to the
+	// teardownWorkloadIssuer endpoint.
+	TeardownWorkloadIssuerDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -301,6 +321,11 @@ func NewClient(
 		GetSpendBreakdownDoer:                     doer,
 		GetSupportMatrixDoer:                      doer,
 		UpdateSupportMatrixDoer:                   doer,
+		GetWorkloadIdentityDoer:                   doer,
+		CreateWorkloadIssuerDoer:                  doer,
+		AdmitWorkloadSubjectDoer:                  doer,
+		SetWorkloadAuthenticationHostDoer:         doer,
+		TeardownWorkloadIssuerDoer:                doer,
 		RestoreResponseBody:                       restoreBody,
 		scheme:                                    scheme,
 		host:                                      host,
@@ -1581,6 +1606,126 @@ func (c *Client) UpdateSupportMatrix() goa.Endpoint {
 		resp, err := c.UpdateSupportMatrixDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "updateSupportMatrix", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetWorkloadIdentity returns an endpoint that makes HTTP requests to the
+// admin service getWorkloadIdentity server.
+func (c *Client) GetWorkloadIdentity() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetWorkloadIdentityRequest(c.encoder)
+		decodeResponse = DecodeGetWorkloadIdentityResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetWorkloadIdentityRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetWorkloadIdentityDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getWorkloadIdentity", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateWorkloadIssuer returns an endpoint that makes HTTP requests to the
+// admin service createWorkloadIssuer server.
+func (c *Client) CreateWorkloadIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateWorkloadIssuerRequest(c.encoder)
+		decodeResponse = DecodeCreateWorkloadIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateWorkloadIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateWorkloadIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "createWorkloadIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// AdmitWorkloadSubject returns an endpoint that makes HTTP requests to the
+// admin service admitWorkloadSubject server.
+func (c *Client) AdmitWorkloadSubject() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeAdmitWorkloadSubjectRequest(c.encoder)
+		decodeResponse = DecodeAdmitWorkloadSubjectResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildAdmitWorkloadSubjectRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.AdmitWorkloadSubjectDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "admitWorkloadSubject", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetWorkloadAuthenticationHost returns an endpoint that makes HTTP requests
+// to the admin service setWorkloadAuthenticationHost server.
+func (c *Client) SetWorkloadAuthenticationHost() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetWorkloadAuthenticationHostRequest(c.encoder)
+		decodeResponse = DecodeSetWorkloadAuthenticationHostResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetWorkloadAuthenticationHostRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetWorkloadAuthenticationHostDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setWorkloadAuthenticationHost", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// TeardownWorkloadIssuer returns an endpoint that makes HTTP requests to the
+// admin service teardownWorkloadIssuer server.
+func (c *Client) TeardownWorkloadIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeTeardownWorkloadIssuerRequest(c.encoder)
+		decodeResponse = DecodeTeardownWorkloadIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildTeardownWorkloadIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.TeardownWorkloadIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "teardownWorkloadIssuer", err)
 		}
 		return decodeResponse(resp)
 	}

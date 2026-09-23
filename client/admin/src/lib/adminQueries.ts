@@ -12,6 +12,7 @@ import {
 import {
   getOrganization,
   getOrganizationChatAnalysisSettings,
+  getWorkloadIdentity,
   getOrganizationStats,
   getInferenceKeys,
   getInferenceSpendHistory,
@@ -27,6 +28,7 @@ import {
   type AdminInferenceSpendMonth,
   type AdminOrganization,
   type AdminOrganizationChatAnalysisSettings,
+  type AdminWorkloadIdentityState,
   type AdminProjectDetail,
   type AdminPaygBillingSummary,
   type AdminStripeSubscription,
@@ -359,5 +361,20 @@ export function projectQuery(
       organizationIdOrSlug ?? null,
     ] as const,
     queryFn: () => getProject(idOrSlug, organizationIdOrSlug),
+  });
+}
+
+export function organizationWorkloadIdentityQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminWorkloadIdentityState,
+  readonly ["gram-admin-organization-workload-identity", string]
+> {
+  return queryOptions({
+    queryKey: [
+      "gram-admin-organization-workload-identity",
+      organizationID,
+    ] as const,
+    queryFn: () => getWorkloadIdentity(organizationID),
   });
 }

@@ -781,3 +781,130 @@ export function resumeStripeSubscription(
     organizationID,
   );
 }
+
+// Workload identity trust policy. Admin-only because the tenant-facing
+// management API lands in a later milestone, and seeding this by hand would
+// otherwise mean raw SQL against production.
+//
+// Every write returns the whole state, so callers replace rather than merge.
+
+export type AdminWorkloadIssuer = {
+  id: string;
+  name: string;
+  issuer: string;
+  jwks_uri: string;
+  project_id?: string;
+  created_at: string;
+};
+
+export type AdminWorkloadSubject = {
+  workload_issuer_id: string;
+  subject: string;
+  name?: string;
+  agent_id?: string;
+  agent_name?: string;
+};
+
+export type AdminWorkloadAuthenticationHost = {
+  user_session_issuer_id: string;
+  project_id?: string;
+  use_authentication_host: boolean;
+};
+
+export type AdminWorkloadIdentityState = {
+  organization_id: string;
+  issuers: AdminWorkloadIssuer[];
+  subjects: AdminWorkloadSubject[];
+  authentication_hosts: AdminWorkloadAuthenticationHost[];
+};
+
+export function getWorkloadIdentity(
+  organizationID: string,
+): Promise<AdminWorkloadIdentityState> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminWorkloadIdentityState>(
+    `/admin/organization.workloadIdentity?${qs}`,
+  );
+}
+
+export function createWorkloadIssuer(input: {
+  organizationID: string;
+  projectID?: string;
+  name: string;
+  issuer: string;
+  jwksURI: string;
+}): Promise<AdminWorkloadIdentityState> {
+  return gramAdminMutation<AdminWorkloadIdentityState>(
+    "/admin/organization.workloadIssuer",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        project_id: input.projectID || undefined,
+        name: input.name,
+        issuer: input.issuer,
+        jwks_uri: input.jwksURI,
+      }),
+    },
+  );
+}
+
+export function admitWorkloadSubject(input: {
+  organizationID: string;
+  workloadIssuerID: string;
+  subject: string;
+  name?: string;
+  agentID: string;
+}): Promise<AdminWorkloadIdentityState> {
+  return gramAdminMutation<AdminWorkloadIdentityState>(
+    "/admin/organization.workloadAdmission",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        workload_issuer_id: input.workloadIssuerID,
+        subject: input.subject,
+        name: input.name || undefined,
+        agent_id: input.agentID,
+      }),
+    },
+  );
+}
+
+export function setWorkloadAuthenticationHost(input: {
+  organizationID: string;
+  userSessionIssuerID: string;
+  enabled: boolean;
+}): Promise<AdminWorkloadIdentityState> {
+  return gramAdminMutation<AdminWorkloadIdentityState>(
+    "/admin/organization.workloadAuthenticationHost",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        user_session_issuer_id: input.userSessionIssuerID,
+        enabled: input.enabled,
+      }),
+    },
+  );
+}
+
+export function teardownWorkloadIssuer(input: {
+  organizationID: string;
+  workloadIssuerID: string;
+}): Promise<AdminWorkloadIdentityState> {
+  return gramAdminMutation<AdminWorkloadIdentityState>(
+    "/admin/organization.workloadIdentityTeardown",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        workload_issuer_id: input.workloadIssuerID,
+      }),
+    },
+  );
+}

@@ -188,7 +188,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-workload-identity|create-workload-issuer|admit-workload-subject|set-workload-authentication-host|teardown-workload-issuer)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -4143,6 +4143,26 @@ func ParseEndpoint(
 		adminUpdateSupportMatrixBodyFlag              = adminUpdateSupportMatrixFlags.String("body", "REQUIRED", "")
 		adminUpdateSupportMatrixAdminSessionTokenFlag = adminUpdateSupportMatrixFlags.String("admin-session-token", "", "")
 
+		adminGetWorkloadIdentityFlags                 = flag.NewFlagSet("get-workload-identity", flag.ExitOnError)
+		adminGetWorkloadIdentityOrganizationIDFlag    = adminGetWorkloadIdentityFlags.String("organization-id", "REQUIRED", "")
+		adminGetWorkloadIdentityAdminSessionTokenFlag = adminGetWorkloadIdentityFlags.String("admin-session-token", "", "")
+
+		adminCreateWorkloadIssuerFlags                 = flag.NewFlagSet("create-workload-issuer", flag.ExitOnError)
+		adminCreateWorkloadIssuerBodyFlag              = adminCreateWorkloadIssuerFlags.String("body", "REQUIRED", "")
+		adminCreateWorkloadIssuerAdminSessionTokenFlag = adminCreateWorkloadIssuerFlags.String("admin-session-token", "", "")
+
+		adminAdmitWorkloadSubjectFlags                 = flag.NewFlagSet("admit-workload-subject", flag.ExitOnError)
+		adminAdmitWorkloadSubjectBodyFlag              = adminAdmitWorkloadSubjectFlags.String("body", "REQUIRED", "")
+		adminAdmitWorkloadSubjectAdminSessionTokenFlag = adminAdmitWorkloadSubjectFlags.String("admin-session-token", "", "")
+
+		adminSetWorkloadAuthenticationHostFlags                 = flag.NewFlagSet("set-workload-authentication-host", flag.ExitOnError)
+		adminSetWorkloadAuthenticationHostBodyFlag              = adminSetWorkloadAuthenticationHostFlags.String("body", "REQUIRED", "")
+		adminSetWorkloadAuthenticationHostAdminSessionTokenFlag = adminSetWorkloadAuthenticationHostFlags.String("admin-session-token", "", "")
+
+		adminTeardownWorkloadIssuerFlags                 = flag.NewFlagSet("teardown-workload-issuer", flag.ExitOnError)
+		adminTeardownWorkloadIssuerBodyFlag              = adminTeardownWorkloadIssuerFlags.String("body", "REQUIRED", "")
+		adminTeardownWorkloadIssuerAdminSessionTokenFlag = adminTeardownWorkloadIssuerFlags.String("admin-session-token", "", "")
+
 		userSessionClientsFlags = flag.NewFlagSet("user-session-clients", flag.ContinueOnError)
 
 		userSessionClientsListUserSessionClientsFlags                   = flag.NewFlagSet("list-user-session-clients", flag.ExitOnError)
@@ -5259,6 +5279,11 @@ func ParseEndpoint(
 	adminGetSpendBreakdownFlags.Usage = adminGetSpendBreakdownUsage
 	adminGetSupportMatrixFlags.Usage = adminGetSupportMatrixUsage
 	adminUpdateSupportMatrixFlags.Usage = adminUpdateSupportMatrixUsage
+	adminGetWorkloadIdentityFlags.Usage = adminGetWorkloadIdentityUsage
+	adminCreateWorkloadIssuerFlags.Usage = adminCreateWorkloadIssuerUsage
+	adminAdmitWorkloadSubjectFlags.Usage = adminAdmitWorkloadSubjectUsage
+	adminSetWorkloadAuthenticationHostFlags.Usage = adminSetWorkloadAuthenticationHostUsage
+	adminTeardownWorkloadIssuerFlags.Usage = adminTeardownWorkloadIssuerUsage
 
 	userSessionClientsFlags.Usage = userSessionClientsUsage
 	userSessionClientsListUserSessionClientsFlags.Usage = userSessionClientsListUserSessionClientsUsage
@@ -7998,6 +8023,21 @@ func ParseEndpoint(
 			case "update-support-matrix":
 				epf = adminUpdateSupportMatrixFlags
 
+			case "get-workload-identity":
+				epf = adminGetWorkloadIdentityFlags
+
+			case "create-workload-issuer":
+				epf = adminCreateWorkloadIssuerFlags
+
+			case "admit-workload-subject":
+				epf = adminAdmitWorkloadSubjectFlags
+
+			case "set-workload-authentication-host":
+				epf = adminSetWorkloadAuthenticationHostFlags
+
+			case "teardown-workload-issuer":
+				epf = adminTeardownWorkloadIssuerFlags
+
 			}
 
 		case "user-session-clients":
@@ -10678,6 +10718,21 @@ func ParseEndpoint(
 			case "update-support-matrix":
 				endpoint = c.UpdateSupportMatrix()
 				data, err = adminc.BuildUpdateSupportMatrixPayload(*adminUpdateSupportMatrixBodyFlag, *adminUpdateSupportMatrixAdminSessionTokenFlag)
+			case "get-workload-identity":
+				endpoint = c.GetWorkloadIdentity()
+				data, err = adminc.BuildGetWorkloadIdentityPayload(*adminGetWorkloadIdentityOrganizationIDFlag, *adminGetWorkloadIdentityAdminSessionTokenFlag)
+			case "create-workload-issuer":
+				endpoint = c.CreateWorkloadIssuer()
+				data, err = adminc.BuildCreateWorkloadIssuerPayload(*adminCreateWorkloadIssuerBodyFlag, *adminCreateWorkloadIssuerAdminSessionTokenFlag)
+			case "admit-workload-subject":
+				endpoint = c.AdmitWorkloadSubject()
+				data, err = adminc.BuildAdmitWorkloadSubjectPayload(*adminAdmitWorkloadSubjectBodyFlag, *adminAdmitWorkloadSubjectAdminSessionTokenFlag)
+			case "set-workload-authentication-host":
+				endpoint = c.SetWorkloadAuthenticationHost()
+				data, err = adminc.BuildSetWorkloadAuthenticationHostPayload(*adminSetWorkloadAuthenticationHostBodyFlag, *adminSetWorkloadAuthenticationHostAdminSessionTokenFlag)
+			case "teardown-workload-issuer":
+				endpoint = c.TeardownWorkloadIssuer()
+				data, err = adminc.BuildTeardownWorkloadIssuerPayload(*adminTeardownWorkloadIssuerBodyFlag, *adminTeardownWorkloadIssuerAdminSessionTokenFlag)
 			}
 		case "user-session-clients":
 			c := usersessionclientsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -27434,6 +27489,11 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-spend-breakdown: Returns exact current PAYG list-price estimates for an organization's three metered products over a maximum of three calendar months. Available for every organization regardless of account type or subscription state.`)
 	fmt.Fprintln(os.Stderr, `    get-support-matrix: Read the shared support catalog and product coverage.`)
 	fmt.Fprintln(os.Stderr, `    update-support-matrix: Save coverage against the last read revision; rejects concurrent changes.`)
+	fmt.Fprintln(os.Stderr, `    get-workload-identity: Read an organization's workload issuers, admitted subjects, and authentication host state.`)
+	fmt.Fprintln(os.Stderr, `    create-workload-issuer: Trust one workload assertion issuer for an organization. Both URLs must be https, which the grant enforces at verification time; rejecting them here avoids storing a row that can never admit anything.`)
+	fmt.Fprintln(os.Stderr, `    admit-workload-subject: Admit one exact subject under a trusted issuer and assign the agent whose policy it inherits. Trusting the issuer alone never admits a workload, so the subject must be the value the platform actually mints.`)
+	fmt.Fprintln(os.Stderr, `    set-workload-authentication-host: Announce the deployment's authentication host as this issuer's OAuth issuer and endpoint origin. Required by clients that refuse a token endpoint sharing a host with the API it calls.`)
+	fmt.Fprintln(os.Stderr, `    teardown-workload-issuer: Withdraw an issuer with its admissions and agent assignments in one step, so teardown cannot leave a subject admitted under an issuer that is gone.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -28548,6 +28608,106 @@ func adminUpdateSupportMatrixUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-support-matrix --body '{\n      \"draft\": {\n         \"mappings\": {\n            \"abc123\": {\n               \"applicability\": \"applicable\",\n               \"conditions\": \"aaa\",\n               \"facts\": {\n                  \"abc123\": {\n                     \"note\": \"aaa\",\n                     \"status\": \"partial\",\n                     \"verify\": false\n                  }\n               }\n            }\n         },\n         \"references\": {\n            \"abc123\": {\n               \"abc123\": {\n                  \"note\": \"aaa\",\n                  \"status\": \"partial\",\n                  \"verify\": false\n               }\n            }\n         }\n      },\n      \"revision\": \"aaa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetWorkloadIdentityUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-workload-identity", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read an organization's workload issuers, admitted subjects, and authentication host state.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-workload-identity --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminCreateWorkloadIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin create-workload-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Trust one workload assertion issuer for an organization. Both URLs must be https, which the grant enforces at verification time; rejecting them here avoids storing a row that can never admit anything.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin create-workload-issuer --body '{\n      \"issuer\": \"aaa\",\n      \"jwks_uri\": \"aaa\",\n      \"name\": \"aa\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminAdmitWorkloadSubjectUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin admit-workload-subject", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Admit one exact subject under a trusted issuer and assign the agent whose policy it inherits. Trusting the issuer alone never admits a workload, so the subject must be the value the platform actually mints.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin admit-workload-subject --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"organization_id\": \"abc123\",\n      \"subject\": \"aa\",\n      \"workload_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminSetWorkloadAuthenticationHostUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-workload-authentication-host", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Announce the deployment's authentication host as this issuer's OAuth issuer and endpoint origin. Required by clients that refuse a token endpoint sharing a host with the API it calls.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-workload-authentication-host --body '{\n      \"enabled\": false,\n      \"organization_id\": \"abc123\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminTeardownWorkloadIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin teardown-workload-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Withdraw an issuer with its admissions and agent assignments in one step, so teardown cannot leave a subject admitted under an issuer that is gone.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin teardown-workload-issuer --body '{\n      \"organization_id\": \"abc123\",\n      \"workload_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --admin-session-token \"abc123\"")
 }
 
 // userSessionClientsUsage displays the usage of the user-session-clients

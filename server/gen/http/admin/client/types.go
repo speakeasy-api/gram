@@ -370,6 +370,50 @@ type UpdateSupportMatrixRequestBody struct {
 	Draft    *SupportDraftRequestBody `form:"draft" json:"draft" xml:"draft"`
 }
 
+// CreateWorkloadIssuerRequestBody is the type of the "admin" service
+// "createWorkloadIssuer" endpoint HTTP request body.
+type CreateWorkloadIssuerRequestBody struct {
+	// Organization ID or canonical slug.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Scope the issuer to one project. Omit for organization-wide.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Name      string  `form:"name" json:"name" xml:"name"`
+	// The assertion's iss claim.
+	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Where the issuer publishes its signing keys.
+	JwksURI string `form:"jwks_uri" json:"jwks_uri" xml:"jwks_uri"`
+}
+
+// AdmitWorkloadSubjectRequestBody is the type of the "admin" service
+// "admitWorkloadSubject" endpoint HTTP request body.
+type AdmitWorkloadSubjectRequestBody struct {
+	// Organization ID or canonical slug.
+	OrganizationID   string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	WorkloadIssuerID string `form:"workload_issuer_id" json:"workload_issuer_id" xml:"workload_issuer_id"`
+	// The assertion's sub claim, matched exactly.
+	Subject string  `form:"subject" json:"subject" xml:"subject"`
+	Name    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Agent supplying the workload's policy.
+	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+}
+
+// SetWorkloadAuthenticationHostRequestBody is the type of the "admin" service
+// "setWorkloadAuthenticationHost" endpoint HTTP request body.
+type SetWorkloadAuthenticationHostRequestBody struct {
+	// Organization ID or canonical slug.
+	OrganizationID      string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	Enabled             bool   `form:"enabled" json:"enabled" xml:"enabled"`
+}
+
+// TeardownWorkloadIssuerRequestBody is the type of the "admin" service
+// "teardownWorkloadIssuer" endpoint HTTP request body.
+type TeardownWorkloadIssuerRequestBody struct {
+	// Organization ID or canonical slug.
+	OrganizationID   string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	WorkloadIssuerID string `form:"workload_issuer_id" json:"workload_issuer_id" xml:"workload_issuer_id"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -1553,6 +1597,51 @@ type UpdateSupportMatrixResponseBody struct {
 	Capabilities []*SupportCapabilityResponseBody `json:"capabilities"`
 	Draft        *SupportDraftResponseBody        `json:"draft"`
 	Revision     *string                          `json:"revision"`
+}
+
+// GetWorkloadIdentityResponseBody is the type of the "admin" service
+// "getWorkloadIdentity" endpoint HTTP response body.
+type GetWorkloadIdentityResponseBody struct {
+	OrganizationID      *string                                        `json:"organization_id"`
+	Issuers             []*AdminWorkloadIssuerResponseBody             `json:"issuers"`
+	Subjects            []*AdminWorkloadSubjectResponseBody            `json:"subjects"`
+	AuthenticationHosts []*AdminWorkloadAuthenticationHostResponseBody `json:"authentication_hosts"`
+}
+
+// CreateWorkloadIssuerResponseBody is the type of the "admin" service
+// "createWorkloadIssuer" endpoint HTTP response body.
+type CreateWorkloadIssuerResponseBody struct {
+	OrganizationID      *string                                        `json:"organization_id"`
+	Issuers             []*AdminWorkloadIssuerResponseBody             `json:"issuers"`
+	Subjects            []*AdminWorkloadSubjectResponseBody            `json:"subjects"`
+	AuthenticationHosts []*AdminWorkloadAuthenticationHostResponseBody `json:"authentication_hosts"`
+}
+
+// AdmitWorkloadSubjectResponseBody is the type of the "admin" service
+// "admitWorkloadSubject" endpoint HTTP response body.
+type AdmitWorkloadSubjectResponseBody struct {
+	OrganizationID      *string                                        `json:"organization_id"`
+	Issuers             []*AdminWorkloadIssuerResponseBody             `json:"issuers"`
+	Subjects            []*AdminWorkloadSubjectResponseBody            `json:"subjects"`
+	AuthenticationHosts []*AdminWorkloadAuthenticationHostResponseBody `json:"authentication_hosts"`
+}
+
+// SetWorkloadAuthenticationHostResponseBody is the type of the "admin" service
+// "setWorkloadAuthenticationHost" endpoint HTTP response body.
+type SetWorkloadAuthenticationHostResponseBody struct {
+	OrganizationID      *string                                        `json:"organization_id"`
+	Issuers             []*AdminWorkloadIssuerResponseBody             `json:"issuers"`
+	Subjects            []*AdminWorkloadSubjectResponseBody            `json:"subjects"`
+	AuthenticationHosts []*AdminWorkloadAuthenticationHostResponseBody `json:"authentication_hosts"`
+}
+
+// TeardownWorkloadIssuerResponseBody is the type of the "admin" service
+// "teardownWorkloadIssuer" endpoint HTTP response body.
+type TeardownWorkloadIssuerResponseBody struct {
+	OrganizationID      *string                                        `json:"organization_id"`
+	Issuers             []*AdminWorkloadIssuerResponseBody             `json:"issuers"`
+	Subjects            []*AdminWorkloadSubjectResponseBody            `json:"subjects"`
+	AuthenticationHosts []*AdminWorkloadAuthenticationHostResponseBody `json:"authentication_hosts"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -11780,6 +11869,942 @@ type UpdateSupportMatrixGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetWorkloadIdentityUnauthorizedResponseBody is the type of the "admin"
+// service "getWorkloadIdentity" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetWorkloadIdentityUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkloadIdentityForbiddenResponseBody is the type of the "admin" service
+// "getWorkloadIdentity" endpoint HTTP response body for the "forbidden" error.
+type GetWorkloadIdentityForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkloadIdentityBadRequestResponseBody is the type of the "admin" service
+// "getWorkloadIdentity" endpoint HTTP response body for the "bad_request"
+// error.
+type GetWorkloadIdentityBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkloadIdentityNotFoundResponseBody is the type of the "admin" service
+// "getWorkloadIdentity" endpoint HTTP response body for the "not_found" error.
+type GetWorkloadIdentityNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkloadIdentityConflictResponseBody is the type of the "admin" service
+// "getWorkloadIdentity" endpoint HTTP response body for the "conflict" error.
+type GetWorkloadIdentityConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkloadIdentityUnsupportedMediaResponseBody is the type of the "admin"
+// service "getWorkloadIdentity" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetWorkloadIdentityUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkloadIdentityInvalidResponseBody is the type of the "admin" service
+// "getWorkloadIdentity" endpoint HTTP response body for the "invalid" error.
+type GetWorkloadIdentityInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkloadIdentityInvariantViolationResponseBody is the type of the "admin"
+// service "getWorkloadIdentity" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetWorkloadIdentityInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkloadIdentityUnexpectedResponseBody is the type of the "admin" service
+// "getWorkloadIdentity" endpoint HTTP response body for the "unexpected" error.
+type GetWorkloadIdentityUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkloadIdentityGatewayErrorResponseBody is the type of the "admin"
+// service "getWorkloadIdentity" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetWorkloadIdentityGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateWorkloadIssuerUnauthorizedResponseBody is the type of the "admin"
+// service "createWorkloadIssuer" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateWorkloadIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateWorkloadIssuerForbiddenResponseBody is the type of the "admin" service
+// "createWorkloadIssuer" endpoint HTTP response body for the "forbidden" error.
+type CreateWorkloadIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateWorkloadIssuerBadRequestResponseBody is the type of the "admin"
+// service "createWorkloadIssuer" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateWorkloadIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateWorkloadIssuerNotFoundResponseBody is the type of the "admin" service
+// "createWorkloadIssuer" endpoint HTTP response body for the "not_found" error.
+type CreateWorkloadIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateWorkloadIssuerConflictResponseBody is the type of the "admin" service
+// "createWorkloadIssuer" endpoint HTTP response body for the "conflict" error.
+type CreateWorkloadIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateWorkloadIssuerUnsupportedMediaResponseBody is the type of the "admin"
+// service "createWorkloadIssuer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateWorkloadIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateWorkloadIssuerInvalidResponseBody is the type of the "admin" service
+// "createWorkloadIssuer" endpoint HTTP response body for the "invalid" error.
+type CreateWorkloadIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateWorkloadIssuerInvariantViolationResponseBody is the type of the
+// "admin" service "createWorkloadIssuer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateWorkloadIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateWorkloadIssuerUnexpectedResponseBody is the type of the "admin"
+// service "createWorkloadIssuer" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateWorkloadIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateWorkloadIssuerGatewayErrorResponseBody is the type of the "admin"
+// service "createWorkloadIssuer" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateWorkloadIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AdmitWorkloadSubjectUnauthorizedResponseBody is the type of the "admin"
+// service "admitWorkloadSubject" endpoint HTTP response body for the
+// "unauthorized" error.
+type AdmitWorkloadSubjectUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AdmitWorkloadSubjectForbiddenResponseBody is the type of the "admin" service
+// "admitWorkloadSubject" endpoint HTTP response body for the "forbidden" error.
+type AdmitWorkloadSubjectForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AdmitWorkloadSubjectBadRequestResponseBody is the type of the "admin"
+// service "admitWorkloadSubject" endpoint HTTP response body for the
+// "bad_request" error.
+type AdmitWorkloadSubjectBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AdmitWorkloadSubjectNotFoundResponseBody is the type of the "admin" service
+// "admitWorkloadSubject" endpoint HTTP response body for the "not_found" error.
+type AdmitWorkloadSubjectNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AdmitWorkloadSubjectConflictResponseBody is the type of the "admin" service
+// "admitWorkloadSubject" endpoint HTTP response body for the "conflict" error.
+type AdmitWorkloadSubjectConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AdmitWorkloadSubjectUnsupportedMediaResponseBody is the type of the "admin"
+// service "admitWorkloadSubject" endpoint HTTP response body for the
+// "unsupported_media" error.
+type AdmitWorkloadSubjectUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AdmitWorkloadSubjectInvalidResponseBody is the type of the "admin" service
+// "admitWorkloadSubject" endpoint HTTP response body for the "invalid" error.
+type AdmitWorkloadSubjectInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AdmitWorkloadSubjectInvariantViolationResponseBody is the type of the
+// "admin" service "admitWorkloadSubject" endpoint HTTP response body for the
+// "invariant_violation" error.
+type AdmitWorkloadSubjectInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AdmitWorkloadSubjectUnexpectedResponseBody is the type of the "admin"
+// service "admitWorkloadSubject" endpoint HTTP response body for the
+// "unexpected" error.
+type AdmitWorkloadSubjectUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AdmitWorkloadSubjectGatewayErrorResponseBody is the type of the "admin"
+// service "admitWorkloadSubject" endpoint HTTP response body for the
+// "gateway_error" error.
+type AdmitWorkloadSubjectGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetWorkloadAuthenticationHostUnauthorizedResponseBody is the type of the
+// "admin" service "setWorkloadAuthenticationHost" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetWorkloadAuthenticationHostUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetWorkloadAuthenticationHostForbiddenResponseBody is the type of the
+// "admin" service "setWorkloadAuthenticationHost" endpoint HTTP response body
+// for the "forbidden" error.
+type SetWorkloadAuthenticationHostForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetWorkloadAuthenticationHostBadRequestResponseBody is the type of the
+// "admin" service "setWorkloadAuthenticationHost" endpoint HTTP response body
+// for the "bad_request" error.
+type SetWorkloadAuthenticationHostBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetWorkloadAuthenticationHostNotFoundResponseBody is the type of the "admin"
+// service "setWorkloadAuthenticationHost" endpoint HTTP response body for the
+// "not_found" error.
+type SetWorkloadAuthenticationHostNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetWorkloadAuthenticationHostConflictResponseBody is the type of the "admin"
+// service "setWorkloadAuthenticationHost" endpoint HTTP response body for the
+// "conflict" error.
+type SetWorkloadAuthenticationHostConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetWorkloadAuthenticationHostUnsupportedMediaResponseBody is the type of the
+// "admin" service "setWorkloadAuthenticationHost" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetWorkloadAuthenticationHostUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetWorkloadAuthenticationHostInvalidResponseBody is the type of the "admin"
+// service "setWorkloadAuthenticationHost" endpoint HTTP response body for the
+// "invalid" error.
+type SetWorkloadAuthenticationHostInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetWorkloadAuthenticationHostInvariantViolationResponseBody is the type of
+// the "admin" service "setWorkloadAuthenticationHost" endpoint HTTP response
+// body for the "invariant_violation" error.
+type SetWorkloadAuthenticationHostInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetWorkloadAuthenticationHostUnexpectedResponseBody is the type of the
+// "admin" service "setWorkloadAuthenticationHost" endpoint HTTP response body
+// for the "unexpected" error.
+type SetWorkloadAuthenticationHostUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetWorkloadAuthenticationHostGatewayErrorResponseBody is the type of the
+// "admin" service "setWorkloadAuthenticationHost" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetWorkloadAuthenticationHostGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TeardownWorkloadIssuerUnauthorizedResponseBody is the type of the "admin"
+// service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "unauthorized" error.
+type TeardownWorkloadIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TeardownWorkloadIssuerForbiddenResponseBody is the type of the "admin"
+// service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "forbidden" error.
+type TeardownWorkloadIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TeardownWorkloadIssuerBadRequestResponseBody is the type of the "admin"
+// service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "bad_request" error.
+type TeardownWorkloadIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TeardownWorkloadIssuerNotFoundResponseBody is the type of the "admin"
+// service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "not_found" error.
+type TeardownWorkloadIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TeardownWorkloadIssuerConflictResponseBody is the type of the "admin"
+// service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "conflict" error.
+type TeardownWorkloadIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TeardownWorkloadIssuerUnsupportedMediaResponseBody is the type of the
+// "admin" service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type TeardownWorkloadIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TeardownWorkloadIssuerInvalidResponseBody is the type of the "admin" service
+// "teardownWorkloadIssuer" endpoint HTTP response body for the "invalid" error.
+type TeardownWorkloadIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TeardownWorkloadIssuerInvariantViolationResponseBody is the type of the
+// "admin" service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type TeardownWorkloadIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TeardownWorkloadIssuerUnexpectedResponseBody is the type of the "admin"
+// service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "unexpected" error.
+type TeardownWorkloadIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TeardownWorkloadIssuerGatewayErrorResponseBody is the type of the "admin"
+// service "teardownWorkloadIssuer" endpoint HTTP response body for the
+// "gateway_error" error.
+type TeardownWorkloadIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -12220,6 +13245,37 @@ type SupportFactRequestBody struct {
 	Verify bool   `json:"verify"`
 }
 
+// AdminWorkloadIssuerResponseBody is used to define fields on response body
+// types.
+type AdminWorkloadIssuerResponseBody struct {
+	ID      *string `json:"id"`
+	Name    *string `json:"name"`
+	Issuer  *string `json:"issuer"`
+	JwksURI *string `json:"jwks_uri"`
+	// Project the issuer is scoped to, absent when it is organization-wide.
+	ProjectID *string `json:"project_id"`
+	CreatedAt *string `json:"created_at"`
+}
+
+// AdminWorkloadSubjectResponseBody is used to define fields on response body
+// types.
+type AdminWorkloadSubjectResponseBody struct {
+	WorkloadIssuerID *string `json:"workload_issuer_id"`
+	Subject          *string `json:"subject"`
+	Name             *string `json:"name"`
+	// Assigned agent, absent when the subject is admitted but unassigned.
+	AgentID   *string `json:"agent_id"`
+	AgentName *string `json:"agent_name"`
+}
+
+// AdminWorkloadAuthenticationHostResponseBody is used to define fields on
+// response body types.
+type AdminWorkloadAuthenticationHostResponseBody struct {
+	UserSessionIssuerID   *string `json:"user_session_issuer_id"`
+	ProjectID             *string `json:"project_id"`
+	UseAuthenticationHost *bool   `json:"use_authentication_host"`
+}
+
 // NewSetOrganizationFeatureRequestBody builds the HTTP request body from the
 // payload of the "setOrganizationFeature" endpoint of the "admin" service.
 func NewSetOrganizationFeatureRequestBody(p *admin.SetOrganizationFeaturePayload) *SetOrganizationFeatureRequestBody {
@@ -12607,6 +13663,54 @@ func NewUpdateSupportMatrixRequestBody(p *admin.UpdateSupportMatrixPayload) *Upd
 	}
 	if p.Draft != nil {
 		body.Draft = marshalAdminSupportDraftToSupportDraftRequestBody(p.Draft)
+	}
+	return body
+}
+
+// NewCreateWorkloadIssuerRequestBody builds the HTTP request body from the
+// payload of the "createWorkloadIssuer" endpoint of the "admin" service.
+func NewCreateWorkloadIssuerRequestBody(p *admin.CreateWorkloadIssuerPayload) *CreateWorkloadIssuerRequestBody {
+	body := &CreateWorkloadIssuerRequestBody{
+		OrganizationID: p.OrganizationID,
+		ProjectID:      p.ProjectID,
+		Name:           p.Name,
+		Issuer:         p.Issuer,
+		JwksURI:        p.JwksURI,
+	}
+	return body
+}
+
+// NewAdmitWorkloadSubjectRequestBody builds the HTTP request body from the
+// payload of the "admitWorkloadSubject" endpoint of the "admin" service.
+func NewAdmitWorkloadSubjectRequestBody(p *admin.AdmitWorkloadSubjectPayload) *AdmitWorkloadSubjectRequestBody {
+	body := &AdmitWorkloadSubjectRequestBody{
+		OrganizationID:   p.OrganizationID,
+		WorkloadIssuerID: p.WorkloadIssuerID,
+		Subject:          p.Subject,
+		Name:             p.Name,
+		AgentID:          p.AgentID,
+	}
+	return body
+}
+
+// NewSetWorkloadAuthenticationHostRequestBody builds the HTTP request body
+// from the payload of the "setWorkloadAuthenticationHost" endpoint of the
+// "admin" service.
+func NewSetWorkloadAuthenticationHostRequestBody(p *admin.SetWorkloadAuthenticationHostPayload) *SetWorkloadAuthenticationHostRequestBody {
+	body := &SetWorkloadAuthenticationHostRequestBody{
+		OrganizationID:      p.OrganizationID,
+		UserSessionIssuerID: p.UserSessionIssuerID,
+		Enabled:             p.Enabled,
+	}
+	return body
+}
+
+// NewTeardownWorkloadIssuerRequestBody builds the HTTP request body from the
+// payload of the "teardownWorkloadIssuer" endpoint of the "admin" service.
+func NewTeardownWorkloadIssuerRequestBody(p *admin.TeardownWorkloadIssuerPayload) *TeardownWorkloadIssuerRequestBody {
+	body := &TeardownWorkloadIssuerRequestBody{
+		OrganizationID:   p.OrganizationID,
+		WorkloadIssuerID: p.WorkloadIssuerID,
 	}
 	return body
 }
@@ -22096,6 +23200,927 @@ func NewUpdateSupportMatrixGatewayError(body *UpdateSupportMatrixGatewayErrorRes
 	return v
 }
 
+// NewGetWorkloadIdentityAdminWorkloadIdentityStateOK builds a "admin" service
+// "getWorkloadIdentity" endpoint result from a HTTP "OK" response.
+func NewGetWorkloadIdentityAdminWorkloadIdentityStateOK(body *GetWorkloadIdentityResponseBody) *admin.AdminWorkloadIdentityState {
+	v := &admin.AdminWorkloadIdentityState{
+		OrganizationID: *body.OrganizationID,
+	}
+	v.Issuers = make([]*admin.AdminWorkloadIssuer, len(body.Issuers))
+	for i, val := range body.Issuers {
+		if val == nil {
+			v.Issuers[i] = nil
+			continue
+		}
+		v.Issuers[i] = unmarshalAdminWorkloadIssuerResponseBodyToAdminAdminWorkloadIssuer(val)
+	}
+	v.Subjects = make([]*admin.AdminWorkloadSubject, len(body.Subjects))
+	for i, val := range body.Subjects {
+		if val == nil {
+			v.Subjects[i] = nil
+			continue
+		}
+		v.Subjects[i] = unmarshalAdminWorkloadSubjectResponseBodyToAdminAdminWorkloadSubject(val)
+	}
+	v.AuthenticationHosts = make([]*admin.AdminWorkloadAuthenticationHost, len(body.AuthenticationHosts))
+	for i, val := range body.AuthenticationHosts {
+		if val == nil {
+			v.AuthenticationHosts[i] = nil
+			continue
+		}
+		v.AuthenticationHosts[i] = unmarshalAdminWorkloadAuthenticationHostResponseBodyToAdminAdminWorkloadAuthenticationHost(val)
+	}
+
+	return v
+}
+
+// NewGetWorkloadIdentityUnauthorized builds a admin service
+// getWorkloadIdentity endpoint unauthorized error.
+func NewGetWorkloadIdentityUnauthorized(body *GetWorkloadIdentityUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkloadIdentityForbidden builds a admin service getWorkloadIdentity
+// endpoint forbidden error.
+func NewGetWorkloadIdentityForbidden(body *GetWorkloadIdentityForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkloadIdentityBadRequest builds a admin service getWorkloadIdentity
+// endpoint bad_request error.
+func NewGetWorkloadIdentityBadRequest(body *GetWorkloadIdentityBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkloadIdentityNotFound builds a admin service getWorkloadIdentity
+// endpoint not_found error.
+func NewGetWorkloadIdentityNotFound(body *GetWorkloadIdentityNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkloadIdentityConflict builds a admin service getWorkloadIdentity
+// endpoint conflict error.
+func NewGetWorkloadIdentityConflict(body *GetWorkloadIdentityConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkloadIdentityUnsupportedMedia builds a admin service
+// getWorkloadIdentity endpoint unsupported_media error.
+func NewGetWorkloadIdentityUnsupportedMedia(body *GetWorkloadIdentityUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkloadIdentityInvalid builds a admin service getWorkloadIdentity
+// endpoint invalid error.
+func NewGetWorkloadIdentityInvalid(body *GetWorkloadIdentityInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkloadIdentityInvariantViolation builds a admin service
+// getWorkloadIdentity endpoint invariant_violation error.
+func NewGetWorkloadIdentityInvariantViolation(body *GetWorkloadIdentityInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkloadIdentityUnexpected builds a admin service getWorkloadIdentity
+// endpoint unexpected error.
+func NewGetWorkloadIdentityUnexpected(body *GetWorkloadIdentityUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkloadIdentityGatewayError builds a admin service
+// getWorkloadIdentity endpoint gateway_error error.
+func NewGetWorkloadIdentityGatewayError(body *GetWorkloadIdentityGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateWorkloadIssuerAdminWorkloadIdentityStateOK builds a "admin" service
+// "createWorkloadIssuer" endpoint result from a HTTP "OK" response.
+func NewCreateWorkloadIssuerAdminWorkloadIdentityStateOK(body *CreateWorkloadIssuerResponseBody) *admin.AdminWorkloadIdentityState {
+	v := &admin.AdminWorkloadIdentityState{
+		OrganizationID: *body.OrganizationID,
+	}
+	v.Issuers = make([]*admin.AdminWorkloadIssuer, len(body.Issuers))
+	for i, val := range body.Issuers {
+		if val == nil {
+			v.Issuers[i] = nil
+			continue
+		}
+		v.Issuers[i] = unmarshalAdminWorkloadIssuerResponseBodyToAdminAdminWorkloadIssuer(val)
+	}
+	v.Subjects = make([]*admin.AdminWorkloadSubject, len(body.Subjects))
+	for i, val := range body.Subjects {
+		if val == nil {
+			v.Subjects[i] = nil
+			continue
+		}
+		v.Subjects[i] = unmarshalAdminWorkloadSubjectResponseBodyToAdminAdminWorkloadSubject(val)
+	}
+	v.AuthenticationHosts = make([]*admin.AdminWorkloadAuthenticationHost, len(body.AuthenticationHosts))
+	for i, val := range body.AuthenticationHosts {
+		if val == nil {
+			v.AuthenticationHosts[i] = nil
+			continue
+		}
+		v.AuthenticationHosts[i] = unmarshalAdminWorkloadAuthenticationHostResponseBodyToAdminAdminWorkloadAuthenticationHost(val)
+	}
+
+	return v
+}
+
+// NewCreateWorkloadIssuerUnauthorized builds a admin service
+// createWorkloadIssuer endpoint unauthorized error.
+func NewCreateWorkloadIssuerUnauthorized(body *CreateWorkloadIssuerUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateWorkloadIssuerForbidden builds a admin service createWorkloadIssuer
+// endpoint forbidden error.
+func NewCreateWorkloadIssuerForbidden(body *CreateWorkloadIssuerForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateWorkloadIssuerBadRequest builds a admin service
+// createWorkloadIssuer endpoint bad_request error.
+func NewCreateWorkloadIssuerBadRequest(body *CreateWorkloadIssuerBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateWorkloadIssuerNotFound builds a admin service createWorkloadIssuer
+// endpoint not_found error.
+func NewCreateWorkloadIssuerNotFound(body *CreateWorkloadIssuerNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateWorkloadIssuerConflict builds a admin service createWorkloadIssuer
+// endpoint conflict error.
+func NewCreateWorkloadIssuerConflict(body *CreateWorkloadIssuerConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateWorkloadIssuerUnsupportedMedia builds a admin service
+// createWorkloadIssuer endpoint unsupported_media error.
+func NewCreateWorkloadIssuerUnsupportedMedia(body *CreateWorkloadIssuerUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateWorkloadIssuerInvalid builds a admin service createWorkloadIssuer
+// endpoint invalid error.
+func NewCreateWorkloadIssuerInvalid(body *CreateWorkloadIssuerInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateWorkloadIssuerInvariantViolation builds a admin service
+// createWorkloadIssuer endpoint invariant_violation error.
+func NewCreateWorkloadIssuerInvariantViolation(body *CreateWorkloadIssuerInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateWorkloadIssuerUnexpected builds a admin service
+// createWorkloadIssuer endpoint unexpected error.
+func NewCreateWorkloadIssuerUnexpected(body *CreateWorkloadIssuerUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateWorkloadIssuerGatewayError builds a admin service
+// createWorkloadIssuer endpoint gateway_error error.
+func NewCreateWorkloadIssuerGatewayError(body *CreateWorkloadIssuerGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAdmitWorkloadSubjectAdminWorkloadIdentityStateOK builds a "admin" service
+// "admitWorkloadSubject" endpoint result from a HTTP "OK" response.
+func NewAdmitWorkloadSubjectAdminWorkloadIdentityStateOK(body *AdmitWorkloadSubjectResponseBody) *admin.AdminWorkloadIdentityState {
+	v := &admin.AdminWorkloadIdentityState{
+		OrganizationID: *body.OrganizationID,
+	}
+	v.Issuers = make([]*admin.AdminWorkloadIssuer, len(body.Issuers))
+	for i, val := range body.Issuers {
+		if val == nil {
+			v.Issuers[i] = nil
+			continue
+		}
+		v.Issuers[i] = unmarshalAdminWorkloadIssuerResponseBodyToAdminAdminWorkloadIssuer(val)
+	}
+	v.Subjects = make([]*admin.AdminWorkloadSubject, len(body.Subjects))
+	for i, val := range body.Subjects {
+		if val == nil {
+			v.Subjects[i] = nil
+			continue
+		}
+		v.Subjects[i] = unmarshalAdminWorkloadSubjectResponseBodyToAdminAdminWorkloadSubject(val)
+	}
+	v.AuthenticationHosts = make([]*admin.AdminWorkloadAuthenticationHost, len(body.AuthenticationHosts))
+	for i, val := range body.AuthenticationHosts {
+		if val == nil {
+			v.AuthenticationHosts[i] = nil
+			continue
+		}
+		v.AuthenticationHosts[i] = unmarshalAdminWorkloadAuthenticationHostResponseBodyToAdminAdminWorkloadAuthenticationHost(val)
+	}
+
+	return v
+}
+
+// NewAdmitWorkloadSubjectUnauthorized builds a admin service
+// admitWorkloadSubject endpoint unauthorized error.
+func NewAdmitWorkloadSubjectUnauthorized(body *AdmitWorkloadSubjectUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAdmitWorkloadSubjectForbidden builds a admin service admitWorkloadSubject
+// endpoint forbidden error.
+func NewAdmitWorkloadSubjectForbidden(body *AdmitWorkloadSubjectForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAdmitWorkloadSubjectBadRequest builds a admin service
+// admitWorkloadSubject endpoint bad_request error.
+func NewAdmitWorkloadSubjectBadRequest(body *AdmitWorkloadSubjectBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAdmitWorkloadSubjectNotFound builds a admin service admitWorkloadSubject
+// endpoint not_found error.
+func NewAdmitWorkloadSubjectNotFound(body *AdmitWorkloadSubjectNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAdmitWorkloadSubjectConflict builds a admin service admitWorkloadSubject
+// endpoint conflict error.
+func NewAdmitWorkloadSubjectConflict(body *AdmitWorkloadSubjectConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAdmitWorkloadSubjectUnsupportedMedia builds a admin service
+// admitWorkloadSubject endpoint unsupported_media error.
+func NewAdmitWorkloadSubjectUnsupportedMedia(body *AdmitWorkloadSubjectUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAdmitWorkloadSubjectInvalid builds a admin service admitWorkloadSubject
+// endpoint invalid error.
+func NewAdmitWorkloadSubjectInvalid(body *AdmitWorkloadSubjectInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAdmitWorkloadSubjectInvariantViolation builds a admin service
+// admitWorkloadSubject endpoint invariant_violation error.
+func NewAdmitWorkloadSubjectInvariantViolation(body *AdmitWorkloadSubjectInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAdmitWorkloadSubjectUnexpected builds a admin service
+// admitWorkloadSubject endpoint unexpected error.
+func NewAdmitWorkloadSubjectUnexpected(body *AdmitWorkloadSubjectUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAdmitWorkloadSubjectGatewayError builds a admin service
+// admitWorkloadSubject endpoint gateway_error error.
+func NewAdmitWorkloadSubjectGatewayError(body *AdmitWorkloadSubjectGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetWorkloadAuthenticationHostAdminWorkloadIdentityStateOK builds a
+// "admin" service "setWorkloadAuthenticationHost" endpoint result from a HTTP
+// "OK" response.
+func NewSetWorkloadAuthenticationHostAdminWorkloadIdentityStateOK(body *SetWorkloadAuthenticationHostResponseBody) *admin.AdminWorkloadIdentityState {
+	v := &admin.AdminWorkloadIdentityState{
+		OrganizationID: *body.OrganizationID,
+	}
+	v.Issuers = make([]*admin.AdminWorkloadIssuer, len(body.Issuers))
+	for i, val := range body.Issuers {
+		if val == nil {
+			v.Issuers[i] = nil
+			continue
+		}
+		v.Issuers[i] = unmarshalAdminWorkloadIssuerResponseBodyToAdminAdminWorkloadIssuer(val)
+	}
+	v.Subjects = make([]*admin.AdminWorkloadSubject, len(body.Subjects))
+	for i, val := range body.Subjects {
+		if val == nil {
+			v.Subjects[i] = nil
+			continue
+		}
+		v.Subjects[i] = unmarshalAdminWorkloadSubjectResponseBodyToAdminAdminWorkloadSubject(val)
+	}
+	v.AuthenticationHosts = make([]*admin.AdminWorkloadAuthenticationHost, len(body.AuthenticationHosts))
+	for i, val := range body.AuthenticationHosts {
+		if val == nil {
+			v.AuthenticationHosts[i] = nil
+			continue
+		}
+		v.AuthenticationHosts[i] = unmarshalAdminWorkloadAuthenticationHostResponseBodyToAdminAdminWorkloadAuthenticationHost(val)
+	}
+
+	return v
+}
+
+// NewSetWorkloadAuthenticationHostUnauthorized builds a admin service
+// setWorkloadAuthenticationHost endpoint unauthorized error.
+func NewSetWorkloadAuthenticationHostUnauthorized(body *SetWorkloadAuthenticationHostUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetWorkloadAuthenticationHostForbidden builds a admin service
+// setWorkloadAuthenticationHost endpoint forbidden error.
+func NewSetWorkloadAuthenticationHostForbidden(body *SetWorkloadAuthenticationHostForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetWorkloadAuthenticationHostBadRequest builds a admin service
+// setWorkloadAuthenticationHost endpoint bad_request error.
+func NewSetWorkloadAuthenticationHostBadRequest(body *SetWorkloadAuthenticationHostBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetWorkloadAuthenticationHostNotFound builds a admin service
+// setWorkloadAuthenticationHost endpoint not_found error.
+func NewSetWorkloadAuthenticationHostNotFound(body *SetWorkloadAuthenticationHostNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetWorkloadAuthenticationHostConflict builds a admin service
+// setWorkloadAuthenticationHost endpoint conflict error.
+func NewSetWorkloadAuthenticationHostConflict(body *SetWorkloadAuthenticationHostConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetWorkloadAuthenticationHostUnsupportedMedia builds a admin service
+// setWorkloadAuthenticationHost endpoint unsupported_media error.
+func NewSetWorkloadAuthenticationHostUnsupportedMedia(body *SetWorkloadAuthenticationHostUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetWorkloadAuthenticationHostInvalid builds a admin service
+// setWorkloadAuthenticationHost endpoint invalid error.
+func NewSetWorkloadAuthenticationHostInvalid(body *SetWorkloadAuthenticationHostInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetWorkloadAuthenticationHostInvariantViolation builds a admin service
+// setWorkloadAuthenticationHost endpoint invariant_violation error.
+func NewSetWorkloadAuthenticationHostInvariantViolation(body *SetWorkloadAuthenticationHostInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetWorkloadAuthenticationHostUnexpected builds a admin service
+// setWorkloadAuthenticationHost endpoint unexpected error.
+func NewSetWorkloadAuthenticationHostUnexpected(body *SetWorkloadAuthenticationHostUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetWorkloadAuthenticationHostGatewayError builds a admin service
+// setWorkloadAuthenticationHost endpoint gateway_error error.
+func NewSetWorkloadAuthenticationHostGatewayError(body *SetWorkloadAuthenticationHostGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTeardownWorkloadIssuerAdminWorkloadIdentityStateOK builds a "admin"
+// service "teardownWorkloadIssuer" endpoint result from a HTTP "OK" response.
+func NewTeardownWorkloadIssuerAdminWorkloadIdentityStateOK(body *TeardownWorkloadIssuerResponseBody) *admin.AdminWorkloadIdentityState {
+	v := &admin.AdminWorkloadIdentityState{
+		OrganizationID: *body.OrganizationID,
+	}
+	v.Issuers = make([]*admin.AdminWorkloadIssuer, len(body.Issuers))
+	for i, val := range body.Issuers {
+		if val == nil {
+			v.Issuers[i] = nil
+			continue
+		}
+		v.Issuers[i] = unmarshalAdminWorkloadIssuerResponseBodyToAdminAdminWorkloadIssuer(val)
+	}
+	v.Subjects = make([]*admin.AdminWorkloadSubject, len(body.Subjects))
+	for i, val := range body.Subjects {
+		if val == nil {
+			v.Subjects[i] = nil
+			continue
+		}
+		v.Subjects[i] = unmarshalAdminWorkloadSubjectResponseBodyToAdminAdminWorkloadSubject(val)
+	}
+	v.AuthenticationHosts = make([]*admin.AdminWorkloadAuthenticationHost, len(body.AuthenticationHosts))
+	for i, val := range body.AuthenticationHosts {
+		if val == nil {
+			v.AuthenticationHosts[i] = nil
+			continue
+		}
+		v.AuthenticationHosts[i] = unmarshalAdminWorkloadAuthenticationHostResponseBodyToAdminAdminWorkloadAuthenticationHost(val)
+	}
+
+	return v
+}
+
+// NewTeardownWorkloadIssuerUnauthorized builds a admin service
+// teardownWorkloadIssuer endpoint unauthorized error.
+func NewTeardownWorkloadIssuerUnauthorized(body *TeardownWorkloadIssuerUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTeardownWorkloadIssuerForbidden builds a admin service
+// teardownWorkloadIssuer endpoint forbidden error.
+func NewTeardownWorkloadIssuerForbidden(body *TeardownWorkloadIssuerForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTeardownWorkloadIssuerBadRequest builds a admin service
+// teardownWorkloadIssuer endpoint bad_request error.
+func NewTeardownWorkloadIssuerBadRequest(body *TeardownWorkloadIssuerBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTeardownWorkloadIssuerNotFound builds a admin service
+// teardownWorkloadIssuer endpoint not_found error.
+func NewTeardownWorkloadIssuerNotFound(body *TeardownWorkloadIssuerNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTeardownWorkloadIssuerConflict builds a admin service
+// teardownWorkloadIssuer endpoint conflict error.
+func NewTeardownWorkloadIssuerConflict(body *TeardownWorkloadIssuerConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTeardownWorkloadIssuerUnsupportedMedia builds a admin service
+// teardownWorkloadIssuer endpoint unsupported_media error.
+func NewTeardownWorkloadIssuerUnsupportedMedia(body *TeardownWorkloadIssuerUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTeardownWorkloadIssuerInvalid builds a admin service
+// teardownWorkloadIssuer endpoint invalid error.
+func NewTeardownWorkloadIssuerInvalid(body *TeardownWorkloadIssuerInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTeardownWorkloadIssuerInvariantViolation builds a admin service
+// teardownWorkloadIssuer endpoint invariant_violation error.
+func NewTeardownWorkloadIssuerInvariantViolation(body *TeardownWorkloadIssuerInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTeardownWorkloadIssuerUnexpected builds a admin service
+// teardownWorkloadIssuer endpoint unexpected error.
+func NewTeardownWorkloadIssuerUnexpected(body *TeardownWorkloadIssuerUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTeardownWorkloadIssuerGatewayError builds a admin service
+// teardownWorkloadIssuer endpoint gateway_error error.
+func NewTeardownWorkloadIssuerGatewayError(body *TeardownWorkloadIssuerGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetSessionResponseBody runs the validations defined on
 // GetSessionResponseBody
 func ValidateGetSessionResponseBody(body *GetSessionResponseBody) (err error) {
@@ -23570,6 +25595,201 @@ func ValidateUpdateSupportMatrixResponseBody(body *UpdateSupportMatrixResponseBo
 	if body.Draft != nil {
 		if err2 := ValidateSupportDraftResponseBody(body.Draft); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateGetWorkloadIdentityResponseBody runs the validations defined on
+// GetWorkloadIdentityResponseBody
+func ValidateGetWorkloadIdentityResponseBody(body *GetWorkloadIdentityResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Issuers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuers", "body"))
+	}
+	if body.Subjects == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subjects", "body"))
+	}
+	if body.AuthenticationHosts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authentication_hosts", "body"))
+	}
+	for _, e := range body.Issuers {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadIssuerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Subjects {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadSubjectResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.AuthenticationHosts {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadAuthenticationHostResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateCreateWorkloadIssuerResponseBody runs the validations defined on
+// CreateWorkloadIssuerResponseBody
+func ValidateCreateWorkloadIssuerResponseBody(body *CreateWorkloadIssuerResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Issuers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuers", "body"))
+	}
+	if body.Subjects == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subjects", "body"))
+	}
+	if body.AuthenticationHosts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authentication_hosts", "body"))
+	}
+	for _, e := range body.Issuers {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadIssuerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Subjects {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadSubjectResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.AuthenticationHosts {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadAuthenticationHostResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdmitWorkloadSubjectResponseBody runs the validations defined on
+// AdmitWorkloadSubjectResponseBody
+func ValidateAdmitWorkloadSubjectResponseBody(body *AdmitWorkloadSubjectResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Issuers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuers", "body"))
+	}
+	if body.Subjects == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subjects", "body"))
+	}
+	if body.AuthenticationHosts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authentication_hosts", "body"))
+	}
+	for _, e := range body.Issuers {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadIssuerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Subjects {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadSubjectResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.AuthenticationHosts {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadAuthenticationHostResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSetWorkloadAuthenticationHostResponseBody runs the validations
+// defined on SetWorkloadAuthenticationHostResponseBody
+func ValidateSetWorkloadAuthenticationHostResponseBody(body *SetWorkloadAuthenticationHostResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Issuers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuers", "body"))
+	}
+	if body.Subjects == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subjects", "body"))
+	}
+	if body.AuthenticationHosts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authentication_hosts", "body"))
+	}
+	for _, e := range body.Issuers {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadIssuerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Subjects {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadSubjectResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.AuthenticationHosts {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadAuthenticationHostResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateTeardownWorkloadIssuerResponseBody runs the validations defined on
+// TeardownWorkloadIssuerResponseBody
+func ValidateTeardownWorkloadIssuerResponseBody(body *TeardownWorkloadIssuerResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Issuers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuers", "body"))
+	}
+	if body.Subjects == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subjects", "body"))
+	}
+	if body.AuthenticationHosts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authentication_hosts", "body"))
+	}
+	for _, e := range body.Issuers {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadIssuerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Subjects {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadSubjectResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.AuthenticationHosts {
+		if e != nil {
+			if err2 := ValidateAdminWorkloadAuthenticationHostResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -36892,6 +39112,1212 @@ func ValidateUpdateSupportMatrixGatewayErrorResponseBody(body *UpdateSupportMatr
 	return
 }
 
+// ValidateGetWorkloadIdentityUnauthorizedResponseBody runs the validations
+// defined on getWorkloadIdentity_unauthorized_response_body
+func ValidateGetWorkloadIdentityUnauthorizedResponseBody(body *GetWorkloadIdentityUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkloadIdentityForbiddenResponseBody runs the validations
+// defined on getWorkloadIdentity_forbidden_response_body
+func ValidateGetWorkloadIdentityForbiddenResponseBody(body *GetWorkloadIdentityForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkloadIdentityBadRequestResponseBody runs the validations
+// defined on getWorkloadIdentity_bad_request_response_body
+func ValidateGetWorkloadIdentityBadRequestResponseBody(body *GetWorkloadIdentityBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkloadIdentityNotFoundResponseBody runs the validations defined
+// on getWorkloadIdentity_not_found_response_body
+func ValidateGetWorkloadIdentityNotFoundResponseBody(body *GetWorkloadIdentityNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkloadIdentityConflictResponseBody runs the validations defined
+// on getWorkloadIdentity_conflict_response_body
+func ValidateGetWorkloadIdentityConflictResponseBody(body *GetWorkloadIdentityConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkloadIdentityUnsupportedMediaResponseBody runs the validations
+// defined on getWorkloadIdentity_unsupported_media_response_body
+func ValidateGetWorkloadIdentityUnsupportedMediaResponseBody(body *GetWorkloadIdentityUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkloadIdentityInvalidResponseBody runs the validations defined
+// on getWorkloadIdentity_invalid_response_body
+func ValidateGetWorkloadIdentityInvalidResponseBody(body *GetWorkloadIdentityInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkloadIdentityInvariantViolationResponseBody runs the
+// validations defined on getWorkloadIdentity_invariant_violation_response_body
+func ValidateGetWorkloadIdentityInvariantViolationResponseBody(body *GetWorkloadIdentityInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkloadIdentityUnexpectedResponseBody runs the validations
+// defined on getWorkloadIdentity_unexpected_response_body
+func ValidateGetWorkloadIdentityUnexpectedResponseBody(body *GetWorkloadIdentityUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkloadIdentityGatewayErrorResponseBody runs the validations
+// defined on getWorkloadIdentity_gateway_error_response_body
+func ValidateGetWorkloadIdentityGatewayErrorResponseBody(body *GetWorkloadIdentityGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateWorkloadIssuerUnauthorizedResponseBody runs the validations
+// defined on createWorkloadIssuer_unauthorized_response_body
+func ValidateCreateWorkloadIssuerUnauthorizedResponseBody(body *CreateWorkloadIssuerUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateWorkloadIssuerForbiddenResponseBody runs the validations
+// defined on createWorkloadIssuer_forbidden_response_body
+func ValidateCreateWorkloadIssuerForbiddenResponseBody(body *CreateWorkloadIssuerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateWorkloadIssuerBadRequestResponseBody runs the validations
+// defined on createWorkloadIssuer_bad_request_response_body
+func ValidateCreateWorkloadIssuerBadRequestResponseBody(body *CreateWorkloadIssuerBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateWorkloadIssuerNotFoundResponseBody runs the validations
+// defined on createWorkloadIssuer_not_found_response_body
+func ValidateCreateWorkloadIssuerNotFoundResponseBody(body *CreateWorkloadIssuerNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateWorkloadIssuerConflictResponseBody runs the validations
+// defined on createWorkloadIssuer_conflict_response_body
+func ValidateCreateWorkloadIssuerConflictResponseBody(body *CreateWorkloadIssuerConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateWorkloadIssuerUnsupportedMediaResponseBody runs the
+// validations defined on createWorkloadIssuer_unsupported_media_response_body
+func ValidateCreateWorkloadIssuerUnsupportedMediaResponseBody(body *CreateWorkloadIssuerUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateWorkloadIssuerInvalidResponseBody runs the validations defined
+// on createWorkloadIssuer_invalid_response_body
+func ValidateCreateWorkloadIssuerInvalidResponseBody(body *CreateWorkloadIssuerInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateWorkloadIssuerInvariantViolationResponseBody runs the
+// validations defined on createWorkloadIssuer_invariant_violation_response_body
+func ValidateCreateWorkloadIssuerInvariantViolationResponseBody(body *CreateWorkloadIssuerInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateWorkloadIssuerUnexpectedResponseBody runs the validations
+// defined on createWorkloadIssuer_unexpected_response_body
+func ValidateCreateWorkloadIssuerUnexpectedResponseBody(body *CreateWorkloadIssuerUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateWorkloadIssuerGatewayErrorResponseBody runs the validations
+// defined on createWorkloadIssuer_gateway_error_response_body
+func ValidateCreateWorkloadIssuerGatewayErrorResponseBody(body *CreateWorkloadIssuerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAdmitWorkloadSubjectUnauthorizedResponseBody runs the validations
+// defined on admitWorkloadSubject_unauthorized_response_body
+func ValidateAdmitWorkloadSubjectUnauthorizedResponseBody(body *AdmitWorkloadSubjectUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAdmitWorkloadSubjectForbiddenResponseBody runs the validations
+// defined on admitWorkloadSubject_forbidden_response_body
+func ValidateAdmitWorkloadSubjectForbiddenResponseBody(body *AdmitWorkloadSubjectForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAdmitWorkloadSubjectBadRequestResponseBody runs the validations
+// defined on admitWorkloadSubject_bad_request_response_body
+func ValidateAdmitWorkloadSubjectBadRequestResponseBody(body *AdmitWorkloadSubjectBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAdmitWorkloadSubjectNotFoundResponseBody runs the validations
+// defined on admitWorkloadSubject_not_found_response_body
+func ValidateAdmitWorkloadSubjectNotFoundResponseBody(body *AdmitWorkloadSubjectNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAdmitWorkloadSubjectConflictResponseBody runs the validations
+// defined on admitWorkloadSubject_conflict_response_body
+func ValidateAdmitWorkloadSubjectConflictResponseBody(body *AdmitWorkloadSubjectConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAdmitWorkloadSubjectUnsupportedMediaResponseBody runs the
+// validations defined on admitWorkloadSubject_unsupported_media_response_body
+func ValidateAdmitWorkloadSubjectUnsupportedMediaResponseBody(body *AdmitWorkloadSubjectUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAdmitWorkloadSubjectInvalidResponseBody runs the validations defined
+// on admitWorkloadSubject_invalid_response_body
+func ValidateAdmitWorkloadSubjectInvalidResponseBody(body *AdmitWorkloadSubjectInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAdmitWorkloadSubjectInvariantViolationResponseBody runs the
+// validations defined on admitWorkloadSubject_invariant_violation_response_body
+func ValidateAdmitWorkloadSubjectInvariantViolationResponseBody(body *AdmitWorkloadSubjectInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAdmitWorkloadSubjectUnexpectedResponseBody runs the validations
+// defined on admitWorkloadSubject_unexpected_response_body
+func ValidateAdmitWorkloadSubjectUnexpectedResponseBody(body *AdmitWorkloadSubjectUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAdmitWorkloadSubjectGatewayErrorResponseBody runs the validations
+// defined on admitWorkloadSubject_gateway_error_response_body
+func ValidateAdmitWorkloadSubjectGatewayErrorResponseBody(body *AdmitWorkloadSubjectGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetWorkloadAuthenticationHostUnauthorizedResponseBody runs the
+// validations defined on
+// setWorkloadAuthenticationHost_unauthorized_response_body
+func ValidateSetWorkloadAuthenticationHostUnauthorizedResponseBody(body *SetWorkloadAuthenticationHostUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetWorkloadAuthenticationHostForbiddenResponseBody runs the
+// validations defined on setWorkloadAuthenticationHost_forbidden_response_body
+func ValidateSetWorkloadAuthenticationHostForbiddenResponseBody(body *SetWorkloadAuthenticationHostForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetWorkloadAuthenticationHostBadRequestResponseBody runs the
+// validations defined on
+// setWorkloadAuthenticationHost_bad_request_response_body
+func ValidateSetWorkloadAuthenticationHostBadRequestResponseBody(body *SetWorkloadAuthenticationHostBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetWorkloadAuthenticationHostNotFoundResponseBody runs the
+// validations defined on setWorkloadAuthenticationHost_not_found_response_body
+func ValidateSetWorkloadAuthenticationHostNotFoundResponseBody(body *SetWorkloadAuthenticationHostNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetWorkloadAuthenticationHostConflictResponseBody runs the
+// validations defined on setWorkloadAuthenticationHost_conflict_response_body
+func ValidateSetWorkloadAuthenticationHostConflictResponseBody(body *SetWorkloadAuthenticationHostConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetWorkloadAuthenticationHostUnsupportedMediaResponseBody runs the
+// validations defined on
+// setWorkloadAuthenticationHost_unsupported_media_response_body
+func ValidateSetWorkloadAuthenticationHostUnsupportedMediaResponseBody(body *SetWorkloadAuthenticationHostUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetWorkloadAuthenticationHostInvalidResponseBody runs the
+// validations defined on setWorkloadAuthenticationHost_invalid_response_body
+func ValidateSetWorkloadAuthenticationHostInvalidResponseBody(body *SetWorkloadAuthenticationHostInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetWorkloadAuthenticationHostInvariantViolationResponseBody runs the
+// validations defined on
+// setWorkloadAuthenticationHost_invariant_violation_response_body
+func ValidateSetWorkloadAuthenticationHostInvariantViolationResponseBody(body *SetWorkloadAuthenticationHostInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetWorkloadAuthenticationHostUnexpectedResponseBody runs the
+// validations defined on setWorkloadAuthenticationHost_unexpected_response_body
+func ValidateSetWorkloadAuthenticationHostUnexpectedResponseBody(body *SetWorkloadAuthenticationHostUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetWorkloadAuthenticationHostGatewayErrorResponseBody runs the
+// validations defined on
+// setWorkloadAuthenticationHost_gateway_error_response_body
+func ValidateSetWorkloadAuthenticationHostGatewayErrorResponseBody(body *SetWorkloadAuthenticationHostGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTeardownWorkloadIssuerUnauthorizedResponseBody runs the validations
+// defined on teardownWorkloadIssuer_unauthorized_response_body
+func ValidateTeardownWorkloadIssuerUnauthorizedResponseBody(body *TeardownWorkloadIssuerUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTeardownWorkloadIssuerForbiddenResponseBody runs the validations
+// defined on teardownWorkloadIssuer_forbidden_response_body
+func ValidateTeardownWorkloadIssuerForbiddenResponseBody(body *TeardownWorkloadIssuerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTeardownWorkloadIssuerBadRequestResponseBody runs the validations
+// defined on teardownWorkloadIssuer_bad_request_response_body
+func ValidateTeardownWorkloadIssuerBadRequestResponseBody(body *TeardownWorkloadIssuerBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTeardownWorkloadIssuerNotFoundResponseBody runs the validations
+// defined on teardownWorkloadIssuer_not_found_response_body
+func ValidateTeardownWorkloadIssuerNotFoundResponseBody(body *TeardownWorkloadIssuerNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTeardownWorkloadIssuerConflictResponseBody runs the validations
+// defined on teardownWorkloadIssuer_conflict_response_body
+func ValidateTeardownWorkloadIssuerConflictResponseBody(body *TeardownWorkloadIssuerConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTeardownWorkloadIssuerUnsupportedMediaResponseBody runs the
+// validations defined on teardownWorkloadIssuer_unsupported_media_response_body
+func ValidateTeardownWorkloadIssuerUnsupportedMediaResponseBody(body *TeardownWorkloadIssuerUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTeardownWorkloadIssuerInvalidResponseBody runs the validations
+// defined on teardownWorkloadIssuer_invalid_response_body
+func ValidateTeardownWorkloadIssuerInvalidResponseBody(body *TeardownWorkloadIssuerInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTeardownWorkloadIssuerInvariantViolationResponseBody runs the
+// validations defined on
+// teardownWorkloadIssuer_invariant_violation_response_body
+func ValidateTeardownWorkloadIssuerInvariantViolationResponseBody(body *TeardownWorkloadIssuerInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTeardownWorkloadIssuerUnexpectedResponseBody runs the validations
+// defined on teardownWorkloadIssuer_unexpected_response_body
+func ValidateTeardownWorkloadIssuerUnexpectedResponseBody(body *TeardownWorkloadIssuerUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTeardownWorkloadIssuerGatewayErrorResponseBody runs the validations
+// defined on teardownWorkloadIssuer_gateway_error_response_body
+func ValidateTeardownWorkloadIssuerGatewayErrorResponseBody(body *TeardownWorkloadIssuerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAdminOrganizationMemberResponseBody runs the validations defined on
 // AdminOrganizationMemberResponseBody
 func ValidateAdminOrganizationMemberResponseBody(body *AdminOrganizationMemberResponseBody) (err error) {
@@ -37598,6 +41024,54 @@ func ValidateSupportFactRequestBody(body *SupportFactRequestBody) (err error) {
 	}
 	if utf8.RuneCountInString(body.Note) > 10000 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", body.Note, utf8.RuneCountInString(body.Note), 10000, false))
+	}
+	return
+}
+
+// ValidateAdminWorkloadIssuerResponseBody runs the validations defined on
+// AdminWorkloadIssuerResponseBody
+func ValidateAdminWorkloadIssuerResponseBody(body *AdminWorkloadIssuerResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.JwksURI == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("jwks_uri", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAdminWorkloadSubjectResponseBody runs the validations defined on
+// AdminWorkloadSubjectResponseBody
+func ValidateAdminWorkloadSubjectResponseBody(body *AdminWorkloadSubjectResponseBody) (err error) {
+	if body.WorkloadIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workload_issuer_id", "body"))
+	}
+	if body.Subject == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject", "body"))
+	}
+	return
+}
+
+// ValidateAdminWorkloadAuthenticationHostResponseBody runs the validations
+// defined on AdminWorkloadAuthenticationHostResponseBody
+func ValidateAdminWorkloadAuthenticationHostResponseBody(body *AdminWorkloadAuthenticationHostResponseBody) (err error) {
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.UseAuthenticationHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
 	}
 	return
 }

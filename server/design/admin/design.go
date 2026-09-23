@@ -1140,5 +1140,6 @@ var _ = Service("admin", func() {
 	})
 
 	supportMatrixMethods()
+	workloadIdentityMethods()
 
 })

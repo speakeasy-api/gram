@@ -74,6 +74,11 @@ type Server struct {
 	GetSpendBreakdown                     http.Handler
 	GetSupportMatrix                      http.Handler
 	UpdateSupportMatrix                   http.Handler
+	GetWorkloadIdentity                   http.Handler
+	CreateWorkloadIssuer                  http.Handler
+	AdmitWorkloadSubject                  http.Handler
+	SetWorkloadAuthenticationHost         http.Handler
+	TeardownWorkloadIssuer                http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -156,6 +161,11 @@ func New(
 			{"GetSpendBreakdown", "GET", "/admin/organization.spendBreakdown"},
 			{"GetSupportMatrix", "GET", "/admin/supportMatrix.get"},
 			{"UpdateSupportMatrix", "POST", "/admin/supportMatrix.update"},
+			{"GetWorkloadIdentity", "GET", "/admin/organization.workloadIdentity"},
+			{"CreateWorkloadIssuer", "POST", "/admin/organization.workloadIssuer"},
+			{"AdmitWorkloadSubject", "POST", "/admin/organization.workloadAdmission"},
+			{"SetWorkloadAuthenticationHost", "POST", "/admin/organization.workloadAuthenticationHost"},
+			{"TeardownWorkloadIssuer", "POST", "/admin/organization.workloadIdentityTeardown"},
 		},
 		Login:                                 NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                              NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -210,6 +220,11 @@ func New(
 		GetSpendBreakdown:                     NewGetSpendBreakdownHandler(e.GetSpendBreakdown, mux, decoder, encoder, errhandler, formatter),
 		GetSupportMatrix:                      NewGetSupportMatrixHandler(e.GetSupportMatrix, mux, decoder, encoder, errhandler, formatter),
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixHandler(e.UpdateSupportMatrix, mux, decoder, encoder, errhandler, formatter),
+		GetWorkloadIdentity:                   NewGetWorkloadIdentityHandler(e.GetWorkloadIdentity, mux, decoder, encoder, errhandler, formatter),
+		CreateWorkloadIssuer:                  NewCreateWorkloadIssuerHandler(e.CreateWorkloadIssuer, mux, decoder, encoder, errhandler, formatter),
+		AdmitWorkloadSubject:                  NewAdmitWorkloadSubjectHandler(e.AdmitWorkloadSubject, mux, decoder, encoder, errhandler, formatter),
+		SetWorkloadAuthenticationHost:         NewSetWorkloadAuthenticationHostHandler(e.SetWorkloadAuthenticationHost, mux, decoder, encoder, errhandler, formatter),
+		TeardownWorkloadIssuer:                NewTeardownWorkloadIssuerHandler(e.TeardownWorkloadIssuer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -271,6 +286,11 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetSpendBreakdown = m(s.GetSpendBreakdown)
 	s.GetSupportMatrix = m(s.GetSupportMatrix)
 	s.UpdateSupportMatrix = m(s.UpdateSupportMatrix)
+	s.GetWorkloadIdentity = m(s.GetWorkloadIdentity)
+	s.CreateWorkloadIssuer = m(s.CreateWorkloadIssuer)
+	s.AdmitWorkloadSubject = m(s.AdmitWorkloadSubject)
+	s.SetWorkloadAuthenticationHost = m(s.SetWorkloadAuthenticationHost)
+	s.TeardownWorkloadIssuer = m(s.TeardownWorkloadIssuer)
 }
 
 // MethodNames returns the methods served.
@@ -331,6 +351,11 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetSpendBreakdownHandler(mux, h.GetSpendBreakdown)
 	MountGetSupportMatrixHandler(mux, h.GetSupportMatrix)
 	MountUpdateSupportMatrixHandler(mux, h.UpdateSupportMatrix)
+	MountGetWorkloadIdentityHandler(mux, h.GetWorkloadIdentity)
+	MountCreateWorkloadIssuerHandler(mux, h.CreateWorkloadIssuer)
+	MountAdmitWorkloadSubjectHandler(mux, h.AdmitWorkloadSubject)
+	MountSetWorkloadAuthenticationHostHandler(mux, h.SetWorkloadAuthenticationHost)
+	MountTeardownWorkloadIssuerHandler(mux, h.TeardownWorkloadIssuer)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -3178,6 +3203,272 @@ func NewUpdateSupportMatrixHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateSupportMatrix")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetWorkloadIdentityHandler configures the mux to serve the "admin"
+// service "getWorkloadIdentity" endpoint.
+func MountGetWorkloadIdentityHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.workloadIdentity", f)
+}
+
+// NewGetWorkloadIdentityHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getWorkloadIdentity" endpoint.
+func NewGetWorkloadIdentityHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetWorkloadIdentityRequest(mux, decoder)
+		encodeResponse = EncodeGetWorkloadIdentityResponse(encoder)
+		encodeError    = EncodeGetWorkloadIdentityError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getWorkloadIdentity")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateWorkloadIssuerHandler configures the mux to serve the "admin"
+// service "createWorkloadIssuer" endpoint.
+func MountCreateWorkloadIssuerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.workloadIssuer", f)
+}
+
+// NewCreateWorkloadIssuerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "createWorkloadIssuer" endpoint.
+func NewCreateWorkloadIssuerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateWorkloadIssuerRequest(mux, decoder)
+		encodeResponse = EncodeCreateWorkloadIssuerResponse(encoder)
+		encodeError    = EncodeCreateWorkloadIssuerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createWorkloadIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountAdmitWorkloadSubjectHandler configures the mux to serve the "admin"
+// service "admitWorkloadSubject" endpoint.
+func MountAdmitWorkloadSubjectHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.workloadAdmission", f)
+}
+
+// NewAdmitWorkloadSubjectHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "admitWorkloadSubject" endpoint.
+func NewAdmitWorkloadSubjectHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeAdmitWorkloadSubjectRequest(mux, decoder)
+		encodeResponse = EncodeAdmitWorkloadSubjectResponse(encoder)
+		encodeError    = EncodeAdmitWorkloadSubjectError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "admitWorkloadSubject")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetWorkloadAuthenticationHostHandler configures the mux to serve the
+// "admin" service "setWorkloadAuthenticationHost" endpoint.
+func MountSetWorkloadAuthenticationHostHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.workloadAuthenticationHost", f)
+}
+
+// NewSetWorkloadAuthenticationHostHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "setWorkloadAuthenticationHost" endpoint.
+func NewSetWorkloadAuthenticationHostHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetWorkloadAuthenticationHostRequest(mux, decoder)
+		encodeResponse = EncodeSetWorkloadAuthenticationHostResponse(encoder)
+		encodeError    = EncodeSetWorkloadAuthenticationHostError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setWorkloadAuthenticationHost")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountTeardownWorkloadIssuerHandler configures the mux to serve the "admin"
+// service "teardownWorkloadIssuer" endpoint.
+func MountTeardownWorkloadIssuerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.workloadIdentityTeardown", f)
+}
+
+// NewTeardownWorkloadIssuerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "teardownWorkloadIssuer" endpoint.
+func NewTeardownWorkloadIssuerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeTeardownWorkloadIssuerRequest(mux, decoder)
+		encodeResponse = EncodeTeardownWorkloadIssuerResponse(encoder)
+		encodeError    = EncodeTeardownWorkloadIssuerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "teardownWorkloadIssuer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

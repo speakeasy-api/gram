@@ -12,6 +12,73 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminAdmitWorkloadSubject = `-- name: AdminAdmitWorkloadSubject :one
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, name)
+SELECT
+  i.organization_id,
+  i.project_id,
+  i.id,
+  $1::text,
+  $2::text
+FROM workload_issuers i
+WHERE i.organization_id = $3::text
+  AND i.id = $4::uuid
+  AND i.deleted_at IS NULL
+RETURNING id
+`
+
+type AdminAdmitWorkloadSubjectParams struct {
+	Subject          string
+	Name             pgtype.Text
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+}
+
+func (q *Queries) AdminAdmitWorkloadSubject(ctx context.Context, arg AdminAdmitWorkloadSubjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, adminAdmitWorkloadSubject,
+		arg.Subject,
+		arg.Name,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const adminAssignWorkloadAgent = `-- name: AdminAssignWorkloadAgent :one
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
+SELECT
+  i.organization_id,
+  i.id,
+  $1::text,
+  $2::uuid
+FROM workload_issuers i
+WHERE i.organization_id = $3::text
+  AND i.id = $4::uuid
+  AND i.deleted_at IS NULL
+RETURNING id
+`
+
+type AdminAssignWorkloadAgentParams struct {
+	Subject          string
+	AgentID          uuid.UUID
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+}
+
+func (q *Queries) AdminAssignWorkloadAgent(ctx context.Context, arg AdminAssignWorkloadAgentParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, adminAssignWorkloadAgent,
+		arg.Subject,
+		arg.AgentID,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const adminBulkUpdateAccountType = `-- name: AdminBulkUpdateAccountType :many
 UPDATE organization_metadata
 SET
@@ -140,6 +207,39 @@ func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrg
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const adminCreateWorkloadIssuer = `-- name: AdminCreateWorkloadIssuer :one
+INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri)
+VALUES (
+  $1::text,
+  $2::uuid,
+  $3::text,
+  $4::text,
+  $5::text
+)
+RETURNING id
+`
+
+type AdminCreateWorkloadIssuerParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+	Issuer         string
+	JwksUri        string
+}
+
+func (q *Queries) AdminCreateWorkloadIssuer(ctx context.Context, arg AdminCreateWorkloadIssuerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, adminCreateWorkloadIssuer,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Issuer,
+		arg.JwksUri,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const adminDisableOrganization = `-- name: AdminDisableOrganization :execrows
@@ -815,6 +915,135 @@ func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organiza
 	return items, nil
 }
 
+const adminListWorkloadAuthenticationHosts = `-- name: AdminListWorkloadAuthenticationHosts :many
+SELECT id, project_id, use_authentication_host
+FROM user_session_issuers
+WHERE organization_id = $1::text AND deleted_at IS NULL
+ORDER BY created_at
+`
+
+type AdminListWorkloadAuthenticationHostsRow struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.NullUUID
+	UseAuthenticationHost bool
+}
+
+func (q *Queries) AdminListWorkloadAuthenticationHosts(ctx context.Context, organizationID string) ([]AdminListWorkloadAuthenticationHostsRow, error) {
+	rows, err := q.db.Query(ctx, adminListWorkloadAuthenticationHosts, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListWorkloadAuthenticationHostsRow
+	for rows.Next() {
+		var i AdminListWorkloadAuthenticationHostsRow
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.UseAuthenticationHost); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListWorkloadIssuers = `-- name: AdminListWorkloadIssuers :many
+SELECT id, name, issuer, jwks_uri, project_id, created_at
+FROM workload_issuers
+WHERE organization_id = $1::text AND deleted_at IS NULL
+ORDER BY created_at
+`
+
+type AdminListWorkloadIssuersRow struct {
+	ID        uuid.UUID
+	Name      string
+	Issuer    string
+	JwksUri   string
+	ProjectID uuid.NullUUID
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListWorkloadIssuers(ctx context.Context, organizationID string) ([]AdminListWorkloadIssuersRow, error) {
+	rows, err := q.db.Query(ctx, adminListWorkloadIssuers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListWorkloadIssuersRow
+	for rows.Next() {
+		var i AdminListWorkloadIssuersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Issuer,
+			&i.JwksUri,
+			&i.ProjectID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListWorkloadSubjects = `-- name: AdminListWorkloadSubjects :many
+SELECT
+  a.workload_issuer_id,
+  a.subject,
+  a.name,
+  g.agent_id,
+  ag.name AS agent_name
+FROM workload_identity_admissions a
+LEFT JOIN workload_agent_assignments g
+  ON g.organization_id = a.organization_id
+  AND g.workload_issuer_id = a.workload_issuer_id
+  AND g.subject = a.subject
+  AND g.deleted_at IS NULL
+LEFT JOIN agents ag
+  ON ag.organization_id = g.organization_id AND ag.id = g.agent_id AND ag.deleted_at IS NULL
+WHERE a.organization_id = $1::text AND a.deleted_at IS NULL
+ORDER BY a.created_at
+`
+
+type AdminListWorkloadSubjectsRow struct {
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	Name             pgtype.Text
+	AgentID          uuid.NullUUID
+	AgentName        pgtype.Text
+}
+
+func (q *Queries) AdminListWorkloadSubjects(ctx context.Context, organizationID string) ([]AdminListWorkloadSubjectsRow, error) {
+	rows, err := q.db.Query(ctx, adminListWorkloadSubjects, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListWorkloadSubjectsRow
+	for rows.Next() {
+		var i AdminListWorkloadSubjectsRow
+		if err := rows.Scan(
+			&i.WorkloadIssuerID,
+			&i.Subject,
+			&i.Name,
+			&i.AgentID,
+			&i.AgentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminResolveOrganizationID = `-- name: AdminResolveOrganizationID :one
 SELECT id
 FROM organization_metadata
@@ -910,6 +1139,28 @@ func (q *Queries) AdminSetStripeCustomer(ctx context.Context, arg AdminSetStripe
 	return organization_id, err
 }
 
+const adminSetWorkloadAuthenticationHost = `-- name: AdminSetWorkloadAuthenticationHost :execrows
+UPDATE user_session_issuers
+SET use_authentication_host = $1::boolean, updated_at = clock_timestamp()
+WHERE organization_id = $2::text
+  AND id = $3::uuid
+  AND deleted_at IS NULL
+`
+
+type AdminSetWorkloadAuthenticationHostParams struct {
+	Enabled             bool
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) AdminSetWorkloadAuthenticationHost(ctx context.Context, arg AdminSetWorkloadAuthenticationHostParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminSetWorkloadAuthenticationHost, arg.Enabled, arg.OrganizationID, arg.UserSessionIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const adminUpdateOrganization = `-- name: AdminUpdateOrganization :exec
 UPDATE organization_metadata
 SET
@@ -929,6 +1180,63 @@ type AdminUpdateOrganizationParams struct {
 // the field. NULL on both is a no-op (still touches updated_at).
 func (q *Queries) AdminUpdateOrganization(ctx context.Context, arg AdminUpdateOrganizationParams) error {
 	_, err := q.db.Exec(ctx, adminUpdateOrganization, arg.AccountType, arg.Whitelisted, arg.ID)
+	return err
+}
+
+const adminWithdrawWorkloadIssuer = `-- name: AdminWithdrawWorkloadIssuer :execrows
+UPDATE workload_issuers
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1::text
+  AND id = $2::uuid
+  AND deleted_at IS NULL
+`
+
+type AdminWithdrawWorkloadIssuerParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+}
+
+func (q *Queries) AdminWithdrawWorkloadIssuer(ctx context.Context, arg AdminWithdrawWorkloadIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminWithdrawWorkloadIssuer, arg.OrganizationID, arg.WorkloadIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const adminWithdrawWorkloadIssuerAdmissions = `-- name: AdminWithdrawWorkloadIssuerAdmissions :exec
+UPDATE workload_identity_admissions
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1::text
+  AND workload_issuer_id = $2::uuid
+  AND deleted_at IS NULL
+`
+
+type AdminWithdrawWorkloadIssuerAdmissionsParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+}
+
+func (q *Queries) AdminWithdrawWorkloadIssuerAdmissions(ctx context.Context, arg AdminWithdrawWorkloadIssuerAdmissionsParams) error {
+	_, err := q.db.Exec(ctx, adminWithdrawWorkloadIssuerAdmissions, arg.OrganizationID, arg.WorkloadIssuerID)
+	return err
+}
+
+const adminWithdrawWorkloadIssuerAssignments = `-- name: AdminWithdrawWorkloadIssuerAssignments :exec
+UPDATE workload_agent_assignments
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1::text
+  AND workload_issuer_id = $2::uuid
+  AND deleted_at IS NULL
+`
+
+type AdminWithdrawWorkloadIssuerAssignmentsParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+}
+
+func (q *Queries) AdminWithdrawWorkloadIssuerAssignments(ctx context.Context, arg AdminWithdrawWorkloadIssuerAssignmentsParams) error {
+	_, err := q.db.Exec(ctx, adminWithdrawWorkloadIssuerAssignments, arg.OrganizationID, arg.WorkloadIssuerID)
 	return err
 }
 
