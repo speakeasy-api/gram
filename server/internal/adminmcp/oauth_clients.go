@@ -20,7 +20,7 @@ import (
 )
 
 var staffGrantTypes = []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
-var staffAuthMethods = []string{oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodNone}
+var staffAuthMethods = []string{oauthwire.AuthMethodClientSecretBasic}
 
 type staffOAuthClient struct {
 	ID              string
@@ -104,6 +104,10 @@ func (s *StaffOAuthClients) RegisterHandler() http.Handler {
 			staffOAuthError(w, http.StatusBadRequest, "invalid_client_metadata", "request body is not valid JSON")
 			return
 		}
+		if request.TokenEndpointAuthMethod == "" {
+			staffOAuthError(w, http.StatusBadRequest, "invalid_client_metadata", "token_endpoint_auth_method is required")
+			return
+		}
 		request.SetDefaults()
 		if err := request.Validate(staffGrantTypes, staffAuthMethods); err != nil {
 			if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
@@ -120,20 +124,17 @@ func (s *StaffOAuthClients) RegisterHandler() http.Handler {
 			return
 		}
 		client := staffOAuthClient{ID: "client_" + uuid.NewString(), Name: request.ClientName, RedirectURIs: request.RedirectURIs, SecretHash: "", SecretExpiresAt: nil}
-		var secret string
-		if request.TokenEndpointAuthMethod != oauthwire.AuthMethodNone {
-			secret, err = staffOpaqueToken()
-			if err != nil {
-				staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
-				return
-			}
-			hash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
-			if err != nil {
-				staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
-				return
-			}
-			client.SecretHash = string(hash)
+		secret, err := staffOpaqueToken()
+		if err != nil {
+			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
+			return
 		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
+		if err != nil {
+			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
+			return
+		}
+		client.SecretHash = string(hash)
 		if err := s.store.RegisterClient(r.Context(), client); err != nil {
 			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
 			return

@@ -65,7 +65,7 @@ func (s *StaffOAuthTokens) TokenHandler() http.Handler {
 			return
 		}
 		_, _, basicAuth := r.BasicAuth()
-		if basicAuth == (client.SecretHash == "") || (basicAuth && (r.PostForm.Has("client_id") || r.PostForm.Has("client_secret"))) {
+		if !basicAuth || r.PostForm.Has("client_id") || r.PostForm.Has("client_secret") {
 			staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication method is invalid")
 			return
 		}
@@ -99,10 +99,8 @@ func (s *StaffOAuthTokens) TokenHandler() http.Handler {
 }
 
 func staffClientCredentials(r *http.Request) (string, string) {
-	if id, secret, ok := r.BasicAuth(); ok {
-		return id, secret
-	}
-	return r.PostForm.Get("client_id"), r.PostForm.Get("client_secret")
+	id, secret, _ := r.BasicAuth()
+	return id, secret
 }
 
 func (s *StaffOAuthTokens) authenticateClient(ctx context.Context, clientID, secret string) (staffOAuthClient, error) {
@@ -112,9 +110,6 @@ func (s *StaffOAuthTokens) authenticateClient(ctx context.Context, clientID, sec
 	client, err := s.clients.GetClient(ctx, clientID)
 	if err != nil || (client.SecretExpiresAt != nil && !time.Now().Before(*client.SecretExpiresAt)) {
 		return staffOAuthClient{}, errStaffGrant
-	}
-	if client.SecretHash == "" && secret == "" {
-		return client, nil
 	}
 	if client.SecretHash == "" || bcrypt.CompareHashAndPassword([]byte(client.SecretHash), []byte(secret)) != nil {
 		return staffOAuthClient{}, errStaffGrant

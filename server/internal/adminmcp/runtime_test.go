@@ -16,10 +16,12 @@ type testAuthenticator struct {
 	principal Principal
 	err       error
 	calls     int
+	token     string
 }
 
-func (a *testAuthenticator) Authenticate(_ context.Context, _ string) (Principal, error) {
+func (a *testAuthenticator) Authenticate(_ context.Context, token string) (Principal, error) {
 	a.calls++
+	a.token = token
 	return a.principal, a.err
 }
 
@@ -134,6 +136,7 @@ func TestContextToolReturnsOnlyAuthenticatedContext(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 	require.Equal(t, 1, auth.calls)
+	require.Equal(t, "test-token", auth.token)
 
 	var message struct {
 		Result struct {

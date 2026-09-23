@@ -25,6 +25,7 @@ import (
 )
 
 const staffChallengePrefix = "adminMCPChallenge:"
+const staffBrowserProofCookie = "__Host-admin-mcp-proof"
 const staffCodeLifetime = 10 * time.Minute
 const staffAuthorizationLifetime = 24 * time.Hour
 
@@ -35,6 +36,7 @@ type staffChallenge struct {
 	State         string    `json:"state"`
 	CodeChallenge string    `json:"code_challenge"`
 	CSRFToken     string    `json:"csrf_token"`
+	BrowserProof  string    `json:"browser_proof"`
 	SessionHash   string    `json:"session_hash"`
 	ResourceURI   string    `json:"resource_uri"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -124,11 +126,17 @@ func (s *StaffOAuthAuthorization) AuthorizeHandler() http.Handler {
 			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not start authorization")
 			return
 		}
-		challenge := staffChallenge{ID: uuid.NewString(), ClientID: client.ID, RedirectURI: request.RedirectURI, State: request.State, CodeChallenge: request.CodeChallenge, CSRFToken: csrf, SessionHash: "", ResourceURI: s.resource, CreatedAt: time.Now()}
+		proof, err := staffOpaqueToken()
+		if err != nil {
+			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not start authorization")
+			return
+		}
+		challenge := staffChallenge{ID: uuid.NewString(), ClientID: client.ID, RedirectURI: request.RedirectURI, State: request.State, CodeChallenge: request.CodeChallenge, CSRFToken: csrf, BrowserProof: staffTokenHash(proof), SessionHash: "", ResourceURI: s.resource, CreatedAt: time.Now()}
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
 			staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not start authorization")
 			return
 		}
+		http.SetCookie(w, &http.Cookie{Name: staffBrowserProofCookie + "-" + challenge.ID, Value: proof, Path: "/", MaxAge: int(staffCodeLifetime.Seconds()), Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:exhaustruct // Host-only session proof; Domain and Expires intentionally omitted.
 		http.Redirect(w, r, Path+"/connect?state="+url.QueryEscape(challenge.ID), http.StatusFound)
 	})
 }
@@ -157,6 +165,10 @@ func (s *StaffOAuthAuthorization) connectGet(w http.ResponseWriter, r *http.Requ
 	challenge, err := s.cache.Get(r.Context(), staffChallengePrefix+r.URL.Query().Get("state"))
 	if err != nil || challenge.ID == "" || time.Since(challenge.CreatedAt) >= staffCodeLifetime || challenge.ResourceURI != s.resource {
 		staffOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		return
+	}
+	if !staffBrowserProofMatches(r, challenge) {
+		staffOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization browser is invalid")
 		return
 	}
 	client, err := s.clients.GetClient(r.Context(), challenge.ClientID)
@@ -201,6 +213,10 @@ func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Req
 	challenge, err := s.cache.GetAndDelete(r.Context(), staffChallengePrefix+r.PostForm.Get("state"))
 	if err != nil || challenge.ID == "" || time.Since(challenge.CreatedAt) >= staffCodeLifetime || challenge.ResourceURI != s.resource {
 		staffOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		return
+	}
+	if !staffBrowserProofMatches(r, challenge) {
+		staffOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization browser is invalid")
 		return
 	}
 	if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
@@ -262,6 +278,12 @@ func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Req
 	}
 	callback.RawQuery = query.Encode()
 	http.Redirect(w, r, callback.String(), http.StatusSeeOther)
+}
+
+func staffBrowserProofMatches(r *http.Request, challenge staffChallenge) bool {
+	cookie, err := r.Cookie(staffBrowserProofCookie + "-" + challenge.ID)
+	return err == nil && cookie.Value != "" && challenge.BrowserProof != "" &&
+		subtle.ConstantTimeCompare([]byte(staffTokenHash(cookie.Value)), []byte(challenge.BrowserProof)) == 1
 }
 
 var errMissingStaffCookie = errors.New("missing admin session cookie")

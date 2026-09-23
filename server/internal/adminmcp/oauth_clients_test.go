@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type recordingStaffClientStore struct {
@@ -36,13 +37,13 @@ func TestStaffClientRegistration(t *testing.T) {
 		body        string
 		status      int
 		expectError string
-		expectHash  bool
 	}{
-		{name: "confidential client", body: `{"client_name":"editor","redirect_uris":["http://localhost:5555/callback"]}`, status: http.StatusCreated, expectHash: true},
-		{name: "public client", body: `{"client_name":"editor","redirect_uris":["http://localhost:5555/callback"],"token_endpoint_auth_method":"none"}`, status: http.StatusCreated},
+		{name: "confidential client", body: `{"client_name":"editor","redirect_uris":["http://localhost:5555/callback"],"token_endpoint_auth_method":"client_secret_basic"}`, status: http.StatusCreated},
+		{name: "omitted authentication method", body: `{"client_name":"editor","redirect_uris":["http://localhost:5555/callback"]}`, status: http.StatusBadRequest, expectError: "invalid_client_metadata"},
+		{name: "public client", body: `{"client_name":"editor","redirect_uris":["http://localhost:5555/callback"],"token_endpoint_auth_method":"none"}`, status: http.StatusBadRequest, expectError: "invalid_client_metadata"},
 		{name: "unsupported post authentication", body: `{"client_name":"editor","redirect_uris":["http://localhost:5555/callback"],"token_endpoint_auth_method":"client_secret_post"}`, status: http.StatusBadRequest, expectError: "invalid_client_metadata"},
-		{name: "invalid redirect", body: `{"client_name":"editor","redirect_uris":["http://example.com/callback"]}`, status: http.StatusBadRequest, expectError: "invalid_redirect_uri"},
-		{name: "unsupported grant", body: `{"client_name":"editor","redirect_uris":["http://localhost:5555/callback"],"grant_types":["client_credentials"]}`, status: http.StatusBadRequest, expectError: "invalid_client_metadata"},
+		{name: "invalid redirect", body: `{"client_name":"editor","redirect_uris":["http://example.com/callback"],"token_endpoint_auth_method":"client_secret_basic"}`, status: http.StatusBadRequest, expectError: "invalid_redirect_uri"},
+		{name: "unsupported grant", body: `{"client_name":"editor","redirect_uris":["http://localhost:5555/callback"],"token_endpoint_auth_method":"client_secret_basic","grant_types":["client_credentials"]}`, status: http.StatusBadRequest, expectError: "invalid_client_metadata"},
 		{name: "invalid json", body: `{`, status: http.StatusBadRequest, expectError: "invalid_client_metadata"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -65,14 +66,10 @@ func TestStaffClientRegistration(t *testing.T) {
 			require.Equal(t, store.client.ID, payload["client_id"])
 			require.Equal(t, []any{"authorization_code", "refresh_token"}, payload["grant_types"])
 			require.NotEmpty(t, store.client.ID)
-			if tc.expectHash {
-				require.NotEmpty(t, payload["client_secret"])
-				require.NotContains(t, store.client.SecretHash, payload["client_secret"])
-				require.NotEmpty(t, store.client.SecretHash)
-			} else {
-				require.Empty(t, store.client.SecretHash)
-				require.NotContains(t, payload, "client_secret")
-			}
+			secret, ok := payload["client_secret"].(string)
+			require.True(t, ok)
+			require.NotEmpty(t, secret)
+			require.NoError(t, bcrypt.CompareHashAndPassword([]byte(store.client.SecretHash), []byte(secret)))
 		})
 	}
 }
@@ -80,7 +77,7 @@ func TestStaffClientRegistration(t *testing.T) {
 func TestStaffClientRegistrationRejectsUnavailableAndWrongMethod(t *testing.T) {
 	t.Parallel()
 	handler := (&StaffOAuthClients{store: &recordingStaffClientStore{err: errors.New("storage failed")}}).RegisterHandler()
-	request := httptest.NewRequest(http.MethodPost, "/admin-mcp/register", strings.NewReader(`{"client_name":"editor","redirect_uris":["http://localhost/callback"]}`))
+	request := httptest.NewRequest(http.MethodPost, "/admin-mcp/register", strings.NewReader(`{"client_name":"editor","redirect_uris":["http://localhost/callback"],"token_endpoint_auth_method":"client_secret_basic"}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)

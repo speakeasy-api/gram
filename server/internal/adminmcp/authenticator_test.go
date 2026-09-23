@@ -97,6 +97,7 @@ func TestStaffAuthenticatorRejectsInvalidTokenBeforeDatabase(t *testing.T) {
 	for _, presented := range []string{"", "not-a-token", token + "tampered"} {
 		_, err := auth.Authenticate(t.Context(), presented)
 		require.Error(t, err)
+		require.NotErrorIs(t, err, ErrAuthUnavailable)
 	}
 	foreign, _, err := sessiontokens.NewSigner("different-key").Mint(sessiontokens.MintParams{
 		Subject: urn.NewUserSubject(staffSubject), Audience: staffAudience, Issuer: staffIssuer, Lifetime: time.Hour, ClientID: staffClient,
@@ -104,6 +105,14 @@ func TestStaffAuthenticatorRejectsInvalidTokenBeforeDatabase(t *testing.T) {
 	require.NoError(t, err)
 	_, err = auth.Authenticate(t.Context(), foreign)
 	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrAuthUnavailable)
+	foreign, _, err = auth.signer.Mint(sessiontokens.MintParams{
+		Subject: urn.NewUserSubject(staffSubject), Audience: staffAudience, Issuer: "https://other.example.test/admin-mcp/oauth", Lifetime: time.Hour, ClientID: staffClient,
+	})
+	require.NoError(t, err)
+	_, err = auth.Authenticate(t.Context(), foreign)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrAuthUnavailable)
 	require.Zero(t, store.calls)
 	require.Zero(t, verifier.calls)
 }
@@ -140,6 +149,7 @@ func TestStaffAuthenticatorRejectsConnectionAndIdentityMismatch(t *testing.T) {
 		modify(auth, store, verifier)
 		_, err := auth.Authenticate(t.Context(), token)
 		require.Error(t, err)
+		require.NotErrorIs(t, err, ErrAuthUnavailable)
 	}
 }
 
