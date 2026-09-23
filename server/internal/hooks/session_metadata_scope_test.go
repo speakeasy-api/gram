@@ -92,6 +92,33 @@ func TestCacheSessionMetadata_RefusesOtherProjectOverwrite(t *testing.T) {
 	require.NoError(t, ti.service.cacheSessionMetadata(ctx, update))
 }
 
+// Two projects racing to attribute a new session id: exactly one claims it.
+func TestCacheSessionMetadata_ConcurrentFirstClaimsHaveOneWinner(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	for range 20 {
+		sessionID := uuid.NewString()
+		contexts := []context.Context{ctx, otherProjectContext(t, ctx)}
+		errs := make(chan error, len(contexts))
+		for _, writerCtx := range contexts {
+			metadata := testSessionMetadata(t, writerCtx, sessionID)
+			go func() {
+				errs <- ti.service.cacheSessionMetadata(writerCtx, metadata)
+			}()
+		}
+		wins := 0
+		for range contexts {
+			if err := <-errs; err == nil {
+				wins++
+			} else {
+				require.ErrorIs(t, err, errSessionMetadataOtherProject)
+			}
+		}
+		require.Equal(t, 1, wins, "exactly one project claims a new session id")
+	}
+}
+
 // An OTEL export from another project for an already-attributed session id
 // must not re-point the session or adopt its unauthenticated hooks.
 func TestClaudeOTELLogs_DoesNotAdoptOtherProjectSession(t *testing.T) {

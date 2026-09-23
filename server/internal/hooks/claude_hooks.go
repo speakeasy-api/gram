@@ -22,6 +22,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -460,34 +461,21 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 	if !ok {
 		return
 	}
-	orgID := ""
-	projectID := ""
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
-		orgID = authCtx.ActiveOrganizationID
-		projectID = authCtx.ProjectID.String()
-	} else if metadata, err := s.resolveClaudeSessionMetadata(ctx, *payload.SessionID, strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))); err == nil {
-		orgID = metadata.GramOrgID
-		projectID = metadata.ProjectID
-	}
-	if projectID == "" {
-		// An unauthenticated SessionStart can beat the OTEL export that
-		// attributes its session. Hold the inventory aside for that export
-		// instead of dropping it; the guard's keys need a project.
-		if isAgentActor(ctx) {
-			return
-		}
-		if err := s.cache.Set(ctx, sessionUnscopedMCPListCacheKey(*payload.SessionID), entries, sessionMCPListTTL); err != nil {
-			s.logger.WarnContext(ctx, "failed to cache unscoped MCP list snapshot",
-				attr.SlogEvent("claude_hook_mcp_list_cache_set_failed"),
-				attr.SlogError(err),
-			)
-		}
+	// Only an authenticated sender's inventory is recorded. An unauthenticated
+	// one proves nothing but a session id, which is not enough to write into
+	// the guard's snapshot or the project's shadow-MCP inventory.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		s.logger.DebugContext(ctx, "skipping MCP inventory capture from unauthenticated hook",
+			attr.SlogEvent("claude_hook_mcp_inventory_unauthenticated"),
+		)
 		return
 	}
+	projectID := authCtx.ProjectID.String()
 	if !s.cacheMCPListSnapshot(ctx, projectID, *payload.SessionID, entries, variant) {
 		return
 	}
-	s.upsertShadowMCPInventoryURLs(ctx, orgID, projectID, *payload.SessionID, entries)
+	s.upsertShadowMCPInventoryURLs(ctx, authCtx.ActiveOrganizationID, projectID, *payload.SessionID, entries)
 }
 
 // parseMCPInventoryFromPayload extracts the MCP inventory carried in the hook
@@ -950,15 +938,29 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 // hooks resolve their project from this entry, so letting a later writer
 // replace it would let any tenant who learns a session id redirect that
 // session's hooks into its own project.
+//
+// The first write claims the session atomically, so two projects racing to
+// attribute a new session cannot both win. Later writes only update an entry
+// already confirmed to be the same project's.
 func (s *Service) cacheSessionMetadata(ctx context.Context, metadata SessionMetadata) error {
 	key := sessionCacheKey(metadata.SessionID)
+	conditional, ok := s.cache.(cache.ConditionalCache)
+	if !ok {
+		return errors.New("cache session metadata: cache does not support conditional writes")
+	}
+	claimed, err := conditional.SetIfAbsent(ctx, key, metadata, sessionMetadataTTL)
+	if err != nil {
+		return fmt.Errorf("claim session metadata: %w", err)
+	}
+	if claimed {
+		return nil
+	}
 	var existing SessionMetadata
-	switch err := s.cache.Get(ctx, key, &existing); {
-	case err == nil && existing.ProjectID != "" &&
-		(existing.GramOrgID != metadata.GramOrgID || existing.ProjectID != metadata.ProjectID):
-		return fmt.Errorf("cache session metadata: %w", errSessionMetadataOtherProject)
-	case err != nil && !errors.Is(err, redisCache.ErrCacheMiss):
+	if err := s.cache.Get(ctx, key, &existing); err != nil {
 		return fmt.Errorf("read existing session metadata: %w", err)
+	}
+	if existing.ProjectID != "" && (existing.GramOrgID != metadata.GramOrgID || existing.ProjectID != metadata.ProjectID) {
+		return fmt.Errorf("cache session metadata: %w", errSessionMetadataOtherProject)
 	}
 	if err := s.cache.Set(ctx, key, metadata, sessionMetadataTTL); err != nil {
 		return fmt.Errorf("cache session metadata: %w", err)

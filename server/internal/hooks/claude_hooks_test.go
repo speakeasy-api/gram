@@ -728,10 +728,20 @@ func TestClaude_RecordHook_PersistsAuthContextProjectIgnoringOtherProjectMetadat
 		ServiceName:   "claude-code",
 		UserEmail:     "other-project@example.com",
 		UserID:        "",
-		ExternalOrgID: authCtx.ActiveOrganizationID,
+		ExternalOrgID: "other-project-claude-org",
+		DeviceID:      "other-project-device",
 		GramOrgID:     authCtx.ActiveOrganizationID,
 		ProjectID:     cachedProjectID,
 	}, time.Hour))
+
+	// The attribution the hook persists under carries none of the other
+	// project's account identity.
+	resolved, err := ti.service.resolveClaudeSessionMetadata(ctx, sessionID, userEmail)
+	require.NoError(t, err)
+	assert.Equal(t, authCtx.ProjectID.String(), resolved.ProjectID)
+	assert.Equal(t, userEmail, resolved.UserEmail)
+	assert.Empty(t, resolved.ExternalOrgID, "another project's provider org never leaks into this session")
+	assert.Empty(t, resolved.DeviceID, "another project's device never leaks into this session")
 
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "UserPromptSubmit",

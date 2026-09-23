@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -49,19 +50,36 @@ type sessionCacheDeadlineRecorder struct {
 	remaining chan time.Duration
 }
 
-func (r *sessionCacheDeadlineRecorder) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
-	if strings.HasPrefix(key, "session:metadata:") {
-		deadline, ok := ctx.Deadline()
-		if ok {
-			r.remaining <- time.Until(deadline)
-		} else {
-			r.remaining <- 0
-		}
+func (r *sessionCacheDeadlineRecorder) record(ctx context.Context, key string) {
+	if !strings.HasPrefix(key, "session:metadata:") {
+		return
 	}
+	if deadline, ok := ctx.Deadline(); ok {
+		r.remaining <- time.Until(deadline)
+	} else {
+		r.remaining <- 0
+	}
+}
+
+func (r *sessionCacheDeadlineRecorder) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	r.record(ctx, key)
 	if err := r.Cache.Set(ctx, key, value, ttl); err != nil {
 		return fmt.Errorf("set cache: %w", err)
 	}
 	return nil
+}
+
+func (r *sessionCacheDeadlineRecorder) SetIfAbsent(ctx context.Context, key string, value any, ttl time.Duration) (bool, error) {
+	r.record(ctx, key)
+	conditional, ok := r.Cache.(cache.ConditionalCache)
+	if !ok {
+		return false, errors.New("underlying cache does not support conditional writes")
+	}
+	stored, err := conditional.SetIfAbsent(ctx, key, value, ttl)
+	if err != nil {
+		return false, fmt.Errorf("set if absent: %w", err)
+	}
+	return stored, nil
 }
 
 func (s ingestUserScopedShadowMCPScanner) ScanForEnforcement(_ context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {

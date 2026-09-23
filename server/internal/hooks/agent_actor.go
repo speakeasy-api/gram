@@ -121,8 +121,9 @@ var selfReportedIdentityKeys = []attr.Key{
 //
 // An authenticated request uses its own project. An unauthenticated Claude
 // hook — the optional-auth path that OTEL attributes later — uses the project
-// its cached session metadata names. Before that metadata lands it has no
-// scope, and callers neither read nor write the guard's keys.
+// its cached session metadata names, which lets it read what that project's
+// authenticated senders wrote; claimMCPListSnapshot never lets it write.
+// Before that metadata lands it has no scope and reads nothing.
 func (s *Service) mcpListProjectID(ctx context.Context, sessionID string) string {
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
 		return authCtx.ProjectID.String()
@@ -172,10 +173,13 @@ func (o mcpListOwner) shares(other mcpListOwner) bool {
 }
 
 // claimMCPListSnapshot records ctx as the owner of the session's snapshot in
-// projectID and reports whether ctx may write it. Nothing is written without a
-// project. An agent may not take over an unowned snapshot.
+// projectID and reports whether ctx may write it. Only a sender authenticated
+// to projectID writes: an unauthenticated hook resolves its project from the
+// session id alone, which anyone who learns that id could present. An agent
+// may not take over an unowned snapshot.
 func (s *Service) claimMCPListSnapshot(ctx context.Context, projectID, sessionID string) bool {
-	if projectID == "" {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if projectID == "" || !ok || authCtx == nil || authCtx.ProjectID == nil || authCtx.ProjectID.String() != projectID {
 		return false
 	}
 	writer := mcpListOwnerFromContext(ctx)

@@ -42,14 +42,6 @@ func sessionMCPListCacheKey(projectID, sessionID string) string {
 	return fmt.Sprintf("session:mcp-list:v2:%s:%s", projectID, sessionID)
 }
 
-// sessionUnscopedMCPListCacheKey holds the inventory from a Claude
-// SessionStart that arrived before any project could be resolved for its
-// session. The shadow-MCP guard never reads it. It only lets OTEL attribution
-// record the session's configured servers once the project is known.
-func sessionUnscopedMCPListCacheKey(sessionID string) string {
-	return fmt.Sprintf("session:mcp-list-unscoped:%s", sessionID)
-}
-
 // sessionMCPInventoryReadCacheKey returns the Redis key recording whether a
 // session's sender managed to read its MCP server list. It rides beside the
 // snapshot rather than inside it because an empty-but-read list has no entries

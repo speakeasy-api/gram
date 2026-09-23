@@ -643,6 +643,48 @@ func TestFlushPendingHooks_DirectCall(t *testing.T) {
 	assert.Equal(t, int64(0), exists, "Buffered hooks should be flushed and deleted from Redis")
 }
 
+// Hooks an authenticated request buffered under its project flush only for
+// that project, and a flush that has not confirmed ownership of the session id
+// leaves the unauthenticated buffer alone.
+func TestFlushPendingHooks_ProjectScopedBuffer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := uuid.NewString()
+	projectID := testProjectID(t, ctx)
+	scopedKey := hookPendingCacheKey(projectID, sessionID)
+	unscopedKey := hookPendingCacheKey("", sessionID)
+	for _, key := range []string{scopedKey, unscopedKey} {
+		require.NoError(t, ti.service.cache.ListAppend(ctx, key, hooks.ClaudePayload{
+			HookEventName: "PreToolUse",
+			SessionID:     &sessionID,
+			ToolName:      &toolName,
+			ToolUseID:     &toolUseID,
+		}, time.Hour))
+	}
+	metadataFor := func(projectID string) SessionMetadata {
+		return SessionMetadata{
+			SessionID:     sessionID,
+			ServiceName:   "test-service",
+			UserEmail:     "test@example.com",
+			UserID:        "",
+			ExternalOrgID: "claude-org-123",
+			GramOrgID:     uuid.NewString(),
+			ProjectID:     projectID,
+		}
+	}
+
+	other := metadataFor(uuid.NewString())
+	ti.service.flushPendingHooks(ctx, sessionID, &other, false)
+	require.Equal(t, int64(1), ti.redisClient.LLen(ctx, scopedKey).Val(), "another project never flushes this project's buffer")
+	require.Equal(t, int64(1), ti.redisClient.LLen(ctx, unscopedKey).Val(), "an unconfirmed owner leaves unauthenticated hooks alone")
+
+	own := metadataFor(projectID)
+	ti.service.flushPendingHooks(ctx, sessionID, &own, false)
+	require.Equal(t, int64(0), ti.redisClient.Exists(ctx, scopedKey).Val(), "the owning project flushes its buffer")
+	require.Equal(t, int64(1), ti.redisClient.LLen(ctx, unscopedKey).Val())
+}
+
 // TestFlushPendingHooks_EmptyList tests flushing when there are no pending hooks
 func TestFlushPendingHooks_EmptyList(t *testing.T) {
 	t.Parallel()

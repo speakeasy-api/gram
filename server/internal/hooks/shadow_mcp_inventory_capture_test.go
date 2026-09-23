@@ -1,10 +1,8 @@
 package hooks
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -158,7 +156,11 @@ func TestClaudeConfigChangeUpsertsCoworkShadowMCPInventoryURLs(t *testing.T) {
 	require.Equal(t, "Linear", rows[0].ServerName)
 }
 
-func TestClaudeSessionStartUpsertsShadowMCPInventoryURLsWhenOTELMetadataArrives(t *testing.T) {
+// An unauthenticated SessionStart proves only a session id, so its inventory
+// is never recorded: not before OTEL attributes the session, not by that
+// attribution, and not after it, when the session id alone resolves the
+// project.
+func TestClaudeUnauthenticatedSessionStartRecordsNoMCPInventory(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	chClient := enableHookTelemetryLogger(t, ctx, ti)
@@ -166,8 +168,7 @@ func TestClaudeSessionStartUpsertsShadowMCPInventoryURLsWhenOTELMetadataArrives(
 
 	sessionID := uuid.NewString()
 	userEmail := "otel-shadow-inventory@example.com"
-	noAuthCtx := t.Context()
-	_, err := ti.service.Claude(noAuthCtx, &gen.ClaudePayload{
+	sessionStart := &gen.ClaudePayload{
 		HookEventName: "SessionStart",
 		SessionID:     &sessionID,
 		UserEmail:     &userEmail,
@@ -176,11 +177,12 @@ func TestClaudeSessionStartUpsertsShadowMCPInventoryURLsWhenOTELMetadataArrives(
 				"notion: https://mcp.notion.com/mcp?auth=secret (HTTP) - connected\n" +
 				"local-tools: /usr/local/bin/local-tools (STDIO) - connected",
 		},
-	})
+	}
+	_, err := ti.service.Claude(t.Context(), sessionStart)
 	require.NoError(t, err)
 
 	_, err = ti.service.getCachedMCPList(ctx, sessionID)
-	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "an unscoped SessionStart never becomes a guard snapshot")
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "an unauthenticated SessionStart never becomes a guard snapshot")
 
 	err = ti.service.Logs(ctx, claudeLogsPayload(
 		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
@@ -195,14 +197,25 @@ func TestClaudeSessionStartUpsertsShadowMCPInventoryURLsWhenOTELMetadataArrives(
 		},
 	))
 	require.NoError(t, err)
+	_, err = ti.service.getCachedMCPList(ctx, sessionID)
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "OTEL attribution never writes the guard snapshot")
 
-	rows := requireShadowMCPInventoryURLsFromHooks(ctx, t, ti, chClient, authCtx.ProjectID.String(), 1)
-	require.Equal(t, "https://mcp.notion.com/mcp", rows[0].CanonicalServerURL)
-	require.Equal(t, "mcp.notion.com", rows[0].URLHost)
-	require.Equal(t, "notion", rows[0].ServerName)
+	// Now the session id resolves the project on its own.
+	_, err = ti.service.Claude(t.Context(), sessionStart)
+	require.NoError(t, err)
+	_, err = ti.service.getCachedMCPList(ctx, sessionID)
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "a known session id does not let an unauthenticated sender write the guard snapshot")
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+	rows, err := chClient.ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		Limit:         50,
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows, "unauthenticated inventory is never recorded")
 }
 
-func TestClaudeConfigChangeUpsertsShadowMCPInventoryURLsFromCachedSessionMetadata(t *testing.T) {
+func TestClaudeConfigChangeUpsertsShadowMCPInventoryURLs(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	chClient := enableHookTelemetryLogger(t, ctx, ti)
@@ -220,8 +233,7 @@ func TestClaudeConfigChangeUpsertsShadowMCPInventoryURLsFromCachedSessionMetadat
 		ProjectID:     authCtx.ProjectID.String(),
 	}, 24*time.Hour))
 
-	noAuthCtx := t.Context()
-	_, err := ti.service.Claude(noAuthCtx, &gen.ClaudePayload{
+	_, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "ConfigChange",
 		SessionID:     &sessionID,
 		UserEmail:     &userEmail,
@@ -390,34 +402,6 @@ func TestCodexSessionStartSkipsShadowMCPInventoryWhenSnapshotCacheFails(t *testi
 	})
 	require.NoError(t, err)
 	require.Empty(t, rows)
-}
-
-// Most sessions authenticate their SessionStart and hold no unscoped
-// inventory, so its absence at attribution is not worth a warning.
-func TestClaudeOTELLogsQuietWhenNoUnscopedMCPInventoryHeld(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestHooksService(t)
-
-	var logBuffer bytes.Buffer
-	ti.service.logger = slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
-
-	sessionID := uuid.NewString()
-	userEmail := "missing-mcp-list@example.com"
-	err := ti.service.Logs(ctx, claudeLogsPayload(
-		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
-		&gen.OTELScope{Name: new("claude-code"), Version: new("1.0.0")},
-		&gen.OTELLogRecord{
-			Body: &gen.OTELLogBody{StringValue: new("session api request")},
-			Attributes: []*gen.OTELAttribute{
-				strAttr("session.id", sessionID),
-				strAttr("user.email", userEmail),
-				strAttr("organization.id", "claude-org-missing-mcp-list"),
-			},
-		},
-	))
-	require.NoError(t, err)
-	require.Contains(t, logBuffer.String(), sessionID)
-	require.NotContains(t, logBuffer.String(), "claude_otel_mcp_list_cache_miss")
 }
 
 func requireShadowMCPInventoryURLsFromHooks(

@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -172,6 +173,20 @@ func (c *localSessionCache) localFallbackUser(ctx context.Context, orgID string)
 	}
 
 	return conv.FromPGTextOrEmpty[string](users[0].UserID), users[0].UserEmail
+}
+
+// SetIfAbsent delegates to the underlying cache, so session metadata claims
+// stay atomic in local development too.
+func (c *localSessionCache) SetIfAbsent(ctx context.Context, key string, value any, ttl time.Duration) (bool, error) {
+	conditional, ok := c.Cache.(cache.ConditionalCache)
+	if !ok {
+		return false, errors.New("underlying cache does not support conditional writes")
+	}
+	stored, err := conditional.SetIfAbsent(ctx, key, value, ttl)
+	if err != nil {
+		return false, fmt.Errorf("set if absent in cache: %w", err)
+	}
+	return stored, nil
 }
 
 // Set always delegates to the underlying cache so explicitly seeded sessions

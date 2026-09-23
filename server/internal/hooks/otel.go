@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 
@@ -193,9 +192,13 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 		)
 
 		_, metadataErr := s.getSessionMetadata(ctx, completeMetadata.SessionID)
-		// Another project already attributed this session id. This batch's own
-		// rows are still stamped, but it must not take over the session's
-		// cached identity or the unauthenticated hooks bound to it.
+		// owned is true only once this project's claim on the session id is
+		// confirmed: an entry of its own is cached, or this batch's write
+		// claimed or updated one. foreign means another project already
+		// attributed the session id; this batch's own rows are still stamped,
+		// but it must not take over the session's cached identity or the
+		// unauthenticated hooks bound to it. A cache error proves neither.
+		owned := metadataErr == nil
 		foreign := errors.Is(metadataErr, errSessionMetadataOtherProject)
 
 		// Attribute the account: classify team vs personal, link it to the
@@ -247,9 +250,11 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 		// Agent sessions never seed the human-keyed session cache.
 		if !linkFailed && !agent && !foreign {
 			switch err := s.cacheSessionMetadata(ctx, completeMetadata); {
+			case err == nil:
+				owned = true
 			case errors.Is(err, errSessionMetadataOtherProject):
 				foreign = true
-			case err != nil:
+			default:
 				sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
 					attr.SlogEvent("claude_logs_cache_set_failed"),
 					attr.SlogError(err),
@@ -257,36 +262,18 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 			}
 		}
 		if foreign {
+			owned = false
 			sessionLogger.WarnContext(ctx, "session id already attributed to another project; not adopting it",
 				attr.SlogEvent("claude_logs_session_owned_by_other_project"),
 			)
 		}
-		// A SessionStart that beat this attribution had no project to cache its
-		// inventory under, so it was held aside. Record it as inventory evidence
-		// now; it never becomes the guard's snapshot, which only a scoped
-		// writer can set.
-		if metadataErr != nil && !agent && !foreign {
-			var entries []MCPServerEntry
-			unscopedKey := sessionUnscopedMCPListCacheKey(completeMetadata.SessionID)
-			switch err := s.cache.Get(ctx, unscopedKey, &entries); {
-			case err == nil:
-				s.upsertShadowMCPInventoryURLs(ctx, completeMetadata.GramOrgID, completeMetadata.ProjectID, completeMetadata.SessionID, entries)
-				if err := s.cache.Delete(ctx, unscopedKey); err != nil {
-					sessionLogger.DebugContext(ctx, "failed to delete unscoped MCP list snapshot", attr.SlogError(err))
-				}
-			case !errors.Is(err, redisCache.ErrCacheMiss):
-				sessionLogger.WarnContext(ctx, "failed to read cached MCP list for shadow inventory capture",
-					attr.SlogEvent("claude_otel_mcp_list_cache_miss"),
-					attr.SlogError(err),
-				)
-			}
-		}
 
 		// Buffered hooks carry no agent identity; an agent batch must never
 		// adopt them. Unauthenticated ones belong to whichever project owns the
-		// session id, so a batch that does not own it leaves them alone.
+		// session id, so they flush only once this batch's ownership is
+		// confirmed; otherwise they wait for a later batch.
 		if !agent {
-			s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata, !foreign)
+			s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata, owned)
 		}
 
 		sessionLogger.InfoContext(ctx, "Stored session metadata",
