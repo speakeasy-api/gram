@@ -2616,7 +2616,7 @@ webhooks:
                 required: true
     audit_log.organization_onboarding_event_v1:
         post:
-            description: Emitted when an organization's onboarding selection is saved
+            description: Emitted when an organization's onboarding selection or answers are saved, or an onboarding step is verified
             operationId: audit_log.organization_onboarding_event_v1
             requestBody:
                 content:

@@ -376,6 +376,12 @@ trackedFiles:
   src/funcs/oktaResourceConnectionsConfirm.ts: {}
   src/funcs/oktaResourceConnectionsList.ts: {}
   src/funcs/oktaResourceConnectionsReset.ts: {}
+  src/funcs/onboardingGetOnboarding.ts: {}
+  src/funcs/onboardingGetUseCaseStatus.ts: {}
+  src/funcs/onboardingListReferenceData.ts: {}
+  src/funcs/onboardingSaveStack.ts: {}
+  src/funcs/onboardingSelectUseCase.ts: {}
+  src/funcs/onboardingVerifyStep.ts: {}
   src/funcs/organizationAssetsUploadImage.ts: {}
   src/funcs/organizationRemoteSessionClientsAttachKeySet.ts: {}
   src/funcs/organizationRemoteSessionClientsCreate.ts: {}
@@ -1350,8 +1356,20 @@ trackedFiles:
   src/models/components/oktaidentityproviderconnection.ts: {}
   src/models/components/oktaresourceconnectionconfirmation.ts: {}
   src/models/components/oktaresourceconnectionserver.ts: {}
+  src/models/components/onboardinganswers.ts: {}
   src/models/components/onboardinghookevent.ts: {}
+  src/models/components/onboardingoption.ts: {}
+  src/models/components/onboardingplan.ts: {}
+  src/models/components/onboardingproduct.ts: {}
+  src/models/components/onboardingprovider.ts: {}
+  src/models/components/onboardingreferencedata.ts: {}
+  src/models/components/onboardingselectedprovider.ts: {}
+  src/models/components/onboardingstate.ts: {}
   src/models/components/onboardingstatusresult.ts: {}
+  src/models/components/onboardingstep.ts: {}
+  src/models/components/onboardingusecasestatus.ts: {}
+  src/models/components/onboardingusecasestatusresult.ts: {}
+  src/models/components/onboardingverifystepresult.ts: {}
   src/models/components/openapiv3deploymentasset.ts: {}
   src/models/components/organization.ts: {}
   src/models/components/organizationclientdelegationstatus.ts: {}
@@ -1521,6 +1539,7 @@ trackedFiles:
   src/models/components/rotatetunneledmcpserverkeyform.ts: {}
   src/models/components/rotatetunneledmcpserverkeyresult.ts: {}
   src/models/components/saveriskevalreviewrequestbody.ts: {}
+  src/models/components/savestackrequestbody.ts: {}
   src/models/components/scopedefinition.ts: {}
   src/models/components/searchbusinessmemoriesrequestbody.ts: {}
   src/models/components/searchbusinessmemoriesresponsebody.ts: {}
@@ -1538,6 +1557,7 @@ trackedFiles:
   src/models/components/searchusersresult.ts: {}
   src/models/components/securityvariable.ts: {}
   src/models/components/selector.ts: {}
+  src/models/components/selectusecaserequestbody.ts: {}
   src/models/components/sendenterpriseadminonboardingemailrequestbody.ts: {}
   src/models/components/sendenterpriseadminonboardingemailresult.ts: {}
   src/models/components/sendinviterequestbody.ts: {}
@@ -1813,6 +1833,7 @@ trackedFiles:
   src/models/components/verifykmskeyresult.ts: {}
   src/models/components/verifyonboardinghookssetupresult.ts: {}
   src/models/components/verifyplatformcredentialresult.ts: {}
+  src/models/components/verifysteprequestbody.ts: {}
   src/models/components/verifyurlform.ts: {}
   src/models/components/verifyurlrequestbody.ts: {}
   src/models/components/verifyurlresult.ts: {}
@@ -2064,7 +2085,9 @@ trackedFiles:
   src/models/operations/getnetworkingress.ts: {}
   src/models/operations/getnetworkingressdeleteimpact.ts: {}
   src/models/operations/getobservabilityoverview.ts: {}
+  src/models/operations/getonboarding.ts: {}
   src/models/operations/getonboardingstatus.ts: {}
+  src/models/operations/getonboardingusecasestatus.ts: {}
   src/models/operations/getorganization.ts: {}
   src/models/operations/getorganizationremotesessionclient.ts: {}
   src/models/operations/getorganizationremotesessionclientdelegationstatus.ts: {}
@@ -2233,6 +2256,7 @@ trackedFiles:
   src/models/operations/listmetamcpservers.ts: {}
   src/models/operations/listmodelproviderkeys.ts: {}
   src/models/operations/listoktaresourceconnections.ts: {}
+  src/models/operations/listonboardingreferencedata.ts: {}
   src/models/operations/listorganizationremotesessionclientmcpservers.ts: {}
   src/models/operations/listorganizationremotesessionclients.ts: {}
   src/models/operations/listorganizationremotesessionclientsessions.ts: {}
@@ -2392,12 +2416,14 @@ trackedFiles:
   src/models/operations/rotatenetworkingresscredentials.ts: {}
   src/models/operations/rotateorganizationremotesessionclient.ts: {}
   src/models/operations/rotatetunneledmcpserverkey.ts: {}
+  src/models/operations/saveonboardingstack.ts: {}
   src/models/operations/saveriskevalreview.ts: {}
   src/models/operations/searchbusinessmemories.ts: {}
   src/models/operations/searchchats.ts: {}
   src/models/operations/searchlogs.ts: {}
   src/models/operations/searchtoolcalls.ts: {}
   src/models/operations/searchusers.ts: {}
+  src/models/operations/selectonboardingusecase.ts: {}
   src/models/operations/sendassistantmessage.ts: {}
   src/models/operations/sendenterpriseadminonboardingemail.ts: {}
   src/models/operations/sendinvite.ts: {}
@@ -2532,6 +2558,7 @@ trackedFiles:
   src/models/operations/verifygcpkmskey.ts: {}
   src/models/operations/verifyidentityproviderconnection.ts: {}
   src/models/operations/verifyonboardinghookssetup.ts: {}
+  src/models/operations/verifyonboardingstep.ts: {}
   src/models/operations/verifyremotemcpurl.ts: {}
   src/models/operations/verifyusersessionissuercimdclienturl.ts: {}
   src/react-query/_context.tsx: {}
@@ -3100,8 +3127,14 @@ trackedFiles:
   src/react-query/networkIngressGetDeleteImpact.ts: {}
   src/react-query/oktaResourceConnections.core.ts: {}
   src/react-query/oktaResourceConnections.ts: {}
+  src/react-query/onboarding.core.ts: {}
+  src/react-query/onboarding.ts: {}
+  src/react-query/onboardingReferenceData.core.ts: {}
+  src/react-query/onboardingReferenceData.ts: {}
   src/react-query/onboardingStatus.core.ts: {}
   src/react-query/onboardingStatus.ts: {}
+  src/react-query/onboardingUseCaseStatus.core.ts: {}
+  src/react-query/onboardingUseCaseStatus.ts: {}
   src/react-query/organization.core.ts: {}
   src/react-query/organization.ts: {}
   src/react-query/organizationRemoteSessionClient.core.ts: {}
@@ -3332,6 +3365,7 @@ trackedFiles:
   src/react-query/rotateNetworkIngressCredentials.ts: {}
   src/react-query/rotateOrganizationRemoteSessionClient.ts: {}
   src/react-query/rotateTunneledMcpServerKey.ts: {}
+  src/react-query/saveOnboardingStack.ts: {}
   src/react-query/searchBusinessMemories.ts: {}
   src/react-query/searchChats.core.ts: {}
   src/react-query/searchChats.ts: {}
@@ -3339,6 +3373,7 @@ trackedFiles:
   src/react-query/searchToolCalls.ts: {}
   src/react-query/searchUsers.core.ts: {}
   src/react-query/searchUsers.ts: {}
+  src/react-query/selectOnboardingUseCase.ts: {}
   src/react-query/sendAssistantMessage.ts: {}
   src/react-query/sendEnterpriseAdminOnboardingEmail.ts: {}
   src/react-query/sendInvite.ts: {}
@@ -3551,6 +3586,7 @@ trackedFiles:
   src/react-query/verifyIdentityProviderConnection.ts: {}
   src/react-query/verifyOnboardingHooksSetup.core.ts: {}
   src/react-query/verifyOnboardingHooksSetup.ts: {}
+  src/react-query/verifyOnboardingStep.ts: {}
   src/react-query/verifyRemoteMcpURL.ts: {}
   src/react-query/verifyUserSessionIssuerCimdClientURL.ts: {}
   src/react-query/workUnitsTrend.core.ts: {}
@@ -3613,6 +3649,7 @@ trackedFiles:
   src/sdk/modelkeys.ts: {}
   src/sdk/networkingress.ts: {}
   src/sdk/oktaresourceconnections.ts: {}
+  src/sdk/onboarding.ts: {}
   src/sdk/organizationassets.ts: {}
   src/sdk/organizationremotesessionclients.ts: {}
   src/sdk/organizationremotesessionissuers.ts: {}
@@ -6578,6 +6615,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getOnboarding:
+    speakeasy-default-get-onboarding:
+      responses:
+        "200":
+          application/json: {"done": true, "stage": "stack", "steps": [{"description": "smuggle for furiously yum by manipulate bid because bonfire", "destination": "devices", "evidence": "<value>", "slug": "<value>", "technique_slug": "<value>", "title": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getOnboardingStatus:
     speakeasy-default-get-onboarding-status:
       responses:
@@ -6587,6 +6633,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getOnboardingUseCaseStatus:
+    speakeasy-default-get-onboarding-use-case-status:
+      responses:
+        "200":
+          application/json: {"statuses": [{"selected": true, "use_case": "observability", "verified": true}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getOrganization:
     speakeasy-default-get-organization:
       responses:
@@ -8608,6 +8663,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listOnboardingReferenceData:
+    speakeasy-default-list-onboarding-reference-data:
+      responses:
+        "200":
+          application/json: {"mdm_vendors": [], "providers": [], "use_cases": [{"name": "<value>", "slug": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listOrganizationRemoteSessionClientMcpServers:
     speakeasy-default-list-organization-remote-session-client-mcp-servers:
       parameters:
@@ -10500,6 +10564,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  saveOnboardingStack:
+    speakeasy-default-save-onboarding-stack:
+      requestBody:
+        application/json: {"mdm_vendor": "intune", "product_slugs": [], "providers": []}
+      responses:
+        "200":
+          application/json: {"done": true, "stage": "steps", "steps": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   saveRiskEvalReview:
     speakeasy-default-save-risk-eval-review:
       requestBody:
@@ -10570,6 +10645,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  selectOnboardingUseCase:
+    speakeasy-default-select-onboarding-use-case:
+      requestBody:
+        application/json: {"use_case": "cost-tracking"}
+      responses:
+        "200":
+          application/json: {"done": false, "stage": "use-case", "steps": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   sendAssistantMessage:
     speakeasy-default-send-assistant-message:
       requestBody:
@@ -12187,6 +12273,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  verifyOnboardingStep:
+    speakeasy-default-verify-onboarding-step:
+      requestBody:
+        application/json: {"step_slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"evidence": "<value>", "state": {"done": true, "stage": "use-case", "steps": []}, "verified": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   verifyRemoteMcpURL:
     speakeasy-default-verify-remote-mcp-URL:
       requestBody:
