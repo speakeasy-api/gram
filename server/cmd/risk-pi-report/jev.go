@@ -28,14 +28,24 @@ const jevInputCostPerToken = 0.042 / 1_000_000
 // so the numbers reflect Jev's raw accuracy on every case, not a sampled
 // shadow slice.
 func scanJevMode(ctx context.Context, opts options, corpus []labeledCase) (modeSummary, [][]scanners.Finding, error) {
-	apiKey := os.Getenv("TYPESAFE_API_KEY")
-	if apiKey == "" || apiKey == "unset" {
-		return modeSummary{}, nil, fmt.Errorf("TYPESAFE_API_KEY not set")
+	policy := guardian.NewDefaultPolicy(tracenoop.NewTracerProvider())
+	var evaluator typesafe.Evaluator
+	if opts.jevOpenRouter {
+		apiKey := os.Getenv("OPENROUTER_DEV_KEY")
+		if apiKey == "" || apiKey == "unset" {
+			return modeSummary{}, nil, fmt.Errorf("OPENROUTER_DEV_KEY not set")
+		}
+		evaluator = typesafe.NewOpenRouterClient(policy.PooledClient(), apiKey)
+	} else {
+		apiKey := os.Getenv("TYPESAFE_API_KEY")
+		if apiKey == "" || apiKey == "unset" {
+			return modeSummary{}, nil, fmt.Errorf("TYPESAFE_API_KEY not set")
+		}
+		evaluator = typesafe.New(policy.PooledClient(), apiKey)
 	}
 
-	fmt.Fprintf(os.Stderr, "judging %d cases with jev (concurrency=%d)\n", len(corpus), opts.judgeConcurrency)
-	policy := guardian.NewDefaultPolicy(tracenoop.NewTracerProvider())
-	judge := jev.New(typesafe.New(policy.PooledClient(), apiKey))
+	fmt.Fprintf(os.Stderr, "judging %d cases with jev (concurrency=%d, via_openrouter=%v)\n", len(corpus), opts.judgeConcurrency, opts.jevOpenRouter)
+	judge := jev.New(evaluator)
 	findings, eval, err := scanJev(ctx, opts, judge, corpus)
 	if err != nil {
 		return modeSummary{}, nil, err

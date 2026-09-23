@@ -121,3 +121,42 @@ func TestUnavailableEvaluatorReturnsErrUnavailable(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrUnavailable)
 }
+
+func testOpenRouterClient(t *testing.T, handler http.HandlerFunc) *OpenRouterClient {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	return &OpenRouterClient{httpClient: server.Client(), apiKey: "test-key", endpoint: server.URL}
+}
+
+func TestOpenRouterEvaluateAcceptsBuildSuffixedModel(t *testing.T) {
+	t.Parallel()
+
+	client := testOpenRouterClient(t, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Model string `json:"model"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		require.Equal(t, OpenRouterModel, req.Model)
+
+		_, err := w.Write([]byte(`{"model":"typesafe/jev-1.13-20260917","answers":{"match":{"type":"noul","noul":0.4}},"usage":{"input_tokens":5,"output_tokens":1}}`))
+		require.NoError(t, err)
+	})
+
+	result, err := client.Evaluate(t.Context(), json.RawMessage(`{}`), testQuestions())
+
+	require.NoError(t, err)
+	require.Equal(t, 0.4, result.Probabilities["match"])
+}
+
+func TestOpenRouterEvaluateRejectsUnrelatedModel(t *testing.T) {
+	t.Parallel()
+
+	client := testOpenRouterClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"model":"some-other-model","answers":{"match":{"type":"noul","noul":0.4}},"usage":{"input_tokens":5,"output_tokens":1}}`))
+	})
+
+	_, err := client.Evaluate(t.Context(), json.RawMessage(`{}`), testQuestions())
+
+	require.ErrorContains(t, err, "invalid typesafe response metadata")
+}

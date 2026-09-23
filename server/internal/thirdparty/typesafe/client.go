@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -53,6 +54,42 @@ func New(httpClient *http.Client, apiKey string) *Client {
 }
 
 func (c *Client) Evaluate(ctx context.Context, state json.RawMessage, questions map[string]Question) (Result, error) {
+	return evaluate(ctx, c.httpClient, c.endpoint, c.apiKey, Model, func(m string) bool { return m == Model }, state, questions)
+}
+
+// OpenRouterModel is the model id OpenRouter's alpha Decisions API expects in
+// the request. The response model id carries a build suffix
+// (e.g. "typesafe/jev-1.13-20260917"), so responses are matched by prefix.
+const OpenRouterModel = "typesafe/jev-1.13"
+
+// OpenRouterClient evaluates Jev through OpenRouter's alpha Decisions API
+// (POST /api/alpha/decisions) instead of TypeSafe's own endpoint, billed to
+// and authenticated by an OpenRouter API key. Same request/response shape as
+// Client, so it satisfies the same Evaluator interface.
+//
+// Not production-ready as of 2026-09-23: benchmarked against the direct
+// Client with server/cmd/risk-pi-report -jev -jev-openrouter and found a
+// reproducible ~9% failure rate, all a Cloudflare "Attention Required" block
+// on typesafe.ai itself when OpenRouter's backend proxies the request there
+// (not a rate limit or content filter on our side). Client had 0 errors
+// across 1,190 calls in the same benchmark. Kept for re-evaluation once
+// OpenRouter's integration leaves alpha; do not wire into judgeshadow until
+// then.
+type OpenRouterClient struct {
+	httpClient *http.Client
+	apiKey     string
+	endpoint   string
+}
+
+func NewOpenRouterClient(httpClient *http.Client, apiKey string) *OpenRouterClient {
+	return &OpenRouterClient{httpClient: httpClient, apiKey: apiKey, endpoint: "https://openrouter.ai/api/alpha/decisions"}
+}
+
+func (c *OpenRouterClient) Evaluate(ctx context.Context, state json.RawMessage, questions map[string]Question) (Result, error) {
+	return evaluate(ctx, c.httpClient, c.endpoint, c.apiKey, OpenRouterModel, func(m string) bool { return strings.HasPrefix(m, OpenRouterModel) }, state, questions)
+}
+
+func evaluate(ctx context.Context, httpClient *http.Client, endpoint, apiKey, requestModel string, acceptModel func(string) bool, state json.RawMessage, questions map[string]Question) (Result, error) {
 	result := Result{Probabilities: nil, Model: Model, InputTokens: 0, OutputTokens: 0}
 	if !json.Valid(state) || len(questions) == 0 {
 		return result, errors.New("invalid typesafe evaluation input")
@@ -61,19 +98,19 @@ func (c *Client) Evaluate(ctx context.Context, state json.RawMessage, questions 
 		Model     string              `json:"model"`
 		State     json.RawMessage     `json:"state"`
 		Questions map[string]Question `json:"questions"`
-	}{Model: Model, State: state, Questions: questions})
+	}{Model: requestModel, State: state, Questions: questions})
 	if err != nil {
 		return result, fmt.Errorf("encode typesafe request: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return result, fmt.Errorf("create typesafe request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
-	res, err := c.httpClient.Do(req)
+	res, err := httpClient.Do(req)
 	if err != nil {
 		return result, fmt.Errorf("request typesafe evaluation: %w", err)
 	}
@@ -103,7 +140,7 @@ func (c *Client) Evaluate(ctx context.Context, state json.RawMessage, questions 
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return result, errors.New("invalid typesafe response JSON")
 	}
-	if response.Model != Model || response.Usage == nil || response.Usage.InputTokens < 0 || response.Usage.OutputTokens < 0 || len(response.Answers) != len(questions) {
+	if !acceptModel(response.Model) || response.Usage == nil || response.Usage.InputTokens < 0 || response.Usage.OutputTokens < 0 || len(response.Answers) != len(questions) {
 		return result, errors.New("invalid typesafe response metadata")
 	}
 	probabilities := make(map[string]float64, len(questions))

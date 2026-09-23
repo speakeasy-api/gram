@@ -288,6 +288,7 @@ type options struct {
 	repeats          int
 	samples          int
 	jev              bool
+	jevOpenRouter    bool
 	skipJudge        bool
 }
 
@@ -336,6 +337,7 @@ func parseFlags() options {
 	flag.IntVar(&opts.repeats, "repeats", 1, "number of complete repeated trials")
 	flag.IntVar(&opts.samples, "samples", piopenrouter.SamplesPerEvent, "physical judge calls per event; production defaults to one")
 	flag.BoolVar(&opts.jev, "jev", false, "also evaluate Jev (TypeSafe) as a shadow candidate for the L1 judge (needs TYPESAFE_API_KEY)")
+	flag.BoolVar(&opts.jevOpenRouter, "jev-openrouter", false, "route the -jev evaluation through OpenRouter's alpha Decisions API instead of TypeSafe's own endpoint (needs OPENROUTER_DEV_KEY, not TYPESAFE_API_KEY)")
 	flag.BoolVar(&opts.skipJudge, "skip-judge", false, "skip the OpenRouter L1 judge entirely (no OPENROUTER_DEV_KEY needed); pair with -jev to evaluate Jev standalone")
 	flag.Parse()
 	return opts
