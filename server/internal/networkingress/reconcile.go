@@ -34,6 +34,13 @@ type ExecutorOptions struct {
 
 	// CanApply is checked on every attempt before credential decryption.
 	CanApply func(context.Context) error
+
+	// PublicationRequester atomically records organization invalidations for
+	// committed DNS authority changes. A nil requester keeps the producer off.
+	PublicationRequester PublicationRequester
+
+	// PublicationActor identifies the reconciler actor in publication hints.
+	PublicationActor string
 }
 
 // ReconcileResult is safe to persist in orchestration history.
@@ -116,7 +123,7 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 	}
 	resources, err := k8s.ParseNetworkIngressResourceNames(row.ProviderResources)
 	if err != nil || resources.OwnerID != row.ID || resources.Namespace != row.AttestorNamespace || resources.AttestorServiceAccount != row.AttestorServiceAccount {
-		return e.record(ctx, queries, row, k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, reconcileFailure("invalid_desired_state"), "")
+		return e.record(ctx, conn, row, k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, reconcileFailure("invalid_desired_state"), "")
 	}
 	provider, err := e.registry.Provisioner(row.Provider)
 	if err != nil {
@@ -124,7 +131,7 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 		if row.Provider == ProviderTailscale {
 			code = "provider_configuration_unavailable"
 		}
-		return e.record(ctx, queries, row, k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, reconcileFailure(code), "")
+		return e.record(ctx, conn, row, k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, reconcileFailure(code), "")
 	}
 
 	gateCode := ""
@@ -149,7 +156,7 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 		if gateCode == "" {
 			credentials, err := e.enc.Decrypt(row.CredentialsEncrypted.String)
 			if err != nil || !row.CredentialsEncrypted.Valid || credentials == "" {
-				return e.record(ctx, queries, row, k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, reconcileFailure("invalid_credentials"), "")
+				return e.record(ctx, conn, row, k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, reconcileFailure("invalid_credentials"), "")
 			}
 			callCtx, callCancel := context.WithTimeout(ctx, 2*time.Minute)
 			observation, operationErr = provider.Apply(callCtx, k8s.NetworkIngressDesired{
@@ -181,7 +188,7 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 	if operationErr != nil {
 		failure = providerFailure(operationErr, observation.ErrorCode)
 	}
-	return e.record(ctx, queries, row, observation, failure, gateCode)
+	return e.record(ctx, conn, row, observation, failure, gateCode)
 }
 
 func (e *Executor) applyGate(ctx context.Context) string {
@@ -238,7 +245,7 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 	return ReconcileResult{Requeue: false}, nil
 }
 
-func (e *Executor) record(ctx context.Context, queries *repo.Queries, row repo.NetworkIngress, observation k8s.NetworkIngressObservation, failure *ReconcileError, gateCode string) (ReconcileResult, error) {
+func (e *Executor) record(ctx context.Context, conn *pgxpool.Conn, row repo.NetworkIngress, observation k8s.NetworkIngressObservation, failure *ReconcileError, gateCode string) (ReconcileResult, error) {
 	status := observation.Status
 	code := observation.ErrorCode
 	switch code {
@@ -274,14 +281,42 @@ func (e *Executor) record(ctx context.Context, queries *repo.Queries, row repo.N
 		status, code = "error", "provider_error"
 		failure = reconcileFailure(code)
 	}
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
+	queries := repo.New(tx)
+	current, err := queries.LockNetworkIngressForReconcile(ctx, repo.LockNetworkIngressForReconcileParams{ID: row.ID, OrganizationID: row.OrganizationID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ReconcileResult{Requeue: false}, nil
+	}
+	if err != nil {
+		return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
+	}
+	if !sameIngressDesired(row, current) {
+		return ReconcileResult{Requeue: true}, nil
+	}
+	previousDNS := ""
+	if current.DnsName.Valid {
+		previousDNS = current.DnsName.String
+	}
 	count, err := queries.RecordNetworkIngressObservation(ctx, repo.RecordNetworkIngressObservationParams{
-		ID: row.ID, OrganizationID: row.OrganizationID, ExpectedUpdatedAt: row.UpdatedAt, Status: status, DnsName: conv.ToPGTextEmpty(dns), LastError: conv.ToPGTextEmpty(code),
+		ID: current.ID, OrganizationID: current.OrganizationID, ExpectedUpdatedAt: current.UpdatedAt, Status: status, DnsName: conv.ToPGTextEmpty(dns), LastError: conv.ToPGTextEmpty(code),
 	})
 	if err != nil {
 		return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
 	}
 	if count == 0 {
 		return ReconcileResult{Requeue: true}, nil
+	}
+	if previousDNS != dns && e.options.PublicationRequester != nil {
+		if err := e.options.PublicationRequester.Organization(ctx, tx, current.OrganizationID, e.options.PublicationActor); err != nil {
+			return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
 	}
 	if failure != nil {
 		return ReconcileResult{Requeue: false}, failure

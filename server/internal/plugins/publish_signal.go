@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
 // PluginPublishSignaler enqueues a republish of a project's marketplace
@@ -28,7 +29,17 @@ func (s *Service) signalPublish(ctx context.Context, projectID uuid.UUID, create
 	if s.publisher == nil || s.github == nil {
 		return
 	}
+	if s.publicationRequests.Enabled {
+		connected, err := repo.New(s.db).HasPluginGithubConnectionForProject(ctx, projectID)
+		if err == nil && connected {
+			return // The transaction already enqueued a durable refresh.
+		}
+		if err != nil {
+			s.logger.WarnContext(ctx, "check marketplace connection after plugin mutation", attr.SlogError(err))
+		}
+	}
 
+	// Preserve the first-publish signal for projects without a marketplace.
 	// The request returning shouldn't drop the enqueue.
 	if err := s.publisher.SignalPluginPublish(context.WithoutCancel(ctx), projectID, createdByUserID); err != nil {
 		s.logger.WarnContext(ctx, "failed to signal plugin publish",

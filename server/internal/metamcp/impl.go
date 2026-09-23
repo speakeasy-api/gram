@@ -59,6 +59,7 @@ type Service struct {
 	networkAccessEligibility networkaccess.EligibilityChecker
 	distributionAdmission    *admission.Guard
 	publisher                plugins.PluginPublishSignaler
+	publicationRequests      plugins.PublicationRequests
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -87,11 +88,17 @@ func NewService(
 		networkAccessEligibility: networkAccessEligibility,
 		distributionAdmission:    nil,
 		publisher:                nil,
+		publicationRequests:      plugins.PublicationRequests{Enabled: false},
 	}
 }
 
 func (s *Service) WithDistributionAdmission(guard *admission.Guard) *Service {
 	s.distributionAdmission = guard
+	return s
+}
+
+func (s *Service) WithPublicationRequests(enabled bool) *Service {
+	s.publicationRequests.Enabled = enabled
 	return s
 }
 
@@ -453,6 +460,9 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "log meta mcp server update").LogError(ctx, logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue gateway publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -655,6 +665,9 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 		return oops.E(oops.CodeUnexpected, err, "log meta mcp server deletion").LogError(ctx, logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enqueue gateway publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -883,6 +896,9 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeUnexpected, err, "log meta mcp member addition").LogError(ctx, logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue gateway publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -986,6 +1002,9 @@ func (s *Service) UpdateMetaMcpMember(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "log meta mcp member update").LogError(ctx, logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue gateway publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -1104,6 +1123,9 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 		return oops.E(oops.CodeUnexpected, err, "log meta mcp member removal").LogError(ctx, logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enqueue gateway publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}

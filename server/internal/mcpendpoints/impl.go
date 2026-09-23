@@ -54,6 +54,7 @@ type Service struct {
 	temporalEnv           *tenv.Environment
 	pluginsGitHubEnabled  bool
 	distributionAdmission *admission.Guard
+	publicationRequests   plugins.PublicationRequests
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -81,7 +82,13 @@ func NewService(
 		temporalEnv:           temporalEnv,
 		pluginsGitHubEnabled:  pluginsGitHubEnabled,
 		distributionAdmission: admission.NewGuard(nil, nil),
+		publicationRequests:   plugins.PublicationRequests{Enabled: false},
 	}
+}
+
+func (s *Service) WithPublicationRequests(enabled bool) *Service {
+	s.publicationRequests.Enabled = enabled
+	return s
 }
 
 func (s *Service) WithDistributionAdmission(guard *admission.Guard) *Service {
@@ -246,12 +253,15 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		}
 	}
 
+	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	s.triggerPluginPublish(ctx, authCtx, attached, pluginCreated)
-	if !attached {
+	if !attached && !s.publicationRequests.Enabled {
 		s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{mcpServerID}, metaMcpServerID)
 	}
 
@@ -598,10 +608,15 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		}
 	}
 
+	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{existing.McpServerID, updated.McpServerID}, existing.MetaMcpServerID, updated.MetaMcpServerID)
+	if !s.publicationRequests.Enabled {
+		s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{existing.McpServerID, updated.McpServerID}, existing.MetaMcpServerID, updated.MetaMcpServerID)
+	}
 
 	if wasRoot && existing.CustomDomainID.Valid {
 		if err := s.reconcileCustomDomains(ctx, []uuid.UUID{existing.CustomDomainID.UUID}); err != nil {
@@ -729,10 +744,15 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		}
 	}
 
+	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{existing.McpServerID}, existing.MetaMcpServerID)
+	if !s.publicationRequests.Enabled {
+		s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{existing.McpServerID}, existing.MetaMcpServerID)
+	}
 
 	if wasRoot {
 		if err := s.reconcileCustomDomains(ctx, []uuid.UUID{existing.CustomDomainID.UUID}); err != nil {
