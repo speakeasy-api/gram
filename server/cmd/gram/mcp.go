@@ -251,6 +251,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return fmt.Errorf("create publishers: %w", err)
 	}
+	publishersShutdown := len(shutdown.funcs)
 	shutdown.funcs = append(shutdown.funcs, stop)
 
 	logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
@@ -278,6 +279,12 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return err
 	}
 	shutdown.funcs = append(shutdown.funcs, mcpRiskScanner.Shutdown)
+	// Shutdown funcs run concurrently, so flag findings drain inside the
+	// publishers' stop instead of racing it.
+	stopPublishers := shutdown.funcs[publishersShutdown]
+	shutdown.funcs[publishersShutdown] = func(ctx context.Context) error {
+		return errors.Join(mcpRiskEvaluator.Drain(ctx), stopPublishers(ctx))
+	}
 	slackClient := slack_client.NewSlackClient(guardianPolicy)
 	// Listing and reading triggers works without Temporal; scheduling one
 	// returns an error from the trigger tool instead of dispatching.

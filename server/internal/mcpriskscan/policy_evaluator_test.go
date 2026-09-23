@@ -132,6 +132,62 @@ func TestPolicyEvaluator_FlagLaneIsDetachedAndAtMostOnce(t *testing.T) {
 	require.Equal(t, riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED, publisher.snapshot()[0].GetEnforcementOutcome())
 }
 
+func TestPolicyEvaluator_DrainPublishesFlagFindingsReturnedWithError(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	serverID := uuid.New()
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	publisher := &findingPublisher{}
+	scanErr := errors.New("detector partially failed")
+	evaluator := newPolicyEvaluator(t, staticPolicies(policycore.Policy{
+		ID:             uuid.New(),
+		ProjectID:      projectID,
+		OrganizationID: "org-test",
+		Name:           "Flag policy",
+		Action:         "flag",
+	}), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
+		started <- struct{}{}
+		<-release
+		return []scanners.Finding{{
+			RuleID:      "flag.partial",
+			Description: "Finding returned before detector failure",
+			Tags:        []string{},
+			Source:      "gitleaks",
+			Confidence:  1,
+		}}, scanErr
+	}), publisher, mcpriskscan.DefaultPolicyConfig)
+
+	require.False(t, evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, serverID, `{}`)).Denied())
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("flag evaluation did not start")
+	}
+
+	drained := make(chan error, 1)
+	go func() {
+		drained <- evaluator.Drain(t.Context())
+	}()
+	select {
+	case <-drained:
+		t.Fatal("drain returned before the flag scan completed")
+	default:
+	}
+	close(release)
+	select {
+	case err := <-drained:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("drain did not return after the flag scan completed")
+	}
+
+	published := publisher.snapshot()
+	require.Len(t, published, 1)
+	require.Equal(t, "flag.partial", published[0].GetRuleId())
+	require.Equal(t, riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED, published[0].GetEnforcementOutcome())
+}
+
 func TestPolicyEvaluator_NonBlockActionsUseFlagLane(t *testing.T) {
 	t.Parallel()
 	for _, action := range []string{"flag", "warn", "quarantine"} {

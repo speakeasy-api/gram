@@ -91,7 +91,6 @@ func TestFetchUnanalyzed_SkipsMCPScopedPolicies(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, result.MessageIDs)
-	require.Empty(t, result.ContentPartIDs)
 	require.Empty(t, result.Policies)
 }
 

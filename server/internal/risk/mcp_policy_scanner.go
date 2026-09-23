@@ -130,11 +130,14 @@ func (s *MCPPolicyScanner) ScanMCPPolicy(ctx context.Context, policy policycore.
 				threshold = *policy.PresidioScoreThreshold
 			}
 			results, err := s.scanner.piiScanner.AnalyzeBatch(ctx, []string{request.Text}, entities, threshold, func() {})
-			if err != nil || len(results) != 1 || !results[0].Completed {
-				scanErr = errors.Join(scanErr, completionError(source, err))
-			}
+			incomplete := err != nil || len(results) != 1
 			if len(results) == 1 {
-				findings = append(findings, filter(source, filterMCPPresidioFindings(results[0].Findings, entities, threshold))...)
+				filtered, hadDeadLetter := filterMCPPresidioFindings(results[0].Findings, entities, threshold)
+				incomplete = incomplete || !results[0].Completed || hadDeadLetter
+				findings = append(findings, filter(source, filtered)...)
+			}
+			if incomplete {
+				scanErr = errors.Join(scanErr, completionError(source, err))
 			}
 		case risk_analysis.SourcePromptInjection:
 			result, _, err := s.scanner.piScanner.ScanWithVerdict(ctx, request.Text, policy.OrganizationID, policy.ProjectID.String(), request.UserID, judgemessage.New(message.ToolRequest, request.ToolName, request.Text))
@@ -225,16 +228,21 @@ func completionError(source string, err error) error {
 	return fmt.Errorf("%s scan incomplete", source)
 }
 
-func filterMCPPresidioFindings(findings []scanners.Finding, entities []string, threshold float64) []scanners.Finding {
+func filterMCPPresidioFindings(findings []scanners.Finding, entities []string, threshold float64) ([]scanners.Finding, bool) {
 	out := make([]scanners.Finding, 0, len(findings))
+	hadDeadLetter := false
 	for _, finding := range findings {
+		if finding.DeadLetterReason != "" {
+			hadDeadLetter = true
+			continue
+		}
 		entity := strings.ToUpper(strings.TrimPrefix(finding.RuleID, "pii."))
 		if risk_analysis.IsEntityFindingDropped(entity) || finding.Confidence < threshold || (len(entities) > 0 && !slices.Contains(entities, entity)) {
 			continue
 		}
 		out = append(out, finding)
 	}
-	return out
+	return out, hadDeadLetter
 }
 
 func argumentsWithToolsetID(raw, toolsetID string) (string, error) {
@@ -243,6 +251,9 @@ func argumentsWithToolsetID(raw, toolsetID string) (string, error) {
 		if err := json.Unmarshal([]byte(raw), &input); err != nil {
 			return "", fmt.Errorf("decode tool arguments: %w", err)
 		}
+	}
+	if input == nil {
+		input = make(map[string]any, 1)
 	}
 	input[shadowmcp.XGramToolsetIDField] = toolsetID
 	encoded, err := json.Marshal(input)

@@ -206,7 +206,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err != nil {
 		return nil, err
 	}
-	r.cleanup = append(r.cleanup, mcpRiskScanner.Shutdown)
+	r.cleanup = append(r.cleanup, mcpRiskScanner.Shutdown, mcpRiskEvaluator.Drain)
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	slackClient := slackclient.NewSlackClient(guardianPolicy)

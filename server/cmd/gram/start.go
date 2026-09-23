@@ -320,6 +320,11 @@ const probeDrainTimeout = 20 * time.Second
 func mcpRuntimeFlags() []cli.Flag {
 	flags := []cli.Flag{
 		&cli.StringFlag{
+			Name:    "presidio-analyzer-url",
+			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
+			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
+		},
+		&cli.StringFlag{
 			Name:    "authentication-host-url",
 			Usage:   "Base URL of the alternate authentication host. It serves the per-server MCP OAuth authorization server, kept apart from MCP traffic. Issuers opt in to announcing it. Empty disables it.",
 			EnvVars: []string{"GRAM_AUTHENTICATION_HOST_URL"},
@@ -614,11 +619,6 @@ func serverFlags() []cli.Flag {
 			Usage:    "JSON mapping of application email template keys to environment-specific Loops IDs",
 			EnvVars:  []string{"GRAM_EMAIL_TEMPLATE_IDS"},
 			Required: false,
-		},
-		&cli.StringFlag{
-			Name:    "presidio-analyzer-url",
-			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
-			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
 		},
 		&cli.StringFlag{
 			Name:     "workos-webhook-secret",

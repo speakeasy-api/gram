@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,6 +69,7 @@ type policyEvaluator struct {
 	publisher  gcp.Publisher[*riskv1.Finding]
 	config     PolicyConfig
 	flagSlots  chan struct{}
+	flagScans  sync.WaitGroup
 	onFlagDrop func(context.Context, Event)
 }
 
@@ -99,6 +101,7 @@ func NewPolicyEvaluator(
 		publisher:  publisher,
 		config:     config,
 		flagSlots:  make(chan struct{}, config.FlagConcurrency),
+		flagScans:  sync.WaitGroup{},
 		onFlagDrop: nil,
 	}
 	policy.onFlagDrop = evaluator.metrics.recordFlagDrop
@@ -169,22 +172,37 @@ func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subje
 		return
 	}
 	payload := bytes.Clone(subject.Payload.Bytes())
+	p.flagScans.Add(1)
 	go func() {
+		defer p.flagScans.Done()
 		defer func() { <-p.flagSlots }()
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), p.config.Deadline)
 		defer cancel()
 		request := policyScanRequest(subject, payload)
 		for _, policy := range policies {
 			findings, err := p.detector.ScanMCPPolicy(ctx, policy, request)
-			if err != nil {
-				p.logger.WarnContext(ctx, "MCP flag policy scan failed", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
-				continue
-			}
 			if len(findings) > 0 {
 				p.publish(ctx, subject.Event, policy, findings, riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED)
 			}
+			if err != nil {
+				p.logger.WarnContext(ctx, "MCP flag policy scan failed", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
+			}
 		}
 	}()
+}
+
+func (p *policyEvaluator) drain(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		p.flagScans.Wait()
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("drain MCP flag lane: %w", ctx.Err())
+	}
 }
 
 func (p *policyEvaluator) publish(ctx context.Context, event Event, policy policycore.Policy, findings []scanners.Finding, outcome riskv1.Finding_EnforcementOutcome) {

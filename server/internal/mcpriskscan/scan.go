@@ -62,6 +62,14 @@ func PrependObserver(observer Observer, next *Evaluator) *Evaluator {
 }
 
 // Scan synchronously evaluates an authoritative subject at most once.
+// Drain waits for detached flag evaluations after request admission has stopped.
+func (e *Evaluator) Drain(ctx context.Context) error {
+	if e == nil || e.policy == nil {
+		return nil
+	}
+	return e.policy.drain(ctx)
+}
+
 func (e *Evaluator) Scan(ctx context.Context, subject Subject) Decision {
 	if e == nil || !subject.claimEvaluation() {
 		return Allow()

@@ -91,3 +91,45 @@ func TestMCPPolicyScanner_AccountIdentityDoesNotMakeGitleaksIndeterminate(t *tes
 		require.Equal(t, risk_analysis.SourceGitleaks, finding.Source)
 	}
 }
+
+func TestMCPPolicyScanner_PresidioDeadLetterUsesFailMode(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	serverID := uuid.New()
+	policy := policycore.Policy{
+		ID:             uuid.New(),
+		ProjectID:      projectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Name:           "PII",
+		Sources:        []string{risk_analysis.SourcePresidio},
+		Action:         "block",
+	}
+	evaluator := mcpriskscan.NewPolicyEvaluator(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		fixedMCPPolicyLookup{policy},
+		risk.NewMCPPolicyScanner(newDeadLetterScanner(t, ti, &deadLetterPIIScanner{}), nil),
+		gcp.NewNoopPublisher[*riskv1.Finding](),
+		mcpriskscan.DefaultPolicyConfig,
+	)
+
+	decision := evaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+		Surface:        mcpriskscan.SurfaceHostedMCP,
+		Method:         mcpriskscan.MethodToolsCall,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID.String(),
+		ServerID:       serverID.String(),
+		MetaServerID:   "",
+		ToolsetID:      "",
+		ToolName:       "lookup",
+		ResourceURI:    "",
+		PromptName:     "",
+		ChatID:         "",
+	}, mcpriskscan.BorrowPayload([]byte(`{"query":"sample"}`))))
+
+	require.False(t, decision.Denied())
+	require.True(t, decision.Indeterminate)
+}
