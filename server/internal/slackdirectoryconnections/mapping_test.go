@@ -12,9 +12,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -120,7 +122,7 @@ func TestMappingBoundaries(t *testing.T) {
 	other := *f.auth
 	other.ActiveOrganizationID = "org_synthetic_other"
 	otherCtx := authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &other), authz.NewGrant(authz.ScopeOrgAdmin, other.ActiveOrganizationID))
-	f.flags.SetFlag("claude-tag-support", other.ActiveOrganizationID, true)
+	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, other.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, true))
 	for _, denied := range []context.Context{authztest.WithExactGrants(t, ctx), contextvalues.SetAuthContext(ctx, &missingSession), contextvalues.WithLegacyAPIKeyAuthorization(ctx, f.auth), contextvalues.WithValidatedSupportSession(ctx, &support), otherCtx} {
 		_, err := f.service.SetMapping(denied, p)
 		require.Error(t, err)
@@ -134,7 +136,7 @@ func TestMappingBoundaries(t *testing.T) {
 		_, err := f.service.SetMapping(ctx, mappingRequest(m, &id))
 		require.ErrorContains(t, err, "Choose an active person")
 	}
-	f.flags.SetFlag("claude-tag-support", f.auth.ActiveOrganizationID, false)
+	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, f.auth.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, false))
 	_, err := f.service.SetMapping(ctx, p)
 	require.Error(t, err)
 }
@@ -438,7 +440,20 @@ func TestMappingGetForeignMembershipReturnsNotFound(t *testing.T) {
 	other := *f.auth
 	other.ActiveOrganizationID = "org_synthetic_other"
 	otherCtx := authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &other), authz.NewGrant(authz.ScopeOrgAdmin, other.ActiveOrganizationID))
-	f.flags.SetFlag("claude-tag-support", other.ActiveOrganizationID, true)
+	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, other.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, true))
 	_, err := f.service.GetMember(otherCtx, &gen.GetMemberPayload{SessionToken: nil, ID: m.ID})
 	requireMappingCode(t, err, oops.CodeNotFound)
+}
+
+func TestSharedDemoRejectsMappingChanges(t *testing.T) {
+	t.Parallel()
+	ctx, f, _, m := mappingFixture(t)
+	visitor := *f.auth
+	visitor.ActiveOrganizationID = constants.DemoOrganizationID
+	ctx = authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &visitor), authz.DemoScopeGrants()...)
+	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, visitor.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, true))
+	_, err := f.service.SetMapping(ctx, mappingRequest(m, &visitor.UserID))
+	requireMappingCode(t, err, oops.CodeForbidden)
+	_, err = f.service.SetMapping(ctx, mappingRequest(m, nil))
+	requireMappingCode(t, err, oops.CodeForbidden)
 }

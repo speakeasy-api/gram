@@ -1,3 +1,5 @@
+import { useOrganization } from "@/contexts/Auth";
+import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiErrorAlert } from "@/components/api-error-alert";
@@ -132,10 +134,13 @@ function MappingForm({
   onSaved: () => Promise<void>;
   onReload: () => void;
 }): JSX.Element {
+  const isDemo = useOrganization().slug === DEMO_ORG_SLUG;
   const [selected, setSelected] = useState<string | undefined>(
     member.mapping?.userId,
   );
   const mutation = useSetSlackIdentityMappingMutation({ onError: inlineError });
+  let disabledMessage = mutation.isPending ? "Saving mapping" : undefined;
+  if (isDemo) disabledMessage = "The shared demo is read-only";
   const email = normalizedEmail(member.email ?? "");
   const items: DropdownItem[] = people.map((person) => {
     const suggested =
@@ -172,6 +177,7 @@ function MappingForm({
     selected === UNMAPPED ||
     (Boolean(selectedPerson) && member.memberType !== "bot");
   const save = async () => {
+    if (isDemo) return;
     onPending(true);
     try {
       await mutation.mutateAsync({
@@ -194,6 +200,11 @@ function MappingForm({
   };
   return (
     <>
+      {isDemo && (
+        <Text muted small>
+          The shared demo is read-only.
+        </Text>
+      )}
       <div className="space-y-2 border p-4">
         <Text className="font-medium">
           {member.displayName || member.slackUserId}
@@ -226,7 +237,7 @@ function MappingForm({
           searchPlaceholder="Search personnel…"
           className="w-full"
           contentClassName="w-[min(28rem,90vw)]"
-          disabledMessage={mutation.isPending ? "Saving mapping" : undefined}
+          disabledMessage={disabledMessage}
         >
           {selectionLabel}
         </Combobox>
@@ -265,7 +276,9 @@ function MappingForm({
           <Button.Text>Cancel</Button.Text>
         </Button>
         <Button
-          disabled={!validSelection || mutation.isPending || mutation.isError}
+          disabled={
+            isDemo || !validSelection || mutation.isPending || mutation.isError
+          }
           onClick={() => {
             void save();
           }}

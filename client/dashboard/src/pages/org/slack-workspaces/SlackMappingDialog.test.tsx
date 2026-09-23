@@ -12,6 +12,7 @@ import type { OrganizationUser } from "@gram/client/models/components/organizati
 import { SlackMappingDialog } from "./SlackMappingDialog";
 
 const mocks = vi.hoisted(() => ({
+  orgSlug: "example",
   member: {} as SlackDirectoryMember,
   people: [] as OrganizationUser[],
   mutate: vi.fn(),
@@ -19,6 +20,9 @@ const mocks = vi.hoisted(() => ({
   refetch: vi.fn(),
   reset: vi.fn(),
   error: null as Error | null,
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ slug: mocks.orgSlug }),
 }));
 vi.mock("@gram/client/react-query/slackDirectoryMember.js", () => ({
   useSlackDirectoryMember: () => ({
@@ -53,14 +57,17 @@ vi.mock("@/components/ui/Combobox", () => ({
     items,
     selected,
     onSelectionChange,
+    disabledMessage,
   }: {
     id: string;
     items: Array<{ value: string; label: string; description?: string }>;
     selected?: string;
+    disabledMessage?: string;
     onSelectionChange: (item: unknown) => void;
   }) => (
     <select
       id={id}
+      disabled={Boolean(disabledMessage)}
       value={selected ?? ""}
       onChange={(e) =>
         onSelectionChange(items.find((item) => item.value === e.target.value))
@@ -85,6 +92,7 @@ const person = (id: string, name: string): OrganizationUser => ({
   updatedAt: new Date(),
 });
 beforeEach(() => {
+  mocks.orgSlug = "example";
   mocks.member = {
     id: "00000000-0000-4000-8000-000000000001",
     connectionId: "00000000-0000-4000-8000-000000000002",
@@ -254,4 +262,16 @@ it("identifies an inactive mapped person separately from Slack state", () => {
     screen.getByText("Mapped person is no longer active in this organization"),
   ).toBeTruthy();
   expect(screen.getByText(/Directory state: Active/)).toBeTruthy();
+});
+
+it("keeps shared demo mapping details readable and refuses confirmation", () => {
+  mocks.orgSlug = "acme-demo";
+  mapped();
+  show();
+  expect(screen.getByText("The shared demo is read-only.")).toBeTruthy();
+  expect(screen.getByRole("combobox").hasAttribute("disabled")).toBe(true);
+  const confirm = screen.getByRole("button", { name: "Confirm" });
+  expect(confirm.hasAttribute("disabled")).toBe(true);
+  fireEvent.click(confirm);
+  expect(mocks.mutate).not.toHaveBeenCalled();
 });

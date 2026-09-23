@@ -49,7 +49,7 @@ func (s *Service) GetMember(ctx context.Context, p *gen.GetMemberPayload) (*gen.
 }
 
 func (s *Service) SetMapping(ctx context.Context, p *gen.SetMappingPayload) (*gen.SlackDirectoryMember, error) {
-	ac, err := s.authorize(ctx)
+	ac, err := s.authorizeMutation(ctx)
 	if err != nil {
 		return nil, err
 	}
