@@ -482,9 +482,13 @@ func run(ctx context.Context, opts options) error {
 	}
 
 	printSummary(os.Stderr, modes)
-	fmt.Fprintf(os.Stderr, "stability: flips=%d/%d (%.2f%%) stable_fp=%d benign_flips=%d\n",
-		summary.Stability.Flipped, summary.Total, summary.Stability.FlipRate*100,
-		summary.Stability.StableFalsePositives, summary.Stability.FlippedBenign)
+	if opts.skipJudge {
+		fmt.Fprintln(os.Stderr, "stability: not applicable (--skip-judge ran no judge repeats)")
+	} else {
+		fmt.Fprintf(os.Stderr, "stability: flips=%d/%d (%.2f%%) stable_fp=%d benign_flips=%d\n",
+			summary.Stability.Flipped, summary.Total, summary.Stability.FlipRate*100,
+			summary.Stability.StableFalsePositives, summary.Stability.FlippedBenign)
+	}
 	for i, gate := range summary.RecallGateRuns {
 		fmt.Fprintf(os.Stderr, "recall gate run %d: TP=%d FN=%d recall=%.3f known_gaps_excluded=%d\n",
 			i+1, gate.Counts.TP, gate.Counts.FN, gate.Recall, gate.Excluded)
@@ -1459,12 +1463,14 @@ func writeMetrics(path string, opts options, corpus []labeledCase, summary accur
 	if err != nil {
 		return fmt.Errorf("marshal corpus for hash: %w", err)
 	}
-	promptHash := sha256.Sum256([]byte(piopenrouter.SystemPrompt))
-	schemaHash := sha256.Sum256(schemaJSON)
 	corpusHash := sha256.Sum256(corpusJSON)
+	promptHashHex, schemaHashHex := fmt.Sprintf("%x", sha256.Sum256([]byte(piopenrouter.SystemPrompt))), fmt.Sprintf("%x", sha256.Sum256(schemaJSON))
 	model, reasoning, providerRoute := opts.judgeModel, opts.reasoning, "OpenRouter default routing"
 	if opts.skipJudge {
+		// No OpenRouter judge ran, so its system prompt and verdict schema were
+		// never evaluated; hashing them would misidentify what this run tested.
 		model, reasoning, providerRoute = typesafe.Model, "", "OpenRouter alpha Decisions API (Jev)"
+		promptHashHex, schemaHashHex = "", ""
 	}
 	payload := envelope{
 		GitSHA:          envOr("GITHUB_SHA", "local"),
@@ -1475,8 +1481,8 @@ func writeMetrics(path string, opts options, corpus []labeledCase, summary accur
 		ProviderRoute:   providerRoute,
 		SamplesPerEvent: opts.samples,
 		TimeoutMS:       piopenrouter.JudgeTimeout.Milliseconds(),
-		PromptSHA256:    fmt.Sprintf("%x", promptHash),
-		SchemaSHA256:    fmt.Sprintf("%x", schemaHash),
+		PromptSHA256:    promptHashHex,
+		SchemaSHA256:    schemaHashHex,
 		CorpusSHA256:    fmt.Sprintf("%x", corpusHash),
 		Summary:         summary,
 	}
