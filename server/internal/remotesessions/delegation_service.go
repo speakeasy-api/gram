@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -102,7 +101,12 @@ func (p delegationProvider) DelegationConfigurationHash() string {
 }
 func (p delegationProvider) OfflineConfigurationHash() string { return p.p.OfflineConfigurationHash() }
 func (p delegationProvider) OfflineRequested() bool {
-	return slices.Contains(p.p.client.Scope, "offline_access")
+	for _, scope := range p.p.client.Scope {
+		if scope == "offline_access" {
+			return true
+		}
+	}
+	return false
 }
 func (p delegationProvider) OfflineSupported() bool {
 	policy, err := p.p.OfflinePolicy()
