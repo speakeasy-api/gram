@@ -131,34 +131,41 @@ type contentBlock struct {
 	Input     json.RawMessage `json:"input"`
 }
 
-func knownBlocks(content json.RawMessage) ([]contentBlock, error) {
+// knownBlocks decodes the content blocks this package understands and returns
+// the types of the blocks it left undecoded, so an image, document, or newly
+// introduced block type is visible as a scanning coverage gap rather than a
+// silent omission. Block content is never part of that second return value.
+func knownBlocks(content json.RawMessage) ([]contentBlock, []string, error) {
 	var rawBlocks []json.RawMessage
 	if err := json.Unmarshal(content, &rawBlocks); err != nil {
-		return nil, fmt.Errorf("decode inference content block: %w", err)
+		return nil, nil, fmt.Errorf("decode inference content block: %w", err)
 	}
 	blocks := make([]contentBlock, 0, len(rawBlocks))
+	var undecoded []string
 	for _, raw := range rawBlocks {
 		var tag struct {
 			Type string `json:"type"`
 		}
 		if err := json.Unmarshal(raw, &tag); err != nil {
-			return nil, fmt.Errorf("decode inference content block: %w", err)
+			return nil, nil, fmt.Errorf("decode inference content block: %w", err)
 		}
 		switch tag.Type {
 		case "text", "attachment", "tool_use", "tool_result":
 			var block contentBlock
 			if err := json.Unmarshal(raw, &block); err != nil {
-				return nil, fmt.Errorf("decode inference content block: %w", err)
+				return nil, nil, fmt.Errorf("decode inference content block: %w", err)
 			}
 			blocks = append(blocks, block)
+		default:
+			undecoded = append(undecoded, tag.Type)
 		}
 	}
-	return blocks, nil
+	return blocks, undecoded, nil
 }
 
 // messageText renders documented content while preserving unknown blocks in storage.
 func messageText(message Message) (string, error) {
-	blocks, err := knownBlocks(message.Content)
+	blocks, _, err := knownBlocks(message.Content)
 	if err != nil {
 		return "", err
 	}

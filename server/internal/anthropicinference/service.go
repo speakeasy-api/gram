@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -79,12 +80,13 @@ type Service struct {
 	logger  *slog.Logger
 	store   transcriptStore
 	scanner scanner
+	metrics coverageMetrics
 }
 
 // NewService uses the shared chat writer so captured messages receive the same
 // storage, metering, and asynchronous analysis as other imported conversations.
-func NewService(logger *slog.Logger, db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner) *Service {
-	return &Service{logger: logger, store: &postgresStore{db: db, writer: writer}, scanner: scanner}
+func NewService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner) *Service {
+	return &Service{logger: logger, store: &postgresStore{db: db, writer: writer}, scanner: scanner, metrics: newCoverageMetrics(meterProvider, logger)}
 }
 
 // Process archives attempts independently of enforcement. Only a successfully
@@ -102,7 +104,7 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 		return Verdict{}, fmt.Errorf("resolve inference hook actor: %w", err)
 	}
 	messages := conversationMessages(frame.Messages)
-	if _, err := policyInputs(messages); err != nil {
+	if _, _, err := policyInputs(messages); err != nil {
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
 	}
 	_, err = s.store.Save(budget, config, frame, userID)
@@ -120,11 +122,14 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	hashes := transcriptHashes(messages)
 	matched := acceptedPrefix(accepted, hashes)
 	scanStart := min(matched, currentTurnStart(messages))
-	inputs, err := policyInputs(messages[scanStart:])
+	inputs, unscanned, err := policyInputs(messages[scanStart:])
 	if err != nil {
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
 	}
-	priorInputs, err := policyInputs(messages[:scanStart])
+	// Report only the messages this delivery evaluates. Reporting the whole
+	// frame would recount every earlier turn's blocks on each redelivery.
+	s.reportCoverage(ctx, config, unscanned)
+	priorInputs, _, err := policyInputs(messages[:scanStart])
 	if err != nil {
 		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
 	}
@@ -254,15 +259,20 @@ type policyInput struct {
 
 // Preserve each block as an independent policy input so tool arguments stay
 // valid JSON and content-specific policy scope expressions retain their meaning.
-func policyInputs(messages []Message) ([]policyInput, error) {
+// The returned coverage tallies the blocks that yielded no input at all.
+func policyInputs(messages []Message) ([]policyInput, coverage, error) {
 	var inputs []policyInput
+	unscanned := coverage{}
 	for index, msg := range messages {
 		if msg.Role != "user" && msg.Role != "assistant" {
 			continue
 		}
-		blocks, err := knownBlocks(msg.Content)
+		blocks, undecoded, err := knownBlocks(msg.Content)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		for _, blockType := range undecoded {
+			unscanned.add(blockType, reasonUnsupportedType)
 		}
 		for _, block := range blocks {
 			input := policyInput{kind: "", tool: "", text: "", toolCallID: "", message: index}
@@ -284,12 +294,13 @@ func policyInputs(messages []Message) ([]policyInput, error) {
 				input.toolCallID = block.ToolUseID
 			}
 			if input.text == "" && input.tool == "" {
+				unscanned.add(block.Type, reasonNoScannableText)
 				continue
 			}
 			inputs = append(inputs, input)
 		}
 	}
-	return inputs, nil
+	return inputs, unscanned, nil
 }
 
 type postgresStore struct {

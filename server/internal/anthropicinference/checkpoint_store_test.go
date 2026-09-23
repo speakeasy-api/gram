@@ -66,7 +66,7 @@ func testConcurrentCheckpoints(t *testing.T, singleConnection bool) {
 		})
 	}
 	first := &Service{logger: testenv.NewLogger(t), store: store, scanner: scan(firstEntered, firstRelease, &firstCalls)}
-	second := NewService(testenv.NewLogger(t), db, store.writer, scan(secondEntered, secondRelease, &secondCalls))
+	second := NewService(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, store.writer, scan(secondEntered, secondRelease, &secondCalls))
 	firstResult, secondResult := make(chan error, 1), make(chan error, 1)
 	firstVerdict, secondVerdict := make(chan Verdict, 1), make(chan Verdict, 1)
 	go func() {
@@ -138,7 +138,7 @@ func TestPostgresCheckpointRequiresSuccessfulEvaluation(t *testing.T) {
 	// Rollout: archived messages carry no implicit acceptance.
 	saveFrame(t, store, config, frame, "")
 	var calls atomic.Int32
-	service := NewService(testenv.NewLogger(t), db, store.writer, scannerFunc(func(_ context.Context, r risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+	service := NewService(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, store.writer, scannerFunc(func(_ context.Context, r risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 		calls.Add(1)
 		if r.Text == "blocked reply" {
 			return &risk.ScanResult{Action: "block"}, nil
@@ -225,7 +225,7 @@ func TestPostgresCanceledEvaluationPreservesPreviousCheckpoint(t *testing.T) {
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
 	frame.Messages = []Message{textMessage("user", "first prompt"), textMessage("assistant", "first reply")}
-	service := NewService(testenv.NewLogger(t), db, store.writer, &recordingScanner{})
+	service := NewService(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, store.writer, &recordingScanner{})
 	_, err := service.Process(t.Context(), config, frame)
 	require.NoError(t, err)
 	previous := transcriptHashes(frame.Messages)
@@ -287,7 +287,7 @@ func TestPostgresLastKnownGoodPreservesDeniedAttempts(t *testing.T) {
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
 	scanned := &recordingScanner{}
-	service := NewService(testenv.NewLogger(t), db, store.writer, scanned)
+	service := NewService(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, store.writer, scanned)
 	verdict, err := service.Process(t.Context(), config, frame)
 	require.NoError(t, err)
 	require.Equal(t, "allow", verdict.Action)

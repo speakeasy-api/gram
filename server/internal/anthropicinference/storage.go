@@ -28,7 +28,7 @@ type storedToolCall struct {
 // Split mixed messages so each stored row has the role and tool representation
 // understood by conversation readers, metering, and asynchronous policy scans.
 func storageBlocks(msg Message, identity string) ([]storedBlock, []contentBlock, error) {
-	blocks, err := knownBlocks(msg.Content)
+	blocks, _, err := knownBlocks(msg.Content)
 	if err != nil {
 		return nil, nil, err
 	}

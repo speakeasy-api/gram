@@ -140,7 +140,7 @@ func TestServicePropagatesStorageErrors(t *testing.T) {
 
 func TestPolicyInputsPreserveContentScopes(t *testing.T) {
 	t.Parallel()
-	inputs, err := policyInputs([]Message{
+	inputs, _, err := policyInputs([]Message{
 		{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"prompt"},{"type":"attachment","text":"file contents"},{"type":"tool_result","tool_name":"read_file","content":"output"}]`)},
 		{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"reply"},{"type":"tool_use","name":"read_file","input":{"path":"example.txt"}}]`)},
 	})
@@ -157,7 +157,7 @@ func TestPolicyInputsPreserveContentScopes(t *testing.T) {
 func TestPolicyInputsDecodesToolNameFromInferenceHooksShape(t *testing.T) {
 	t.Parallel()
 	// Inference hooks use tool_name (not name) on tool_use blocks.
-	inputs, err := policyInputs([]Message{
+	inputs, _, err := policyInputs([]Message{
 		{Role: "assistant", Content: json.RawMessage(`[{"type":"tool_use","tool_name":"bash","input":{"cmd":"ls"}}]`)},
 	})
 	require.NoError(t, err)
@@ -168,7 +168,7 @@ func TestPolicyInputsDecodesToolNameFromInferenceHooksShape(t *testing.T) {
 
 func TestUnknownContentBlocksDoNotBreakParsing(t *testing.T) {
 	t.Parallel()
-	inputs, err := policyInputs([]Message{{Role: "user", Content: json.RawMessage(`[{"type":"future","content":[{"unknown":true}]},{"type":"text","text":"known"}]`)}})
+	inputs, _, err := policyInputs([]Message{{Role: "user", Content: json.RawMessage(`[{"type":"future","content":[{"unknown":true}]},{"type":"text","text":"known"}]`)}})
 	require.NoError(t, err)
 	require.Equal(t, []policyInput{{kind: message.User, tool: "", text: "known", toolCallID: ""}}, inputs)
 }
