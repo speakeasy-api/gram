@@ -1,3 +1,4 @@
+import { SurfaceOnboardingGuidance } from "@/components/onboarding/surface-onboarding-guidance";
 import { RequireScope } from "@/components/require-scope";
 import { GatewayCard } from "@/components/mcp/GatewayCard";
 import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
@@ -338,6 +339,7 @@ function MCPOverview() {
   ) {
     return (
       <>
+        <SurfaceOnboardingGuidance useCase="mcp-gateway" className="mb-6" />
         <MCPEmptyState cta={newMcpServerButton} />
       </>
     );
