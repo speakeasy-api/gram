@@ -120,7 +120,6 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 		// with provider=openai entries whose shape — AccountType set, no
 		// account UUID — would otherwise satisfy the company-credential arm
 		// below and stamp Claude rows with Codex attribution.
-		// Another project's entry for this session id is never merged here.
 		cached, cachedErr := s.getSessionMetadata(ctx, session.SessionID)
 		if cachedErr == nil && !agent &&
 			cached.Provider == providerAnthropic && cached.GramOrgID == orgID && cached.ProjectID == projectID &&
@@ -192,12 +191,10 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 		)
 
 		_, metadataErr := s.getSessionMetadata(ctx, completeMetadata.SessionID)
-		// owned is true only once this project's claim on the session id is
-		// confirmed: an entry of its own is cached, or this batch's write
-		// claimed or updated one. foreign means another project already
-		// attributed the session id; this batch's own rows are still stamped,
-		// but it must not take over the session's cached identity or the
-		// unauthenticated hooks bound to it. A cache error proves neither.
+		// owned: this project holds the session id (its entry is cached, or this
+		// batch's write succeeds). foreign: another project holds it, so this
+		// batch stamps its own rows but adopts neither the cached identity nor
+		// the unauthenticated hooks. A cache error sets neither.
 		owned := metadataErr == nil
 		foreign := errors.Is(metadataErr, errSessionMetadataOtherProject)
 
@@ -268,10 +265,8 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 			)
 		}
 
-		// Buffered hooks carry no agent identity; an agent batch must never
-		// adopt them. Unauthenticated ones belong to whichever project owns the
-		// session id, so they flush only once this batch's ownership is
-		// confirmed; otherwise they wait for a later batch.
+		// Agent batches never adopt buffered hooks. Unauthenticated hooks flush
+		// only once this project owns the session id.
 		if !agent {
 			s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata, owned)
 		}

@@ -222,8 +222,7 @@ func resolvedMCPMatch(matched *MCPServerEntry, serverPrefix string) string {
 // at SessionStart. Returns an error when the cache has no entry for the
 // session — callers decide whether that means "fall back to allow",
 // "buffer", or in the shadow-MCP guard's case, "deny with retry message".
-// Only the snapshot in the caller's own project is visible; with no project
-// there is no snapshot.
+// Only the caller's own project's snapshot is visible.
 func (s *Service) getCachedMCPList(ctx context.Context, sessionID string) ([]MCPServerEntry, error) {
 	projectID := s.mcpListProjectID(ctx, sessionID)
 	if projectID == "" {

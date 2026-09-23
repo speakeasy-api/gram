@@ -175,8 +175,8 @@ func (c *localSessionCache) localFallbackUser(ctx context.Context, orgID string)
 	return conv.FromPGTextOrEmpty[string](users[0].UserID), users[0].UserEmail
 }
 
-// SetIfAbsent delegates to the underlying cache, so session metadata claims
-// stay atomic in local development too.
+// SetIfAbsent delegates to the underlying cache so session metadata claims
+// stay atomic.
 func (c *localSessionCache) SetIfAbsent(ctx context.Context, key string, value any, ttl time.Duration) (bool, error) {
 	conditional, ok := c.Cache.(cache.ConditionalCache)
 	if !ok {

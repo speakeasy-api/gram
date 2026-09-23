@@ -18,10 +18,9 @@ func sessionNativeHooksCacheKey(projectID, sessionID string) string {
 	return fmt.Sprintf("session:native-prompt:v1:%s:%s", projectID, sessionID)
 }
 
-// hookPendingCacheKey returns the Redis key for hooks buffered for a session
-// until OTEL attributes it. Hooks that authenticated to a project buffer under
-// that project, so only its own OTEL export flushes them. Unauthenticated
-// hooks (projectID "") have only the session id to go on and buffer unscoped.
+// hookPendingCacheKey returns the Redis key for hooks buffered until OTEL
+// attributes their session. Authenticated hooks buffer under their project;
+// unauthenticated hooks (projectID "") buffer by session id alone.
 func hookPendingCacheKey(projectID, sessionID string) string {
 	if projectID == "" {
 		return fmt.Sprintf("hook:pending:%s", sessionID)
@@ -33,11 +32,8 @@ func hookPendingCacheKey(projectID, sessionID string) string {
 // snapshot of a session. Stored on SessionStart, TTL refreshed on every
 // subsequent hook for the same session so we don't lose the mapping while
 // the user is actively working but garbage-collect dead sessions.
-//
-// The session id is client-reported, so this key, the read status, the agent
-// variant and the snapshot owner are all scoped by the project
-// mcpListProjectID resolves. Otherwise any tenant's hooks key could write what
-// another tenant's shadow-MCP guard reads back for the same session id.
+// Scoped by project, like the read status, agent variant and owner keys,
+// because the session id is client-reported.
 func sessionMCPListCacheKey(projectID, sessionID string) string {
 	return fmt.Sprintf("session:mcp-list:v2:%s:%s", projectID, sessionID)
 }

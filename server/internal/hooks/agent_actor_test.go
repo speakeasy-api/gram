@@ -536,7 +536,7 @@ func testProjectID(t *testing.T, ctx context.Context) string {
 }
 
 // otherProjectContext makes ctx look like a hooks key for a different
-// organization and project, sending the same client-reported session ids.
+// organization and project.
 func otherProjectContext(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -548,8 +548,8 @@ func otherProjectContext(t *testing.T, ctx context.Context) context.Context {
 	return contextvalues.SetAuthContext(ctx, &other)
 }
 
-// Another project writing the same session id must not change what this
-// project's guard reads: not the snapshot, and not by squatting first.
+// Another project's writes for the same session id, before or after this
+// project's, never change this project's snapshot.
 func TestMCPListSnapshot_OtherProjectCannotAlterSnapshot(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -575,9 +575,8 @@ func TestMCPListSnapshot_OtherProjectCannotAlterSnapshot(t *testing.T) {
 	require.Equal(t, "intruder", otherEntries[0].Name, "each project keeps its own snapshot")
 }
 
-// An authoritative read status from another project must not make this
-// project's empty inventory look complete, which under block_all would deny
-// every later meta-tool call in the session.
+// Another project's read status never makes this project's empty inventory
+// look complete.
 func TestMCPInventoryReadStatus_OtherProjectCannotSetIt(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

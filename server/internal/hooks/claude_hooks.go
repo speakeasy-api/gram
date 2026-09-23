@@ -461,9 +461,7 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 	if !ok {
 		return
 	}
-	// Only an authenticated sender's inventory is recorded. An unauthenticated
-	// one proves nothing but a session id, which is not enough to write into
-	// the guard's snapshot or the project's shadow-MCP inventory.
+	// Unauthenticated inventory proves only a session id, so it isn't recorded.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		s.logger.DebugContext(ctx, "skipping MCP inventory capture from unauthenticated hook",
@@ -545,7 +543,7 @@ func (s *Service) parseMCPInventoryFromPayload(ctx context.Context, payload *gen
 //
 // A cache write failure is logged but still reports ownership: the shadow-MCP
 // inventory row the caller persists next is independent security evidence and
-// must survive a transient Redis error. Only a missing project or an ownership
+// must survive a transient Redis error. Only an ownership or authentication
 // mismatch refuses.
 func (s *Service) cacheMCPListSnapshot(ctx context.Context, projectID, sessionID string, entries []MCPServerEntry, variant string) bool {
 	if !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
@@ -915,11 +913,9 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, m
 // organization or project seeded under the same client-reported session id.
 var errSessionMetadataOtherProject = errors.New("session metadata belongs to another project")
 
-// getSessionMetadata returns the cached metadata for a session. An
-// authenticated caller only sees metadata its own org and project seeded, so a
-// colliding or spoofed session id never lends it another tenant's identity or
-// attribution. An unauthenticated Claude hook has nothing else to go on: its
-// session id is what binds it to the OTEL export that attributes it.
+// getSessionMetadata returns the cached metadata for a session. Authenticated
+// callers only see their own org and project's entry; unauthenticated Claude
+// hooks see any entry, since the session id is all that ties them to it.
 func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (SessionMetadata, error) {
 	var metadata SessionMetadata
 	err := s.cache.Get(ctx, sessionCacheKey(sessionID), &metadata)
@@ -933,15 +929,10 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 	return metadata, nil
 }
 
-// cacheSessionMetadata stores metadata as its session's cached identity unless
-// another org or project already holds that session id. Unauthenticated Claude
-// hooks resolve their project from this entry, so letting a later writer
-// replace it would let any tenant who learns a session id redirect that
-// session's hooks into its own project.
-//
-// The first write claims the session atomically, so two projects racing to
-// attribute a new session cannot both win. Later writes only update an entry
-// already confirmed to be the same project's.
+// cacheSessionMetadata stores a session's cached identity unless another org or
+// project already holds it, since unauthenticated hooks resolve their project
+// from this entry. The first write claims the session atomically; later writes
+// update only a same-project entry.
 func (s *Service) cacheSessionMetadata(ctx context.Context, metadata SessionMetadata) error {
 	key := sessionCacheKey(metadata.SessionID)
 	conditional, ok := s.cache.(cache.ConditionalCache)

@@ -115,15 +115,9 @@ var selfReportedIdentityKeys = []attr.Key{
 }
 
 // mcpListProjectID returns the project a session's MCP inventory keys are
-// scoped to, or "" when none can be established. The session id is
-// client-reported, so without this scope any tenant holding a hooks key could
-// write the snapshot or read status that another tenant's guard reads back.
-//
-// An authenticated request uses its own project. An unauthenticated Claude
-// hook — the optional-auth path that OTEL attributes later — uses the project
-// its cached session metadata names, which lets it read what that project's
-// authenticated senders wrote; claimMCPListSnapshot never lets it write.
-// Before that metadata lands it has no scope and reads nothing.
+// scoped to, or "" if none. An authenticated request uses its own project. An
+// unauthenticated Claude hook uses the project in its cached session metadata,
+// which it may read under but claimMCPListSnapshot never lets it write.
 func (s *Service) mcpListProjectID(ctx context.Context, sessionID string) string {
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
 		return authCtx.ProjectID.String()
@@ -138,9 +132,8 @@ func (s *Service) mcpListProjectID(ctx context.Context, sessionID string) string
 	return metadata.ProjectID
 }
 
-// mcpListOwner binds a session's MCP-list snapshot to the actor that wrote it.
-// The keys are already scoped by project; the owner keeps an agent's snapshot
-// its own within that project.
+// mcpListOwner records the actor that wrote a session's MCP-list snapshot, so
+// an agent's snapshot stays its own within a project.
 type mcpListOwner struct {
 	Actor string `json:"actor"`
 }
@@ -174,9 +167,7 @@ func (o mcpListOwner) shares(other mcpListOwner) bool {
 
 // claimMCPListSnapshot records ctx as the owner of the session's snapshot in
 // projectID and reports whether ctx may write it. Only a sender authenticated
-// to projectID writes: an unauthenticated hook resolves its project from the
-// session id alone, which anyone who learns that id could present. An agent
-// may not take over an unowned snapshot.
+// to projectID may write, and an agent may not take over an unowned snapshot.
 func (s *Service) claimMCPListSnapshot(ctx context.Context, projectID, sessionID string) bool {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if projectID == "" || !ok || authCtx == nil || authCtx.ProjectID == nil || authCtx.ProjectID.String() != projectID {

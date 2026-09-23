@@ -156,10 +156,8 @@ func TestClaudeConfigChangeUpsertsCoworkShadowMCPInventoryURLs(t *testing.T) {
 	require.Equal(t, "Linear", rows[0].ServerName)
 }
 
-// An unauthenticated SessionStart proves only a session id, so its inventory
-// is never recorded: not before OTEL attributes the session, not by that
-// attribution, and not after it, when the session id alone resolves the
-// project.
+// Inventory from an unauthenticated SessionStart is never recorded, before or
+// after OTEL attributes the session.
 func TestClaudeUnauthenticatedSessionStartRecordsNoMCPInventory(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -200,14 +198,12 @@ func TestClaudeUnauthenticatedSessionStartRecordsNoMCPInventory(t *testing.T) {
 	_, err = ti.service.getCachedMCPList(ctx, sessionID)
 	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "OTEL attribution never writes the guard snapshot")
 
-	// The last scenario only means something if attribution bound the session
-	// id to the project; otherwise an unresolved session trivially writes
-	// nothing.
+	// Attribution must have bound the session to the project for the next
+	// step to exercise a resolved session id.
 	attributed, err := ti.service.getSessionMetadata(ctx, sessionID)
 	require.NoError(t, err, "OTEL attribution must cache this project's session metadata")
 	require.Equal(t, authCtx.ProjectID.String(), attributed.ProjectID)
 
-	// Now the session id resolves the project on its own.
 	_, err = ti.service.Claude(t.Context(), sessionStart)
 	require.NoError(t, err)
 	_, err = ti.service.getCachedMCPList(ctx, sessionID)

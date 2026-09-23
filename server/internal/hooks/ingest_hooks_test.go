@@ -50,9 +50,8 @@ type sessionCacheDeadlineRecorder struct {
 	remaining chan time.Duration
 }
 
-// record keeps the first session metadata write's remaining deadline. Updating
-// an already-cached session writes twice (the claim, then the update) under one
-// deadline, so later records are dropped rather than blocking on the channel.
+// record sends a session metadata write's remaining deadline, dropping it when
+// the channel is full: an update writes twice under one deadline.
 func (r *sessionCacheDeadlineRecorder) record(ctx context.Context, key string) {
 	if !strings.HasPrefix(key, "session:metadata:") {
 		return

@@ -14,7 +14,7 @@ import (
 )
 
 // siblingProjectContext switches ctx to a second, real project in the same
-// organization, for flows that write rows keyed to the project.
+// organization.
 func siblingProjectContext(t *testing.T, ctx context.Context, ti *testInstance) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -68,7 +68,7 @@ func TestGetSessionMetadata_OtherProjectIsMissForAuthenticatedReader(t *testing.
 	_, err := ti.service.getSessionMetadata(ctx, sessionID)
 	require.ErrorIs(t, err, errSessionMetadataOtherProject, "another project's identity is never lent out")
 
-	// An unauthenticated Claude hook only has the session id to go on.
+	// Unauthenticated callers are not project-scoped.
 	_, err = ti.service.getSessionMetadata(t.Context(), sessionID)
 	require.NoError(t, err)
 }
@@ -119,8 +119,8 @@ func TestCacheSessionMetadata_ConcurrentFirstClaimsHaveOneWinner(t *testing.T) {
 	}
 }
 
-// An OTEL export from another project for an already-attributed session id
-// must not re-point the session or adopt its unauthenticated hooks.
+// Another project's OTEL export neither re-points an attributed session nor
+// flushes its unauthenticated hooks.
 func TestClaudeOTELLogs_DoesNotAdoptOtherProjectSession(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -144,8 +144,7 @@ func TestClaudeOTELLogs_DoesNotAdoptOtherProjectSession(t *testing.T) {
 	require.Len(t, buffered, 1, "the session's unauthenticated hooks are not flushed into another project")
 }
 
-// A hook that authenticated to one project is only ever flushed by that
-// project's OTEL export, even when another project attributes the session id.
+// An authenticated hook is only flushed by its own project's OTEL export.
 func TestFlushPendingHooks_AuthenticatedHookStaysInItsProject(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

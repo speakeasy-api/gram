@@ -657,8 +657,8 @@ func isDeltaTemporality(v any) bool {
 
 // flushPendingHooks retrieves the hooks buffered for a session and writes them to ClickHouse.
 // Conversation events (UserPromptSubmit, Stop) are written to PostgreSQL.
-// Hooks that authenticated to metadata's project always flush; unauthenticated
-// ones flush only when includeUnscoped says this caller owns the session id.
+// Hooks buffered under metadata's project always flush; unauthenticated ones
+// flush only when includeUnscoped is set.
 func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metadata *SessionMetadata, includeUnscoped bool) {
 	s.flushPendingHookList(ctx, hookPendingCacheKey(metadata.ProjectID, sessionID), metadata)
 	if includeUnscoped {
