@@ -373,8 +373,8 @@ func mcpRuntimeFlags() []cli.Flag {
 			EnvVars:  []string{"GRAM_SITE_URL"},
 			Required: true,
 		},
-		&cli.StringFlag{Name: "slack-directory-client-id", EnvVars: []string{"GRAM_SLACK_DIRECTORY_CLIENT_ID"}, Usage: "OAuth client ID for organization Slack directory connections"},
-		&cli.StringFlag{Name: "slack-directory-client-secret", EnvVars: []string{"GRAM_SLACK_DIRECTORY_CLIENT_SECRET"}, Usage: "OAuth client secret for organization Slack directory connections"},
+		&cli.StringFlag{Name: "slack-client-id", EnvVars: []string{"SLACK_CLIENT_ID"}, Usage: "OAuth client ID for the Gram Slack app"},
+		&cli.StringFlag{Name: "slack-client-secret", EnvVars: []string{"SLACK_CLIENT_SECRET"}, Usage: "OAuth client secret for the Gram Slack app"},
 
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -1480,9 +1480,9 @@ func newStartCommand() *cli.Command {
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
 
 			var slackDirectoryProvider slackdirectoryconnections.Provider
-			if c.String("slack-directory-client-id") != "" && c.String("slack-directory-client-id") != "unset" && c.String("slack-directory-client-secret") != "" && c.String("slack-directory-client-secret") != "unset" {
+			if c.String("slack-client-id") != "" && c.String("slack-client-id") != "unset" && c.String("slack-client-secret") != "" && c.String("slack-client-secret") != "unset" {
 				callbackURL := serverURL.JoinPath(slackdirectoryconnections.CallbackPath)
-				slackDirectoryProvider = slackdirectoryconnections.NewOAuthProvider(slackapi.NewClient("", guardianPolicy.PooledClient()), c.String("slack-directory-client-id"), c.String("slack-directory-client-secret"), callbackURL.String())
+				slackDirectoryProvider = slackdirectoryconnections.NewOAuthProvider(slackapi.NewClient("", guardianPolicy.PooledClient()), c.String("slack-client-id"), c.String("slack-client-secret"), callbackURL.String())
 			}
 			slackdirectoryconnections.Attach(mux, slackdirectoryconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags, cache.NewRedisCacheAdapter(redisClient), encryptionClient, slackDirectoryProvider, siteURL))
 			dataexports.Attach(mux, dataexports.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient))
