@@ -111,10 +111,11 @@ describe("Gateway network access", () => {
         />
       </MemoryRouter>,
     );
-    expect(NetworkAccessSection).toHaveBeenCalledWith(
-      { metaMcpServer: server, endpoints: [] },
-      undefined,
-    );
+    expect(NetworkAccessSection).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(NetworkAccessSection).mock.calls[0]?.[0]).toEqual({
+      metaMcpServer: server,
+      endpoints: [],
+    });
   });
 
   it("does not offer private access while endpoints are loading", () => {

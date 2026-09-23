@@ -31,7 +31,17 @@ const testState = vi.hoisted(() => ({
     | undefined,
   mutate: vi.fn(),
   mutateGateway: vi.fn(),
+  invalidateGetGateway: vi.fn().mockResolvedValue(undefined),
+  invalidateListGateway: vi.fn().mockResolvedValue(undefined),
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
   mutationOptions: undefined as
+    | {
+        onError?: (error: Error) => void;
+        onSuccess?: () => Promise<void>;
+      }
+    | undefined,
+  gatewayMutationOptions: undefined as
     | {
         onError?: (error: Error) => void;
         onSuccess?: () => Promise<void>;
@@ -155,16 +165,22 @@ vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
   invalidateAllGetMcpServer: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/getMetaMcpServer.js", () => ({
-  invalidateAllGetMetaMcpServer: vi.fn(),
+  invalidateAllGetMetaMcpServer: testState.invalidateGetGateway,
 }));
 vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
-  invalidateAllMetaMcpServers: vi.fn(),
+  invalidateAllMetaMcpServers: testState.invalidateListGateway,
 }));
 vi.mock("@gram/client/react-query/updateMetaMcpServer.js", () => ({
-  useUpdateMetaMcpServerMutation: () => ({
-    isPending: false,
-    mutate: testState.mutateGateway,
-  }),
+  useUpdateMetaMcpServerMutation: (options: {
+    onError?: (error: Error) => void;
+    onSuccess?: () => Promise<void>;
+  }) => {
+    testState.gatewayMutationOptions = options;
+    return {
+      isPending: false,
+      mutate: testState.mutateGateway,
+    };
+  },
 }));
 
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
@@ -190,7 +206,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), success: vi.fn() },
+  toast: { error: testState.toastError, success: testState.toastSuccess },
 }));
 
 const baseServer: McpServer = {
@@ -257,7 +273,12 @@ beforeEach(() => {
   testState.requireScopeProps = undefined;
   testState.mutate.mockReset();
   testState.mutateGateway.mockReset();
+  testState.invalidateGetGateway.mockClear();
+  testState.invalidateListGateway.mockClear();
+  testState.toastSuccess.mockClear();
+  testState.toastError.mockClear();
   testState.mutationOptions = undefined;
+  testState.gatewayMutationOptions = undefined;
 });
 
 afterEach(cleanup);
@@ -622,11 +643,12 @@ describe("NetworkAccessSection", () => {
     );
   });
 
-  it("lets an eligible gateway use dual access and its private endpoint", () => {
-    render(
+  it("lets an eligible gateway use dual access and its private endpoint", async () => {
+    const gatewayEndpoints = [{ ...endpoints[0], metaMcpServerId: gateway.id }];
+    const { rerender } = render(
       <NetworkAccessSection
         metaMcpServer={gateway}
-        endpoints={[{ ...endpoints[0], metaMcpServerId: gateway.id }]}
+        endpoints={gatewayEndpoints}
       />,
     );
 
@@ -646,6 +668,34 @@ describe("NetworkAccessSection", () => {
       },
     });
     expect(testState.mutate).not.toHaveBeenCalled();
+
+    await testState.gatewayMutationOptions?.onSuccess?.();
+    expect(testState.invalidateGetGateway).toHaveBeenCalledWith(
+      expect.anything(),
+      { refetchType: "all" },
+    );
+    expect(testState.invalidateListGateway).toHaveBeenCalledWith(
+      expect.anything(),
+      { refetchType: "all" },
+    );
+    expect(testState.toastSuccess).toHaveBeenCalledWith(
+      "Network access updated",
+    );
+
+    rerender(
+      <NetworkAccessSection
+        metaMcpServer={{ ...gateway, networkAccessMode: "dual" }}
+        endpoints={gatewayEndpoints}
+      />,
+    );
+    expect(
+      screen.getByText("https://private.example.ts.net/mcp/hosted-mcp"),
+    ).toBeTruthy();
+
+    testState.gatewayMutationOptions?.onError?.(
+      new Error("Gateway update failed"),
+    );
+    expect(testState.toastError).toHaveBeenCalledWith("Gateway update failed");
   });
 
   it("confirms private-only gateway access and lists affected URLs", () => {
