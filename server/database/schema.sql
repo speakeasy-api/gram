@@ -77,21 +77,189 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
 ON organization_metadata (workos_id);
 
--- Onboarding state is organization-scoped, independent of any project.
--- Unlike retained records, this state has no lifetime beyond its owning organization.
-CREATE TABLE IF NOT EXISTS organization_onboarding (
+-- Onboarding coverage model. These reference tables are global, not tenant
+-- scoped: they describe the providers, their plans, the products the platform
+-- can cover, and the techniques and capabilities behind that coverage. The
+-- server seeds them from its Go catalog at startup; nothing edits them per
+-- organization. Every row carries a stable slug that application code refers to.
+CREATE TABLE IF NOT EXISTS onboarding_providers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  preset TEXT,
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 64),
+  name TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT organization_onboarding_pkey PRIMARY KEY (id),
-  CONSTRAINT organization_onboarding_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+  CONSTRAINT onboarding_providers_pkey PRIMARY KEY (id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS organization_onboarding_organization_id_key
-ON organization_onboarding (organization_id);
+CREATE UNIQUE INDEX IF NOT EXISTS onboarding_providers_slug_key
+ON onboarding_providers (slug);
+
+-- A plan belongs to a provider and applies to every product of that provider:
+-- an organization on Anthropic Enterprise is on it for Claude Code, Cowork
+-- and Claude Chat alike. Providers without rows here have no plan.
+CREATE TABLE IF NOT EXISTS onboarding_plans (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  provider_id uuid NOT NULL,
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 64),
+  name TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT onboarding_plans_pkey PRIMARY KEY (id),
+  CONSTRAINT onboarding_plans_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES onboarding_providers (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS onboarding_plans_slug_key
+ON onboarding_plans (slug);
+
+CREATE TABLE IF NOT EXISTS onboarding_products (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  provider_id uuid NOT NULL,
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 64),
+  name TEXT NOT NULL,
+  -- hook_source / ingest adapter ids whose events belong to this product.
+  source_ids TEXT[] NOT NULL DEFAULT '{}',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT onboarding_products_pkey PRIMARY KEY (id),
+  CONSTRAINT onboarding_products_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES onboarding_providers (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS onboarding_products_slug_key
+ON onboarding_products (slug);
+
+CREATE TABLE IF NOT EXISTS onboarding_techniques (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 64),
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT onboarding_techniques_pkey PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS onboarding_techniques_slug_key
+ON onboarding_techniques (slug);
+
+CREATE TABLE IF NOT EXISTS onboarding_capabilities (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 64),
+  name TEXT NOT NULL,
+  -- The onboarding use case this capability serves: observability,
+  -- cost-tracking, security or mcp-gateway. Values live in application code.
+  use_case TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT onboarding_capabilities_pkey PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS onboarding_capabilities_slug_key
+ON onboarding_capabilities (slug);
+
+CREATE TABLE IF NOT EXISTS onboarding_technique_capabilities (
+  technique_id uuid NOT NULL,
+  capability_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT onboarding_technique_capabilities_pkey PRIMARY KEY (technique_id, capability_id),
+  CONSTRAINT onboarding_technique_capabilities_technique_id_fkey FOREIGN KEY (technique_id) REFERENCES onboarding_techniques (id) ON DELETE CASCADE,
+  CONSTRAINT onboarding_technique_capabilities_capability_id_fkey FOREIGN KEY (capability_id) REFERENCES onboarding_capabilities (id) ON DELETE CASCADE
+);
+
+-- Which techniques the platform supports for a product.
+CREATE TABLE IF NOT EXISTS onboarding_product_techniques (
+  product_id uuid NOT NULL,
+  technique_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT onboarding_product_techniques_pkey PRIMARY KEY (product_id, technique_id),
+  CONSTRAINT onboarding_product_techniques_product_id_fkey FOREIGN KEY (product_id) REFERENCES onboarding_products (id) ON DELETE CASCADE,
+  CONSTRAINT onboarding_product_techniques_technique_id_fkey FOREIGN KEY (technique_id) REFERENCES onboarding_techniques (id) ON DELETE CASCADE
+);
+
+-- Plan gate. When a product/technique pair has rows here the technique is
+-- available only on the listed plans of the product's provider; a pair with
+-- no rows is available on every plan.
+CREATE TABLE IF NOT EXISTS onboarding_product_technique_plans (
+  product_id uuid NOT NULL,
+  technique_id uuid NOT NULL,
+  plan_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT onboarding_product_technique_plans_pkey PRIMARY KEY (product_id, technique_id, plan_id),
+  CONSTRAINT onboarding_product_technique_plans_product_id_technique_id_fkey FOREIGN KEY (product_id, technique_id) REFERENCES onboarding_product_techniques (product_id, technique_id) ON DELETE CASCADE,
+  CONSTRAINT onboarding_product_technique_plans_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES onboarding_plans (id) ON DELETE CASCADE
+);
+
+-- An organization's onboarding answers. Organization scoped, independent of
+-- any project; one row per organization, created when an admin first saves
+-- their stack. The use case is answered separately, after the stack.
+CREATE TABLE IF NOT EXISTS organization_onboarding_answers (
+  organization_id TEXT NOT NULL,
+  -- MDM vendor the organization uses: jamf, intune, iru or none. NULL until
+  -- the admin answers. Values live in application code.
+  mdm_vendor TEXT,
+  -- The single use case the admin picked: observability, cost-tracking,
+  -- security or mcp-gateway. NULL until the admin picks one.
+  use_case TEXT,
+  -- Set once every step for the use case has been verified.
+  completed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT organization_onboarding_answers_pkey PRIMARY KEY (organization_id),
+  CONSTRAINT organization_onboarding_answers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+-- Providers the organization uses, each with the plan it is on. plan_id is
+-- NULL only for providers that have no plans.
+CREATE TABLE IF NOT EXISTS organization_onboarding_providers (
+  organization_id TEXT NOT NULL,
+  provider_id uuid NOT NULL,
+  plan_id uuid,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT organization_onboarding_providers_pkey PRIMARY KEY (organization_id, provider_id),
+  CONSTRAINT organization_onboarding_providers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_onboarding_answers (organization_id) ON DELETE CASCADE,
+  CONSTRAINT organization_onboarding_providers_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES onboarding_providers (id) ON DELETE CASCADE,
+  CONSTRAINT organization_onboarding_providers_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES onboarding_plans (id) ON DELETE SET NULL
+);
+
+-- Products the organization uses. Their plan is the one declared for their
+-- provider.
+CREATE TABLE IF NOT EXISTS organization_onboarding_products (
+  organization_id TEXT NOT NULL,
+  product_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT organization_onboarding_products_pkey PRIMARY KEY (organization_id, product_id),
+  CONSTRAINT organization_onboarding_products_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_onboarding_answers (organization_id) ON DELETE CASCADE,
+  CONSTRAINT organization_onboarding_products_product_id_fkey FOREIGN KEY (product_id) REFERENCES onboarding_products (id) ON DELETE CASCADE
+);
+
+-- Progress through the next steps the platform recommended. A row is written
+-- when a step is shown; verified_at is set once its evidence check passes.
+CREATE TABLE IF NOT EXISTS organization_onboarding_steps (
+  organization_id TEXT NOT NULL,
+  step_slug TEXT NOT NULL,
+  verified_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT organization_onboarding_steps_pkey PRIMARY KEY (organization_id, step_slug),
+  CONSTRAINT organization_onboarding_steps_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_onboarding_answers (organization_id) ON DELETE CASCADE
+);
 
 -- One enterprise-trial lifecycle per organization. Lifecycle operations update
 -- the row in place. Unrelated to organization_metadata.free_trial_*, another
