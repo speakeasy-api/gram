@@ -431,14 +431,12 @@ trackedFiles:
   src/funcs/organizationsGet.ts: {}
   src/funcs/organizationsGetOnboardingStatus.ts: {}
   src/funcs/organizationsListInvites.ts: {}
-  src/funcs/organizationsListSetupTasks.ts: {}
   src/funcs/organizationsListUsers.ts: {}
   src/funcs/organizationsRemoveUser.ts: {}
   src/funcs/organizationsRevokeInvite.ts: {}
   src/funcs/organizationsSendEnterpriseAdminOnboardingEmail.ts: {}
   src/funcs/organizationsSendInvite.ts: {}
   src/funcs/organizationsUpdateInviteRole.ts: {}
-  src/funcs/organizationsUpdateSetupTask.ts: {}
   src/funcs/organizationsVerifyOnboardingHooksSetup.ts: {}
   src/funcs/otelGetEventFacets.ts: {}
   src/funcs/otelGetEventVolume.ts: {}
@@ -1255,7 +1253,6 @@ trackedFiles:
   src/models/components/listsessionspayload.ts: {}
   src/models/components/listsessionsresponsebody.ts: {}
   src/models/components/listsessionsresult.ts: {}
-  src/models/components/listsetuptasksresult.ts: {}
   src/models/components/listshadowmcpinventoryresult.ts: {}
   src/models/components/listshadowmcpinventoryusersresult.ts: {}
   src/models/components/listskilldistributionsresult.ts: {}
@@ -1584,9 +1581,6 @@ trackedFiles:
   src/models/components/settoolmetadatarequestbody.ts: {}
   src/models/components/settoolsetenvironmentlinkrequestbody.ts: {}
   src/models/components/settoolvariationsgrouprequestbody.ts: {}
-  src/models/components/setuptask.ts: {}
-  src/models/components/setuptaskassignee.ts: {}
-  src/models/components/setuptaskassigneeinput.ts: {}
   src/models/components/setusersessionissuerrequestbody.ts: {}
   src/models/components/shadowmcpaccesssummary.ts: {}
   src/models/components/shadowmcpinventoryapprovalrequest.ts: {}
@@ -1775,7 +1769,6 @@ trackedFiles:
   src/models/components/updaterouterequestbody.ts: {}
   src/models/components/updateserverform.ts: {}
   src/models/components/updateserverheaderform.ts: {}
-  src/models/components/updatesetuptaskrequestbody.ts: {}
   src/models/components/updateshadowmcpinventoryservernameform.ts: {}
   src/models/components/updateskillrequestbody.ts: {}
   src/models/components/updatespendrulerequestbody.ts: {}
@@ -2278,7 +2271,6 @@ trackedFiles:
   src/models/operations/listservernameoverrides.ts: {}
   src/models/operations/listsessionquarantines.ts: {}
   src/models/operations/listsessions.ts: {}
-  src/models/operations/listsetuptasks.ts: {}
   src/models/operations/listshadowmcpinventory.ts: {}
   src/models/operations/listshadowmcpinventoryserversforuser.ts: {}
   src/models/operations/listshadowmcpinventoryusers.ts: {}
@@ -2508,7 +2500,6 @@ trackedFiles:
   src/models/operations/updateriskexclusion.ts: {}
   src/models/operations/updateriskpolicy.ts: {}
   src/models/operations/updaterole.ts: {}
-  src/models/operations/updatesetuptask.ts: {}
   src/models/operations/updateshadowmcpinventoryservername.ts: {}
   src/models/operations/updateskill.ts: {}
   src/models/operations/updatespendrule.ts: {}
@@ -3054,8 +3045,6 @@ trackedFiles:
   src/react-query/listScopes.ts: {}
   src/react-query/listSessions.core.ts: {}
   src/react-query/listSessions.ts: {}
-  src/react-query/listSetupTasks.core.ts: {}
-  src/react-query/listSetupTasks.ts: {}
   src/react-query/listToolSchemaStaticValues.core.ts: {}
   src/react-query/listToolSchemaStaticValues.ts: {}
   src/react-query/listToolUsageTraces.core.ts: {}
@@ -3514,7 +3503,6 @@ trackedFiles:
   src/react-query/updateRemoteSessionClient.ts: {}
   src/react-query/updateRemoteSessionIssuer.ts: {}
   src/react-query/updateRole.ts: {}
-  src/react-query/updateSetupTask.ts: {}
   src/react-query/updateShadowMCPInventoryServerName.ts: {}
   src/react-query/updateSkill.ts: {}
   src/react-query/updateTemplate.ts: {}

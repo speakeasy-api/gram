@@ -11,7 +11,6 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
-import { useOrgRoutes } from "@/routes";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { Badge } from "@/components/ui/Badge";
@@ -83,25 +82,6 @@ function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
         Configure
       </Button>
     </SimpleTooltip>
-  );
-}
-
-/**
- * Routes an admin into Gram's guided setup wizard at the relevant step instead
- * of bouncing them straight to the WorkOS admin portal. Used when SSO / Directory
- * Sync has not been configured yet so first-run setup happens in-product.
- */
-function SetupStepButton() {
-  const orgRoutes = useOrgRoutes();
-
-  return (
-    <RequireScope scope="org:admin" level="component">
-      <orgRoutes.setupTask.Link params={["idp"]}>
-        <Button variant="secondary" size="sm">
-          Configure
-        </Button>
-      </orgRoutes.setupTask.Link>
-    </RequireScope>
   );
 }
 
@@ -212,32 +192,22 @@ function DirectorySyncConfigureButton() {
  * WorkOS portal launcher once a connection exists, otherwise the in-product
  * setup wizard for first-run configuration.
  */
-function SSOConfigureControl({
-  featureEnabled,
-  active,
-}: {
-  featureEnabled: boolean;
-  active: boolean;
-}) {
+function SSOConfigureControl({ featureEnabled }: { featureEnabled: boolean }) {
   if (!featureEnabled) return <ConfigureButton sectionId="sso" />;
-  if (active) return <SSOConfigureButton />;
-  return <SetupStepButton />;
+  return <SSOConfigureButton />;
 }
 
 /**
  * Picks the Directory Sync configure control, mirroring {@link SSOConfigureControl}:
- * upsell, WorkOS portal launcher, or the in-product setup wizard.
+ * upsell or the WorkOS portal launcher.
  */
 function DirectorySyncConfigureControl({
   featureEnabled,
-  active,
 }: {
   featureEnabled: boolean;
-  active: boolean;
 }) {
   if (!featureEnabled) return <ConfigureButton sectionId="directory_sync" />;
-  if (active) return <DirectorySyncConfigureButton />;
-  return <SetupStepButton />;
+  return <DirectorySyncConfigureButton />;
 }
 
 function IdentitySection({
@@ -366,10 +336,7 @@ function SingleSignOnTab(): JSX.Element {
         learnMoreHref="https://www.speakeasy.com/docs"
         active={ssoActive}
         configureButton={
-          <SSOConfigureControl
-            featureEnabled={ssoFeatureEnabled}
-            active={ssoActive}
-          />
+          <SSOConfigureControl featureEnabled={ssoFeatureEnabled} />
         }
       />
 
@@ -398,10 +365,7 @@ function SingleSignOnTab(): JSX.Element {
         learnMoreHref="https://www.speakeasy.com/docs"
         active={scimActive}
         configureButton={
-          <DirectorySyncConfigureControl
-            featureEnabled={scimFeatureEnabled}
-            active={scimActive}
-          />
+          <DirectorySyncConfigureControl featureEnabled={scimFeatureEnabled} />
         }
       />
     </div>

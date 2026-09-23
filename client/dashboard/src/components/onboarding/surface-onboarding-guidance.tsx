@@ -2,7 +2,6 @@ import { useOnboardingUseCaseStatus } from "@gram/client/react-query/onboardingU
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/Button";
-import { useNewOnboardingEnabled } from "@/hooks/useNewOnboarding";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
@@ -24,15 +23,12 @@ export function SurfaceOnboardingGuidance({
   useCase: UseCaseSlug;
   className?: string;
 }): JSX.Element | null {
-  const enabled = useNewOnboardingEnabled();
   const { hasScope } = useRBAC();
   const orgRoutes = useOrgRoutes();
   const hrefFor = useDestinationHref();
-  const statuses = useOnboardingUseCaseStatus(undefined, undefined, {
-    enabled,
-  });
+  const statuses = useOnboardingUseCaseStatus();
 
-  if (!enabled || !statuses.isSuccess) return null;
+  if (!statuses.isSuccess) return null;
   const status = statuses.data.statuses.find(
     (candidate) => candidate.useCase === useCase,
   );

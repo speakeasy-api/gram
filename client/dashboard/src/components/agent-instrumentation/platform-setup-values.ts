@@ -5,7 +5,7 @@ import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSett
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useOrgRoutes } from "@/routes";
-import type { AgentPlatform, PlatformSetupStep } from "../types";
+import type { AgentPlatform, PlatformSetupStep } from "./types";
 
 const API_KEY_PLACEHOLDER = "{{GRAM_API_KEY}}";
 const PROJECT_SLUG_PLACEHOLDER = "{{GRAM_PROJECT_SLUG}}";

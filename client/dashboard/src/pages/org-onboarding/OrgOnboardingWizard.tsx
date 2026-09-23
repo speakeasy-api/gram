@@ -16,13 +16,13 @@ import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { RequireScope } from "@/components/require-scope";
-import { JourneyLayout } from "@/pages/setup/components/journey-layout";
-import { OnboardingFooter } from "@/pages/setup/components/onboarding-footer";
-import { OnboardingHeader } from "@/pages/setup/components/onboarding-header";
+import { JourneyLayout } from "@/components/onboarding/journey-layout";
+import { OnboardingFooter } from "@/components/onboarding/onboarding-footer";
+import { OnboardingHeader } from "@/components/onboarding/onboarding-header";
 import {
   OnboardingStepper,
   type Step as RailStep,
-} from "@/pages/setup/components/onboarding-stepper";
+} from "@/components/onboarding/onboarding-stepper";
 import { MdmPicker } from "./components/mdm-picker";
 import { NextStepPanel, type CheckResult } from "./components/next-step-panel";
 import { ProductPicker } from "./components/product-picker";

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -351,8 +352,7 @@ func newTestOrganizationsServiceWithEmailEnabled(t *testing.T, emailEnabled bool
 	require.NoError(t, err)
 
 	emailService := email.NewService(logger, loopsMock, email.NewTemplateIDs(map[string]string{
-		"team_invite":           "team-invite-test-id",
-		"setup_task_assignment": "setup-task-assignment-test-id",
+		"team_invite": "team-invite-test-id",
 	}), emailEnabled)
 	trialNotifier := &fakeTrialNotifier{}
 	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), nil, authzEngine, emailService, trialNotifier, productfeatures.SeedEnterpriseTrialBundleTx, nil, nil, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
@@ -365,4 +365,11 @@ func newTestOrganizationsServiceWithEmailEnabled(t *testing.T, emailEnabled bool
 		trial:   trialNotifier,
 		svixSrv: svixSrv,
 	}
+}
+
+func requireOopsCode(t *testing.T, err error, code oops.Code) {
+	t.Helper()
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, code, oopsErr.Code)
 }

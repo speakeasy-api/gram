@@ -14,8 +14,7 @@ interface JourneyLayoutProps {
 }
 
 // The linear onboarding frame: a narrow rail on the left for where you are in
-// the journey and the current step's content on the right. Shared by the
-// wizard and by each setup task's page so the two never drift apart.
+// the journey and the current screen's content on the right.
 export function JourneyLayout({
   top,
   rail,
