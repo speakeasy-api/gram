@@ -137,6 +137,7 @@ import {
 import ShadowAIHarnesses from "./pages/shadow-ai/ShadowAIHarnesses";
 import ShadowAIAssistants from "./pages/shadow-ai/ShadowAIAssistants";
 import ShadowAIModels from "./pages/shadow-ai/ShadowAIModels";
+import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
 import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
@@ -901,20 +902,47 @@ const ROUTE_STRUCTURE = {
     component: ShadowAIRoot,
     indexComponent: ShadowAIIndexRedirect,
     subPages: {
+      // Each tool tab opens a row onto the people running that tool. The
+      // detail is nested under its tab, as the server detail is under MCPs,
+      // so the breadcrumb says which tab a pasted link came from.
       harnesses: {
         title: "Harnesses",
         url: "harnesses",
-        component: ShadowAIHarnesses,
+        component: ShadowAIRoot,
+        indexComponent: ShadowAIHarnesses,
+        subPages: {
+          detail: {
+            title: "Shadow AI Tool",
+            url: ":targetId",
+            component: ShadowAIToolDetail,
+          },
+        },
       },
       assistants: {
         title: "Assistants",
         url: "assistants",
-        component: ShadowAIAssistants,
+        component: ShadowAIRoot,
+        indexComponent: ShadowAIAssistants,
+        subPages: {
+          detail: {
+            title: "Shadow AI Tool",
+            url: ":targetId",
+            component: ShadowAIToolDetail,
+          },
+        },
       },
       models: {
         title: "Models",
         url: "models",
-        component: ShadowAIModels,
+        component: ShadowAIRoot,
+        indexComponent: ShadowAIModels,
+        subPages: {
+          detail: {
+            title: "Shadow AI Tool",
+            url: ":targetId",
+            component: ShadowAIToolDetail,
+          },
+        },
       },
       mcps: {
         title: "MCPs",

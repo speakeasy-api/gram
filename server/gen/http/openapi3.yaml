@@ -5169,6 +5169,97 @@ paths:
             x-speakeasy-name-override: getShadowMCPInventoryServer
             x-speakeasy-react-hook:
                 name: ShadowMCPInventoryServer
+    /rpc/access.listAIDetectionUsers:
+        get:
+            description: 'List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.'
+            operationId: listAIDetectionUsers
+            parameters:
+                - allowEmptyValue: true
+                  description: Id of the detection target to expand. Accepted exactly as agents report it, under the same length bound the scan-report ingest stores it with, so every id in the inventory can be expanded.
+                  in: query
+                  name: target_id
+                  required: true
+                  schema:
+                    description: Id of the detection target to expand. Accepted exactly as agents report it, under the same length bound the scan-report ingest stores it with, so every id in the inventory can be expanded.
+                    maxLength: 64
+                    minLength: 1
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAIDetectionUsersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listAIDetectionUsers access
+            tags:
+                - access
+            x-speakeasy-name-override: listAIDetectionUsers
+            x-speakeasy-react-hook:
+                name: AIDetectionUsers
     /rpc/access.listAIDetections:
         get:
             description: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
@@ -74849,6 +74940,45 @@ components:
                 - versions
                 - first_seen
                 - last_seen
+        AIDetectionUser:
+            type: object
+            properties:
+                device_count:
+                    type: integer
+                    description: Distinct devices, by hardware serial, this tool was detected on for this user. Devices that report no serial are not counted.
+                    format: int64
+                first_seen:
+                    type: string
+                    description: When this tool was first detected for this user.
+                    format: date-time
+                last_seen:
+                    type: string
+                    description: When this tool was most recently detected for this user.
+                    format: date-time
+                signals:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - installed
+                            - running
+                    description: 'Detection signals observed for this user: installed and/or running.'
+                user_email:
+                    type: string
+                    description: Canonical email of the enrolled user the detections are attributed to. Linked alias emails are folded into it.
+                versions:
+                    type: array
+                    items:
+                        type: string
+                    description: Unique non-empty detected versions for this user.
+            description: 'One enrolled user a detection target was found for, with that user''s share of the organization''s scan reports: the evidence AIDetection carries for the whole organization, narrowed to one person.'
+            required:
+                - user_email
+                - device_count
+                - signals
+                - versions
+                - first_seen
+                - last_seen
         AIIntegrationConfig:
             type: object
             properties:
@@ -86876,6 +87006,19 @@ components:
             required:
                 - client_name
                 - activity_count
+        ListAIDetectionUsersResult:
+            type: object
+            properties:
+                detection:
+                    $ref: '#/components/schemas/AIDetection'
+                users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AIDetectionUser'
+                    description: Users the target was detected for, most recently seen first.
+            required:
+                - detection
+                - users
         ListAIDetectionsResult:
             type: object
             properties:
