@@ -14,6 +14,9 @@ export const FEATURE_FLAGS = {
   killswitches: "gram-killswitches",
   mcpResearch: "gram-mcp-research",
   newCostsPage: "gram-new-costs-page",
+  // Org-targeted rollout of the question-driven onboarding wizard that
+  // replaces the Setup board. Off keeps the Setup board; removed at GA.
+  newOnboarding: "gram-new-onboarding",
   oktaConnections: "okta-connections",
   paygSelfServeBilling: "gram-payg-self-serve-billing",
   promptPolicies: "gram-prompt-policies",
