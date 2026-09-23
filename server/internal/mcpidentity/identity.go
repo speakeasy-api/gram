@@ -179,9 +179,9 @@ func (b *ValidatorBoundary) stampAgentID(ctx context.Context, agentID string) co
 	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, agentID: agentID, userID: "", apiKeyID: "", expiresAt: time.Time{}})
 }
 
-// StampConsentDiscovery records a user only after the consent owner validates
-// a live, endpoint-bound challenge resolved by the identity provider. This is
-// not a runtime session stamp and must never authorize tool execution.
+// StampConsentDiscovery records a user after the consent owner validates a live,
+// endpoint-bound challenge resolved by the identity provider. It establishes
+// identity for discovery only and must never authorize tool execution.
 func (b *ValidatorBoundary) StampConsentDiscovery(ctx context.Context, userID string, expiresAt time.Time) context.Context {
 	if b == nil || !b.initialized || userID == "" || expiresAt.IsZero() || !expiresAt.After(time.Now()) {
 		return ctx
@@ -189,8 +189,8 @@ func (b *ValidatorBoundary) StampConsentDiscovery(ctx context.Context, userID st
 	return context.WithValue(ctx, contextKey{}, Identity{kind: KindConsentDiscovery, userID: userID, agentID: "", apiKeyID: "", expiresAt: expiresAt})
 }
 
-// WithoutIdentity removes inherited provenance when entering a distinct
-// authentication surface. It never establishes a replacement identity.
+// WithoutIdentity clears inherited provenance on entry to another authentication
+// surface. It leaves the context without an identity.
 func WithoutIdentity(ctx context.Context) context.Context {
 	return context.WithValue(ctx, contextKey{}, Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: time.Time{}})
 }

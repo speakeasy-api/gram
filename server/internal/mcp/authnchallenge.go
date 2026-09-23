@@ -641,8 +641,8 @@ func (s *Service) contextForSessionSubject(
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
 		authCtx.UserID = subject.ID
-		// Assertion emails describe the resolved human, never an inherited
-		// context's credential creator or another principal's owner.
+		// Load the authenticated user's email. An inherited context may contain
+		// the credential creator's or principal owner's email.
 		needsProfile, err := s.endpointNeedsCallerProfile(ctx, endpoint)
 		if err != nil {
 			return nil, err

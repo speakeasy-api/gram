@@ -1,6 +1,6 @@
 // Package mcpauthz issues short-lived caller assertions for private MCP tunnels.
-// These assertions identify the authenticated principal; the destination owns
-// authorization and must verify the issuer, resource, tenant, and expiry.
+// The destination verifies the authenticated principal, issuer, resource, tenant,
+// and expiry, then applies its own authorization rules.
 package mcpauthz
 
 import (
@@ -63,8 +63,8 @@ type Target struct {
 	TunnelID uuid.UUID
 }
 
-// New validates the complete configuration before serving traffic. Both key
-// settings and issuer empty disables issuance; partial configuration is an error.
+// New validates configuration before serving traffic. Leaving both key settings
+// and the issuer empty disables issuance. Partial configuration is an error.
 func New(privatePEM, publicPEM, issuerURL string, allowHTTP bool) (*Issuer, error) {
 	if strings.TrimSpace(privatePEM) == "" && strings.TrimSpace(publicPEM) == "" && strings.TrimSpace(issuerURL) == "" {
 		return &Issuer{key: nil, kid: "", issuer: "", jwks: nil, etag: ""}, nil

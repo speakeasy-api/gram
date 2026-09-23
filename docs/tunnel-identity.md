@@ -1,26 +1,23 @@
 # Signed caller identity for MCP tunnels
 
-Gram can send a signed caller assertion to a private MCP server through its
-tunnel. The receiving server validates the assertion using Gram's public JWKS
-and uses the verified principal in its own access policy. The assertion does
-not contain the user's Gram credentials or replace the receiving server's
-authorization rules.
+Gram can send a signed caller assertion through a tunnel to your private MCP
+server. Your server verifies it against Gram's public JWKS and applies its own
+access policy. The assertion contains no Gram credentials.
 
-AICP is the issuer:
+AICP issues the assertions. Pin these values in your verifier:
 
-- **Issuer (`iss`):** `https://tunnel.speakeasy.com`
-- **Public JWKS:** `https://tunnel.speakeasy.com/.well-known/jwks.json`
+- Issuer (`iss`): `https://tunnel.speakeasy.com`
+- Public JWKS: `https://tunnel.speakeasy.com/.well-known/jwks.json`
 
-These are AICP's endpoints, independent of your server's OAuth provider or custom
-domain. No issuer configuration is needed in Gram for your server. Pin these
-values in your verifier.
+The endpoints are independent of your server's OAuth provider and custom domain.
+You do not need to configure a per-server assertion issuer in Gram.
 
 ## Wire contract
 
 The HTTP header is `SPEAKEASY_AUTHZ: <JWT>`, without a `Bearer` prefix. Gram
 removes client-supplied variants of this header and the `Speakeasy-Authz` alias.
-The tunnel gateway and agent transport the minted assertion to the customer
-server. The existing upstream OAuth `Authorization` header remains independent.
+The tunnel gateway and agent forward the assertion to your server. Upstream
+OAuth uses its own `Authorization` header.
 
 Header names are case-insensitive. Underscores are significant: if the customer
 server is behind an HTTP proxy that drops headers containing underscores,
@@ -65,20 +62,20 @@ flows do not receive a discovery assertion. HTTP `DELETE` used to close the
 discovery session also carries it; a receiver may permit that session cleanup.
 
 Runtime user assertions identify the effective user of the validated Gram
-session. Existing session credentials do not retain support-impersonation
-provenance, so this contract does not assert that impersonation never occurred.
+session. Session credentials do not record whether support impersonation
+occurred, so the assertion cannot rule it out.
 
 Issuance is limited to private tunneled destinations. Public destinations,
 anonymous callers, embedded chat sessions, assistant credentials, workload
 sessions and background probes do not receive an assertion in this version.
 Servers that require the header must account for those unsupported callers.
-Synthetic OAuth keepalive probes are skipped for private tunnels while signing
-is enabled, preserving their prior connection verdict. Interactive consent
+While signing is enabled, Gram skips synthetic OAuth keepalive probes for
+private tunnels and keeps their prior connection verdict. Interactive consent
 validation uses the authenticated discovery assertion.
 
-A caller whose authenticated organization or bound project differs from the
-destination is rejected before forwarding. Use an API key scoped to the
-destination project.
+Gram rejects a request before forwarding if the caller's authenticated
+organization or bound project differs from the destination. Use an API key
+scoped to the destination project.
 
 ## Verification
 
@@ -87,25 +84,25 @@ Cache them for up to five minutes. On an unknown `kid`, refresh from that URL
 once before rejecting the assertion. The endpoint supports GET, HEAD, ETag and
 conditional GET.
 
-The receiving server must:
+Your server must:
 
 1. Read exactly one assertion and select an RSA signing key by `kid` from the
    AICP JWKS above. Do not follow a token-provided key URL or issuer.
 2. Verify the signature with an explicit RS256 allowlist and require
    `typ=speakeasy-authz+jwt` and `version=1`.
 3. Require `iss=https://tunnel.speakeasy.com` and the destination audience. Check
-   organization, project and MCP server bindings against its own configuration.
+   organization, project and MCP server bindings against your configuration.
 4. Require `iat` and `exp`, reject expired/future-dated tokens, and enforce a
    maximum 60-second lifetime with at most five seconds of clock tolerance.
-5. Check the principal type and purpose before applying the customer's access
-   policy. Require `purpose=mcp_request` for tool calls; accept `mcp_discovery`
+5. Check the principal type and purpose before applying your access policy.
+   Require `purpose=mcp_request` for tool calls; accept `mcp_discovery`
    only for the discovery methods listed above and in `allowed_methods`. Reject
    unknown purposes. A valid signature alone does not authorize a tool call.
 
-Treat a missing assertion as unauthenticated. A `jti` does not make these bearer
-tokens replay-proof; a captured token can be reused within its validity window
-unless the receiver adds replay protection. Do not put assertions in tool
-arguments, ordinary application logs, or error responses.
+Treat a missing assertion as unauthenticated. A captured bearer token can be
+reused until it expires, even with a unique `jti`, unless your server adds replay
+protection. Keep assertions out of tool arguments, ordinary application logs,
+and error responses.
 
 Validate each HTTP request. Accepting an assertion during initialization does
 not authorize later requests on the same MCP session. A response admitted while
@@ -113,20 +110,19 @@ the token was valid may continue streaming after its expiry.
 
 ## Key rotation
 
-Publish the future key alongside the active key on all replicas first. After
-the last old JWKS-serving replica has stopped, wait the full five-minute cache
+Publish the next key alongside the active key on every replica. Once the last
+replica serving the old JWKS has stopped, wait the full five-minute cache
 lifetime before switching signing keys. Keep the retiring public key until all
-old signer replicas have stopped and their last tokens have expired, allowing
-for clock tolerance. Key removal does not immediately revoke tokens for clients
-that still have the old key cached.
+old signer replicas have stopped and their last tokens have expired, including
+clock tolerance. Clients that cached the old key can still accept its tokens
+after you remove it from the JWKS.
 
 ## Tool-call records
 
-Tunneled calls use the MCP proxy's existing telemetry. Available caller
-attribution, server/tool identifiers, timing and status are recorded when
-logging is enabled. Arguments and results additionally require the tool I/O
-logging setting. These records are best-effort operational telemetry; they
-must not be treated as a guaranteed record of every attempted or rejected call.
+When logging is enabled, the MCP proxy records tunneled calls with available
+caller attribution, server/tool identifiers, timing and status. Recording
+arguments and results also requires the tool I/O logging setting. These
+best-effort records may omit attempted or rejected calls.
 
 The checked-in retention policy keeps raw rows for 90 days. Arguments and
 results are each truncated at 64 KiB when tool I/O logging is enabled. The Logs
@@ -136,5 +132,5 @@ HTTP `/v1/logs` destination. Export delivery is at least once; consumers can
 deduplicate using `gram.telemetry.log.id`. The destination's sensitive-data
 policy determines whether payloads and user attributes are included.
 
-This identity assertion feature does not change telemetry retention, delivery
-or export capabilities. Management audit events are a separate subsystem.
+Telemetry retention, delivery and export are unchanged. Management audit events
+use a separate subsystem.

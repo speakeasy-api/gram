@@ -400,8 +400,8 @@ func (f *ProxyManager) BuildTarget(
 	}
 }
 
-// IssuesCallerAssertions is the shared scope boundary for forwarding and
-// background probes. Only configured issuers and private tunnels are eligible.
+// IssuesCallerAssertions reports whether a destination requires assertions for
+// forwarding and background probes. It requires a configured issuer and a private tunnel.
 func (f *ProxyManager) IssuesCallerAssertions(visibility string, tunneled bool) bool {
 	return f != nil && f.callerAssertions.Enabled() && visibility == mcpservers.VisibilityPrivate && tunneled
 }
