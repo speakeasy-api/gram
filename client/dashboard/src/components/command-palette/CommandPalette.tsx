@@ -1,30 +1,29 @@
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { Badge } from "@/components/ui/Badge";
 import {
   CommandDialog,
-  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
   CommandList,
 } from "@/components/ui/Command";
-import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { Icon } from "@/components/ui/Icon";
+import { Spinner } from "@/components/ui/Spinner";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useSlugs } from "@/contexts/Sdk";
-import { Badge } from "@/components/ui/Badge";
-import { Icon } from "@/components/ui/Icon";
-import { IconName } from "@/components/ui/Icon/names";
-import { useState } from "react";
-import { useNavigate } from "react-router";
+import { cn } from "@/lib/utils";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router";
 import { requestAskAi } from "./askAiBridge";
+import { useLauncherCandidates } from "./candidates";
 import {
-  getRecentLabelOverride,
-  useRecentlyVisited,
-  useRecentsUserId,
-} from "./recentlyVisited";
-import {
-  PeopleResults,
-  ProjectsResults,
-  ResourceResults,
-} from "./ResourceResults";
+  MUTATING_VERBS,
+  type LauncherCandidate,
+  type Verb,
+} from "./candidates/types";
+import { isReady, prefilter, rank } from "./ranker";
+import { useRecentsUserId } from "./recentlyVisited";
+import { useLauncherJudge } from "./useLauncherJudge";
 
 // Speakeasy brand spectrum — the same brand-language gradient the Project
 // Assistant uses. Rendered as a thin hairline at the top of the palette so the
@@ -35,105 +34,385 @@ const BRAND_GRADIENT =
 const KBD_CLASS =
   "border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 min-w-5 items-center justify-center gap-1 border px-1.5 font-mono text-[10px] font-medium select-none";
 
+const READY_KBD_CLASS =
+  "text-default-success border-success-softest bg-success-softest";
+
+const ASK_AI_VALUE = "__ask_ai__";
+
+const VERB_LABEL: Record<Verb, string> = {
+  open: "Open",
+  enable: "Enable",
+  disable: "Disable",
+  publish: "Publish",
+};
+
+/** A candidate plus the verb Jev (or the fuzzy fallback) resolved for it. */
+interface DisplayRow {
+  candidate: LauncherCandidate;
+  verb: Verb;
+}
+
+/**
+ * The confirm flow (see the design spec, "Mutation confirm flow"):
+ * list ─Enter on verb≠open─▶ confirm ─Enter─▶ running ─▶ closed, with Esc
+ * returning from confirm to list and a rejected run returning from running.
+ */
+type PaletteMode =
+  | { mode: "list" }
+  | { mode: "confirm"; row: DisplayRow }
+  | { mode: "running"; row: DisplayRow };
+
+const LIST: PaletteMode = { mode: "list" };
+
+// Idle order for page actions: contextual Tool Actions first, then project
+// Pages before Organization pages, then anything else alphabetically.
+function groupPriority(name: string): number {
+  switch (name) {
+    case "Tool Actions":
+      return 0;
+    case "Pages":
+      return 1;
+    case "Organization":
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+function compareGroups(a: string, b: string): number {
+  const byPriority = groupPriority(a) - groupPriority(b);
+  return byPriority !== 0 ? byPriority : a.localeCompare(b);
+}
+
+function openRow(candidate: LauncherCandidate): DisplayRow {
+  return { candidate, verb: "open" };
+}
+
+/**
+ * The zero-state list: recents first, then registered page actions by group.
+ * No prefilter and no Jev call while the query is empty.
+ */
+function idleRows(candidates: LauncherCandidate[]): {
+  recents: DisplayRow[];
+  actions: DisplayRow[];
+} {
+  const recents = candidates.filter((c) => c.kind === "recent").map(openRow);
+  const actions = candidates
+    .filter((c) => c.kind === "page")
+    .map(openRow)
+    .sort((a, b) => compareGroups(a.candidate.group, b.candidate.group));
+  return { recents, actions };
+}
+
+/**
+ * Buckets rows by their display group in order of first appearance, so the
+ * DOM keeps the global ranked order (cmdk auto-selects the first item in DOM
+ * order) and a group appears at the position of its best row.
+ */
+function groupRows(rows: DisplayRow[]): Array<{
+  heading: string;
+  rows: DisplayRow[];
+}> {
+  const groups: Array<{ heading: string; rows: DisplayRow[] }> = [];
+  const byHeading = new Map<string, DisplayRow[]>();
+  for (const row of rows) {
+    const heading = row.candidate.group;
+    let bucket = byHeading.get(heading);
+    if (!bucket) {
+      bucket = [];
+      byHeading.set(heading, bucket);
+      groups.push({ heading, rows: bucket });
+    }
+    bucket.push(row);
+  }
+  return groups;
+}
+
+function rowTitle({ candidate, verb }: DisplayRow): string {
+  return verb === "open"
+    ? candidate.title
+    : `${VERB_LABEL[verb]} · ${candidate.title}`;
+}
+
+function PaletteRow({
+  row,
+  ready,
+  running,
+  onSelect,
+}: {
+  row: DisplayRow;
+  ready: boolean;
+  running: boolean;
+  onSelect: () => void;
+}): JSX.Element {
+  const { candidate } = row;
+  return (
+    <CommandItem
+      value={candidate.id}
+      onSelect={onSelect}
+      className="flex items-center gap-2"
+    >
+      {candidate.icon && (
+        <Icon name={candidate.icon} className="size-4 shrink-0" />
+      )}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="flex items-center gap-2">
+          <span className="truncate">{rowTitle(row)}</span>
+          {candidate.stage && (
+            <ReleaseStageBadge stage={candidate.stage} noTooltip />
+          )}
+        </span>
+        <span className="text-muted-foreground truncate text-xs">
+          {candidate.detail}
+        </span>
+      </div>
+      {running && <Spinner className="mr-0 size-4 shrink-0" />}
+      {ready && !running && (
+        <kbd aria-label="Ready" className={cn(KBD_CLASS, READY_KBD_CLASS)}>
+          ↵
+        </kbd>
+      )}
+    </CommandItem>
+  );
+}
+
+function RowGroups({
+  rows,
+  readyValue,
+  runningValue,
+  onSelect,
+}: {
+  rows: DisplayRow[];
+  readyValue: string | null;
+  runningValue: string | null;
+  onSelect: (row: DisplayRow) => void;
+}): JSX.Element {
+  return (
+    <>
+      {groupRows(rows).map((group) => (
+        <CommandGroup key={group.heading} heading={group.heading}>
+          {group.rows.map((row) => (
+            <PaletteRow
+              key={row.candidate.id}
+              row={row}
+              ready={readyValue === row.candidate.id}
+              running={runningValue === row.candidate.id}
+              onSelect={() => onSelect(row)}
+            />
+          ))}
+        </CommandGroup>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Replaces the input while a mutating verb awaits its second Enter. It holds
+ * focus so Enter lands here rather than on cmdk, and swallows it while the
+ * run is in flight. Escape is handled by the dialog (see `handleEscape`).
+ */
+function ConfirmBar({
+  row,
+  running,
+  onConfirm,
+}: {
+  row: DisplayRow;
+  running: boolean;
+  onConfirm: () => void;
+}): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      tabIndex={0}
+      role="group"
+      aria-label="Confirm action"
+      className="flex h-14 items-center gap-3 border-b px-3 text-sm outline-hidden"
+      onKeyDown={(e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!running) onConfirm();
+      }}
+    >
+      <span className="flex-1 truncate font-medium">
+        {VERB_LABEL[row.verb]} {row.candidate.title}?
+      </span>
+      <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+        <kbd className={KBD_CLASS}>↵</kbd>
+        confirm
+        <span aria-hidden>·</span>
+        <kbd className={KBD_CLASS}>esc</kbd>
+        back
+      </span>
+    </div>
+  );
+}
+
 export function CommandPalette(): JSX.Element {
-  const { isOpen, close, actions, contextBadge } = useCommandPalette();
+  const { isOpen, close, contextBadge } = useCommandPalette();
   const { orgSlug, projectSlug } = useSlugs();
-  const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<PaletteMode>(LIST);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Project Assistant and resource search are project-scoped. At the org level
-  // (no project in the URL) the palette still navigates org pages, and searches
-  // the org-scoped resources — projects and people.
+  // (no project in the URL) the palette still works for navigating org pages.
   const inProject = Boolean(projectSlug);
 
-  // Recently visited pages (client-side; read only while the palette is open).
-  // Scoped per user so a shared browser profile doesn't leak history. Gate the
-  // session lookup on `isOpen` so we don't poll auth.info on every page (it
-  // 401s when unauthenticated); gate the read on the user id resolving so we
-  // never read the shared anonymous key before the session loads.
+  // Recents are scoped per user so a shared browser profile doesn't leak
+  // history. Gate the session lookup on `isOpen` so we don't poll auth.info on
+  // every page (it 401s when unauthenticated).
   const recentsUserId = useRecentsUserId(isOpen);
-  const recents = useRecentlyVisited(
-    recentsUserId,
+
+  const candidates = useLauncherCandidates({
+    enabled: isOpen,
+    inProject,
+    recentsUserId: recentsUserId ?? null,
     orgSlug,
     projectSlug,
-    isOpen && Boolean(recentsUserId),
+  });
+  const { state, judge, reset } = useLauncherJudge();
+
+  const trimmedQuery = query.trim();
+  const hasQuery = trimmedQuery.length > 0;
+
+  const pre = useMemo(
+    () => prefilter(trimmedQuery, candidates),
+    [trimmedQuery, candidates],
   );
+  const rows = useMemo(() => rank(pre, state.judgment), [pre, state.judgment]);
+  const idle = useMemo(() => idleRows(candidates), [candidates]);
+
+  // Ask Jev on every keystroke while open. The hook aborts the previous
+  // request itself; an empty query clears the judgment without a call.
+  useEffect(() => {
+    if (!isOpen || state.disabled) return;
+    judge(trimmedQuery, pre.sendable, pathname);
+  }, [isOpen, state.disabled, trimmedQuery, pre.sendable, pathname, judge]);
+
+  useEffect(() => {
+    if (!isOpen) reset();
+  }, [isOpen, reset]);
+
+  // cmdk only reselects the first item when its search changes, so when a
+  // judgment reorders the rows the highlight would stay on a now-demoted row.
+  // Controlling the value pins it to the top row whenever the DOM order
+  // changes, and remembers a ↑/↓ move only for the order it was made in.
+  const [selectedFor, setSelectedFor] = useState<{
+    key: string;
+    value: string;
+  } | null>(null);
+  const domOrder = useMemo((): string[] => {
+    if (mode.mode !== "list") return [mode.row.candidate.id];
+    const ask = inProject ? [ASK_AI_VALUE] : [];
+    if (!hasQuery) {
+      return [
+        ...idle.recents.map((r) => r.candidate.id),
+        ...ask,
+        ...idle.actions.map((r) => r.candidate.id),
+      ];
+    }
+    return [...rows.map((r) => r.candidate.id), ...ask];
+  }, [mode, inProject, hasQuery, idle, rows]);
+  const rowsKey = domOrder.join("\n");
+  const selectedValue =
+    selectedFor?.key === rowsKey ? selectedFor.value : (domOrder[0] ?? "");
+
+  // The green ↵ is purely visual: Enter always runs the highlighted row.
+  const topRow = rows[0];
+  const readyValue =
+    mode.mode === "list" &&
+    hasQuery &&
+    topRow &&
+    selectedValue === topRow.candidate.id &&
+    // Only a fresh judgment may light the ↵: a dimmed one belongs to the
+    // previous keystroke and says nothing about the current query.
+    state.fresh &&
+    isReady(rows, state.judgment)
+      ? topRow.candidate.id
+      : null;
+
+  // Focus follows the mode: the confirm bar focuses itself on mount, and the
+  // input takes focus back when the bar goes away.
+  useEffect(() => {
+    if (mode.mode === "list") inputRef.current?.focus();
+  }, [mode.mode]);
 
   const closeAndReset = () => {
     setQuery("");
+    setMode(LIST);
+    setSelectedFor(null);
     close();
   };
 
-  const handleRecentSelect = (href: string) => {
-    void navigate(href);
+  const selectRow = (row: DisplayRow) => {
+    if (mode.mode !== "list") return;
+    if (MUTATING_VERBS.has(row.verb)) {
+      setMode({ mode: "confirm", row });
+      return;
+    }
+    void row.candidate.run(row.verb);
     closeAndReset();
   };
 
-  // Group actions by their group property
-  const groupedActions = actions.reduce(
-    (acc, action) => {
-      const group = action.group || "Actions";
-      if (!acc[group]) {
-        acc[group] = [];
-      }
-      acc[group].push(action);
-      return acc;
-    },
-    {} as Record<string, typeof actions>,
-  );
+  // Second Enter. The candidate's `run` toasts on its own and rejects on
+  // failure, so a rejection just returns to the list with the query intact.
+  const runConfirmed = () => {
+    if (mode.mode !== "confirm") return;
+    const { row } = mode;
+    setMode({ mode: "running", row });
+    Promise.resolve()
+      .then(() => row.candidate.run(row.verb))
+      .then(
+        () => closeAndReset(),
+        () => setMode(LIST),
+      );
+  };
 
-  // Sort groups by an explicit priority: contextual Tool Actions first, then
-  // project Pages before Organization pages, then anything else alphabetically.
-  const groupPriority = (name: string): number => {
-    switch (name) {
-      case "Tool Actions":
-        return 0;
-      case "Pages":
-        return 1;
-      case "Organization":
-        return 2;
-      default:
-        return 3;
+  // Radix listens for Escape on the document in the capture phase, so this is
+  // the only place that can stop it closing the dialog. Escape steps back one
+  // level at a time: running ignores it, confirm returns to the list with the
+  // query intact, a query is cleared, and only an empty list closes.
+  const handleEscape = (e: KeyboardEvent) => {
+    if (mode.mode === "running") {
+      e.preventDefault();
+      return;
+    }
+    if (mode.mode === "confirm") {
+      e.preventDefault();
+      setMode(LIST);
+      return;
+    }
+    if (query) {
+      e.preventDefault();
+      setQuery("");
     }
   };
-  const sortedGroups = Object.entries(groupedActions).sort(([a], [b]) => {
-    const byPriority = groupPriority(a) - groupPriority(b);
-    return byPriority !== 0 ? byPriority : a.localeCompare(b);
-  });
-
-  const handleSelect = (action: (typeof actions)[0]) => {
-    action.onSelect();
-    closeAndReset();
-  };
-
-  const trimmedQuery = query.trim();
-  // Recently Visited is a zero-state convenience and the Project Assistant row
-  // moves to the bottom once the user starts typing (see below), so both branch
-  // on whether there's an active query.
-  const hasQuery = trimmedQuery.length > 0;
 
   const handleAskAi = () => {
     requestAskAi(trimmedQuery);
     closeAndReset();
   };
 
-  // Free-form AI escape hatch — always offered regardless of the filter
-  // (forceMount) so the typed query can always be sent to the assistant.
-  // forceMount is needed on the *group* too: cmdk hides a group whose id isn't
-  // in `filtered.groups` while a search is active, which would hide the
-  // forceMounted row inside it exactly when the query matches nothing — the
-  // case where it matters most.
-  // Project Assistant is project-scoped, so only at the project level. Rendered
-  // near the top when the palette is idle (discoverable) but pushed below the
-  // results while searching: cmdk auto-selects the first item in DOM order after
-  // filtering, so keeping this forceMounted row above the matches would steal
-  // the highlight from the closest result and force an extra ↓ keypress to reach
-  // it (AGE-2807).
+  // Free-form AI escape hatch — forceMounted so the typed query can always be
+  // sent to the assistant (the group too, since cmdk hides a group whose id
+  // isn't in `filtered.groups` while a search is active). Project Assistant
+  // is project-scoped, so only at the project level. Rendered near the top
+  // when the palette is idle (discoverable) but pushed below the results
+  // while searching: cmdk auto-selects the first item in DOM order, so keeping
+  // this row above the matches would steal the highlight from the closest
+  // result and force an extra ↓ keypress to reach it (AGE-2807).
   const askAiGroup = inProject ? (
     <CommandGroup forceMount heading="Assistant">
       <CommandItem
         forceMount
-        value="__ask_ai__"
+        value={ASK_AI_VALUE}
         onSelect={handleAskAi}
         className="flex items-center gap-2"
       >
@@ -152,12 +431,22 @@ export function CommandPalette(): JSX.Element {
     </CommandGroup>
   ) : null;
 
+  const rowGroupProps = {
+    readyValue,
+    runningValue: mode.mode === "running" ? mode.row.candidate.id : null,
+    onSelect: mode.mode === "list" ? selectRow : runConfirmed,
+  };
+
   return (
     <CommandDialog
       open={isOpen}
       onOpenChange={(open) => {
         if (!open) closeAndReset();
       }}
+      shouldFilter={false}
+      value={selectedValue}
+      onValueChange={(value) => setSelectedFor({ key: rowsKey, value })}
+      onEscapeKeyDown={handleEscape}
     >
       {/* Speakeasy brand hairline */}
       <div
@@ -172,110 +461,57 @@ export function CommandPalette(): JSX.Element {
           </Badge>
         </div>
       )}
-      <CommandInput
-        placeholder={
-          inProject
-            ? "Ask AI or search resources and pages…"
-            : "Search projects and pages…"
-        }
-        value={query}
-        onValueChange={setQuery}
-        onKeyDown={(e) => {
-          // Two-step Escape: first clears the query, then (when already empty)
-          // bubbles up to close the palette.
-          if (e.key === "Escape" && query) {
-            e.preventDefault();
-            e.stopPropagation();
-            setQuery("");
+      {mode.mode === "list" ? (
+        <CommandInput
+          ref={inputRef}
+          placeholder={
+            inProject
+              ? "Ask AI or search resources and pages…"
+              : "Search pages…"
           }
-        }}
-      />
-      <CommandList>
-        {/* The Ask row is always mounted inside a project, so an unmatched
-            query there is an offer to ask the assistant, not a dead end. */}
-        {!inProject && <CommandEmpty>No results found.</CommandEmpty>}
-
-        {/* Recently visited pages (most-recent first), client-side localStorage.
-            Only a zero-state affordance: once the user types, hide it so search
-            results rank on their own merits instead of recents jumping ahead of
-            a closer text match (AGE-2808). */}
-        {!hasQuery && recents.length > 0 && (
-          <CommandGroup heading="Recently Visited">
-            {recents.map((recent) => {
-              // Prefer a live name override over a stored URL-derived fallback
-              // so id-keyed pages show the resource name once it has loaded.
-              const label = getRecentLabelOverride(recent.href) ?? recent.label;
-              return (
-                <CommandItem
-                  key={recent.href}
-                  value={`recent ${label} ${recent.href}`}
-                  onSelect={() => handleRecentSelect(recent.href)}
-                  className="flex items-center gap-2"
-                >
-                  {recent.icon && (
-                    <Icon name={recent.icon as IconName} className="size-4" />
-                  )}
-                  <span className="truncate">{label}</span>
-                </CommandItem>
-              );
-            })}
-          </CommandGroup>
+          value={query}
+          onValueChange={setQuery}
+        />
+      ) : (
+        <ConfirmBar
+          row={mode.row}
+          running={mode.mode === "running"}
+          onConfirm={runConfirmed}
+        />
+      )}
+      <CommandList
+        className={cn(
+          "transition-opacity",
+          // A newer request is in flight: keep the last order, but dimmed.
+          state.judgment && !state.fresh && "opacity-60",
+        )}
+      >
+        {mode.mode !== "list" && (
+          <RowGroups rows={[mode.row]} {...rowGroupProps} />
         )}
 
-        {/* Idle: Ask AI sits up top for discoverability. */}
-        {!hasQuery && askAiGroup}
-
-        {/* Projects are organization-scoped, so the palette offers them from
-            either shell. At the org level picking a project is the palette's
-            main job, so the group is there from the moment it opens; inside a
-            project it is a switcher, so it waits for a query rather than
-            heading an idle palette with the projects you aren't in. */}
-        {isOpen && (!inProject || hasQuery) && (
-          <ProjectsResults onNavigate={closeAndReset} />
+        {mode.mode === "list" && !hasQuery && (
+          <>
+            {/* Recents are a zero-state affordance only: once the user types
+                they compete on their own merits (AGE-2808). */}
+            <RowGroups rows={idle.recents} {...rowGroupProps} />
+            {askAiGroup}
+            <RowGroups rows={idle.actions} {...rowGroupProps} />
+          </>
         )}
 
-        {sortedGroups.map(([groupName, groupActions]) => (
-          <CommandGroup key={groupName} heading={groupName}>
-            {groupActions.map((action) => (
-              <CommandItem
-                key={action.id}
-                onSelect={() => handleSelect(action)}
-                className="flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2">
-                  {action.icon && (
-                    <Icon name={action.icon as IconName} className="size-4" />
-                  )}
-                  <span>{action.label}</span>
-                  {action.stage && (
-                    <ReleaseStageBadge stage={action.stage} noTooltip />
-                  )}
-                </div>
-                {action.shortcut && (
-                  <span className="text-muted-foreground text-xs">
-                    {action.shortcut}
-                  </span>
-                )}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        ))}
-
-        {/* Resource search results — only mounted while open, so the list
-            fetches lazily on first open (React Query caches thereafter). */}
-        {isOpen && inProject && (
-          <ResourceResults onNavigate={closeAndReset} query={trimmedQuery} />
+        {mode.mode === "list" && hasQuery && (
+          <>
+            {/* The Ask row is always mounted inside a project, so an unmatched
+                query there is an offer to ask the assistant, not a dead end.
+                cmdk's own empty state depends on its filter, which is off. */}
+            {rows.length === 0 && !inProject && (
+              <div className="py-6 text-center text-sm">No results found.</div>
+            )}
+            <RowGroups rows={rows} {...rowGroupProps} />
+            {askAiGroup}
+          </>
         )}
-
-        {/* People are org-scoped, so they are offered from either shell —
-            but only once there is a query: the idle palette should not open on
-            a list of every colleague. */}
-        {isOpen && hasQuery && <PeopleResults onNavigate={closeAndReset} />}
-
-        {/* Searching: Ask AI drops below the results so the closest match keeps
-            the auto-selected highlight, while the "Ask AI: …" fallback stays
-            available at the bottom of the list (AGE-2807). */}
-        {hasQuery && askAiGroup}
       </CommandList>
 
       {/* Keyboard navigation hints */}
@@ -293,6 +529,9 @@ export function CommandPalette(): JSX.Element {
           <kbd className={KBD_CLASS}>esc</kbd>
           to close
         </span>
+        {state.fresh && state.latencyMs != null && (
+          <span className="ml-auto tabular-nums">{state.latencyMs} ms</span>
+        )}
       </div>
     </CommandDialog>
   );

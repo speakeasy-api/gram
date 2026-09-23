@@ -74,6 +74,7 @@ export type CandidateKind =
   | "page"
   | "recent"
   | "mcp_server"
+  | "catalog"
   | "plugin"
   | "marketplace"
   | "assistant"
@@ -107,6 +108,7 @@ detail string. Examples:
 | `mcp_server`  | `MCP server · enabled` / `MCP server · disabled`                                |
 | `marketplace` | `Plugin marketplace · unpublished changes` / `· up to date` / `· not connected` |
 | `plugin`      | `Plugin · 4 servers`                                                            |
+| `catalog`     | `Catalog entry · <registry specifier>` (open-only; requires `project:read`)     |
 | `page`        | `Page` (org pages: `Organization page`)                                         |
 | `recent`      | `Recently visited`                                                              |
 | `person`      | `Member · <role>` (fuzzy only, see below)                                       |
@@ -332,10 +334,12 @@ No SQL, no migration, no Temporal.
 ### Data leaving the tenant
 
 Titles and details of candidates are sent to TypeSafe. This version sends
-pages, recents, MCP servers, plugins, the marketplace, assistants,
+pages, recents, MCP servers, catalog entries, plugins, the marketplace, assistants,
 environments, sources, deployments, policies, rules and access requests.
-**People are never sent**: `person` candidates are excluded from the
-prefilter's outgoing slice and rank by fuzzy alone. `keywords` (slugs,
+**People are never sent**: `person` candidates, and any candidate marked
+`fuzzyOnly` (a recent whose href is an identity page, whose label is the
+person's name or email), are excluded from the prefilter's outgoing slice
+and rank by fuzzy alone. `keywords` (slugs,
 ids) are never sent. The query text is sent and is not logged server-side.
 
 ## Error handling
