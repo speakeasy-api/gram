@@ -525,7 +525,7 @@ func NewService(
 		autoVerifications:    newAutoVerifications(),
 		remoteSessionRecheck: newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
 		remoteProxyManager:   remoteProxyManager,
-		tunnelManager:        newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
+		tunnelManager:        newTunnelManager(db, tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:          metaRuntimeConfig.withDefaults(),
 	}

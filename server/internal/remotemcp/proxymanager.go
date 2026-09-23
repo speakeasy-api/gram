@@ -39,8 +39,9 @@ import (
 // [ProxyManager.Build] so the closure over the per-server correlation ids
 // stays request-scoped.
 type proxyBuildOptions struct {
-	recordIdentityCoverage bool
-	metaMCPServerID        string
+	recordIdentityCoverage  bool
+	metaMCPServerID         string
+	callerAssertionResource string
 }
 
 // BuildOption customizes one proxy without changing the defaults used by
@@ -62,6 +63,14 @@ func WithoutToolsCallIdentityCoverage() BuildOption {
 func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
 	return BuildOption{apply: func(options *proxyBuildOptions) {
 		options.metaMCPServerID = metaMCPServerID
+	}}
+}
+
+// WithCallerAssertionResource sets the audience from the destination's saved
+// resource identifier. An empty value uses the tunneled server's Gram identifier.
+func WithCallerAssertionResource(resourceIdentifier string) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.callerAssertionResource = resourceIdentifier
 	}}
 }
 
@@ -221,7 +230,7 @@ func (f *ProxyManager) BuildTarget(
 	selection *toolfilter.SessionSelection,
 	buildOptions ...BuildOption,
 ) *proxy.Proxy {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: ""}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", callerAssertionResource: ""}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -351,7 +360,7 @@ func (f *ProxyManager) BuildTarget(
 			if err != nil {
 				return "", fmt.Errorf("parse caller assertion destination: %w", err)
 			}
-			return f.callerAssertions.Mint(ctx, mcpauthz.Target{OrganizationID: organizationID, ProjectID: projectUUID, MCPServerID: identity.McpServerID, TunnelID: tunnelID})
+			return f.callerAssertions.Mint(ctx, mcpauthz.Target{OrganizationID: organizationID, ProjectID: projectUUID, MCPServerID: identity.McpServerID, TunnelID: tunnelID, ResourceIdentifier: options.callerAssertionResource})
 		}
 	}
 	return &proxy.Proxy{

@@ -27,21 +27,39 @@ Tokens use RS256 and the protected header `typ: speakeasy-authz+jwt`. The `kid`
 is the public key's RFC 7638 SHA-256 thumbprint. Their lifetime is at most 60
 seconds, capped by the source credential's expiry where available.
 
-| Claim                           | Meaning                                                                                                                                  |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`                       | Contract version, currently `1`.                                                                                                         |
-| `iss`                           | `https://tunnel.speakeasy.com` (AICP).                                                                                                   |
-| `aud`                           | `tunneled-mcp-server:<TUNNELED_MCP_SERVER_ID>`. Identifies the destination, independently of gateway address, MCP slug or custom domain. |
-| `sub`                           | Typed principal identifier, for example `user:<USER_ID>`.                                                                                |
-| `email`                         | Human user's email from their Gram profile; absent for agents and API keys.                                                              |
-| `principal_type`                | Authenticated principal class; a machine credential is never represented as its owner's human identity.                                  |
-| `organization_id`, `project_id` | Destination tenant and project.                                                                                                          |
-| `mcp_server_id`                 | MCP wrapper serving this request.                                                                                                        |
-| `tunneled_mcp_server_id`        | Underlying tunneled MCP source.                                                                                                          |
-| `purpose`                       | Context in which Gram issued the assertion.                                                                                              |
-| `allowed_methods`               | Present for consent discovery; limits the assertion to the listed MCP methods.                                                           |
-| `iat`, `exp`                    | Issuance and expiry, Unix seconds.                                                                                                       |
-| `jti`                           | Unique assertion identifier for correlation.                                                                                             |
+| Claim                           | Meaning                                                                                                    |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `version`                       | Contract version, currently `1`.                                                                           |
+| `iss`                           | `https://tunnel.speakeasy.com` (AICP).                                                                     |
+| `aud`                           | The destination's saved resource identifier, or `tunneled-mcp-server:<TUNNELED_MCP_SERVER_ID>` when unset. |
+| `sub`                           | Typed principal identifier, for example `user:<USER_ID>`.                                                  |
+| `email`                         | Human user's email from their Gram profile; absent for agents and API keys.                                |
+| `principal_type`                | Authenticated principal class; a machine credential is never represented as its owner's human identity.    |
+| `organization_id`, `project_id` | Destination tenant and project.                                                                            |
+| `mcp_server_id`                 | MCP wrapper serving this request.                                                                          |
+| `tunneled_mcp_server_id`        | Underlying tunneled MCP source.                                                                            |
+| `purpose`                       | Context in which Gram issued the assertion.                                                                |
+| `allowed_methods`               | Present for consent discovery; limits the assertion to the listed MCP methods.                             |
+| `iat`, `exp`                    | Issuance and expiry, Unix seconds.                                                                         |
+| `jti`                           | Unique assertion identifier for correlation.                                                               |
+
+Set the resource identifier in the tunneled source settings to use your server's
+own audience, such as `https://mcp.internal.example.com/mcp`. Gram copies the
+saved identifier exactly, including trailing slashes and escaped characters,
+and never connects to that address. Client-supplied resource parameters cannot
+change the assertion's audience. Gateway requests use the selected member's
+identifier. If the setting is blank, the audience is the tunneled server's Gram
+identifier above.
+
+Changing or clearing the setting changes the audience of subsequent assertions;
+coordinate that change with your verifier. Older saved identifiers may have had
+trailing slashes removed. Save the exact identifier again if your verifier needs
+a trailing slash. Restoring a path slash before a query also changes credential
+routing, for example `/mcp?tenant=example` to `/mcp/?tenant=example`. Reconnect
+upstream OAuth credentials for the new resource; credentials qualified to the
+old resource are not forwarded. Existing saved settings are unchanged by deployment.
+Continue validating the organization, project and server bindings: a resource
+identifier alone does not distinguish tenants that choose the same value.
 
 Runtime requests use `purpose=mcp_request`. Supported subjects are `user:<USER_ID>`,
 `api_key:<API_KEY_ID>` and `agent:<AGENT_ID>`, with matching `principal_type`
@@ -90,8 +108,10 @@ Your server must:
    AICP JWKS above. Do not follow a token-provided key URL or issuer.
 2. Verify the signature with an explicit RS256 allowlist and require
    `typ=speakeasy-authz+jwt` and `version=1`.
-3. Require `iss=https://tunnel.speakeasy.com` and the destination audience. Check
-   organization, project and MCP server bindings against your configuration.
+3. Require `iss=https://tunnel.speakeasy.com` and the exact destination audience.
+   Require `organization_id`, `project_id`, `mcp_server_id` and
+   `tunneled_mcp_server_id` to match your configured bindings. Audience matching
+   alone cannot distinguish tenants that configure the same resource identifier.
 4. Require `iat` and `exp`, reject expired/future-dated tokens, and enforce a
    maximum 60-second lifetime with at most five seconds of clock tolerance.
 5. Check the principal type and purpose before applying your access policy.

@@ -47,6 +47,16 @@ func TestProxyManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 	require.Equal(t, "agent", claims["principal_type"])
 	require.NotContains(t, claims, "user_id")
 	require.NotEqual(t, meta, claims["aud"])
+	resource := "https://mcp.internal.example.com/a%2Fb/?tenant=example/"
+	configured := manager.BuildTarget(logger, identity, "http://gateway.example", nil, mcpservers.VisibilityPrivate, "org_test", project.String(), "upstream-oauth", "", nil, WithMetaMCPServerID(meta), WithCallerAssertionResource(resource))
+	raw, err = configured.CallerAssertion(ctx)
+	require.NoError(t, err)
+	token, err = jwt.Parse(raw, func(*jwt.Token) (any, error) { return &key.PublicKey, nil }, jwt.WithAudience(resource), jwt.WithValidMethods([]string{"RS256"}))
+	require.NoError(t, err)
+	claims, ok = token.Claims.(jwt.MapClaims)
+	require.True(t, ok)
+	require.Equal(t, resource, claims["aud"])
+	require.Equal(t, tunnel.String(), claims["tunneled_mcp_server_id"])
 	// This is also the direct BuildTarget path used by a pinned public session.
 	publicProxy := manager.BuildTarget(logger, identity, "http://gateway.example", nil, mcpservers.VisibilityPublic, "org_test", project.String(), "", "", nil)
 	require.Nil(t, publicProxy.CallerAssertion)

@@ -225,10 +225,11 @@ func TestServeAgentGateway_PrivateTunnelReceivesAgentAssertion(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.Email, "the agent's owner has a human profile")
 	projectID := *authCtx.ProjectID
+	resource := "https://mcp.internal.example.com/agent/"
 	serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
 	tunnel, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
 		ID: uuid.New(), ProjectID: projectID, Name: fx.granted,
-		KeyHash: "hash-" + fx.granted, KeyPrefix: "test",
+		KeyHash: "hash-" + fx.granted, KeyPrefix: "test", ResourceIdentifier: conv.ToPGText(resource),
 	})
 	require.NoError(t, err)
 	// Keep the granted wrapper identity and its delegated policy, but serve
@@ -257,7 +258,7 @@ func TestServeAgentGateway_PrivateTunnelReceivesAgentAssertion(t *testing.T) {
 	headers, _ := tunnelForwards(gateway)
 	require.GreaterOrEqual(t, len(headers), 3)
 	for _, header := range headers {
-		token, err := jwt.Parse(header.Get(mcpauthz.Header), func(*jwt.Token) (any, error) { return publicKey, nil }, jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer("https://gram.example"), jwt.WithAudience(urn.NewTunneledMcpServer(tunnel.ID).String()), jwt.WithExpirationRequired())
+		token, err := jwt.Parse(header.Get(mcpauthz.Header), func(*jwt.Token) (any, error) { return publicKey, nil }, jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer("https://gram.example"), jwt.WithAudience(resource), jwt.WithExpirationRequired())
 		require.NoError(t, err)
 		claims, ok := token.Claims.(jwt.MapClaims)
 		require.True(t, ok)
