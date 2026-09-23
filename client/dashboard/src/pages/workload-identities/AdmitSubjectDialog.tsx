@@ -23,18 +23,13 @@ export interface AdmitSubjectValues {
   agentId: string;
 }
 
-export interface AgentOption {
-  id: string;
-  name: string;
-}
-
 interface AdmitSubjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: AdmitSubjectValues) => void;
   isPending: boolean;
   issuers: WorkloadIssuer[];
-  agents: AgentOption[];
+  agents: { id: string; name: string }[];
 }
 
 const EMPTY: AdmitSubjectValues = {

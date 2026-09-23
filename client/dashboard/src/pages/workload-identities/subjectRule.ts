@@ -3,7 +3,7 @@
  * its own breadth: a bare stem matches the same subjects while hiding that it
  * does.
  */
-export const WILDCARD_SUFFIX = "*";
+const WILDCARD_SUFFIX = "*";
 
 export type MatchKind = "exact" | "wildcard";
 
