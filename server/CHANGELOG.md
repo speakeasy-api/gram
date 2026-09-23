@@ -1,5 +1,15 @@
 # server
 
+## 2.10.1
+
+### Patch Changes
+
+- 85734c6: Load delegable API key permissions for all of an agent's MCP servers in one request instead of one per server, so the create API key dialog no longer fails with lock timeouts on agents with many servers.
+- aa82c9f: Recheck live authorization before delegated credential refresh, scope claim cleanup to its issuer, and quarantine rotated credentials when identity verification is unavailable without replaying them. Clear terminal configuration secrets and preserve retryable provider dependency failures.
+- 9d3e030: Reject federated delegation retries when the trusted issuer URL has changed, even if issuer and client IDs are unchanged. Revalidate private endpoint authority before consent actions consume retry state or access credentials, preserving consent state when authority has been revoked or repointed.
+- 9847774: Hook ingestion now records a trace span for each gating and persistence step (quarantine and spend gates, risk scan, warn acknowledgement, shadow-MCP guard, idempotency claim, skill activation, event persistence, MCP inventory caching), so slow gating requests can be traced to the step that stalled instead of showing as an unexplained gap under `hooks.ingest`.
+- fce61bb: Serialize project-bound agent creation with project deletion. Show the agent creation empty state when a project has no visible agents, and align settings headings with their visible controls.
+
 ## 2.10.0
 
 ### Minor Changes
