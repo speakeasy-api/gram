@@ -62,6 +62,7 @@ func TestGatewayMemberAdmissionChecksEveryPluginAudience(t *testing.T) {
 	})
 	require.NoError(t, err)
 	tx = testenv.BeginTx(t, ctx, fixture.conn)
+	require.ErrorIs(t, (*Guard)(nil).CheckGatewayAttachment(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID), ErrUnavailable)
 	require.ErrorIs(t, guard.CheckGatewayAttachment(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID), ErrApprovalRequired)
 	require.ErrorIs(t, guard.CheckPluginAudience(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, []string{"role:developers", "role:operators"}), ErrApprovalRequired)
 	require.ErrorIs(t, guard.CheckRemoteTarget(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, remoteID, "https://mcp.example.test/changed"), ErrApprovalRequired)

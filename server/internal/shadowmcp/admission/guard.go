@@ -149,6 +149,9 @@ func (g *Guard) CheckGatewayAttachment(ctx context.Context, tx pgx.Tx, rollout R
 	if len(targets) == 0 {
 		return nil
 	}
+	if g == nil {
+		return unavailable(errors.New("distribution admission guard is missing"))
+	}
 	if err := requireUsableRollout(rollout, rolloutErr); err != nil {
 		return err
 	}

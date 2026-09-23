@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -100,6 +101,26 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"], &config))
 	require.Equal(t, "https://app.getgram.ai/mcp/gateway-test", config.MCPServers["Gateway"].URL)
 
+	domain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: ac.ActiveOrganizationID, Domain: "gateway.example.test", ProvisionerKind: "ingress", IpAllowlist: []string{},
+	})
+	require.NoError(t, err)
+	//nolint:glint // This test needs an addressable domain without exercising domain provisioning.
+	_, err = ti.conn.Exec(ctx, `UPDATE custom_domains SET verified = TRUE, activated = TRUE WHERE id = $1`, domain.ID)
+	require.NoError(t, err)
+	root, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: *ac.ProjectID, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+		MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true}, Slug: "gateway-root",
+	})
+	require.NoError(t, err)
+	//nolint:glint // Gateway root endpoints are not supported by the public root setter yet.
+	_, err = ti.conn.Exec(ctx, `UPDATE mcp_endpoints SET is_domain_root = TRUE WHERE id = $1`, root.ID)
+	require.NoError(t, err)
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"], &config))
+	require.Equal(t, "https://gateway.example.test", config.MCPServers["Gateway"].URL)
+
 	fixtures := testrepo.New(ti.conn)
 	_, err = fixtures.SetMetaMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMetaMCPServerNetworkAccessModeFixtureParams{
 		ID: gateway.ID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
@@ -115,6 +136,18 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"], &config))
 	require.Equal(t, "https://tail.example/mcp/gateway-test", config.MCPServers["Gateway"].URL)
+
+	//nolint:glint // Exercise a persisted gateway whose required issuer disappeared after attachment.
+	result, err := ti.conn.Exec(ctx, `UPDATE meta_mcp_servers SET user_session_issuer_id = NULL WHERE id = $1`, gateway.ID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.RowsAffected())
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	var missingIssuer *oops.ShareableError
+	require.ErrorAs(t, err, &missingIssuer)
+	require.Equal(t, oops.CodeUnavailable, missingIssuer.Code)
+	//nolint:glint // Restore the test gateway for the missing-admission-guard assertion below.
+	_, err = ti.conn.Exec(ctx, `UPDATE meta_mcp_servers SET user_session_issuer_id = $1 WHERE id = $2`, issuer.ID, gateway.ID)
+	require.NoError(t, err)
 
 	ti.service.WithDistributionAdmission(nil)
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})

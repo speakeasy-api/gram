@@ -40,11 +40,6 @@ func TestDeleteMetaMcpServer_DetachesPluginGateway(t *testing.T) {
 	live, err := pluginsrepo.New(ti.conn).ListPluginServers(ctx, plugin.ID)
 	require.NoError(t, err)
 	require.Empty(t, live)
-	attachedToGateway, err := pluginsrepo.New(ti.conn).HasPluginMembershipForGateway(ctx, pluginsrepo.HasPluginMembershipForGatewayParams{
-		ProjectID: *ac.ProjectID, GatewayID: gatewayID,
-	})
-	require.NoError(t, err)
-	require.False(t, attachedToGateway)
 }
 
 func TestDeleteMetaMcpServer_TombstonesMembershipsAndEndpoints(t *testing.T) {

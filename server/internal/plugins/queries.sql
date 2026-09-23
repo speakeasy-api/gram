@@ -570,6 +570,7 @@ SELECT p.id AS plugin_id, p.name AS plugin_name, p.slug AS plugin_slug,
   (g.user_session_issuer_id IS NOT NULL)::bool AS gateway_is_oauth,
   g.network_access_mode,
   COALESCE(ep.slug, '') AS endpoint_slug, ep.custom_domain AS endpoint_custom_domain,
+  (ep.is_domain_root IS TRUE)::bool AS endpoint_is_domain_root,
   COALESCE(private_ep.slug, '') AS private_endpoint_slug,
   ingress.dns_name AS private_dns_name
 FROM plugins p
@@ -584,13 +585,13 @@ LEFT JOIN LATERAL (
   ORDER BY e.created_at, e.id LIMIT 1
 ) private_ep ON TRUE
 LEFT JOIN LATERAL (
-  SELECT e.slug, cd.domain AS custom_domain
+  SELECT e.slug, e.is_domain_root, cd.domain AS custom_domain
   FROM mcp_endpoints e
   LEFT JOIN custom_domains cd ON cd.id = e.custom_domain_id AND cd.organization_id = p.organization_id
     AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
   WHERE e.meta_mcp_server_id = g.id AND e.project_id = p.project_id AND e.deleted IS FALSE
     AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
-  ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at, e.id LIMIT 1
+  ORDER BY (e.is_domain_root IS TRUE) DESC, (e.custom_domain_id IS NULL) ASC, e.created_at, e.id LIMIT 1
 ) ep ON TRUE
 WHERE p.project_id = @project_id AND p.deleted IS FALSE
   AND (COALESCE(cardinality(@plugin_ids::uuid[]), 0) = 0 OR p.id = ANY(@plugin_ids::uuid[]))

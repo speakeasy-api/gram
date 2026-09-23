@@ -3056,38 +3056,36 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with mcp servers").LogError(ctx, s.logger)
 	}
-	gatewayRows, err := s.repo.ListPluginsWithGatewaysForProject(ctx, repo.ListPluginsWithGatewaysForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	// Resolve external rollout state before taking the shared project lock.
+	// Even an empty initial gateway set must be read under the lock so a
+	// concurrent attachment cannot publish a package that omits it.
+	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with gateways").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnavailable, err, "resolve gateway distribution project").LogError(ctx, s.logger)
 	}
-	if len(gatewayRows) > 0 {
-		if s.distributionAdmission == nil {
-			return nil, mapDistributionAdmissionError(admission.ErrUnavailable)
-		}
-		// Publication and downloads must not bypass approval after a policy or
-		// audience change. Resolve external rollout state before taking the
-		// shared project lock, then re-read the live gateway rows under it.
-		project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnavailable, err, "resolve gateway distribution project").LogError(ctx, s.logger)
-		}
-		rollout, rolloutErr := s.distributionAdmission.Resolve(ctx, project.ID, project.Slug, project.ProjectSlug)
-		tx, err := s.db.Begin(ctx)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "begin gateway distribution check").LogError(ctx, s.logger)
-		}
-		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-		if err := admission.LockProject(ctx, tx, projectID); err != nil {
-			return nil, oops.E(oops.CodeUnavailable, err, "lock gateway distribution check").LogError(ctx, s.logger)
-		}
-		gatewayRows, err = s.repo.WithTx(tx).ListPluginsWithGatewaysForProject(ctx, repo.ListPluginsWithGatewaysForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnavailable, err, "list live plugin gateways").LogError(ctx, s.logger)
-		}
-		for _, gateway := range gatewayRows {
-			if err := s.distributionAdmission.CheckGatewayAttachment(ctx, tx, rollout, rolloutErr, project.ID, projectID, gateway.PluginID, gateway.GatewayID); err != nil {
-				return nil, mapDistributionAdmissionError(err)
-			}
+	var rollout admission.RolloutConfig
+	var rolloutErr error
+	if s.distributionAdmission != nil {
+		rollout, rolloutErr = s.distributionAdmission.Resolve(ctx, project.ID, project.Slug, project.ProjectSlug)
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin gateway distribution check").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	if err := admission.LockProject(ctx, tx, projectID); err != nil {
+		return nil, oops.E(oops.CodeUnavailable, err, "lock gateway distribution check").LogError(ctx, s.logger)
+	}
+	gatewayRows, err := s.repo.WithTx(tx).ListPluginsWithGatewaysForProject(ctx, repo.ListPluginsWithGatewaysForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnavailable, err, "list live plugin gateways").LogError(ctx, s.logger)
+	}
+	if len(gatewayRows) > 0 && s.distributionAdmission == nil {
+		return nil, mapDistributionAdmissionError(admission.ErrUnavailable)
+	}
+	for _, gateway := range gatewayRows {
+		if err := s.distributionAdmission.CheckGatewayAttachment(ctx, tx, rollout, rolloutErr, project.ID, projectID, gateway.PluginID, gateway.GatewayID); err != nil {
+			return nil, mapDistributionAdmissionError(err)
 		}
 	}
 
@@ -3243,6 +3241,9 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 	}
 
 	for _, gateway := range gatewayRows {
+		if !gateway.GatewayIsOauth {
+			return nil, oops.E(oops.CodeUnavailable, nil, "gateway plugin member has no OAuth issuer").LogError(ctx, s.logger)
+		}
 		pb := ensurePlugin(gateway.PluginID, gateway.PluginName, gateway.PluginSlug, gateway.PluginDescription)
 		mcpBase := s.serverURL
 		if cd := conv.FromPGText[string](gateway.EndpointCustomDomain); cd != nil {
@@ -3251,6 +3252,9 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 		mcpURL, err := packageMCPURL(gateway.NetworkAccessMode, mcpBase, gateway.EndpointSlug, gateway.PrivateDnsName.String, gateway.PrivateEndpointSlug)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve gateway plugin address").LogError(ctx, s.logger)
+		}
+		if gateway.EndpointIsDomainRoot && gateway.EndpointCustomDomain.Valid && gateway.NetworkAccessMode.String != "private_only" {
+			mcpURL = mcpBase
 		}
 		pb.servers = append(pb.servers, serverBuild{
 			info: PluginServerInfo{

@@ -32,9 +32,13 @@ export type PluginServer = {
    */
   id: string;
   /**
-   * Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one of toolset_id / mcp_server_id is set).
+   * Gram MCP server ID. Exactly one backend ID is set.
    */
   mcpServerId?: string | undefined;
+  /**
+   * MCP gateway ID. Exactly one backend ID is set.
+   */
+  metaMcpServerId?: string | undefined;
   /**
    * Whether this server is required or optional.
    */
@@ -44,7 +48,7 @@ export type PluginServer = {
    */
   sortOrder: number;
   /**
-   * Gram toolset ID. Set when this server is toolset-backed (exactly one of toolset_id / mcp_server_id is set).
+   * Gram toolset ID. Exactly one backend ID is set.
    */
   toolsetId?: string | undefined;
 };
@@ -65,6 +69,7 @@ export const PluginServer$inboundSchema: z.ZodMiniType<PluginServer, unknown> =
       display_name: z.string(),
       id: z.string(),
       mcp_server_id: z.optional(z.string()),
+      meta_mcp_server_id: z.optional(z.string()),
       policy: PluginServerPolicy$inboundSchema,
       sort_order: z.int(),
       toolset_id: z.optional(z.string()),
@@ -74,6 +79,7 @@ export const PluginServer$inboundSchema: z.ZodMiniType<PluginServer, unknown> =
         "created_at": "createdAt",
         "display_name": "displayName",
         "mcp_server_id": "mcpServerId",
+        "meta_mcp_server_id": "metaMcpServerId",
         "sort_order": "sortOrder",
         "toolset_id": "toolsetId",
       });
