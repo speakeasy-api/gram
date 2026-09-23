@@ -20,6 +20,14 @@ const (
 	// AsyncScanOutcomeDisabled marks a message acked untouched because the
 	// handler's engine is not configured in this deployment.
 	AsyncScanOutcomeDisabled = "disabled"
+	// AsyncScanOutcomeNoVerdict marks a message whose engine was asked for a
+	// judgement and reached none — a throttle, timeout or provider outage. The
+	// scan fails open, so the message is acked with no findings; the outcome is
+	// kept apart from ok because for a source whose only engine is its stream
+	// consumer (prompt injection) it counts a finding that will never be
+	// produced, not a clean message. It is the signal to watch when sizing the
+	// judge budget against real scan volume.
+	AsyncScanOutcomeNoVerdict = "no_verdict"
 	// AsyncScanOutcomeShadowPublished marks a shadow-mode message the handler
 	// evaluated, metered and published like an enforcing one, with the shadow
 	// marker on every finding so the findings store records them for engine

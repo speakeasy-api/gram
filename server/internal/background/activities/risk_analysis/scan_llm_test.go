@@ -142,7 +142,6 @@ func runLLMLaneBatchWithMeter(t *testing.T, conn *pgxpool.Pool, td testData, fla
 		nil,
 		nil,
 		nil,
-		nil,
 		flags,
 		presidioPub,
 		gitleaksPub,

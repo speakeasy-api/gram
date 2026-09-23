@@ -33,7 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
-	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -42,25 +41,29 @@ import (
 
 // AnalyzeBatch scans a batch of messages against one risk policy and replaces
 // that policy's stored results for the fetched message IDs.
+//
+// Prompt injection is the one source with no in-process engine here: the
+// activity only publishes PromptInjectionAnalysis requests and the streams
+// consumer runs the judge, so the worker holds no prompt-injection judge
+// credentials and pays none of its latency (AIS-722).
 type AnalyzeBatch struct {
-	logger                 *slog.Logger
-	tracer                 trace.Tracer
-	metrics                *riskMetrics
-	db                     *pgxpool.Pool
-	assetStorage           contentPartAssetReader
-	gitleaksScanner        *gitleaks.Scanner
-	stokenCodec            *stokens.Codec
-	piiScanner             PIIScanner
-	promptInjectionScanner *promptinjection.Scanner
-	shadowMCPScanner       *shadowmcpscan.Scanner
-	judge                  promptpolicy.Evaluator
-	flags                  feature.Provider
-	presidioPub            gcp.Publisher[*riskv1.PresidioAnalysis]
-	gitleaksPub            gcp.Publisher[*riskv1.GitleaksAnalysis]
-	promptInjectionPub     gcp.Publisher[*riskv1.PromptInjectionAnalysis]
-	promptPolicyPub        gcp.Publisher[*riskv1.PromptPolicyAnalysis]
-	customRulesPub         gcp.Publisher[*riskv1.CustomRulesAnalysis]
-	llmPub                 gcp.Publisher[*riskv1.LLMAnalysis]
+	logger             *slog.Logger
+	tracer             trace.Tracer
+	metrics            *riskMetrics
+	db                 *pgxpool.Pool
+	assetStorage       contentPartAssetReader
+	gitleaksScanner    *gitleaks.Scanner
+	stokenCodec        *stokens.Codec
+	piiScanner         PIIScanner
+	shadowMCPScanner   *shadowmcpscan.Scanner
+	judge              promptpolicy.Evaluator
+	flags              feature.Provider
+	presidioPub        gcp.Publisher[*riskv1.PresidioAnalysis]
+	gitleaksPub        gcp.Publisher[*riskv1.GitleaksAnalysis]
+	promptInjectionPub gcp.Publisher[*riskv1.PromptInjectionAnalysis]
+	promptPolicyPub    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
+	customRulesPub     gcp.Publisher[*riskv1.CustomRulesAnalysis]
+	llmPub             gcp.Publisher[*riskv1.LLMAnalysis]
 	// llmAnalyzerEnabled reports whether the streams process has a fine-tuned
 	// risk model to evaluate LLM analysis requests (GRAM_RISK_LLM_URL set).
 	// Without it the flag alone must not divert covered sources away from the
@@ -86,7 +89,6 @@ func NewAnalyzeBatch(
 	db *pgxpool.Pool,
 	assetStorage contentPartAssetReader,
 	piiScanner PIIScanner,
-	promptInjectionScanner *promptinjection.Scanner,
 	shadowMCPClient *shadowmcp.Client,
 	mcpProvenanceLookup MCPProvenanceLookup,
 	judge promptpolicy.Evaluator,
@@ -110,9 +112,6 @@ func NewAnalyzeBatch(
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
 	}
-	if promptInjectionScanner == nil {
-		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
-	}
 	if findingsPub == nil {
 		findingsPub = gcp.NewNoopPublisher[*riskv1.Finding]()
 	}
@@ -124,15 +123,14 @@ func NewAnalyzeBatch(
 	metrics := newRiskMetrics(meterProvider, logger)
 
 	return &AnalyzeBatch{
-		logger:                 logger,
-		tracer:                 tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
-		metrics:                metrics,
-		db:                     db,
-		assetStorage:           assetStorage,
-		gitleaksScanner:        gitleaks.NewScanner(),
-		stokenCodec:            stokens.NewCodec(),
-		piiScanner:             piiScanner,
-		promptInjectionScanner: promptInjectionScanner,
+		logger:          logger,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
+		metrics:         metrics,
+		db:              db,
+		assetStorage:    assetStorage,
+		gitleaksScanner: gitleaks.NewScanner(),
+		stokenCodec:     stokens.NewCodec(),
+		piiScanner:      piiScanner,
 		shadowMCPScanner: shadowmcpscan.NewScanner(
 			logger,
 			shadowMCPClient,

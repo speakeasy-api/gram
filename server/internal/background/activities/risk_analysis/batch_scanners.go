@@ -27,6 +27,13 @@ import (
 const (
 	inlineBatchExecutionPath  = "inline_batch"
 	shadowStreamExecutionPath = "shadow_stream"
+	// promptInjectionStreamExecutionPath marks prompt injection analysis
+	// requests the streams consumer evaluates as the only engine for the
+	// batch. It replaces shadowStreamExecutionPath on this source: nothing
+	// scans prompt injection inline any more, so the requests are not a
+	// shadow of an inline scan and their metering is the batch's only
+	// prompt-injection usage (AIS-722).
+	promptInjectionStreamExecutionPath = "prompt_injection_stream"
 	// llmAnalyzerStreamExecutionPath marks analysis requests the fine-tuned
 	// LLM analyzer's streams consumer evaluates as the only engine for the
 	// policy's sources, as opposed to the shadow stream that runs alongside
@@ -169,7 +176,6 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	shadowMCPFindings := make([][]scanners.Finding, n)
 	destructiveToolFindings := make([][]scanners.Finding, n)
 	cliDestructiveFindings := make([][]scanners.Finding, n)
-	promptInjectionFindings := make([][]scanners.Finding, n)
 	customFindings := make([][]scanners.Finding, n)
 
 	// The risk engine mode selects the engine behind every covered source
@@ -218,7 +224,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	var llmPublishErr error
 	var llmPublishFailed int
 
-	var promptInjectionErr error
+	var promptInjectionPublishErr error
 	var customErr error
 
 	if llmMode || llmShadow {
@@ -260,16 +266,17 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		})
 	}
 
+	// Prompt injection is dispatched, not scanned: the streams consumer is the
+	// only engine, so this lane contributes no findings to the merge below and
+	// no prompt_injection rows to Postgres. Its findings reach ClickHouse
+	// risk_findings from the consumer, so an org needs
+	// risk-list-from-clickhouse / risk-overview-from-clickhouse to see them —
+	// the same prerequisite the LLM analyzer's async lane documents.
 	if !llmMode && sources.Has(SourcePromptInjection) {
 		wg.Go(func() {
-			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
+			subMessages, _, _ := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePromptInjection, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
-			findings, err := a.scanPromptInjection(ctx, args, subMessages, subContents)
-			if err != nil {
-				promptInjectionErr = err
-				return
-			}
-			promptInjectionFindings = scatterFindings(n, indices, findings)
+			promptInjectionPublishErr = a.dispatchPromptInjection(ctx, args, subMessages)
 		})
 	}
 
@@ -314,9 +321,9 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		scanSpan.SetStatus(codes.Error, llmPublishErr.Error())
 		return nil, fmt.Errorf("llm analyzer scan dispatch: %w", llmPublishErr)
 	}
-	if promptInjectionErr != nil {
-		scanSpan.SetStatus(codes.Error, promptInjectionErr.Error())
-		return nil, fmt.Errorf("prompt injection scan dispatch: %w", promptInjectionErr)
+	if promptInjectionPublishErr != nil {
+		scanSpan.SetStatus(codes.Error, promptInjectionPublishErr.Error())
+		return nil, fmt.Errorf("prompt injection scan dispatch: %w", promptInjectionPublishErr)
 	}
 	if customErr != nil {
 		scanSpan.SetStatus(codes.Error, customErr.Error())
@@ -365,7 +372,6 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		shadowMCPFindings:       shadowMCPFindings,
 		destructiveToolFindings: destructiveToolFindings,
 		cliDestructiveFindings:  cliDestructiveFindings,
-		promptInjectionFindings: promptInjectionFindings,
 		customFindings:          customFindings,
 	}, ctx), nil
 }
@@ -382,7 +388,6 @@ type mergeFindingsInput struct {
 	shadowMCPFindings       [][]scanners.Finding
 	destructiveToolFindings [][]scanners.Finding
 	cliDestructiveFindings  [][]scanners.Finding
-	promptInjectionFindings [][]scanners.Finding
 	customFindings          [][]scanners.Finding
 }
 
@@ -395,7 +400,6 @@ func mergeFindings(in mergeFindingsInput, ctx context.Context) [][]scanners.Find
 			in.shadowMCPFindings[i],
 			in.destructiveToolFindings[i],
 			in.cliDestructiveFindings[i],
-			in.promptInjectionFindings[i],
 			in.customFindings[i],
 		)
 		combined = filterByCategoryScopes(ctx, in.orgID, in.metrics, in.masks, i, combined)

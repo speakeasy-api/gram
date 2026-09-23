@@ -134,7 +134,6 @@ func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, findingsPu
 		nil,
 		nil,
 		nil,
-		nil,
 		newPresidioPub(),
 		newGitleaksPub(),
 		newPromptInjectionPub(),

@@ -185,7 +185,7 @@ func capturingFindingsPub(t *testing.T) (*gcp.MockPublisher[*riskv1.Finding], *[
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newFindingsPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil, nil, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()), false)
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newFindingsPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil, nil, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()), false)
 	require.NoError(t, err)
 	require.NotNil(t, ab)
 
@@ -221,7 +221,7 @@ func TestAnalyzeBatch_MeterPublishFailureDoesNotDiscardFindings(t *testing.T) {
 		Return(gcp.NewErrPublishResult(errors.New("meter transport unavailable"))).Once()
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t),
-		conn, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil,
+		conn, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil,
 		newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(),
 		newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newFindingsPub(),
 		mustCustomRuleScanner(t, conn), mustCELEngine(t), nil, nil,
@@ -301,7 +301,6 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		conn,
 		nil,
 		piiScanner,
-		nil,
 		nil,
 		nil,
 		nil,
@@ -387,7 +386,6 @@ func TestAnalyzeBatch_ContentSourcesNotRepublishedToFindingsTopic(t *testing.T) 
 		conn,
 		nil,
 		&risk_analysis.StubPIIScanner{},
-		nil,
 		nil,
 		nil,
 		nil,
@@ -607,7 +605,6 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 		nil,
 		nil,
 		nil,
-		nil,
 		&feature.InMemory{},
 		newPresidioPub(),
 		newGitleaksPub(),
@@ -657,7 +654,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 	require.Equal(t, td.chatID.String(), partRequest.GetChatId())
 	require.Empty(t, partRequest.GetParentChatMessageId())
 	require.Equal(t, "content_part_unlinked", partRequest.GetMessageLinkReason())
-	require.Equal(t, "shadow_stream", partRequest.GetExecutionPath())
+	require.Equal(t, "prompt_injection_stream", partRequest.GetExecutionPath())
 	require.Equal(t, td.policyID.String(), partRequest.GetOriginRiskPolicyId())
 	require.Equal(t, td.policyVersion, partRequest.GetOriginRiskPolicyVersion())
 	require.NotEmpty(t, partRequest.GetRequestId())
@@ -708,7 +705,6 @@ func TestAnalyzeBatch_PromptInjectionPublishesStrictlyBoundedTrajectory(t *testi
 		conn,
 		nil,
 		&risk_analysis.StubPIIScanner{},
-		nil,
 		nil,
 		nil,
 		nil,
@@ -783,7 +779,6 @@ func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(
 		conn,
 		nil,
 		&risk_analysis.StubPIIScanner{},
-		nil,
 		nil,
 		nil,
 		(&recordingPromptJudge{}).Evaluate,
@@ -886,7 +881,6 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		conn,
 		nil,
 		&risk_analysis.StubPIIScanner{},
-		nil,
 		nil,
 		nil,
 		judge.Evaluate,
@@ -993,7 +987,6 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		conn,
 		nil,
 		&risk_analysis.StubPIIScanner{},
-		nil,
 		nil,
 		nil,
 		judge.Evaluate,
@@ -1189,7 +1182,6 @@ func TestAnalyzeBatch_PolicyDeletedMidAnalysisPublishesNothing(t *testing.T) {
 		conn,
 		nil,
 		&deletingPIIScanner{conn: conn, projectID: td.projectID, policyID: td.policyID},
-		nil,
 		shadowMCPClient,
 		stubProvenanceLookup{},
 		nil,
@@ -1296,7 +1288,6 @@ func TestAnalyzeBatch_Presidio_PIIInToolCallArgsOnly(t *testing.T) {
 		conn,
 		nil,
 		newPresidioClient(t),
-		nil,
 		nil,
 		nil,
 		nil,
@@ -1826,7 +1817,6 @@ func executeAnalyzeBatchForIDs(t *testing.T, conn *pgxpool.Pool, assetStorage as
 		conn,
 		assetStorage,
 		&risk_analysis.StubPIIScanner{},
-		nil,
 		shadowMCPClient,
 		stubProvenanceLookup{},
 		nil,

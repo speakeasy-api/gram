@@ -228,6 +228,9 @@ func NewActivities(
 	emailService *email.Service,
 	assistantsCore *assistants.ServiceCore,
 	piiScanner risk_analysis.PIIScanner,
+	// piScanner backs the MCP research agent's scanner judge. Batch risk
+	// analysis no longer scans prompt injection in the worker: it publishes to
+	// the streams consumer instead (AIS-722).
 	piScanner *promptinjection.Scanner,
 	customRuleScanner *customruleanalyzer.Scanner,
 	shadowMCPClient *shadowmcp.Client,
@@ -275,7 +278,6 @@ func NewActivities(
 		db,
 		assetStorage,
 		piiScanner,
-		piScanner,
 		shadowMCPClient,
 		telemetryRepo,
 		ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate,
