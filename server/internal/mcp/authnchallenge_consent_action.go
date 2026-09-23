@@ -78,6 +78,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
 	}
+	// Revalidate private authority before retry consumes state or card actions
+	// read or mutate credentials; the resolved endpoint can already be stale.
+	if err := endpoint.ValidateLiveChallenge(ctx, s.db, challengeState.Endpoint); err != nil {
+		return oauthAuthorityError(err).LogError(ctx, logger)
+	}
 	subject := *challengeState.Subject
 
 	switch r.PostForm.Get("action") {
