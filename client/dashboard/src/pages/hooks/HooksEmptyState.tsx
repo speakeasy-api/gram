@@ -1,3 +1,4 @@
+import { SurfaceOnboardingGuidance } from "@/components/onboarding/surface-onboarding-guidance";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Icon } from "@/components/ui/Icon";
 import { Workflow } from "lucide-react";
@@ -54,6 +55,10 @@ export function HooksEmptyState({
     <>
       <div className="flex flex-col items-center justify-center px-4 py-16">
         <div className="w-full max-w-2xl space-y-8 text-center">
+          <SurfaceOnboardingGuidance
+            useCase="observability"
+            className="text-left"
+          />
           {/* Icon and Title */}
           <div className="flex flex-col items-center gap-4">
             <div className="border-border flex size-16 items-center justify-center border">

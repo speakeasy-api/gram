@@ -1,3 +1,4 @@
+import { SurfaceOnboardingGuidance } from "@/components/onboarding/surface-onboarding-guidance";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import {
   defineFilters,
@@ -84,6 +85,10 @@ function AIToolStatusCell({ detection }: { detection: AIDetection }) {
 function AIToolsEmptyState({ noun }: { noun: string }) {
   return (
     <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
+      <SurfaceOnboardingGuidance
+        useCase="security"
+        className="mb-6 w-full text-left"
+      />
       <Text variant="body" className="font-medium">
         No {noun} detected yet
       </Text>
