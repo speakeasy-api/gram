@@ -222,6 +222,46 @@ async def test_uk_nhs_needs_context():
     assert detections[0].match == "4010232137"
 
 
+async def test_credit_card_needs_context_and_ignores_test_pans():
+    """Regression for AIS-720. Presidio's ``CreditCardRecognizer`` reports any
+    Luhn-valid 13-19 digit run at maximum confidence without consulting its own
+    context words, so a financial-data policy warned on published test PANs and
+    on incidental digit runs in coding-agent tool traffic. Both are now dropped at
+    the scanner; a plausible PAN named as a card still reports.
+    """
+    # Four consecutive PR numbers printed by a `gh` command.
+    content = "gh pr view 6651 6652 6653 6654 --json title"
+    start = content.index("6651")
+    analyzer = FakeAnalyzer(
+        {content: [_Result("CREDIT_CARD", start=start, end=start + 19, score=1.0)]}
+    )
+    assert await _scanner(analyzer).scan(content, None, 0.75) == [], (
+        "a run of consecutive PR numbers is not cardholder data"
+    )
+
+    # A published test PAN inside a fixture file, re-shipped by an editing hook.
+    content = "INSERT INTO cards (pan) VALUES ('4111 1111 1111 1111');"
+    start = content.index("4111")
+    analyzer = FakeAnalyzer(
+        {content: [_Result("CREDIT_CARD", start=start, end=start + 19, score=1.0)]}
+    )
+    assert await _scanner(analyzer).scan(content, None, 0.75) == [], (
+        "a documented sandbox card number is not cardholder data"
+    )
+
+    # A plausible PAN in a payload that names it as a card still reports.
+    content = '{"payment_method": {"card": {"number": "4539172846305125"}}}'
+    start = content.index("4539172846305125")
+    analyzer = FakeAnalyzer(
+        {content: [_Result("CREDIT_CARD", start=start, end=start + 16, score=1.0)]}
+    )
+    detections = await _scanner(analyzer).scan(content, None, 0.75)
+
+    assert len(detections) == 1, "a card number in payment context still reports"
+    assert detections[0].entity_type == "CREDIT_CARD"
+    assert detections[0].match == "4539172846305125"
+
+
 async def test_nothing_recognized_yields_no_detections():
     analyzer = FakeAnalyzer()  # recognizes nothing
 

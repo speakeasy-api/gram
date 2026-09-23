@@ -18,10 +18,24 @@ import pytest
 from pystreams.risk import presidiofp
 from pystreams.risk.presidiofp import ip_asn
 from pystreams.risk.presidiofp.classify import (
+    ENTITY_TYPE_CREDIT_CARD,
     ENTITY_TYPE_EMAIL_ADDRESS,
     ENTITY_TYPE_IP_ADDRESS,
     ENTITY_TYPE_UK_NHS,
     _entity_type_for_rule_id,
+)
+from pystreams.risk.presidiofp.creditcard import (
+    ISSUED_CARD_PREFIXES,
+    KNOWN_TEST_PANS,
+    MAX_CARD_DIGITS,
+    MIN_CARD_DIGITS,
+    _card_digits,
+    _contains_word,
+    _placeholder_card_shape_reason,
+    card_context_reason,
+    issued_card_prefix,
+    luhn_valid,
+    non_card_reason,
 )
 from pystreams.risk.presidiofp.ip import _NON_PII_IP_EXACT
 from pystreams.risk.presidiofp.nhs import (
@@ -31,6 +45,11 @@ from pystreams.risk.presidiofp.nhs import (
     non_nhs_reason,
 )
 from pystreams.risk.presidiofp.retired import RETIRED_RECOGNIZERS
+
+# A Luhn-valid, correctly-prefixed PAN that is not published in any processor's
+# test-card documentation, so it stands in for "a real card" below. Used only as
+# the value that MUST survive the catalog.
+SYNTHETIC_VISA = "4539172846305125"
 
 
 def test_non_pii_ip_exact_keys_are_canonical():
@@ -55,12 +74,18 @@ def test_reason():
     assert presidiofp.reason(ENTITY_TYPE_EMAIL_ADDRESS, "noreply@example.com"), (
         "placeholder email"
     )
+    assert presidiofp.reason(ENTITY_TYPE_CREDIT_CARD, "4111 1111 1111 1111"), (
+        "published test card"
+    )
 
     assert not presidiofp.reason(ENTITY_TYPE_IP_ADDRESS, "71.126.87.167"), (
         "residential IP"
     )
     assert not presidiofp.reason(ENTITY_TYPE_EMAIL_ADDRESS, "ada@speakeasy.com"), (
         "real email"
+    )
+    assert not presidiofp.reason(ENTITY_TYPE_CREDIT_CARD, SYNTHETIC_VISA), (
+        "real-shaped card, no context supplied"
     )
 
     # Uncatalogued entity types never fire, even on a value another lane would flag.
@@ -93,9 +118,10 @@ def test_reason_by_rule_id():
         "pii.ip_address",
         "pii.email_address",
         "pii.uk_nhs",
+        "pii.credit_card",
         "pii.us_driver_license",
     ]
-    assert presidiofp.context_rule_ids() == ["pii.uk_nhs"]
+    assert presidiofp.context_rule_ids() == ["pii.uk_nhs", "pii.credit_card"]
     assert _entity_type_for_rule_id("pii.ip_address") == "IP_ADDRESS"
     assert _entity_type_for_rule_id("pii.email_address") == "EMAIL_ADDRESS"
     assert _entity_type_for_rule_id("secret.aws_access_key") == ""
@@ -310,6 +336,289 @@ def test_nhs_suppresses_opaque_identifiers():
             f"opaque identifier {identifier} must not read as an NHS number"
         )
     assert checked > 0, "corpus produced no checksum-valid ids"
+
+
+@pytest.mark.parametrize(
+    ("match", "expect_fp"),
+    [
+        # Real-shaped PANs: this layer must let them through.
+        (SYNTHETIC_VISA, False),
+        ("4539 1728 4630 5125", False),
+        ("4539-1728-4630-5125", False),
+        ("5534129876004319", False),
+        ("371882450931763", False),
+        # Published sandbox PANs from processor documentation.
+        ("4111111111111111", True),
+        ("4111 1111 1111 1111", True),
+        ("4242424242424242", True),
+        ("5555555555554444", True),
+        ("378282246310005", True),
+        ("6011111111111117", True),
+        ("30569309025904", True),
+        ("3530111333300000", True),
+        # Placeholder shapes.
+        ("4141414141414141", True),  # two distinct digits
+        ("4009401040114012", True),  # consecutive four-digit groups
+        ("1234567890123452", True),  # consecutive digit run
+        # Prefixes no network issues from.
+        ("6651665266536654", True),
+        ("6135802974216083", True),
+        # Presidio only reports checksum-valid runs, so a failing one is noise
+        # by construction (and the offline sweep re-checks stored values).
+        ("4539172846305126", True),
+        # Out of this catalog's scope: the recognizer never emits these shapes.
+        ("453917284630", False),
+        ("45391728463051250000", False),
+        ("4539-1728-4630-51AB", False),
+        ("", False),
+    ],
+)
+def test_non_card_reason(match: str, expect_fp: bool):
+    """Mirror of ``TestNonCardReason``: the value-only layer, i.e. what a
+    card-shaped digit run says about itself before any surrounding text is read.
+    """
+    assert bool(non_card_reason(match)) is expect_fp
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"Customer credit card {SYNTHETIC_VISA}",
+        f"Card: {SYNTHETIC_VISA}",
+        f'{{"card": {{"number": "{SYNTHETIC_VISA}"}}}}',
+        f'{{"card_number": "{SYNTHETIC_VISA}"}}',
+        f'{{"cardNumber":"{SYNTHETIC_VISA}","cvv":"123"}}',
+        f"CARD_NUMBER={SYNTHETIC_VISA}",
+        "charge the Visa ending 5125",
+        f"stripe.paymentMethods.create({{ number: '{SYNTHETIC_VISA}' }})",
+        "cardholder data must never be logged",
+        "PCI DSS scope review",
+        # Unknown context is not evidence of anything.
+        "",
+    ],
+)
+def test_card_context_reason_keeps(text: str):
+    """Mirror of ``TestCardContextReason``'s kept half."""
+    assert card_context_reason(text) == ""
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "gh pr view 6651 6652 6653 6654",
+        f'{{"trace_id": "{SYNTHETIC_VISA}", "level": "info"}}',
+        f"order {SYNTHETIC_VISA} shipped",
+        # The words Presidio's own CONTEXT list would have matched, in the
+        # ordinary code senses that make substring matching unusable as a gate.
+        "discard the wildcard entry and recompute cardinality",
+        "the account was credited last night",
+        "scorecard rendered by DiscoveryPanel",
+    ],
+)
+def test_card_context_reason_suppresses(text: str):
+    """Mirror of ``TestCardContextReason``'s suppressed half."""
+    assert card_context_reason(text) != ""
+
+
+def test_contains_word():
+    """Mirror of ``TestContainsWord``: the generic words the recognizer ships are
+    only safe as a gate because they are matched as whole tokens, with
+    punctuation and separators counting as boundaries.
+    """
+    for text in (
+        "card",
+        "card: 1",
+        '{"card":1}',
+        "card_number",
+        "card-number",
+        "a card here",
+        "CARD",
+    ):
+        assert _contains_word(text.lower(), "card"), f"should match: {text!r}"
+    for text in (
+        "discard",
+        "wildcard",
+        "cardinality",
+        "scorecard",
+        "cards2",
+        "",
+        "car",
+    ):
+        assert not _contains_word(text.lower(), "card"), f"should not match: {text!r}"
+
+
+def test_credit_card_regressions():
+    """Mirror of ``TestCreditCardRegressions`` (AIS-720): the exact traffic shapes
+    a financial-data policy was warning on.
+    """
+    # A fixture-bearing file re-shipped by a coding agent's PostToolUse hook. It
+    # talks about cards all over, so only the test-PAN layer can clear it.
+    seed_file = (
+        "INSERT INTO risk_results (match, rule_id) VALUES\n"
+        "('4111 1111 1111 1111', 'pii.credit_card'),\n"
+        "('4242424242424242', 'pii.credit_card');"
+    )
+    for pan in ("4111 1111 1111 1111", "4242424242424242"):
+        assert presidiofp.reason_in_context(ENTITY_TYPE_CREDIT_CARD, pan, seed_file), (
+            f"test fixture PAN {pan!r} must not flag"
+        )
+
+    # A Bash tool request listing four consecutive PR numbers.
+    assert presidiofp.reason_in_context(
+        ENTITY_TYPE_CREDIT_CARD,
+        "6651 6652 6653 6654",
+        "gh pr view 6651 6652 6653 6654 --json title",
+    ), "consecutive PR numbers must not flag"
+
+    # A genuine-looking card in a payload that names it still flags.
+    assert (
+        presidiofp.reason_in_context(
+            ENTITY_TYPE_CREDIT_CARD,
+            SYNTHETIC_VISA,
+            f"Customer's credit card on file is {SYNTHETIC_VISA}",
+        )
+        == ""
+    )
+    assert (
+        presidiofp.reason_in_context(
+            ENTITY_TYPE_CREDIT_CARD,
+            SYNTHETIC_VISA,
+            f'{{"payment_method": {{"card": {{"number": "{SYNTHETIC_VISA}"}}}}}}',
+        )
+        == ""
+    )
+
+
+def test_credit_card_suppresses_opaque_identifiers():
+    """Mirror of ``TestCreditCardSuppressesOpaqueIdentifiers``: about one in ten
+    card-shaped digit runs passes Luhn, and Presidio reports every one of those at
+    maximum confidence. None may survive the catalog.
+    """
+    rng = random.Random(720)
+
+    checked = 0
+    for _ in range(20000):
+        # A 16-digit run whose leading group Presidio's regex accepts.
+        identifier = f"{rng.randrange(4000, 7000)}{rng.randrange(10**12):012d}"
+        if not luhn_valid(identifier):
+            continue  # Presidio would not have reported it in the first place.
+        checked += 1
+        text = f"build artifact sha stream offset {identifier} written to disk"
+        assert presidiofp.reason_in_context(
+            ENTITY_TYPE_CREDIT_CARD, identifier, text
+        ), f"opaque identifier {identifier} must not read as a card number"
+    assert checked > 0, "corpus produced no checksum-valid runs"
+
+
+def test_known_test_pans_are_well_formed():
+    """Mirror of ``TestKnownTestPANsAreWellFormed``: every entry must be bare
+    digits, Luhn-valid, inside the recognizer's length window, and carry an issued
+    network prefix — a mistyped digit would otherwise match nothing.
+    """
+    assert KNOWN_TEST_PANS
+    for pan in KNOWN_TEST_PANS:
+        assert pan == _card_digits(pan), f"{pan} must be stored as bare digits"
+        assert MIN_CARD_DIGITS <= len(pan) <= MAX_CARD_DIGITS, f"{pan} is out of window"
+        assert luhn_valid(pan), f"{pan} must pass the Luhn checksum"
+        assert issued_card_prefix(pan), f"{pan} must start with an issued prefix"
+
+
+def test_issued_card_prefixes_are_well_formed():
+    """Mirror of ``TestIssuedCardPrefixesAreWellFormed``: bounds of differing
+    length, or a low above its high, means someone mistyped a boundary.
+    """
+    for i, (low, high) in enumerate(ISSUED_CARD_PREFIXES):
+        assert low, f"range {i} is empty"
+        assert len(low) == len(high), f"range {i} has mismatched bound lengths"
+        assert low <= high, f"range {i} is inverted"
+        assert low == _card_digits(low), f"range {i} low must be digits"
+        assert high == _card_digits(high), f"range {i} high must be digits"
+
+
+@pytest.mark.parametrize(
+    ("network", "pan"),
+    [
+        ("visa", "4539172846305125"),
+        ("mastercard", "5534129876004319"),
+        ("mastercard 2-series", "2223003122003222"),
+        ("amex 34", "340000000000009"),
+        ("amex 37", "371449635398431"),
+        ("discover 6011", "6011111111111117"),
+        ("discover 65", "6500000000000002"),
+        ("diners 305", "30569309025904"),
+        ("diners 36", "36006666333344"),
+        ("jcb", "3530111333300000"),
+        ("unionpay", "6212345678901232"),
+        ("maestro 67", "6759649826438453"),
+        ("uatp", "135412345678911"),
+    ],
+)
+def test_issued_card_prefix_covers_the_networks(network: str, pan: str):
+    """Mirror of ``TestIssuedCardPrefixCoversTheNetworks``: narrowing a range in
+    future fails here rather than silently suppressing a live card.
+    """
+    assert issued_card_prefix(pan), f"{network} ({pan}) must be recognized as issued"
+
+
+@pytest.mark.parametrize(
+    "pan", ["6651665266536654", "6135802974216083", "6900000000000008"]
+)
+def test_unissued_card_prefixes(pan: str):
+    """Ranges the networks do not issue from, which Presidio nonetheless matches."""
+    assert not issued_card_prefix(pan)
+
+
+def test_luhn_valid_matches_presidio():
+    """Mirror of ``TestLuhnValidMatchesPresidio``."""
+    for digits in (
+        "4111111111111111",
+        "378282246310005",
+        "30569309025904",
+        SYNTHETIC_VISA,
+    ):
+        assert luhn_valid(digits), f"{digits} should pass"
+    for digits in (
+        "4111111111111112",
+        "378282246310006",
+        "30569309025905",
+        "",
+        "1234567890123456",
+    ):
+        assert not luhn_valid(digits), f"{digits} should fail"
+
+
+def test_placeholder_card_shapes():
+    """Mirror of ``TestPlaceholderCardShapes``."""
+    for digits in (
+        "4111111111111111",  # two distinct digits
+        "4242424242424242",  # two distinct digits
+        "4009401040114012",  # groups counting up
+        "4048404740464045",  # groups counting down
+        "1234567890123452",  # one ascending run, wrapping 9->0
+    ):
+        assert _placeholder_card_shape_reason(digits), (
+            f"{digits} should read as a pattern"
+        )
+
+    for digits in (
+        SYNTHETIC_VISA,
+        "5534129876004319",
+        "378282246310005",
+        "4009401040114013",  # last group breaks the run
+    ):
+        assert not _placeholder_card_shape_reason(digits), f"{digits} is not a pattern"
+
+
+def test_card_separators_match_recognizer_grammar():
+    """Mirror of ``TestCreditCardSeparatorsMatchRecognizerGrammar``: spaces and
+    hyphens only, per the recognizer's ``replacement_pairs``.
+    """
+    assert _card_digits("4111 1111 1111 1111") == "4111111111111111"
+    assert _card_digits("4111-1111-1111-1111") == "4111111111111111"
+    assert _card_digits("  4111 1111-1111 1111  ") == "4111111111111111"
+    assert _card_digits("4111.1111.1111.1111") == ""
+    assert _card_digits("4111_1111_1111_1111") == ""
+    assert _card_digits("not a card") == ""
 
 
 def test_retired_recognizers():

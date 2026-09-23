@@ -725,10 +725,10 @@ func convertPresidioFindings(text string, results []presidioResult) []scanners.F
 // findings); see presidiofp.ReasonInContext for the per-entity coverage.
 //
 // text is the payload the match came from. Most catalogs judge the match alone,
-// but some need it: a ten-digit run only reads as a UK NHS number when the
-// surrounding text talks about health care, because Presidio's recognizer pins
-// any checksum-valid run at maximum confidence without ever consulting its own
-// context words.
+// but some need it: a ten-digit run only reads as a UK NHS number, and a
+// card-shaped run only reads as a payment card, when the surrounding text talks
+// about health care or payments. Both recognizers pin any checksum-valid run at
+// maximum confidence without ever consulting their own context words.
 func isPresidioFalsePositive(entityType, match, text string) bool {
 	return presidiofp.ReasonInContext(entityType, match, text) != ""
 }
