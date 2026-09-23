@@ -209,7 +209,7 @@ export function AgentGatewayInstall({
           <Text small className="font-medium">
             One command
           </Text>
-          {command ? (
+          {command && (
             <div className="border-border flex items-center gap-2 border p-3">
               <code className="min-w-0 flex-1 break-all text-xs">
                 {command}
@@ -226,28 +226,43 @@ export function AgentGatewayInstall({
                 {copied === "command" ? "Copied" : "Copy"}
               </Button>
             </div>
-          ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={minting}
-              onClick={() => {
-                setMinting(true);
-                setCommandError(null);
-                mintInstallCommand(url, secret)
-                  .then(setCommand)
-                  .catch((error: Error) => setCommandError(error.message))
-                  .finally(() => setMinting(false));
-              }}
-            >
-              {minting ? "Preparing…" : "Generate install command"}
-            </Button>
           )}
+          {/* Always available: a code is spent on first fetch and expires in
+              15 minutes, so a delayed or failed install needs a fresh one. */}
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={minting}
+            onClick={() => {
+              setMinting(true);
+              setCommandError(null);
+              mintInstallCommand(url, secret)
+                .then(setCommand)
+                .catch((error: Error) => setCommandError(error.message))
+                .finally(() => setMinting(false));
+            }}
+          >
+            {minting
+              ? "Preparing…"
+              : command
+                ? "Generate a new command"
+                : "Generate install command"}
+          </Button>
           <Text muted small>
             Configures the MCP clients on a machine in one step. The command
             carries a single-use code, not the key, and the code expires in 15
             minutes.
           </Text>
+          {command && (
+            <Text muted small>
+              Piping to a shell runs whatever this deployment returns. To read
+              it first, fetch it to a file and run that instead — but the code
+              is spent by the fetch, so generate a new command afterwards:{" "}
+              <code className="text-xs">
+                {command.replace(" | sh", " -o gram-install.sh")}
+              </code>
+            </Text>
+          )}
           {commandError && (
             <Text role="alert" small>
               {commandError}
