@@ -1,0 +1,18 @@
+server/internal/database/models.go
+  h_9630b74bdac540 2192-2204
+server/internal/plugins/repo/models.go
+  h_9630b74bdac540 52-64
+server/internal/plugins/repo/queries.sql.go
+  h_9630b74bdac540 61,89,92,490,514,517,1112,1131,1134,1154,1184,1187,1709,1725,1728,1919,1928-1942,1963,1966,2087,2110,2113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "922d112bc70e2c27fec0b6c8b8c38d14c68ceedd",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
