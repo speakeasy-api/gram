@@ -14,11 +14,15 @@ import { SlackDirectory } from "./SlackDirectory";
 import { SlackSyncStatus, SlackSyncButton } from "./SlackSyncStatus";
 
 const mocks = vi.hoisted(() => ({
+  orgSlug: "example",
   query: vi.fn(),
   mutate: vi.fn(),
   pending: false,
   error: null as Error | null,
   rows: [] as unknown[],
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ slug: mocks.orgSlug }),
 }));
 vi.mock("@gram/client/react-query/slackDirectoryMembers.js", () => ({
   invalidateAllSlackDirectoryMembers: vi.fn(),
@@ -219,4 +223,18 @@ it("manual sync sends the selected connection generation and blocks reconnect-re
       .getByRole("button", { name: "Sync members" })
       .hasAttribute("disabled"),
   ).toBe(true);
+});
+
+it("prevents shared demo sync even with a connected workspace", () => {
+  mocks.orgSlug = "acme-demo";
+  try {
+    show(<SlackSyncButton connection={connection} />);
+    expect(
+      screen
+        .getByRole("button", { name: "Sync members" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  } finally {
+    mocks.orgSlug = "example";
+  }
 });

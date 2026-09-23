@@ -1,3 +1,5 @@
+import { useOrganization } from "@/contexts/Auth";
+import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { syncInProgress } from "./syncView";
 import { LoaderCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -17,6 +19,8 @@ function syncFailure(code?: string): string {
     case "reconnect_required":
     case "credential_unavailable":
       return "Reconnect this workspace before syncing again.";
+    case "feature_disabled":
+      return "Claude Tag support was disabled during this sync. Try syncing again.";
     case "rate_limited":
       return "Slack limited requests. Try syncing again later.";
     case "directory_too_large":
@@ -111,6 +115,7 @@ export function SlackSyncButton({
   connection: SlackDirectoryConnection;
 }): JSX.Element {
   const client = useQueryClient();
+  const isDemo = useOrganization().slug === DEMO_ORG_SLUG;
   const sync = useSyncSlackDirectoryMutation({
     onSuccess: () => {
       toast.success("Directory sync requested");
@@ -127,7 +132,7 @@ export function SlackSyncButton({
       <Button
         variant="secondary"
         size="sm"
-        disabled={connection.status !== "connected" || running}
+        disabled={isDemo || connection.status !== "connected" || running}
         onClick={() =>
           sync.mutate({
             request: {

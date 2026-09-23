@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
@@ -45,8 +46,8 @@ type slackDirectoryActivities struct {
 	sync *slackdirectoryconnections.DirectorySync
 }
 
-func newSlackDirectoryActivities(db *pgxpool.Pool, enc *encryption.Client, httpClient *guardian.HTTPClient) *slackDirectoryActivities {
-	return &slackDirectoryActivities{sync: slackdirectoryconnections.NewDirectorySync(db, enc, slackdirectoryconnections.NewDirectoryProvider(slackapi.NewClient("", httpClient)), audit.NewLogger())}
+func newSlackDirectoryActivities(db *pgxpool.Pool, enc *encryption.Client, httpClient *guardian.HTTPClient, productFeatures *productfeatures.Client) *slackDirectoryActivities {
+	return &slackDirectoryActivities{sync: slackdirectoryconnections.NewDirectorySync(db, enc, slackdirectoryconnections.NewDirectoryProvider(slackapi.NewClient("", httpClient)), audit.NewLogger(), productFeatures)}
 }
 
 func (a *slackDirectoryActivities) SyncSlackDirectory(ctx context.Context, input slackdirectoryconnections.SyncInput) error {

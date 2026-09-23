@@ -16,7 +16,7 @@ import (
 )
 
 func (s *Service) Sync(ctx context.Context, p *gen.SyncPayload) (*gen.SyncResult, error) {
-	ac, err := s.authorize(ctx)
+	ac, err := s.authorizeMutation(ctx)
 	if err != nil {
 		return nil, err
 	}

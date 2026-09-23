@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
@@ -13,8 +14,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +26,7 @@ func memberRequest() *gen.ListMembersPayload {
 	return &gen.ListMembersPayload{SessionToken: nil, ConnectionID: nil, Search: nil, Cursor: nil, Limit: 50}
 }
 
-func TestDirectoryEndpointsRequireAdminSessionAndFlag(t *testing.T) {
+func TestDirectoryEndpointsRequireAdminSessionAndProductFeature(t *testing.T) {
 	t.Parallel()
 	ctx, f := newService(t)
 	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
@@ -40,15 +43,14 @@ func TestDirectoryEndpointsRequireAdminSessionAndFlag(t *testing.T) {
 		_, err = f.service.ListMembers(deniedCtx, memberRequest())
 		require.Error(t, err)
 	}
-	for _, flags := range []feature.Provider{nil, &feature.InMemory{}, failingFlags{f.flags}} {
-		service := f.build(flags, f.provider)
-		_, err := service.Sync(ctx, request)
-		require.Error(t, err)
-		_, err = service.ListMembers(ctx, memberRequest())
-		require.Error(t, err)
-	}
-	f.flags.SetFlag(feature.FlagClaudeTagSupport, f.auth.ActiveOrganizationID, false)
-	_, err := f.service.Sync(ctx, request)
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err := f.service.Sync(cancelled, request)
+	require.Error(t, err)
+	_, err = f.service.ListMembers(cancelled, memberRequest())
+	require.Error(t, err)
+	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, f.auth.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, false))
+	_, err = f.service.Sync(ctx, request)
 	require.Error(t, err)
 	_, err = f.service.ListMembers(ctx, memberRequest())
 	require.Error(t, err)
@@ -64,7 +66,7 @@ func TestDirectoryTenantIsolationAndGeneration(t *testing.T) {
 	other.ActiveOrganizationID = "org_synthetic_other"
 	otherCtx := contextvalues.SetAuthContext(ctx, &other)
 	otherCtx = authztest.WithExactGrants(t, otherCtx, authz.NewGrant(authz.ScopeOrgAdmin, other.ActiveOrganizationID))
-	f.flags.SetFlag(feature.FlagClaudeTagSupport, other.ActiveOrganizationID, true)
+	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, other.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, true))
 	empty, err := f.service.ListMembers(otherCtx, memberRequest())
 	require.NoError(t, err)
 	require.Empty(t, empty.Members)
@@ -184,4 +186,30 @@ func TestDirectoryDisconnectRetainsCountAndAudit(t *testing.T) {
 	require.NoError(t, json.Unmarshal(entry.AfterSnapshot, &after))
 	require.Equal(t, int64(1), before.MemberCount)
 	require.Equal(t, int64(1), after.MemberCount)
+}
+
+func TestSharedDemoDirectoryRemainsReadableWithoutSync(t *testing.T) {
+	t.Parallel()
+	ctx, f := newService(t)
+	visitor := *f.auth
+	visitor.ActiveOrganizationID = constants.DemoOrganizationID
+	ctx = authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &visitor), authz.DemoScopeGrants()...)
+	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, visitor.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, true))
+	_, err := f.service.ListMembers(ctx, memberRequest())
+	require.NoError(t, err)
+	_, err = f.service.Sync(ctx, &gen.SyncPayload{SessionToken: nil, ID: uuid.NewString(), Generation: uuid.NewString()})
+	var failure *oops.ShareableError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, oops.CodeForbidden, failure.Code)
+	require.Empty(t, f.scheduler.inputs)
+	input := slackdirectoryconnections.SyncInput{OrganizationID: constants.DemoOrganizationID, ConnectionID: uuid.New(), Generation: uuid.New(), ActorID: visitor.UserID, StartedAt: time.Now()}
+	provider := directoryFunc(func(context.Context, string, string, func(slackdirectoryconnections.SyncProgress)) ([]slackdirectoryconnections.DirectoryMember, error) {
+		t.Error("shared demo fetched Slack profiles")
+		return nil, nil
+	})
+	err = syncer(f, provider).Run(ctx, input, nil)
+	var syncErr *slackdirectoryconnections.SyncError
+	require.ErrorAs(t, err, &syncErr)
+	require.Equal(t, "demo_read_only", syncErr.Code)
+	require.False(t, syncErr.Retryable)
 }

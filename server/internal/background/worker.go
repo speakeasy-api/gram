@@ -661,7 +661,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(SlackDirectorySyncWorkflow)
 	if opts.DB != nil && opts.EncryptionClient != nil && opts.GuardianPolicy != nil {
-		temporalWorker.RegisterActivity(newSlackDirectoryActivities(opts.DB, opts.EncryptionClient, opts.GuardianPolicy.PooledClient()).SyncSlackDirectory)
+		temporalWorker.RegisterActivity(newSlackDirectoryActivities(opts.DB, opts.EncryptionClient, opts.GuardianPolicy.PooledClient(), opts.ProductFeatures).SyncSlackDirectory)
 	}
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
