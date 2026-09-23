@@ -257,7 +257,9 @@ export function AgentGatewayInstall({
             <Text muted small>
               Piping to a shell runs whatever this deployment returns. To read
               it first, fetch it to a file and run that instead — but the code
-              is spent by the fetch, so generate a new command afterwards:{" "}
+              is spent by the fetch, so generate a new command afterwards. The
+              saved file carries the key: treat it as a secret and delete it
+              once you have run it.{" "}
               <code className="text-xs">
                 {command.replace(" | sh", " -o gram-install.sh")}
               </code>
