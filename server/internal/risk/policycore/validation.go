@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
@@ -119,80 +118,14 @@ func ValidateMCPScopeOwnership(scope *MCPScope, projectServerIDs []uuid.UUID) er
 	return nil
 }
 
-// ValidateMCPScopeDetectionSurfaces enforces that an MCP-scoped policy only
-// scans tool traffic after category defaults and explicit overrides compose.
-func ValidateMCPScopeDetectionSurfaces(
-	eng *celenv.Engine,
-	scope *MCPScope,
-	policyType string,
-	sources []string,
-	hasCustomRules bool,
-	specs []ra.DetectionScopeConfig,
-) error {
+// ValidateMCPScopeSources rejects sources that cannot be evaluated against
+// individual MCP calls.
+func ValidateMCPScopeSources(scope *MCPScope, sources []string) error {
 	if scope == nil {
 		return nil
 	}
-
-	selectedCategories := make(map[categories.Category]struct{})
-	for _, source := range sources {
-		for _, category := range ra.SourceCategories(source) {
-			selectedCategories[category] = struct{}{}
-		}
-		if source == ra.SourceAccountIdentity {
-			selectedCategories[categories.CategoryAccountIdentity] = struct{}{}
-		}
-	}
-	if policyType == ra.PolicyTypePromptBased {
-		selectedCategories[categories.CategoryPromptPolicy] = struct{}{}
-	}
-	if hasCustomRules {
-		selectedCategories[categories.CategoryCustom] = struct{}{}
-	}
-
-	specified := make(map[categories.Category]ra.DetectionScopeConfig, len(specs))
-	for _, spec := range specs {
-		specified[categories.Category(spec.Category)] = spec
-	}
-
-	nonToolViews := []ra.MessageView{
-		{Content: "", Type: message.User, Tools: nil},
-		{Content: "", Type: message.Assistant, Tools: nil},
-		{Content: "", Type: message.PromptAttachment, Tools: nil},
-	}
-	for category := range selectedCategories {
-		spec, ok := specified[category]
-		if !ok {
-			recommendation, found := recommendedscopes.For(category)
-			if found && !recommendation.Applicable {
-				return fmt.Errorf("category %q cannot be used by an MCP-scoped policy", category)
-			}
-			if found {
-				spec = ra.DetectionScopeConfig{
-					Category:     string(category),
-					ScopeInclude: recommendation.ScopeInclude,
-					ScopeExempt:  recommendation.ScopeExempt,
-				}
-			}
-		}
-		compiled, err := ra.CompileScope(eng, spec.ScopeInclude, spec.ScopeExempt)
-		if err != nil {
-			return &ValidationError{
-				Message: fmt.Sprintf("detection scope for %q does not compile", category),
-				Cause:   err,
-			}
-		}
-		for _, view := range nonToolViews {
-			inScope, err := compiled.InScope(view)
-			if err != nil {
-				return &ValidationError{
-					Message: fmt.Sprintf("detection scope for %q could not be evaluated", category),
-					Cause:   err,
-				}
-			}
-			if inScope {
-				return fmt.Errorf("MCP-scoped policy category %q must only inspect tool traffic", category)
-			}
-		}
+	if slices.Contains(sources, ra.SourceAccountIdentity) {
+		return fmt.Errorf("source %q cannot be used by an MCP-scoped policy", ra.SourceAccountIdentity)
 	}
 	return nil
 }

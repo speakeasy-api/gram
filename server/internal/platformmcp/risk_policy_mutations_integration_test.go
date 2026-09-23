@@ -17,6 +17,7 @@ import (
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
+	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -25,6 +26,25 @@ import (
 type noopRiskPolicySignaler struct{}
 
 func (noopRiskPolicySignaler) Signal(context.Context, uuid.UUID) error { return nil }
+
+func TestRiskPolicyCreateMatchesMCPScope(t *testing.T) {
+	t.Parallel()
+
+	var row riskrepo.RiskPolicy
+	var desired riskrepo.CreateRiskPolicyParams
+	desired.PolicyType = ""
+	audience := []string{authz.AllUsersPrincipal().String()}
+	catalog := policycatalog.Catalog{}
+
+	require.True(t, riskPolicyCreateMatches(row, audience, desired, catalog))
+
+	desired.McpScope = []byte(`{"servers":[{"mcp_server_id":"11111111-1111-4111-8111-111111111111","tools":["search"]}]}`)
+	row.McpScope = []byte(`{"servers":[{"tools":["search"],"mcp_server_id":"11111111-1111-4111-8111-111111111111"}]}`)
+	require.True(t, riskPolicyCreateMatches(row, audience, desired, catalog))
+
+	row.McpScope = nil
+	require.False(t, riskPolicyCreateMatches(row, audience, desired, catalog))
+}
 
 func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	t.Parallel()

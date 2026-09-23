@@ -41,45 +41,17 @@ func TestNormalizeAndValidateMCPScope(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestValidateMCPScopeDetectionSurfaces(t *testing.T) {
+func TestValidateMCPScopeSources(t *testing.T) {
 	t.Parallel()
 
-	eng, err := celenv.New()
-	require.NoError(t, err)
 	scope := &MCPScope{Servers: []MCPServerScope{{MCPServerID: uuid.New()}}}
-
-	err = ValidateMCPScopeDetectionSurfaces(
-		eng,
-		scope,
-		ra.PolicyTypeStandard,
-		[]string{ra.SourceGitleaks},
-		false,
-		nil,
+	require.NoError(t, ValidateMCPScopeSources(nil, []string{ra.SourceAccountIdentity}))
+	require.NoError(t, ValidateMCPScopeSources(scope, []string{ra.SourceGitleaks}))
+	require.EqualError(
+		t,
+		ValidateMCPScopeSources(scope, []string{ra.SourceAccountIdentity}),
+		`source "account_identity" cannot be used by an MCP-scoped policy`,
 	)
-	require.ErrorContains(t, err, "must only inspect tool traffic")
-
-	toolOnly := []ra.DetectionScopeConfig{{
-		Category:     string(categories.CategorySecrets),
-		ScopeInclude: `kind in ["tool_request","tool_response"]`,
-	}}
-	require.NoError(t, ValidateMCPScopeDetectionSurfaces(
-		eng,
-		scope,
-		ra.PolicyTypeStandard,
-		[]string{ra.SourceGitleaks},
-		false,
-		toolOnly,
-	))
-
-	err = ValidateMCPScopeDetectionSurfaces(
-		eng,
-		scope,
-		ra.PolicyTypeStandard,
-		[]string{ra.SourceAccountIdentity},
-		false,
-		nil,
-	)
-	require.ErrorContains(t, err, "cannot be used")
 }
 
 func TestValidateActionAndSourceCompatibility(t *testing.T) {

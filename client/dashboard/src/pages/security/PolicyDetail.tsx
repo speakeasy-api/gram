@@ -1213,52 +1213,6 @@ function RecommendedScopesPanel({
       );
   }, [categoriesQuery.data?.categories, selectedCategories, scopeOverrides]);
 
-  useEffect(() => {
-    if (!mcpScoped || !categoriesQuery.data?.categories) return;
-    const next = new Map(scopeOverrides);
-    let changed = false;
-    for (const category of categoriesQuery.data.categories) {
-      if (
-        !selectedCategories.has(category.key as RuleCategory) ||
-        !category.recommendedScopeApplicable
-      ) {
-        continue;
-      }
-      const active = next.get(category.key) ?? {
-        scopeInclude: category.recommendedScopeInclude,
-        scopeExempt: category.recommendedScopeExempt,
-      };
-      const surfaces = surfacesFromScope(
-        active.scopeInclude,
-        active.scopeExempt,
-      );
-      const toolSurfaces = new Set<ScopeSurfaceKind>(
-        (surfaces ? [...surfaces] : ALL_SURFACE_KINDS).filter(
-          (kind) => kind === "tool_request" || kind === "tool_response",
-        ),
-      );
-      if (toolSurfaces.size === 0) {
-        toolSurfaces.add("tool_request");
-        toolSurfaces.add("tool_response");
-      }
-      const toolOnly = scopeFromSurfaces(toolSurfaces);
-      if (
-        active.scopeInclude !== toolOnly.scopeInclude ||
-        active.scopeExempt !== toolOnly.scopeExempt
-      ) {
-        next.set(category.key, toolOnly);
-        changed = true;
-      }
-    }
-    if (changed) setScopeOverrides(next);
-  }, [
-    categoriesQuery.data?.categories,
-    mcpScoped,
-    scopeOverrides,
-    selectedCategories,
-    setScopeOverrides,
-  ]);
-
   if (categoriesQuery.isLoading) {
     return (
       <Text small muted className="flex items-center gap-2">
@@ -1511,12 +1465,6 @@ function RecommendedScopeRow({
   const editorsOpen = celOpen && override !== undefined;
 
   const toggleSurface = (kind: ScopeSurfaceKind) => {
-    if (
-      mcpScoped &&
-      (kind === "user_message" || kind === "assistant_message")
-    ) {
-      return;
-    }
     if (!activeSurfaces) return;
     const next = new Set(activeSurfaces);
     if (next.has(kind)) {
@@ -1541,7 +1489,7 @@ function RecommendedScopeRow({
           <Badge variant="neutral">
             {override === undefined ? "Recommended" : "Custom"}
           </Badge>
-          {override !== undefined && !mcpScoped && (
+          {override !== undefined && (
             <button
               type="button"
               onClick={() => {
@@ -1559,6 +1507,13 @@ function RecommendedScopeRow({
       {!celOpen && activeSurfaces && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {SCOPE_SURFACES.map(({ kind, label }) => {
+            if (
+              mcpScoped &&
+              kind !== "tool_request" &&
+              kind !== "tool_response"
+            ) {
+              return null;
+            }
             const active = activeSurfaces.has(kind);
             return (
               <button
@@ -1566,18 +1521,8 @@ function RecommendedScopeRow({
                 type="button"
                 onClick={() => toggleSurface(kind)}
                 aria-pressed={active}
-                disabled={
-                  mcpScoped &&
-                  (kind === "user_message" || kind === "assistant_message")
-                }
-                title={
-                  mcpScoped &&
-                  (kind === "user_message" || kind === "assistant_message")
-                    ? "MCP-scoped policies inspect tool traffic only"
-                    : undefined
-                }
                 className={cn(
-                  "rounded-full border px-2.5 py-0.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                  "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
                   active
                     ? "border-foreground bg-foreground text-background"
                     : "border-border text-muted-foreground hover:text-foreground",
@@ -1587,29 +1532,28 @@ function RecommendedScopeRow({
               </button>
             );
           })}
-          {!mcpScoped && (
-            <SimpleTooltip tooltip="Switch to CEL expressions for granular scoping: match on tool names, servers, or message content instead of whole surfaces.">
-              <button
-                type="button"
-                onClick={() => {
-                  if (override === undefined) {
-                    onOverrideChange({ ...activeScope });
-                  }
-                  setCelOpen(true);
-                }}
-                className="border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 ml-1 flex items-center gap-1 rounded-full border border-dashed px-2.5 py-0.5 text-xs transition-colors"
-              >
-                <Code className="h-3 w-3" />
-                Granular scope
-              </button>
-            </SimpleTooltip>
-          )}
+          <SimpleTooltip tooltip="Switch to CEL expressions for granular scoping: match on tool names, servers, or message content instead of whole surfaces.">
+            <button
+              type="button"
+              onClick={() => {
+                if (override === undefined) {
+                  onOverrideChange({ ...activeScope });
+                }
+                setCelOpen(true);
+              }}
+              className="border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 ml-1 flex items-center gap-1 rounded-full border border-dashed px-2.5 py-0.5 text-xs transition-colors"
+            >
+              <Code className="h-3 w-3" />
+              Granular scope
+            </button>
+          </SimpleTooltip>
         </div>
       )}
 
-      {granularChips && !mcpScoped && (
+      {granularChips && (
         <GranularRecommendationChips
           engine={engine}
+          mcpScoped={mcpScoped}
           scope={activeScope}
           onToggleSurface={(kind, on) =>
             onOverrideChange(scopeWithSurface(activeScope, kind, on))
@@ -1623,7 +1567,7 @@ function RecommendedScopeRow({
         />
       )}
 
-      {editorsOpen && !mcpScoped && override !== undefined && (
+      {editorsOpen && override !== undefined && (
         <div className="mt-3 space-y-4">
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">
@@ -1678,11 +1622,13 @@ function GranularRecommendationChips({
   scope,
   onToggleSurface,
   onCustomize,
+  mcpScoped,
 }: {
   engine: CelEngine | null;
   scope: ScopeOverride;
   onToggleSurface: (kind: ScopeSurfaceKind, on: boolean) => void;
   onCustomize: () => void;
+  mcpScoped: boolean;
 }): JSX.Element {
   const states = engine
     ? surfaceStatesFromProbes(engine, scope.scopeInclude, scope.scopeExempt)
@@ -1696,6 +1642,13 @@ function GranularRecommendationChips({
       {states ? (
         <div className="flex flex-wrap items-center gap-1.5">
           {SCOPE_SURFACES.map(({ kind, label }) => {
+            if (
+              mcpScoped &&
+              kind !== "tool_request" &&
+              kind !== "tool_response"
+            ) {
+              return null;
+            }
             const state = states[kind];
             // Tri-state checkbox semantics: out and conditional click to
             // fully in; in clicks to out (unless it is the last surface).

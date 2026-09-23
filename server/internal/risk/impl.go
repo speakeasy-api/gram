@@ -496,14 +496,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err != nil {
 		return nil, err
 	}
-	if err := policycore.ValidateMCPScopeDetectionSurfaces(
-		s.celEng,
-		mcpScope,
-		policyType,
-		sources,
-		len(payload.CustomRuleIds) > 0,
-		ra.DetectionScopesFromConfig(analyzerConfig),
-	); err != nil {
+	if err := policycore.ValidateMCPScopeSources(mcpScope, sources); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 
@@ -890,14 +883,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		}
 		customRuleIds = payload.CustomRuleIds
 	}
-	if err := policycore.ValidateMCPScopeDetectionSurfaces(
-		s.celEng,
-		mcpScope,
-		current.PolicyType,
-		sources,
-		len(customRuleIds) > 0,
-		ra.DetectionScopesFromConfig(analyzerConfig),
-	); err != nil {
+	if err := policycore.ValidateMCPScopeSources(mcpScope, sources); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 

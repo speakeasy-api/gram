@@ -32,6 +32,24 @@ func TestMCPScopeAppliesToDirectServerAndCurrentGatewayMembership(t *testing.T) 
 	require.False(t, scope.Applies(otherID, "anything", nil))
 }
 
+func TestUnmarshalMCPScopeNormalizesEmptyAndFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, unmarshalMCPScope(nil))
+	require.Nil(t, unmarshalMCPScope([]byte(`null`)))
+	require.Nil(t, unmarshalMCPScope([]byte(`{"servers":[]}`)))
+
+	for _, raw := range [][]byte{
+		[]byte(`{}`),
+		[]byte(`{"servers":null}`),
+		[]byte(`not-json`),
+	} {
+		scope := unmarshalMCPScope(raw)
+		require.NotNil(t, scope)
+		require.Empty(t, scope.Servers)
+	}
+}
+
 func TestProjectPreservesPolicyReadSemantics(t *testing.T) {
 	t.Parallel()
 

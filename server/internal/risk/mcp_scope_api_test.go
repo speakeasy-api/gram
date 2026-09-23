@@ -82,6 +82,41 @@ func TestRiskPolicyMCPScopeRoundTripsAndFiltersEnabledPolicies(t *testing.T) {
 	require.NotNil(t, allPolicy)
 }
 
+func TestRiskPolicyMCPScopeRejectsAccountIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	projectID, organizationID := riskTestProject(t, ctx)
+	serverID, _, _ := seedRiskMCPServers(t, ctx, ti, projectID, organizationID)
+	scope := &types.RiskMCPScope{Servers: []*types.RiskMCPServerScope{{
+		McpServerID: serverID.String(),
+	}}}
+
+	name := "Scoped account identity"
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:     &name,
+		Sources:  []string{"account_identity"},
+		Action:   "flag",
+		McpScope: scope,
+	})
+	require.ErrorContains(t, err, `source "account_identity" cannot be used by an MCP-scoped policy`)
+
+	name = "All-server account identity"
+	unscoped, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:    &name,
+		Sources: []string{"account_identity"},
+		Action:  "flag",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:       unscoped.ID,
+		Name:     unscoped.Name,
+		McpScope: scope,
+	})
+	require.ErrorContains(t, err, `source "account_identity" cannot be used by an MCP-scoped policy`)
+}
+
 func createMCPScopedPolicy(
 	t *testing.T,
 	ctx context.Context,

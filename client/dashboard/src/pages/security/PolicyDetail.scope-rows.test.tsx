@@ -249,34 +249,50 @@ describe("StandardPolicyEditor scope rows", () => {
     expect(screen.queryByText("Custom rules")).toBeNull();
   });
 
-  it("disables user and assistant surfaces for selected MCP servers", async () => {
+  it("shows only tool surfaces for selected MCP servers", async () => {
     renderEditor(policy());
 
     fireEvent.click(screen.getByLabelText("Selected servers"));
-    fireEvent.click(screen.getByText("Support MCP"));
+    const server = screen.getByRole("checkbox", { name: "Support MCP" });
+    fireEvent.click(server);
 
     await waitFor(() => {
-      expect(
-        screen
-          .getAllByRole("button", { name: "User" })
-          .every((button) => button.hasAttribute("disabled")),
-      ).toBe(true);
+      expect(server.getAttribute("aria-checked")).toBe("true");
     });
-    expect(
-      screen
-        .getAllByRole("button", { name: "Assistant" })
-        .every((button) => button.hasAttribute("disabled")),
-    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "User" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Assistant" })).toBeNull();
     expect(
       screen
         .getAllByRole("button", { name: "Tool requests" })
-        .some((button) => button.hasAttribute("disabled")),
-    ).toBe(false);
+        .every((button) => !button.hasAttribute("disabled")),
+    ).toBe(true);
     expect(
       screen
         .getAllByRole("button", { name: "Tool responses" })
-        .some((button) => button.hasAttribute("disabled")),
-    ).toBe(false);
+        .every((button) => !button.hasAttribute("disabled")),
+    ).toBe(true);
+  });
+
+  it("preserves custom CEL when switching to selected MCP servers", async () => {
+    const expression = 'content.contains("access token")';
+    renderEditor(
+      policy({
+        detectionScopes: [
+          { category: "secrets", scopeInclude: expression, scopeExempt: "" },
+        ],
+      }),
+    );
+    expect(screen.getByText(expression)).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Selected servers"));
+    const server = screen.getByRole("checkbox", { name: "Support MCP" });
+    fireEvent.click(server);
+
+    await waitFor(() => {
+      expect(server.getAttribute("aria-checked")).toBe("true");
+    });
+    expect(screen.getByText(expression)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Customize" })).toBeTruthy();
   });
 
   it("shows synchronous detector cost for a scoped gating action", () => {
@@ -284,6 +300,11 @@ describe("StandardPolicyEditor scope rows", () => {
 
     fireEvent.click(screen.getByLabelText("Selected servers"));
     fireEvent.click(screen.getByText("Support MCP"));
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Support MCP" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
 
     expect(
       screen.getByText(

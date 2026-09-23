@@ -184,7 +184,11 @@ func unmarshalMCPScope(raw []byte) *MCPScope {
 		return &MCPScope{Servers: []MCPServerScope{}}
 	}
 	if scope.Servers == nil {
-		scope.Servers = []MCPServerScope{}
+		// Missing or null servers is malformed persisted state and must fail closed.
+		return &MCPScope{Servers: []MCPServerScope{}}
+	}
+	if len(scope.Servers) == 0 {
+		return nil
 	}
 	return &scope
 }
