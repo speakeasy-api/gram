@@ -251,7 +251,7 @@ func TestRotationPrepublishOverlapAndRetirement(t *testing.T) {
 	token, err := josejwt.ParseSigned(old, []jose.SignatureAlgorithm{jose.RS256})
 	require.NoError(t, err)
 	require.Error(t, token.Claims(servedKeys(t, retired), &josejwt.Claims{}))
-	// PKCS#1 public encoding and whitespace leave the RFC 7638 kid unchanged.
+	// Key order, duplicates and whitespace leave the RFC 7638 kid unchanged.
 	same, err := New(privateA, "\n"+publicB+publicA+publicA, "https://gram.example", false)
 	require.NoError(t, err)
 	require.Equal(t, a.kid, same.kid)

@@ -8,10 +8,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// stampConsentDiscovery is called after resolving and authorizing a challenge's
-// endpoint and reconstructing its current tenant context. Only the human
-// resolved by the IDP callback is evidence; a selected agent, anonymous subject,
-// pending federation, or synthetic background probe is not an acting user.
+// stampConsentDiscovery uses the human identity from the IDP callback. Call it
+// after resolving and authorizing the challenge's endpoint and rebuilding its
+// tenant context. Selected agents, anonymous subjects, pending federation and
+// synthetic background probes cannot establish a human identity.
 func (s *Service) stampConsentDiscovery(ctx context.Context, state AuthnChallengeState) context.Context {
 	ctx = mcpidentity.WithoutIdentity(ctx)
 	if state.Subject == nil || state.Subject.Kind != urn.SessionSubjectKindUser ||

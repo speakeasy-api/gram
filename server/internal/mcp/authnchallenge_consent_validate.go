@@ -126,8 +126,8 @@ func (s *Service) probeRemoteSession(
 		return oops.E(oops.CodeUnexpected, err, "resolve validation target").LogError(ctx, logger)
 	}
 
-	// A synthetic keepalive has no live caller proof. A strict upstream would
-	// reject it despite a valid OAuth grant; leave the prior verdict untouched.
+	// Synthetic keepalives have no caller identity and would fail at an upstream
+	// that requires assertions, even with a valid OAuth grant. Keep the prior verdict.
 	if trigger == remotesessionmetrics.ValidationTriggerKeepalive && target.requiresCallerAssertion {
 		return errors.New("keepalive skipped: private tunnel requires authenticated caller provenance")
 	}

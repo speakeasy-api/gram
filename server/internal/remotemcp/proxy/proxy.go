@@ -229,8 +229,8 @@ type Proxy struct {
 	// Leave empty (default) to send no Authorization upstream.
 	AuthorizationOverride string
 
-	// CallerAssertion mints trusted provenance at each forward, after all headers.
-	// Proxies with an issuer never follow redirects.
+	// CallerAssertion signs the caller's identity for each forwarded request,
+	// after headers are set. Proxies with an issuer never follow redirects.
 	CallerAssertion func(context.Context) (string, error)
 
 	// UpstreamResponseRetryer may replace the upstream target once after
