@@ -1,0 +1,32 @@
+client/dashboard/src/pages/security/PolicyDetail.scope-rows.test.tsx
+  h_e404c1a6a54184 252,256-257,260,262-263,267-268,272-295,303-307
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  h_e404c1a6a54184 1492,1510-1516,1525,1535-1549,1553,1556,1570,1625,1631,1645-1651
+server/internal/platformmcp/risk_policy_mutations.go
+  h_e404c1a6a54184 802
+server/internal/platformmcp/risk_policy_mutations_integration_test.go
+  h_e404c1a6a54184 20,30-48
+server/internal/risk/impl.go
+  h_e404c1a6a54184 499,886
+server/internal/risk/mcp_scope_api_test.go
+  h_e404c1a6a54184 85-119
+server/internal/risk/policycore/types.go
+  h_e404c1a6a54184 187-191
+server/internal/risk/policycore/types_test.go
+  h_e404c1a6a54184 35-52
+server/internal/risk/policycore/validation.go
+  h_e404c1a6a54184 121-123,127-128
+server/internal/risk/policycore/validation_test.go
+  h_e404c1a6a54184 44,48-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d6ea59d13d186993356b81f56bfbbf28ee05bf61",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
