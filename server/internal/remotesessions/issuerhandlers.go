@@ -1021,6 +1021,10 @@ type discoveryError struct {
 // the transport's url.Error so a probe can tell it from a network failure.
 var errDiscoveryRedirectRefused = errors.New("issuer discovery redirect target must use HTTPS outside local loopback")
 
+// Distinguish a fully received but invalid document from a transport/body-read
+// failure without changing the shared probe fallback policy.
+var errInvalidDiscoveryDocument = errors.New("invalid issuer discovery document")
+
 func (e *discoveryError) Error() string {
 	switch {
 	case e.WellKnownURL == "":
@@ -1454,7 +1458,7 @@ func attemptIssuerProbe(ctx context.Context, client httpDoer, wellKnown string) 
 		return rfc8414Document{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
-			cause:        err,
+			cause:        errors.Join(errInvalidDiscoveryDocument, err),
 			definitive:   false,
 		}
 	}

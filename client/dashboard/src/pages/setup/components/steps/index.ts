@@ -1,3 +1,4 @@
+export { DomainVerificationStep } from "./domain-verification-step";
 export { IdentityProviderStep } from "./identity-provider-step";
 export { AnthropicInferenceHooksStep } from "./anthropic-inference-hooks-step";
 export { AnthropicAdminControlsStep } from "./anthropic-admin-controls-step";

@@ -136,6 +136,11 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 			break
 		}
 		group.Go(func() error {
+			// group.Go can block on a free slot past the budget, so the check
+			// above may be stale by the time this runs.
+			if groupCtx.Err() != nil {
+				return nil
+			}
 			outcome, err := s.scanner.ScanForInferenceEnforcement(groupCtx, scanRequest(config, frame, userID, len(priorInputs)+offset, input))
 			if err != nil {
 				if groupCtx.Err() != nil {

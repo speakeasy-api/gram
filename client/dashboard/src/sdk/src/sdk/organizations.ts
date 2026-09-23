@@ -196,7 +196,7 @@ export class Organizations extends ClientSDK {
    * getOnboardingStatus organizations
    *
    * @remarks
-   * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
+   * Get the onboarding status for the active organization by checking WorkOS domain verification, SSO connections, and directory sync state.
    */
   async getOnboardingStatus(
     request?: GetOnboardingStatusRequest | undefined,

@@ -20,6 +20,9 @@ import (
 )
 
 func (s *Service) checkQuarantineGate(ctx context.Context, ev hookevents.Event) *sessionquarantine.Quarantine {
+	ctx, span := s.tracer.Start(ctx, "hooks.checkQuarantineGate")
+	defer span.End()
+
 	if s.cache == nil || ev.ConversationID == "" {
 		return nil
 	}
@@ -71,6 +74,9 @@ func (s *Service) sessionQuarantineFailClosed(ctx context.Context, organizationI
 }
 
 func (s *Service) openSessionQuarantine(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult, auditReason string) *sessionquarantine.Quarantine {
+	ctx, span := s.tracer.Start(ctx, "hooks.openSessionQuarantine")
+	defer span.End()
+
 	if scanResult == nil || ev.ConversationID == "" || ev.Context.OrganizationID == "" || ev.Context.ProjectID == uuid.Nil {
 		return nil
 	}

@@ -251,6 +251,9 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	}
 
 	s.triggerPluginPublish(ctx, authCtx, attached, pluginCreated)
+	if !attached {
+		s.publishForMCPMembership(ctx, authCtx, mcpServerID)
+	}
 
 	return mv.BuildMcpEndpointView(created), nil
 }
@@ -598,6 +601,7 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+	s.publishForMCPMembership(ctx, authCtx, existing.McpServerID, updated.McpServerID)
 
 	if wasRoot && existing.CustomDomainID.Valid {
 		if err := s.reconcileCustomDomains(ctx, []uuid.UUID{existing.CustomDomainID.UUID}); err != nil {
@@ -728,6 +732,7 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+	s.publishForMCPMembership(ctx, authCtx, existing.McpServerID)
 
 	if wasRoot {
 		if err := s.reconcileCustomDomains(ctx, []uuid.UUID{existing.CustomDomainID.UUID}); err != nil {

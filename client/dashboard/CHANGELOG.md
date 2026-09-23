@@ -1,5 +1,58 @@
 # dashboard
 
+## 0.123.0
+
+### Minor Changes
+
+- 36cee24: Create agent keys with a server-scoped permission wizard and manage agent access to MCP servers.
+- 5757d84: Show agent identities and their attached upstream accounts in session management.
+- 6efa45c: Adds the Okta page to organization settings: the connection card with the console checklist, client ID and verification steps, the applications snapshot with on-demand sync, and the Cross App Access readiness checklist with bulk confirmation.
+- 1768893: Offer permission-aware Platform MCP setup and task prompts to non-admin members from MCP troubleshooting, skill workflows, Plugins and organisation home.
+- 40279e9: Organizations now verify a domain before setting up single sign-on. WorkOS refuses to start an SSO connection until a domain is verified, so the IdP and SSO page gains a Domain verification card that opens the WorkOS Admin Portal. Once verified, the card lists every verified domain, because SSO only applies to users on those domains. Until a domain is verified, the Single Sign-On and Directory Sync cards are dimmed, their Configure buttons are disabled, and an amber warning explains why. The setup board adds a "Verify your domain" task that the identity provider task now depends on. Organizations that already have an active SSO connection are treated as verified and are not blocked.
+  
+  The verified domains are kept in sync from WorkOS events: `organization_domain.verified` adds a domain, `organization_domain.deleted` removes one, and `organization.created` / `organization.updated` replace the list from the organization's full domain set. Onboarding status reports `domain_verified` and `verified_domains`.
+- 11c951b: Scope agent MCP credentials to live delegable access, support agent-owned upstream account bindings, and preserve agent identity in sessions and usage views.
+- 8794f71: MCP servers can select an existing organization- or project-owned user session issuer during creation or from authentication settings. Interactive creation prefers a sole organization issuer, requires a choice when several exist, and keeps project-specific issuer creation as an explicit fallback. Organization-owned issuer settings remain read-only from project pages.
+- 391d796: Open your own profile from the sidebar account menu. The avatar and name in the sidebar footer are now the menu's only trigger — the separate dots button is gone — and the menu carries a "View user profile" item that opens your identity page. The item appears only for readers who can open that page.
+
+### Patch Changes
+
+- 8df3dad: Agent API keys can now poll `agent.getPlugins` when the agent holds the new `org:device_agent_sync` grant. The response includes the agent's principal, and plugins resolve for the agent, its roles, and the org wildcard. Adds the agent-runtime-safe `org:device_agent_sync` and `org:hooks_ingest` scopes in registry and delegated-policy version 2.
+- e23ba04: Adds audit feed phrases for Cross App Access readiness confirmations and resets.
+- 5db7eef: Dashboard pages scroll with the browser's own scrollbar. The page header, mode switcher, and assistant composer stay pinned with `position: sticky` / `fixed` instead of living inside an inner `overflow-y: auto` container.
+- de55aca: Allow MCP gateways to use private network ingress from their dashboard settings.
+- 6efa45c: Make the applications list footer an explicit, centered expand/collapse button and keep empty snapshots within their container. Correct Okta admin-console links and verification guidance without presenting unrelated edits as verification times. Describe an existing Okta connection without prompting the admin to connect again. Group Cross App Access configuration into compact labelled rows with consistent spacing, aligned copy controls, and quieter confirmation metadata. Long values remain available in full on hover and copy without breaking the table layout. Correct small copy-button padding and accessible labels. Highlight the entire copied value line when its copy button is hovered or keyboard-focused.
+  
+  Distinguish saved Cross App Access confirmations from actual Okta connections. Guide admins to review and reuse existing connections before creating new ones, edit saved settings without clearing them first, and recover cleared confirmations with Undo while staying on the page. Preserve recorded application references when editing without a replacement. Vertically center Cross App Access row content alongside the multi-line Okta configuration.
+  
+  Link issuer-URL guidance directly to Okta Applications and include the Resource Server → Cross App Access navigation path, distinguishing Issuer URL from Okta’s separate Audience/tenant ID.
+  
+  Clarify that saved confirmations do not verify Okta configuration or access, without implying that Okta has no connection API.
+  
+  Complete the Connect checklist from existing authentication and API-read verification results. Distinguish unchecked steps from those needing attention, and show fully verified setup as six of six complete without claiming specific Okta role assignments were inspected.
+  
+  Simplify setup, application updates, and Cross App Access wording for organization administrators. Explain permissions and token protection, retain exact Okta field names, and distinguish unverified settings from successful access checks.
+  
+  Organize Enterprise Managed Auth under Team → IDP and SSO, separate from employee single sign-on. Add a provider overview and an Okta workspace for Setup, Applications, and Cross App Access and independent provider-specific setup flows.
+  
+  Clarify that the AI Agent setup registers Speakeasy in Okta rather than creating a Speakeasy assistant. Restrict Okta console links to HTTPS on supported tenant domains, keep Undo independent across upstream issuer identities, and use consistent application-update labels. Strengthen checklist evidence, provider delegation, and tab navigation regression coverage.
+  
+  Keep initial Okta onboarding focused on adding the organization URL. Hide workspace tabs, setup progress, and Cross App Access instructions until a connection exists, and offer only the custom-app creation path until catalog availability is verified.
+  
+  Move the AI agent ID fields and Save action into the agent-creation checklist step, preserving draft edits when collapsed and opening the step for existing agent setup links.
+  
+  Replace obsolete agent Delegations instructions with the current registration, permanent user-access app binding, Client registration, User access, and Resource connections sequence. Explicitly distinguish the API Services management credential from agent authentication, require separate runtime configuration before activation, and clarify that recorded IDs do not provision or verify delegated access.
+  
+  Replace the non-actionable agent registration checklist with optional existing-agent ID recording. State that this setup does not connect agent authentication, and remove prompts to configure unsupported client registration or user access settings.
+- 6efa45c: Show seven applications initially with expand and collapse controls. Clarify Okta setup next steps and verification recovery, validate client IDs before submission, and preserve unfinished Cross App Access confirmations for retry after partial failures.
+- 6efa45c: Splits the Okta AI agent setup into separate checklist steps, ending with setting up a first Cross App Access connection. Speakeasy now ticks the linked app steps from the applications sync, flags a linked app that is inactive or has nobody assigned, and collapses the checklist once setup is complete. The checklist moves above the connection details.
+  
+  The checklist item `key` is now an enumerated value in the API. The Okta settings code is reorganized by tab with no change in behavior, and links to settings URLs that were never released are removed.
+- 6efa45c: Okta readiness dashboard: gate the applications snapshot on a clean verification and explain a degraded connection inline, scroll to the connection card after verifying, show when a degraded check ran, confirm before resetting a Cross App Access confirmation, surface confirmed rows under the Needs action filter, fit the readiness table at 1440px, disambiguate duplicate app instances, say Speakeasy consistently in the console checklist, move Sync now feedback to a toast, and fold the Okta page into the Identity page as concern tabs (`identity?tab=sso|provider|applications|cross-app-access`; `/okta` and `identity?tab=okta` redirect there) with a vendor-neutral provider picker. The console checklist is now two groups, Connect and Cross App Access setup, with the steps a verification can observe ticked automatically, the per-app steps left to the Cross App Access tab, and the agent credential step deferred until the token exchange consumes it.
+- 7ce576e: Open your identity overview by clicking your name inside the sidebar account menu.
+- 9a08893: Risk Events can be filtered by MCP server, and findings from MCP tool calls now show up there with their server, tool and enforcement outcome even when no chat is attached.
+- 1d2bc0f: Watchdog evidence cards can now show the message behind a finding. In the signal drawer, a chevron after each card's session title shows the full message the finding was flagged in, clicking the title opens the session transcript scrolled to that finding, and a link opens the session in Agent Sessions. Flagged secrets and PII stay masked in the expanded message. These controls only appear for users with the `chat:read` scope.
+
 ## 0.122.0
 
 ### Minor Changes

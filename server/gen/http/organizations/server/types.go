@@ -168,6 +168,12 @@ type GetOnboardingStatusResponseBody struct {
 	SsoConfigured bool `form:"sso_configured" json:"sso_configured" xml:"sso_configured"`
 	// Whether the organization has at least one linked directory sync in WorkOS.
 	DsyncConfigured bool `form:"dsync_configured" json:"dsync_configured" xml:"dsync_configured"`
+	// Whether the organization has at least one verified domain in WorkOS. Single
+	// sign-on cannot be set up until one is verified.
+	DomainVerified bool `form:"domain_verified" json:"domain_verified" xml:"domain_verified"`
+	// Domains WorkOS has verified for the organization. Single sign-on only works
+	// for users on these domains.
+	VerifiedDomains []string `form:"verified_domains" json:"verified_domains" xml:"verified_domains"`
 }
 
 // VerifyOnboardingHooksSetupResponseBody is the type of the "organizations"
@@ -3471,6 +3477,15 @@ func NewGetOnboardingStatusResponseBody(res *organizations.OnboardingStatusResul
 	body := &GetOnboardingStatusResponseBody{
 		SsoConfigured:   res.SsoConfigured,
 		DsyncConfigured: res.DsyncConfigured,
+		DomainVerified:  res.DomainVerified,
+	}
+	if res.VerifiedDomains != nil {
+		body.VerifiedDomains = make([]string, len(res.VerifiedDomains))
+		for i, val := range res.VerifiedDomains {
+			body.VerifiedDomains[i] = val
+		}
+	} else {
+		body.VerifiedDomains = []string{}
 	}
 	return body
 }
