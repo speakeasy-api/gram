@@ -103,6 +103,7 @@ func TestFederatedOptionalOfflineConsent(t *testing.T) {
 				require.Equal(t, 1, lookups)
 				return
 			}
+			require.Equal(t, http.StatusFound, first.Code)
 			offline, err := url.Parse(first.Header().Get("Location"))
 			require.NoError(t, err)
 			require.Equal(t, f.provider.URL+"/authorize", offline.Scheme+"://"+offline.Host+offline.Path)
@@ -146,6 +147,7 @@ func TestFederatedOptionalOfflineConsent(t *testing.T) {
 				require.Contains(t, second.Header().Get("Location"), "error=")
 			} else {
 				require.NoError(t, err)
+				require.Equal(t, http.StatusFound, second.Code)
 				require.Len(t, logins, 2)
 				require.True(t, logins[1].OfflineRequested)
 				require.Equal(t, scenario == "cancel", logins[1].OptionalRefused)

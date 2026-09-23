@@ -53,6 +53,9 @@ func (s *Service) isHookDuplicate(ctx context.Context) bool {
 // window, since competing drain triggers can re-deliver the same entry hours
 // apart.
 func (s *Service) claimHookIdempotency(ctx context.Context, token string, replayed bool) bool {
+	ctx, span := s.tracer.Start(ctx, "hooks.claimHookIdempotency")
+	defer span.End()
+
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return true
