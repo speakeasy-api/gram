@@ -16,9 +16,15 @@ const mocks = vi.hoisted(() => ({
   /** Scopes the RBAC mock reports; empty keeps the gated groups unmounted. */
   scopes: [] as string[],
   blocked: [] as { scope: string; selectors: { resourceId: string }[] }[],
+  orgSlug: "acme" as string | undefined,
+  projectSlug: "default" as string | undefined,
+  organizations: [] as unknown[],
+  activeOrganizationId: "",
   goToToolsetDetails: vi.fn(),
   goToMcpServerOverview: vi.fn(),
   goToCatalogDetail: vi.fn(),
+  navigate: vi.fn(),
+  clearQueryCache: vi.fn(),
 }));
 
 // The palette's other groups are irrelevant here; stub them empty so this file
@@ -62,9 +68,34 @@ vi.mock("@gram/client/react-query/members.js", () => ({
   useMembersSuspense: mocks.members,
 }));
 
+vi.mock("@gram/client/react-query/sessionInfo.js", () => ({
+  useSessionInfoSuspense: () => ({
+    data: {
+      result: {
+        organizations: mocks.organizations,
+        activeOrganizationId: mocks.activeOrganizationId,
+      },
+    },
+  }),
+}));
+
 vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
-  useProjectSlugForRequests: () => "default",
+  useSlugs: () => ({
+    orgSlug: mocks.orgSlug,
+    projectSlug: mocks.projectSlug,
+  }),
+  useProjectSlugForRequests: () => mocks.projectSlug ?? "default",
+}));
+
+// The projects group navigates by path (there is no per-project route entry)
+// and drops the query cache on a switch, so both are stubbed here.
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useNavigate: () => mocks.navigate,
+  useLocation: () => ({ search: "" }),
+}));
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ clear: mocks.clearQueryCache }),
 }));
 
 // Exercise the real RBAC hook, including resource-specific exclusion grants.
@@ -103,7 +134,11 @@ vi.mock("@/pages/plugins/usePluginQueryScope", () => ({
     gramSession: "session-a",
   }),
 }));
-import { PeopleResults, ResourceResults } from "./ResourceResults";
+import {
+  PeopleResults,
+  ProjectsResults,
+  ResourceResults,
+} from "./ResourceResults";
 
 function toolset(name: string, slug: string) {
   return { id: `toolset-${slug}`, name, slug };
@@ -145,6 +180,27 @@ function catalogServer(title: string, registrySpecifier: string) {
   return { title, registrySpecifier, registryId: "registry-1" };
 }
 
+function renderProjects(query = "") {
+  const result = render(
+    <Command shouldFilter>
+      <CommandInput />
+      <CommandList>
+        <ProjectsResults onNavigate={() => {}} />
+      </CommandList>
+    </Command>,
+  );
+  if (query) {
+    fireEvent.change(result.container.querySelector("input")!, {
+      target: { value: query },
+    });
+  }
+  return result;
+}
+
+function project(name: string, slug: string) {
+  return { id: `project-${slug}`, name, slug };
+}
+
 function resetMocks() {
   vi.clearAllMocks();
   mocks.toolsets = [];
@@ -152,9 +208,15 @@ function resetMocks() {
   mocks.catalogServers = [];
   mocks.scopes = [];
   mocks.blocked = [];
+  mocks.orgSlug = "acme";
+  mocks.projectSlug = "default";
+  mocks.organizations = [];
+  mocks.activeOrganizationId = "";
   mocks.goToToolsetDetails.mockClear();
   mocks.goToMcpServerOverview.mockClear();
   mocks.goToCatalogDetail.mockClear();
+  mocks.navigate.mockClear();
+  mocks.clearQueryCache.mockClear();
 }
 
 describe("ResourceResults MCP Servers group", () => {
@@ -433,5 +495,175 @@ describe("ResourceResults MCP Catalog group", () => {
     renderResults("datadog");
 
     expect(screen.queryByText("MCP Catalog")).toBeNull();
+  });
+});
+
+describe("ProjectsResults", () => {
+  beforeEach(resetMocks);
+  afterEach(cleanup);
+
+  it("lists the organization's projects in slug order", () => {
+    mocks.organizations = [
+      {
+        id: "org-acme",
+        slug: "acme",
+        projects: [
+          project("Widgets", "widgets"),
+          project("Billing", "billing"),
+        ],
+      },
+    ];
+    renderProjects();
+
+    expect(screen.getAllByText("Projects")).not.toHaveLength(0);
+    const labels = screen
+      .getAllByRole("option")
+      .map((option) => option.textContent);
+    expect(labels).toEqual(["Billing", "Widgets"]);
+  });
+
+  it("renders nothing when the organization has no projects", () => {
+    mocks.organizations = [{ id: "org-acme", slug: "acme", projects: [] }];
+    renderProjects();
+
+    expect(screen.queryByText("Projects")).toBeNull();
+  });
+
+  it("finds a project by name", () => {
+    mocks.organizations = [
+      {
+        id: "org-acme",
+        slug: "acme",
+        projects: [
+          project("Widgets", "widgets-a1b2"),
+          project("Billing", "billing"),
+        ],
+      },
+    ];
+    renderProjects("widgets");
+
+    expect(screen.getByText("Widgets")).toBeTruthy();
+    expect(screen.queryByText("Billing")).toBeNull();
+  });
+
+  // A renamed project keeps its original slug, so the slug is often the only
+  // thing that still matches what the URL showed.
+  it("finds a project by slug", () => {
+    mocks.organizations = [
+      {
+        id: "org-acme",
+        slug: "acme",
+        projects: [
+          project("Widgets", "widgets"),
+          project("Payments", "billing"),
+        ],
+      },
+    ];
+    renderProjects("billing");
+
+    expect(screen.getByText("Payments")).toBeTruthy();
+    expect(screen.queryByText("Widgets")).toBeNull();
+  });
+
+  it("finds a project by id", () => {
+    mocks.organizations = [
+      {
+        id: "org-acme",
+        slug: "acme",
+        projects: [
+          project("Widgets", "widgets"),
+          project("Billing", "billing"),
+        ],
+      },
+    ];
+    renderProjects("project-billing");
+
+    expect(screen.getByText("Billing")).toBeTruthy();
+    expect(screen.queryByText("Widgets")).toBeNull();
+  });
+
+  it("opens the project and drops the cache when switching projects", () => {
+    mocks.projectSlug = "widgets";
+    mocks.organizations = [
+      {
+        id: "org-acme",
+        slug: "acme",
+        projects: [project("Billing", "billing")],
+      },
+    ];
+    renderProjects();
+
+    fireEvent.click(screen.getByText("Billing"));
+
+    expect(mocks.navigate).toHaveBeenCalledWith("/acme/projects/billing");
+    expect(mocks.clearQueryCache).toHaveBeenCalled();
+  });
+
+  // Selecting the project you are already in is a jump to its overview, not a
+  // switch — dropping the cache there would refetch the whole page for nothing.
+  it("keeps the cache when opening the project already in the URL", () => {
+    mocks.projectSlug = "billing";
+    mocks.organizations = [
+      {
+        id: "org-acme",
+        slug: "acme",
+        projects: [project("Billing", "billing")],
+      },
+    ];
+    renderProjects();
+
+    fireEvent.click(screen.getByText("Billing"));
+
+    expect(mocks.navigate).toHaveBeenCalledWith("/acme/projects/billing");
+    expect(mocks.clearQueryCache).not.toHaveBeenCalled();
+  });
+
+  // The group's whole reason to exist: at the org level there is no project
+  // slug in the path, so the organization has to come from the session.
+  it("falls back to the active organization when the path carries no org slug", () => {
+    mocks.orgSlug = undefined;
+    mocks.projectSlug = undefined;
+    mocks.activeOrganizationId = "org-other";
+    mocks.organizations = [
+      {
+        id: "org-acme",
+        slug: "acme",
+        projects: [project("Widgets", "widgets")],
+      },
+      {
+        id: "org-other",
+        slug: "other",
+        projects: [project("Billing", "billing")],
+      },
+    ];
+    renderProjects();
+
+    expect(screen.getByText("Billing")).toBeTruthy();
+    expect(screen.queryByText("Widgets")).toBeNull();
+
+    fireEvent.click(screen.getByText("Billing"));
+    expect(mocks.navigate).toHaveBeenCalledWith("/other/projects/billing");
+  });
+
+  it("omits the slug when it only repeats the name", () => {
+    mocks.organizations = [
+      {
+        id: "org-acme",
+        slug: "acme",
+        projects: [project("Default", "default")],
+      },
+    ];
+    renderProjects();
+
+    expect(screen.getAllByText(/default/i)).toHaveLength(1);
+  });
+
+  it("labels a nameless project with its slug", () => {
+    mocks.organizations = [
+      { id: "org-acme", slug: "acme", projects: [project("", "widgets")] },
+    ];
+    renderProjects();
+
+    expect(screen.getAllByText("widgets")).toHaveLength(1);
   });
 });

@@ -158,13 +158,15 @@ function AgentList({
   const agents = useReadableAgents(true);
   const project = useProject();
   const [search, setSearch] = useState("");
-  const rows = (agents.data ?? []).filter(
+  const visibleAgents = (agents.data ?? []).filter(
     (agent) =>
       // An agent bound to another project is that project's to manage, so
       // showing it here reads as a listing bug. Organization-wide agents have
       // no home project and belong in every project's list.
-      (!agent.projectId || agent.projectId === project.id) &&
-      agent.name.toLowerCase().includes(search.trim().toLowerCase()),
+      !agent.projectId || agent.projectId === project.id,
+  );
+  const rows = visibleAgents.filter((agent) =>
+    agent.name.toLowerCase().includes(search.trim().toLowerCase()),
   );
   const columns: Column<ManagedAgent>[] = [
     {
@@ -198,7 +200,7 @@ function AgentList({
         placeholder: "Search agents",
       }}
       isLoading={agents.isLoading}
-      isEmpty={!agents.isError && (agents.data ?? []).length === 0}
+      isEmpty={!agents.isError && visibleAgents.length === 0 && !search.trim()}
       empty={{
         icon: "bot",
         heading: "No agents yet",

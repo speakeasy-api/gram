@@ -57,6 +57,7 @@ import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDoma
 import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
 import { useOrganization } from "@/contexts/Auth";
+import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -613,6 +614,12 @@ function ChatGPTAppVerificationControl({
 }
 
 function OrgDomainsInner() {
+  // Only call this a custom-domain-only view when rollout absence is known.
+  // Admins retain private-network setup and recovery even before rollout.
+  const { canManageIngress, status: rolloutStatus } =
+    useNetworkIngressRollout();
+  const showNetworkAccess = canManageIngress || rolloutStatus !== "disabled";
+  const title = showNetworkAccess ? "Network Access" : "Custom Domain";
   const organization = useOrganization();
   const productTier = useProductTier();
   const { hasScope } = useRBAC();
@@ -843,13 +850,17 @@ function OrgDomainsInner() {
   }, [domain?.isUpdating, domainRefetch]);
 
   useEffect(() => {
-    document.title = "Network Access | Speakeasy";
-  }, []);
+    document.title = `${title} | Speakeasy`;
+  }, [title]);
 
   return (
     <SettingsPage
-      title="Network Access"
-      description="Configure the public and private network surfaces used to reach your organization's hosted MCP servers."
+      title={title}
+      description={
+        showNetworkAccess
+          ? "Configure the public and private network surfaces used to reach your organization's hosted MCP servers."
+          : "Connect a custom domain to serve your MCP servers from your own branded URL instead of the default platform domain."
+      }
     >
       <PrivateNetworkSection />
       <SettingsSection>

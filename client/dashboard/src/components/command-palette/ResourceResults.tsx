@@ -21,8 +21,10 @@ import { useRiskListCustomDetectionRulesSuspense } from "@gram/client/react-quer
 import { useListMcpApprovalRequestsSuspense } from "@gram/client/react-query/listMcpApprovalRequests.js";
 import { useRiskListPoliciesSuspense } from "@gram/client/react-query/riskListPolicies.js";
 import { usePluginsSuspense } from "@gram/client/react-query/plugins";
+import { useSessionInfoSuspense } from "@gram/client/react-query/sessionInfo.js";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
+import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, useMemo, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { CommandErrorBoundary } from "./CommandErrorBoundary";
@@ -522,6 +524,86 @@ function PeopleGroup({ onNavigate }: GroupProps) {
         />
       ))}
     </CommandGroup>
+  );
+}
+
+/**
+ * Projects in the organization, jumping straight into one.
+ *
+ * Read off the session rather than projects.list: the response the app boots
+ * on already carries the caller's projects for each of their organizations, so
+ * the group costs no request of its own and offers exactly what the workspace
+ * switcher offers.
+ */
+function ProjectsGroup({ onNavigate }: GroupProps) {
+  const { orgSlug, projectSlug } = useSlugs();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { data } = useSessionInfoSuspense();
+  const { organizations, activeOrganizationId } = data.result;
+  // The palette opens from either shell, and only the project shell's path
+  // carries a slug we could match on — so fall back to the session's active
+  // organization, which is the one every other surface renders.
+  const organization = useMemo(
+    () =>
+      organizations.find((org) => org.slug === orgSlug) ??
+      organizations.find((org) => org.id === activeOrganizationId),
+    [organizations, activeOrganizationId, orgSlug],
+  );
+  // Slug order, matching the switcher, so a reader scanning the idle list
+  // finds a project where the switcher taught them to look.
+  const projects = useMemo(
+    () =>
+      (organization?.projects ?? []).toSorted((a, b) =>
+        a.slug.localeCompare(b.slug),
+      ),
+    [organization],
+  );
+  if (!organization || !projects.length) return null;
+  return (
+    <CommandGroup heading="Projects">
+      {projects.map((project) => {
+        const label = project.name || project.slug;
+        return (
+          <ResultItem
+            key={project.id}
+            value={`project ${project.name} ${project.slug} ${project.id}`}
+            label={label}
+            // Case-insensitively, as in the switcher: "Default" / "default" is
+            // the same name, so the slug would only repeat the label — as it
+            // would for a project with no name, where it *is* the label.
+            sublabel={
+              label.toLowerCase() === project.slug.toLowerCase()
+                ? undefined
+                : project.slug
+            }
+            icon="folder"
+            onSelect={() => {
+              // Drop the cache on a switch, the way WorkspaceSwitcher does:
+              // project-scoped queries that don't fold the slug into their key
+              // would otherwise serve the previous project's data on the page
+              // we land on.
+              if (project.slug !== projectSlug) queryClient.clear();
+              void navigate(`/${organization.slug}/projects/${project.slug}`);
+              onNavigate();
+            }}
+          />
+        );
+      })}
+    </CommandGroup>
+  );
+}
+
+/**
+ * Projects on their own, so the palette can offer them from the org shell,
+ * where the project-scoped resource groups have no project to read. Projects
+ * are the one resource that is organization-scoped rather than project-scoped.
+ */
+export function ProjectsResults({ onNavigate }: GroupProps): JSX.Element {
+  return (
+    <LazyGroup>
+      <ProjectsGroup onNavigate={onNavigate} />
+    </LazyGroup>
   );
 }
 
