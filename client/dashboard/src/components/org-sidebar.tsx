@@ -23,6 +23,7 @@ import { SidebarUserMenu } from "./sidebar-user-menu";
 import { TrialStatusCard } from "./trial-status-card";
 import { Wrench } from "lucide-react";
 import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
+import { useNewOnboardingEnabled } from "@/hooks/useNewOnboarding";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -60,6 +61,7 @@ export function OrgSidebar({
   const { isLoading: rbacLoading, hasScope } = useRBAC();
   const canReadFeatures = !rbacLoading && hasScope("org:read", organization.id);
   const canSetUpOrg = useCanSetUpOrg();
+  const newOnboarding = useNewOnboardingEnabled();
   const telemetry = useTelemetry();
   const { data: featuresData } = useProductFeatures(
     { organizationId: organization.id },
@@ -301,9 +303,15 @@ export function OrgSidebar({
             the standing nav but always reachable while it still applies. */}
         {canSetUpOrg && (
           <SidebarFooterAction
-            to={orgRoutes.setup.href()}
+            to={
+              newOnboarding
+                ? orgRoutes.onboarding.href()
+                : orgRoutes.setup.href()
+            }
             icon={Wrench}
-            label="Finish organization setup"
+            label={
+              newOnboarding ? "Finish onboarding" : "Finish organization setup"
+            }
             labelClassName="mode-shimmer"
           />
         )}

@@ -4,6 +4,8 @@ import { cn } from "@/lib/utils";
 import { SETUP_CONTAINER } from "./setup-container";
 
 interface JourneyLayoutProps {
+  /** Rendered above both columns, spanning their full width. */
+  top?: ReactNode;
   /** The timeline down the left: a stepper or a status list. */
   rail: ReactNode;
   /** Swap both columns for skeletons while the journey is being resolved. */
@@ -13,11 +15,12 @@ interface JourneyLayoutProps {
   children: ReactNode;
 }
 
-// The linear onboarding frame: a rail on the left (1/5 of the width) for where
-// you are in the journey and the current step's content on the right (4/5).
-// Shared by the wizard and by each setup task's page so the two never drift
-// apart.
+// The linear onboarding frame: an optional strip across the top, then a rail
+// on the left (1/5 of the width) for where you are in the journey and the
+// current step's content on the right (4/5). Shared by the wizard and by each
+// setup task's page so the two never drift apart.
 export function JourneyLayout({
+  top,
   rail,
   loading = false,
   skeletonRows = 7,
@@ -27,29 +30,32 @@ export function JourneyLayout({
     <main className="min-h-0 flex-1 overflow-y-auto py-8 md:py-16">
       {/* Same frame as the header, so the rail starts under the logo and the
           content ends under the header actions. */}
-      <div className={cn(SETUP_CONTAINER, "md:grid md:grid-cols-5 md:gap-14")}>
-        <div className="hidden md:col-span-1 md:block">
-          {loading ? (
-            <Skeleton>
-              {Array.from({ length: skeletonRows }, (_, index) => (
-                <div key={index} className="h-8 w-full" />
-              ))}
-            </Skeleton>
-          ) : (
-            rail
-          )}
-        </div>
+      <div className={cn(SETUP_CONTAINER, "flex flex-col gap-10")}>
+        {top}
+        <div className="md:grid md:grid-cols-5 md:gap-14">
+          <div className="hidden md:col-span-1 md:block">
+            {loading ? (
+              <Skeleton>
+                {Array.from({ length: skeletonRows }, (_, index) => (
+                  <div key={index} className="h-8 w-full" />
+                ))}
+              </Skeleton>
+            ) : (
+              rail
+            )}
+          </div>
 
-        <div className="min-w-0 md:col-span-4">
-          {loading ? (
-            <Skeleton>
-              <div className="h-12 w-2/3" />
-              <div className="h-5 w-full" />
-              <div className="h-64 w-full" />
-            </Skeleton>
-          ) : (
-            children
-          )}
+          <div className="min-w-0 md:col-span-4">
+            {loading ? (
+              <Skeleton>
+                <div className="h-12 w-2/3" />
+                <div className="h-5 w-full" />
+                <div className="h-64 w-full" />
+              </Skeleton>
+            ) : (
+              children
+            )}
+          </div>
         </div>
       </div>
     </main>

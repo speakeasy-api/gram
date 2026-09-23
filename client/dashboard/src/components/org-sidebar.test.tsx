@@ -30,6 +30,9 @@ vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ isLoading: false, hasScope: () => false }),
 }));
 vi.mock("@/hooks/useCanSetUpOrg", () => ({ useCanSetUpOrg: () => false }));
+vi.mock("@/hooks/useNewOnboarding", () => ({
+  useNewOnboardingEnabled: () => false,
+}));
 
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => false }),
