@@ -30,6 +30,8 @@ export const RequestAccessFormScope = {
   AgentWrite: "agent:write",
   AgentAuthorize: "agent:authorize",
   AgentTransfer: "agent:transfer",
+  WorkloadRead: "workload:read",
+  WorkloadWrite: "workload:write",
   OrgDeviceAgentSync: "org:device_agent_sync",
   OrgHooksIngest: "org:hooks_ingest",
 } as const;
