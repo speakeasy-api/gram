@@ -10,6 +10,7 @@ import { assertNever } from "@/lib/utils";
 export const AUDIT_ACTIONS = [
   "slack-directory-connection:authorize",
   "slack-directory-connection:disconnect",
+  "slack-directory-connection:sync",
   "access_challenge:resolve",
   "access_member:update_role",
   "access_role:create",
@@ -300,6 +301,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "authorized Slack workspace";
     case "slack-directory-connection:disconnect":
       return "disconnected Slack workspace";
+    case "slack-directory-connection:sync":
+      return "synced Slack directory";
     case "access_challenge:resolve":
       return "resolved access challenge";
     case "access_member:update_role":
