@@ -1454,5 +1454,15 @@ VALUES (@id, sqlc.narg('organization_id')::text, @slug, @issuer, sqlc.narg('auth
 -- Permit deliberately mismatched issuer ownership to test loader isolation.
 INSERT INTO remote_session_clients (id, organization_id, remote_session_issuer_id, client_id, scope, token_endpoint_auth_method)
 VALUES (@id, @organization_id::text, @remote_session_issuer_id, @client_id, @scope::text[], 'client_secret_basic');
+
 -- name: CountPreparationFixtureBindingByID :one
 SELECT count(*) FROM remote_session_ema_bindings WHERE id = @id AND project_id = @project_id;
+
+-- name: SeedLifecycleBindingClientFixture :exec
+-- Include cross-tenant and deleted clients to exercise binding ownership guards.
+INSERT INTO remote_session_clients (id, project_id, organization_id, remote_session_issuer_id, client_id, deleted_at)
+VALUES (@id, sqlc.narg('project_id')::uuid, sqlc.narg('organization_id')::text, @remote_session_issuer_id, @client_id, CASE WHEN @deleted::boolean THEN clock_timestamp() ELSE NULL END);
+
+-- name: IsLifecycleBackendBlockedFixture :one
+-- Observe a specific writer's lock wait instead of relying on a scheduling delay.
+SELECT cardinality(pg_blocking_pids(@pid::integer)) > 0 AS blocked;

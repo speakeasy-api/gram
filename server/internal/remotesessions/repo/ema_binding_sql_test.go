@@ -1,4 +1,3 @@
-//nolint:glint // SQL regression tests require isolated ownership and lifecycle fixtures.
 package repo_test
 
 import (
@@ -12,8 +11,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestSetEMABindingSQL(t *testing.T) {
@@ -27,29 +29,33 @@ func TestSetEMABindingSQL(t *testing.T) {
 	q := repo.New(conn)
 	const org = "org_ema_sql_test"
 	const otherOrg = "org_ema_sql_other"
-	project, otherProject, issuer, otherIssuer, userIssuer := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	exec := func(t *testing.T, sql string, args ...any) {
-		t.Helper()
-		_, err := conn.Exec(ctx, sql, args...)
+	project, otherProject, issuer, otherIssuer := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	fixtures := testrepo.New(conn)
+	for _, id := range []string{org, otherOrg} {
+		require.NoError(t, fixtures.SeedDelegationLoaderOrganizationFixture(ctx, testrepo.SeedDelegationLoaderOrganizationFixtureParams{OrganizationID: id, Name: id, Slug: id}))
+	}
+	for _, id := range []uuid.UUID{project, otherProject} {
+		_, err := fixtures.CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{ID: id, OrganizationID: org, Name: "Test project", Slug: id.String()})
 		require.NoError(t, err)
 	}
-	exec(t, `INSERT INTO organization_metadata (id,name,slug) VALUES ($1,'Test organization','ema-test'),($2,'Other organization','ema-other')`, org, otherOrg)
-	exec(t, `INSERT INTO projects (id,organization_id,name,slug) VALUES ($1,$2,'Test project','ema-test'),($3,$2,'Other project','ema-other')`, project, org, otherProject)
-	exec(t, `INSERT INTO remote_session_issuers (id,slug,issuer) VALUES ($1,'ema-test','https://issuer.example.test'),($2,'ema-other','https://other.example.test')`, issuer, otherIssuer)
-	exec(t, `INSERT INTO user_session_issuers (id,organization_id,slug,authn_challenge_mode,session_duration) VALUES ($1,$2,'ema-test','interactive',interval '1 hour')`, userIssuer, org)
-	client := func(projectID any, organizationID any, issuerID uuid.UUID, deleted bool) uuid.UUID {
+	for _, id := range []uuid.UUID{issuer, otherIssuer} {
+		require.NoError(t, fixtures.SeedDelegationLoaderIssuerFixture(ctx, testrepo.SeedDelegationLoaderIssuerFixtureParams{ID: id, Slug: id.String(), Issuer: "https://issuer.example.test/" + id.String()}))
+	}
+	userIssuer, err := fixtures.InsertOrganizationTierUserSessionIssuerFixture(ctx, testrepo.InsertOrganizationTierUserSessionIssuerFixtureParams{OrganizationID: conv.ToPGText(org), Slug: "ema-test", AuthnChallengeMode: "interactive", SessionDuration: pgtype.Interval{Microseconds: 3600000000, Valid: true}})
+	require.NoError(t, err)
+	client := func(projectID uuid.NullUUID, organizationID pgtype.Text, issuerID uuid.UUID, deleted bool) uuid.UUID {
 		t.Helper()
 		id := uuid.New()
-		exec(t, `INSERT INTO remote_session_clients (id,project_id,organization_id,remote_session_issuer_id,client_id,deleted_at) VALUES ($1,$2,$3,$4,$5,CASE WHEN $6 THEN clock_timestamp() ELSE NULL END)`, id, projectID, organizationID, issuerID, id.String(), deleted)
+		require.NoError(t, fixtures.SeedLifecycleBindingClientFixture(ctx, testrepo.SeedLifecycleBindingClientFixtureParams{ID: id, ProjectID: projectID, OrganizationID: organizationID, RemoteSessionIssuerID: issuerID, ClientID: id.String(), Deleted: deleted}))
 		return id
 	}
-	projectClient := client(project, nil, issuer, false)
-	orgClient := client(nil, org, issuer, false)
-	globalClient := client(nil, nil, issuer, false)
-	foreignProjectClient := client(otherProject, org, issuer, false)
-	foreignOrgClient := client(nil, otherOrg, issuer, false)
-	wrongIssuerClient := client(nil, nil, otherIssuer, false)
-	deletedClient := client(nil, nil, issuer, true)
+	projectClient := client(conv.ToNullUUID(project), pgtype.Text{}, issuer, false)
+	orgClient := client(uuid.NullUUID{}, conv.ToPGText(org), issuer, false)
+	globalClient := client(uuid.NullUUID{}, pgtype.Text{}, issuer, false)
+	foreignProjectClient := client(conv.ToNullUUID(otherProject), conv.ToPGText(org), issuer, false)
+	foreignOrgClient := client(uuid.NullUUID{}, conv.ToPGText(otherOrg), issuer, false)
+	wrongIssuerClient := client(uuid.NullUUID{}, pgtype.Text{}, otherIssuer, false)
+	deletedClient := client(uuid.NullUUID{}, pgtype.Text{}, issuer, true)
 	text := func(s string) pgtype.Text { return pgtype.Text{String: s, Valid: true} }
 	// Ownership fixtures are immutable after setup. Every case gets a unique
 	// binding resource; deletion cases also get their own project and pool.
@@ -171,7 +177,7 @@ func TestSetEMABindingSQL(t *testing.T) {
 				t.Cleanup(conn.Close)
 				q := repo.New(conn)
 				projectID := uuid.New()
-				_, err = conn.Exec(ctx, `INSERT INTO projects (id,organization_id,name,slug) VALUES ($1,$2,'Deletion test',$3)`, projectID, org, projectID.String())
+				_, err = testrepo.New(conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{ID: projectID, OrganizationID: org, Name: "Deletion test", Slug: projectID.String()})
 				require.NoError(t, err)
 				key := repo.EnsureEMABindingParams{ProjectID: projectID, OrganizationID: org, UserSessionIssuerID: userIssuer, RemoteSessionIssuerID: issuer, Resource: "https://resource.example.test/"}
 				var params repo.SetEMABindingParams
@@ -185,9 +191,9 @@ func TestSetEMABindingSQL(t *testing.T) {
 				require.NoError(t, err)
 				defer func() { _ = deletion.Rollback(context.Background()) }()
 				// Match the project lifecycle lock, then soft-delete before commit.
-				_, err = deletion.Exec(ctx, `SELECT id FROM projects WHERE id=$1 AND organization_id=$2 FOR UPDATE`, projectID, org)
+				_, err = projectsrepo.New(deletion).LockProjectForEMADeletion(ctx, projectsrepo.LockProjectForEMADeletionParams{ProjectID: projectID, OrganizationID: org})
 				require.NoError(t, err)
-				_, err = deletion.Exec(ctx, `UPDATE projects SET deleted_at=clock_timestamp() WHERE id=$1 AND organization_id=$2`, projectID, org)
+				_, err = projectsrepo.New(deletion).DeleteProject(ctx, projectID)
 				require.NoError(t, err)
 				writer, err := conn.Acquire(ctx)
 				require.NoError(t, err)
@@ -204,8 +210,7 @@ func TestSetEMABindingSQL(t *testing.T) {
 				}()
 				// Observe an actual lock wait instead of relying on a scheduling delay.
 				require.Eventually(t, func() bool {
-					var blocked bool
-					err := conn.QueryRow(ctx, `SELECT cardinality(pg_blocking_pids($1)) > 0`, pid).Scan(&blocked)
+					blocked, err := testrepo.New(conn).IsLifecycleBackendBlockedFixture(ctx, int32(pid))
 					return err == nil && blocked
 				}, 5*time.Second, 10*time.Millisecond)
 				require.NoError(t, deletion.Commit(ctx))
