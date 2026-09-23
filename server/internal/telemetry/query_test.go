@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	telemetryserver "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -1525,4 +1526,29 @@ func TestQueryTumDetails_IncludesDeletedProjects(t *testing.T) {
 		assert.Equal(c, int64(1250), res.Totals.TotalTokens,
 			"the deleted project's usage must still count toward the billing breakdowns")
 	}, 10*time.Second, 200*time.Millisecond)
+}
+
+// The include_dimension_values default is applied when the HTTP body is
+// decoded, so in-process callers of Service.Query must set it explicitly.
+func TestNewQueryPayload_IncludeDimensionValuesDefaultsToTrue(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		body string
+		want bool
+	}{
+		"omitted":        {body: `{"from":"2026-07-14T00:00:00Z","to":"2026-07-14T02:00:00Z"}`, want: true},
+		"explicit true":  {body: `{"from":"2026-07-14T00:00:00Z","to":"2026-07-14T02:00:00Z","include_dimension_values":true}`, want: true},
+		"explicit false": {body: `{"from":"2026-07-14T00:00:00Z","to":"2026-07-14T02:00:00Z","include_dimension_values":false}`, want: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var body telemetryserver.QueryRequestBody
+			require.NoError(t, json.Unmarshal([]byte(tc.body), &body))
+
+			payload := telemetryserver.NewQueryPayload(&body, nil)
+			require.Equal(t, tc.want, payload.IncludeDimensionValues)
+		})
+	}
 }
