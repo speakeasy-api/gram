@@ -1454,3 +1454,5 @@ VALUES (@id, sqlc.narg('organization_id')::text, @slug, @issuer, sqlc.narg('auth
 -- Permit deliberately mismatched issuer ownership to test loader isolation.
 INSERT INTO remote_session_clients (id, organization_id, remote_session_issuer_id, client_id, scope, token_endpoint_auth_method)
 VALUES (@id, @organization_id::text, @remote_session_issuer_id, @client_id, @scope::text[], 'client_secret_basic');
+-- name: CountPreparationFixtureBindingByID :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE id = @id AND project_id = @project_id;

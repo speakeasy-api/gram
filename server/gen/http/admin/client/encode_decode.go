@@ -13054,6 +13054,7 @@ func unmarshalGlobalRemoteSessionIssuerResponseBodyToAdminGlobalRemoteSessionIss
 		GlobalClientCount:             *v.GlobalClientCount,
 		TenantClientCount:             *v.TenantClientCount,
 		TrustedUserSessionIssuerCount: *v.TrustedUserSessionIssuerCount,
+		EmaBindingCount:               v.EmaBindingCount,
 	}
 	res.Issuer = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v.Issuer)
 

@@ -463,7 +463,8 @@ var ListIssuerConvergenceCandidatesResult = Type("ListIssuerConvergenceCandidate
 // IssuerMigratePreflight describes the impact of consolidating one
 // organization's issuer onto a global issuer. can_migrate is FALSE when
 // endpoint metadata differs, an MCP-server binding conflicts, or a
-// user-session issuer still trusts the source — the same conditions the
+// user-session issuer still trusts the source, or active identity-chaining
+// bindings reference the source — the same conditions the
 // mutation rejects with 409.
 var IssuerMigratePreflight = Type("IssuerMigratePreflight", func() {
 	Description("Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: how many clients move, which MCP servers are affected, every blocker that would make the migration fail, and how many tenant-owned clients the target already carries.")
@@ -474,10 +475,11 @@ var IssuerMigratePreflight = Type("IssuerMigratePreflight", func() {
 	Attribute("conflicting_mcp_server_names", ArrayOf(String), "Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.")
 	Attribute("warnings", ArrayOf(rsissuers.IssuerFieldMismatch), "Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.")
 	Attribute("trusted_user_session_issuer_count", Int, "Number of user_session_issuers that trust the source. Any non-zero value blocks migration.")
-	Attribute("can_migrate", Boolean, "TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.")
+	Attribute("ema_binding_count", Int, "Number of active identity-chaining bindings on the source. Non-zero blocks migration; explicitly unlink these bindings before migration, then prepare new bindings for the target.")
+	Attribute("can_migrate", Boolean, "TRUE when the migration would succeed: no active identity-chaining bindings, endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.")
 	Attribute("target_tenant_client_count", Int, "Number of tenant-owned remote_session_clients already registered with the target issuer, BEFORE this migration. Any non-zero value blocks deleting the target issuer, and only the owning organizations can clear it, so a successful migration is effectively one-way.")
 
-	Required("client_count", "mcp_server_names", "endpoint_mismatches", "conflicting_mcp_server_names", "warnings", "trusted_user_session_issuer_count", "can_migrate", "target_tenant_client_count")
+	Required("ema_binding_count", "client_count", "mcp_server_names", "endpoint_mismatches", "conflicting_mcp_server_names", "warnings", "trusted_user_session_issuer_count", "can_migrate", "target_tenant_client_count")
 })
 
 // MigrateRemoteSessionIssuerResult reports the outcome of consolidating
@@ -504,6 +506,8 @@ var GlobalRemoteSessionIssuer = Type("GlobalRemoteSessionIssuer", func() {
 	Attribute("global_client_count", Int, "Number of non-deleted global remote_session_clients (project_id NULL, organization_id NULL) registered with this issuer. These block a delete and the platform admin can remove them here.")
 	Attribute("tenant_client_count", Int, "Number of non-deleted remote_session_clients owned by an organization or project that are registered with this issuer. These block a delete but only their owning organization can remove them.")
 	Attribute("trusted_user_session_issuer_count", Int, "Number of active tenant-owned user_session_issuers that trust this issuer. These block deletion and must be unlinked by their owning organizations.")
+
+	Attribute("ema_binding_count", Int, "Number of active identity-chaining bindings that block deletion and must be explicitly unlinked by their owning organizations. Included in the detail response; omitted from listings.")
 
 	Required("issuer", "global_client_count", "tenant_client_count", "trusted_user_session_issuer_count")
 })

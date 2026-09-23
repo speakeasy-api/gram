@@ -285,6 +285,22 @@ func (q *Queries) CountPlatformMCPSetupMilestoneFixture(ctx context.Context, arg
 	return count, err
 }
 
+const countPreparationFixtureBindingByID = `-- name: CountPreparationFixtureBindingByID :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE id = $1 AND project_id = $2
+`
+
+type CountPreparationFixtureBindingByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) CountPreparationFixtureBindingByID(ctx context.Context, arg CountPreparationFixtureBindingByIDParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPreparationFixtureBindingByID, arg.ID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPublishOutboxRows = `-- name: CountPublishOutboxRows :one
 SELECT COUNT(*) FROM publish_outbox
 `
