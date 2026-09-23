@@ -1,4 +1,4 @@
-h1:ulkr5yYRxWiaKuJGvTjRVrKhDHpnEYO5NeBXrVblM/Q=
+h1:Ekaq0rYkAlMkpr0a5qcsxookaGWZ3tD7VD4cRhbyzIw=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -429,4 +429,4 @@ h1:ulkr5yYRxWiaKuJGvTjRVrKhDHpnEYO5NeBXrVblM/Q=
 20260922192857_organization-metadata-add-creation-source.sql h1:OirX6dlp8fKPW8QIHKfAhdWoYSapi5+ktYowQCowfgA=
 20260923172149_risk-policies-add-mcp-scope.sql h1:ZLQtnDLXrHcas+F6qBCAOkysAPxjDHR0GBPk+Kw7uF8=
 20260923175416_organization-metadata-add-verified-domains.sql h1:gKLrBw8W7Xbr6CS1VpXKkUi1cfjHHz0zo4PB2R7o8EY=
-20260923184230_workload-admission-match-kind.sql h1:qa8MHadNZx+1mQw6fd5DFt35WFLd3bJBOS/60r6AR34=
+20260923184230_workload-admission-match-kind.sql h1:hbv47+L3b6xqgOkixredvmScN3pk6D46yW9YWw6xa2g=
