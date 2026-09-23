@@ -14,15 +14,18 @@ const second = {
   projectId: "project_two",
   kind: "Remote",
 };
-const grant: AgentPolicyGrantForm = {
+const pinned = (
+  resourceId: string,
+  projectId: string,
+): AgentPolicyGrantForm => ({
   effect: "allow",
   scope: "mcp:connect",
-  selector: { resourceKind: "mcp", resourceId: "*" },
-};
+  selector: { resourceKind: "mcp", resourceId, projectId },
+});
 const signal = () => new AbortController().signal;
 
 describe("scoped credential discovery", () => {
-  it("sends toolset_id on every actual generated GET, with no unscoped request", async () => {
+  it("sends every resource as toolset_ids on one actual generated GET, with no unscoped request", async () => {
     const requests: Request[] = [];
     const agents = new Agents({
       serverURL: "https://gram.example",
@@ -42,50 +45,41 @@ describe("scoped credential discovery", () => {
       [first, second],
       signal(),
     );
-    expect(requests).toHaveLength(2);
-    expect(
-      requests.map((request) => {
-        expect(request.method).toBe("GET");
-        const url = new URL(request.url);
-        expect(url.pathname).toBe("/rpc/agents.listDelegableGrants");
-        expect(url.searchParams.get("agent_id")).toBe("agent_example");
-        expect(url.searchParams.has("resources")).toBe(false);
-        expect(url.searchParams.has("project_id")).toBe(false);
-        return url.searchParams.get("toolset_id");
-      }),
-    ).toEqual([first.resourceId, second.resourceId]);
+    expect(requests).toHaveLength(1);
+    const request = requests[0]!;
+    expect(request.method).toBe("GET");
+    const url = new URL(request.url);
+    expect(url.pathname).toBe("/rpc/agents.listDelegableGrants");
+    expect(url.searchParams.get("agent_id")).toBe("agent_example");
+    expect(url.searchParams.has("toolset_id")).toBe(false);
+    expect(url.searchParams.getAll("toolset_ids")).toEqual([
+      first.resourceId,
+      second.resourceId,
+    ]);
   });
-  it("starts scoped requests concurrently and publishes only the complete aggregate", async () => {
-    const pending: Array<(grants: AgentPolicyGrantForm[]) => void> = [];
-    const listDelegableGrants = vi.fn(
-      () =>
-        new Promise<AgentPolicyGrantForm[]>((resolve) => {
-          pending.push(resolve);
-        }),
-    );
-    let settled = false;
+  it("narrows each pinned candidate onto its own server", async () => {
+    const listDelegableGrants = vi
+      .fn()
+      .mockResolvedValue([
+        pinned(first.resourceId, first.projectId),
+        pinned(second.resourceId, second.projectId),
+      ]);
     const controller = new AbortController();
-    const result = discoverKeyServerGrants(
+    const grants = await discoverKeyServerGrants(
       { listDelegableGrants },
       "agent_example",
       [first, second],
       controller.signal,
-    ).then((grants) => {
-      settled = true;
-      return grants;
-    });
-    expect(listDelegableGrants).toHaveBeenCalledTimes(2);
-    expect(listDelegableGrants).toHaveBeenNthCalledWith(
-      1,
-      { agentId: "agent_example", toolsetId: first.resourceId },
+    );
+    expect(listDelegableGrants).toHaveBeenCalledExactlyOnceWith(
+      {
+        agentId: "agent_example",
+        toolsetIds: [first.resourceId, second.resourceId],
+      },
       undefined,
       { signal: controller.signal },
     );
-    pending[0]!([grant]);
-    await Promise.resolve();
-    expect(settled).toBe(false);
-    pending[1]!([grant]);
-    expect((await result).map((item) => item.selector)).toEqual([
+    expect(grants.map((item) => item.selector)).toEqual([
       {
         resourceKind: "mcp",
         resourceId: first.resourceId,
@@ -98,31 +92,39 @@ describe("scoped credential discovery", () => {
       },
     ]);
   });
-  it("rejects the aggregate when one scoped call fails", async () => {
-    const listDelegableGrants = vi
-      .fn()
-      .mockResolvedValueOnce([grant])
-      .mockRejectedValueOnce(new Error("forbidden"));
+  it("splits large inventories into sequential batches and rejects if one fails", async () => {
+    const inventory = Array.from({ length: 150 }, (_, i) => ({
+      resourceId: `toolset_${i}`,
+      projectId: "project_one",
+      kind: "Hosted",
+    }));
+    let inFlight = 0;
+    const listDelegableGrants = vi.fn(
+      async ({ toolsetIds }: { toolsetIds?: string[] }) => {
+        inFlight++;
+        expect(inFlight).toBe(1);
+        await Promise.resolve();
+        inFlight--;
+        if (toolsetIds?.length === 50) throw new Error("forbidden");
+        return [];
+      },
+    );
     await expect(
       discoverKeyServerGrants(
         { listDelegableGrants },
         "agent_example",
-        [first, second],
+        inventory,
         signal(),
       ),
     ).rejects.toThrow("forbidden");
-    expect(listDelegableGrants).toHaveBeenCalledTimes(2);
+    expect(
+      listDelegableGrants.mock.calls.map(([req]) => req.toolsetIds?.length),
+    ).toEqual([100, 50]);
   });
-  it("does not expand a grant from one response onto another inventory resource", async () => {
+  it("never expands a wildcard candidate onto the batch", async () => {
     const listDelegableGrants = vi
       .fn()
-      .mockResolvedValueOnce([
-        {
-          ...grant,
-          selector: { ...grant.selector, resourceId: second.resourceId },
-        },
-      ])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValue([pinned("*", first.projectId)]);
     expect(
       await discoverKeyServerGrants(
         { listDelegableGrants },
@@ -154,6 +156,10 @@ describe("scoped credential discovery", () => {
       ],
       signal(),
     );
-    expect(listDelegableGrants).toHaveBeenCalledTimes(1);
+    expect(listDelegableGrants).toHaveBeenCalledExactlyOnceWith(
+      { agentId: "agent_example", toolsetIds: [first.resourceId] },
+      undefined,
+      expect.anything(),
+    );
   });
 });

@@ -416,6 +416,44 @@ func TestListDelegableGrantsScopedToolset(t *testing.T) {
 	}
 }
 
+func TestListDelegableGrantsBatchedToolsets(t *testing.T) {
+	t.Parallel()
+	f := newDelegableFixture(t)
+	first := f.toolset(t, "org-delegable", "first")
+	second := f.toolset(t, "org-delegable", "second")
+	blocked := f.toolset(t, "org-delegable", "blocked")
+	for _, principal := range []string{"agent", "owner", "caller"} {
+		f.grant(t, principal, authz.ScopeMCPWrite, authz.NewSelector(authz.ScopeMCPWrite, "*"))
+	}
+	f.grant(t, "owner", authz.ScopeMCPBlockedConnect, authz.NewSelector(authz.ScopeMCPBlockedConnect, blocked.ID.String()))
+	ctx := validatedHumanContext(t, "org-delegable", "caller")
+
+	var want []*gen.AgentPolicyGrantForm
+	for _, id := range []string{first.ID.String(), second.ID.String(), blocked.ID.String()} {
+		grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{AgentID: f.agentID.String(), ToolsetID: new(id)})
+		require.NoError(t, err)
+		want = append(want, grants...)
+	}
+	require.NotEmpty(t, want)
+
+	// The legacy single field and the batch field combine, and repeats collapse.
+	grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+		AgentID:    f.agentID.String(),
+		ToolsetID:  new(first.ID.String()),
+		ToolsetIds: []string{first.ID.String(), second.ID.String(), blocked.ID.String()},
+	})
+	require.NoError(t, err)
+	require.ElementsMatch(t, want, grants)
+	for _, grant := range grants {
+		require.NotEqual(t, blocked.ID.String(), grant.Selector.ResourceID)
+	}
+
+	_, err = f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+		AgentID: f.agentID.String(), ToolsetIds: []string{first.ID.String(), uuid.NewString()},
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
 func TestListDelegableGrantsScopedToolsetRejectsInvalidResources(t *testing.T) {
 	t.Parallel()
 	f := newDelegableFixture(t)
