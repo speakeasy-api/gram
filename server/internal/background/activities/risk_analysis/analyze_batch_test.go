@@ -40,6 +40,7 @@ import (
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -165,6 +166,20 @@ func newFindingsPub() *gcp.MockPublisher[*riskv1.Finding] {
 	pub := gcp.NewMockPublisher[*riskv1.Finding]()
 	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
 	return pub
+}
+
+func capturingMeterPub(t *testing.T) (*gcp.MockPublisher[*meteringv1.MeterReading], *[]*meteringv1.MeterReading) {
+	t.Helper()
+	pub := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	var published []*meteringv1.MeterReading
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			reading, ok := args.Get(1).(*meteringv1.MeterReading)
+			require.True(t, ok)
+			published = append(published, reading)
+		})
+	return pub, &published
 }
 
 // capturingFindingsPub records every Finding the batch path mirrors onto the
@@ -675,6 +690,115 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 	require.Equal(t, td.policyID.String(), partRequest.GetOriginRiskPolicyId())
 	require.Equal(t, td.policyVersion, partRequest.GetOriginRiskPolicyVersion())
 	require.NotEmpty(t, partRequest.GetRequestId())
+}
+
+// The batch dispatches and the consumer decides: this drives the requests
+// AnalyzeBatch publishes through the real stream handler and asserts the
+// findings and the usage that come out the other side, for every scanned
+// message and with no flag admitting them.
+func TestAnalyzeBatch_PromptInjectionFindingsAndUsageComeFromTheConsumer(t *testing.T) {
+	t.Parallel()
+
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgIDs := seedMessages(t, conn, td, 3)
+	promptInjectionPub, requests := capturingPromptInjectionPub(t)
+	batchMeterPub := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	batchMeterPub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+
+	ab, err := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t),
+		conn, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, &feature.InMemory{},
+		newPresidioPub(), newGitleaksPub(), promptInjectionPub,
+		newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newFindingsPub(),
+		mustCustomRuleScanner(t, conn), mustCELEngine(t), nil, nil,
+		metering.NewRiskRecorder(batchMeterPub),
+		false,
+	)
+	require.NoError(t, err)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       msgIDs,
+		Sources:          []string{risk_analysis.SourcePromptInjection},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.NoError(t, err)
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+
+	require.Len(t, *requests, len(msgIDs), "one analysis request per scanned message")
+	require.Zero(t, result.Findings, "the activity produces no prompt injection findings of its own")
+	batchMeterPub.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+
+	// Drive the published requests through the stream handler with a judge
+	// that flags everything. The handler takes no gate, so all three are
+	// judged for real.
+	judged := 0
+	classifier := func(_ context.Context, req promptinjection.Request) ([]promptinjection.Result, error) {
+		judged += len(req.Messages)
+		results := make([]promptinjection.Result, len(req.Messages))
+		for i := range results {
+			results[i] = promptinjection.Result{
+				Label: promptinjection.LabelInjection, Score: 0, Rationale: "flagged by test judge",
+				DirectiveKind: "", Target: "", Operational: false,
+				STokens: 7, Completed: true, Model: "test-model", Provider: "test-provider",
+			}
+		}
+		return results, nil
+	}
+	findingsPub, findings := capturingFindingsPub(t)
+	consumerMeterPub, readings := capturingMeterPub(t)
+	handler := promptinjection.NewHandler(
+		testenv.NewLogger(t), testenv.NewMeterProvider(t),
+		promptinjection.NewScanner(testenv.NewLogger(t), classifier),
+		findingsPub,
+		metering.NewRiskRecorder(consumerMeterPub),
+	)
+	for _, req := range *requests {
+		require.NoError(t, handler.Handle(t.Context(), req, gcp.MessageMetadata{}))
+	}
+
+	require.Equal(t, len(msgIDs), judged)
+	require.Len(t, *findings, len(msgIDs), "the consumer publishes one finding per scanned message")
+	anchored := map[string]bool{}
+	for _, f := range *findings {
+		require.Equal(t, promptinjection.Source, f.GetSource())
+		require.Equal(t, promptinjection.Rule, f.GetRuleId())
+		require.Equal(t, td.policyID.String(), f.GetRiskPolicyId())
+		require.Equal(t, td.policyVersion, f.GetRiskPolicyVersion())
+		require.False(t, f.GetShadow(), "the consumer is the enforcing engine, not a shadow lane")
+		anchored[f.GetChatMessageId()] = true
+	}
+	for _, id := range msgIDs {
+		require.True(t, anchored[id.String()], "missing finding for message %s", id)
+	}
+
+	require.Len(t, *readings, len(msgIDs), "usage is metered once per scanned message, by the consumer")
+	for _, reading := range *readings {
+		require.Equal(t, "prompt_injection_stream", reading.GetAttributes()[metering.AttributeScanExecutionPath])
+		require.Equal(t, int64(7), reading.GetValue())
+	}
+
+	// None of it reaches Postgres: the scanned messages keep only their
+	// sentinel rows and the findings live in ClickHouse via the findings topic.
+	rows, err := testrepo.New(conn).ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, len(msgIDs))
+	for _, row := range rows {
+		require.False(t, row.Found)
+		require.Equal(t, risk_analysis.SourceNone, row.Source)
+	}
 }
 
 func TestAnalyzeBatch_PromptInjectionPublishesStrictlyBoundedTrajectory(t *testing.T) {
