@@ -1,0 +1,76 @@
+server/internal/shadowmcp/admission/guard_integration_test.go
+  h_9630b74bdac540 10,17-68
+  h_9630b74bdac540 69
+server/internal/metamcp/deletemetamcpserver_test.go
+  h_9630b74bdac540 7,17,20-48
+  h_9630b74bdac540 49
+server/internal/plugins/queries.sql
+  h_9630b74bdac540 234-253,255-256,268-281,564-598,610-627,709-710
+  h_9630b74bdac540 282
+server/internal/plugins/impl.go
+  h_9630b74bdac540 832,839-851,889,916,920-934,937-942,944,952-963,971,976,985,1001,1015,1019,1022-1026,1028-1033,1035,1037-1047,1049,1052,1055,1057-1059,1062,1196,1209,3059-3092,3245-3265,3482,3497-3499
+  h_9630b74bdac540 935-936,943,964-970,1017-1018,1056,3266-3268,3479-3481,3483-3486,3500
+server/internal/plugins/plugin_write_test.go
+  h_9630b74bdac540 5-6,9,12,20-22,24-26,29-129
+server/cmd/gram/worker.go
+  h_9630b74bdac540 60,477-478
+server/internal/mcpendpoints/plugin_publish.go
+  h_9630b74bdac540 16,25-39
+  h_9630b74bdac540 40
+server/internal/feature/flags.go
+  h_9630b74bdac540 59-60
+server/design/plugins/design.go
+  h_9630b74bdac540 479,488,492,495-496,590,594-598,601
+  h_9630b74bdac540 493-494
+server/internal/shadowmcp/admission/guard.go
+  h_9630b74bdac540 135-220
+server/cmd/gram/start.go
+  h_9630b74bdac540 1551-1553,1621-1622
+server/internal/audit/plugins.go
+  h_9630b74bdac540 166-167,174-176,196-198,209,305-308,316
+server/internal/platformmcp/plugins.go
+  h_9630b74bdac540 151,560-561,705-706
+server/internal/mcpservers/impl.go
+  h_9630b74bdac540 1155
+server/internal/mcpendpoints/impl.go
+  h_9630b74bdac540 255,604,735
+server/internal/plugins/default_plugin.go
+  h_9630b74bdac540 276,468
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 1937-1945,1947,1965-2013,2026-2034,2036,2071-2079,2081,3083-3084,3094-3096,3109-3112,3122-3126
+  h_9630b74bdac540 1936
+server/internal/metamcp/impl.go
+  h_9630b74bdac540 42-43,46,60-61,88-89,93-125,329-331,452,498-500,557-573,648,726-731,740-742,797-805,882,978,1102
+  h_9630b74bdac540 90-92,574,732-733,806-807
+server/gen/http/cli/gram/cli.go
+  h_9630b74bdac540 20045
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 75387,75390-75394,75411,92076-92080,92094
+server/gen/http/plugins/client/cli.go
+  h_9630b74bdac540 258,267-269,290-296
+server/gen/http/plugins/client/encode_decode.go
+  h_9630b74bdac540 4877-4884
+server/gen/http/plugins/client/types.go
+  h_9630b74bdac540 42-43,45,47-50,211,213,215-216,231,233,235-236,4285,4287,4289-4290,4364-4370,5777-5784,5959-5966,8139-8141,8180-8182,13426-13428
+server/gen/http/plugins/server/encode_decode.go
+  h_9630b74bdac540 4482-4489
+server/gen/http/plugins/server/types.go
+  h_9630b74bdac540 42-43,45,47-50,211,213,215-216,231,233,235-236,4285,4287,4289-4290,4509-4516,4525-4532,7766-7770,7978-7980
+server/gen/plugins/service.go
+  h_9630b74bdac540 109-110,112,114-117,342,344,346-347
+server/internal/platformmcp/repo/queries.sql.go
+  h_9630b74bdac540 4014-4058,4068-4076,4078,4185-4193,4195,4245-4318,4326-4335,4337,5494-5496,5509-5512,5522-5526,5548,5553-5554,5578
+server/internal/plugins/repo/queries.sql.go
+  h_9630b74bdac540 15-61,120-121,332-364,765-786,927-944,1026-1027,1559-1655,2227-2298
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3d881fc87d7c45ae60a4cca8bc57a28f788ad7c3",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
