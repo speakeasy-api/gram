@@ -281,6 +281,50 @@ func (s *stallingScanner) ScanForInferenceEnforcement(ctx context.Context, reque
 	}
 }
 
+func TestServiceDoesNotScanAfterCanceledAdmission(t *testing.T) {
+	t.Parallel()
+	for _, callerCanceled := range []bool{true, false} {
+		t.Run(fmt.Sprintf("callerCanceled=%t", callerCanceled), func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				frame := exampleFrame()
+				frame.Messages = nil
+				for range scanConcurrency + 1 {
+					frame.Messages = append(frame.Messages, textMessage("user", "stall"))
+				}
+				scanner := &stallingScanner{stallOn: "stall"}
+				store := &memoryStore{}
+				service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				var verdict Verdict
+				var err error
+				done := make(chan struct{})
+				go func() {
+					defer close(done)
+					verdict, err = service.Process(ctx, Config{}, frame)
+				}()
+				// All slots are occupied and Process is blocked admitting one more input.
+				synctest.Wait()
+				require.EqualValues(t, scanConcurrency, scanner.calls.Load())
+				if callerCanceled {
+					cancel()
+				}
+				// Otherwise the internal verdict budget expires in virtual time.
+				<-done
+				require.EqualValues(t, scanConcurrency, scanner.calls.Load())
+				if callerCanceled {
+					require.ErrorIs(t, err, context.Canceled)
+				} else {
+					require.NoError(t, err)
+					require.Equal(t, Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}, verdict)
+				}
+				require.Empty(t, store.accepted)
+			})
+		})
+	}
+}
+
 func TestServiceEvaluatesInputsConcurrently(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
