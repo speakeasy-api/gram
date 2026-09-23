@@ -614,10 +614,12 @@ function ChatGPTAppVerificationControl({
 }
 
 function OrgDomainsInner() {
-  // Match the sections this viewer can actually see. Admins retain the
-  // private-network setup and recovery surface even before rollout.
-  const { canManageIngress } = useNetworkIngressRollout();
-  const title = canManageIngress ? "Network Access" : "Custom Domain";
+  // Only call this a custom-domain-only view when rollout absence is known.
+  // Admins retain private-network setup and recovery even before rollout.
+  const { canManageIngress, status: rolloutStatus } =
+    useNetworkIngressRollout();
+  const showNetworkAccess = canManageIngress || rolloutStatus !== "disabled";
+  const title = showNetworkAccess ? "Network Access" : "Custom Domain";
   const organization = useOrganization();
   const productTier = useProductTier();
   const { hasScope } = useRBAC();
@@ -855,7 +857,7 @@ function OrgDomainsInner() {
     <SettingsPage
       title={title}
       description={
-        canManageIngress
+        showNetworkAccess
           ? "Configure the public and private network surfaces used to reach your organization's hosted MCP servers."
           : "Connect a custom domain to serve your MCP servers from your own branded URL instead of the default platform domain."
       }
