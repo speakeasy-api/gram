@@ -151,7 +151,7 @@ describe("identity top-level tabs", () => {
     show();
     expect(screen.getByRole("heading", { name: "IDP and SSO" })).toBeTruthy();
     const nav = screen.getByRole("navigation");
-    expect(nav.querySelectorAll("a")).toHaveLength(2);
+    expect(nav.querySelectorAll("a")).toHaveLength(3);
     expect(
       screen.getByRole("link", { name: "Single sign-on" }).getAttribute("href"),
     ).toBe("?tab=sso");

@@ -1,0 +1,196 @@
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter, useLocation } from "react-router";
+import type { ReactNode } from "react";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import { SlackWorkspaces } from "./SlackWorkspaces";
+
+const mocks = vi.hoisted(() => ({
+  admin: true,
+  configured: true,
+  generation: "generation-one",
+  mutate: vi.fn(),
+  list: vi.fn(),
+  invalidate: vi.fn(),
+}));
+vi.mock("nuqs", async (original) => {
+  const actual = await original<typeof import("nuqs")>();
+  const { useSearchParams } = await import("react-router");
+  const { useCallback } = await import("react");
+  return {
+    ...actual,
+    useQueryState: (key: string) => {
+      const [params, setParams] = useSearchParams();
+      const set = useCallback(
+        (value: string | null) => {
+          setParams(
+            (previous) => {
+              const next = new URLSearchParams(previous);
+              if (value === null) next.delete(key);
+              else next.set(key, value);
+              return next;
+            },
+            { replace: true },
+          );
+        },
+        [key, setParams],
+      );
+      return [params.get(key), set];
+    },
+  };
+});
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({ children }: { children: ReactNode }) =>
+    mocks.admin ? children : <div>Unauthorized</div>,
+}));
+vi.mock("@gram/client/react-query/slackDirectoryConnections.js", () => ({
+  invalidateAllSlackDirectoryConnections: (...args: unknown[]) =>
+    mocks.invalidate(...args),
+  useSlackDirectoryConnections: () => {
+    mocks.list();
+    return {
+      data: {
+        authorizationConfigured: mocks.configured,
+        connections: [
+          {
+            id: "connection-one",
+            workspaceId: "TEXAMPLE01",
+            workspaceName: "Example workspace",
+            status: "connected",
+            generation: mocks.generation,
+            grantedScopes: [],
+            updatedAt: "2026-01-01T00:00:00Z",
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+  },
+}));
+vi.mock("@gram/client/react-query/beginSlackDirectoryConnection.js", () => ({
+  useBeginSlackDirectoryConnectionMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+  }),
+}));
+vi.mock(
+  "@gram/client/react-query/disconnectSlackDirectoryConnection.js",
+  () => ({
+    useDisconnectSlackDirectoryConnectionMutation: () => ({
+      mutate: mocks.mutate,
+      reset: vi.fn(),
+      isPending: false,
+      error: null,
+    }),
+  }),
+);
+
+function Location() {
+  return <output data-testid="location">{useLocation().search}</output>;
+}
+function show(search = "") {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const tree = () => (
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[`/example/identity${search}`]}>
+        <TooltipProvider>
+          <SlackWorkspaces />
+          <Location />
+        </TooltipProvider>
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+  const view = render(tree());
+  return { ...view, refresh: () => view.rerender(tree()) };
+}
+
+beforeEach(() => {
+  mocks.admin = true;
+  mocks.configured = true;
+  mocks.generation = "generation-one";
+});
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+it("does not fetch workspace data for a non-admin", () => {
+  mocks.admin = false;
+  show();
+  expect(mocks.list).not.toHaveBeenCalled();
+});
+it("disables connect when the deployment is unconfigured", () => {
+  mocks.configured = false;
+  show();
+  expect(
+    screen
+      .getByRole("button", { name: "Connect Slack" })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(screen.getByText(/Ask your deployment administrator/)).toBeTruthy();
+});
+it.each([
+  "connected",
+  "cancelled",
+  "invalid_state",
+  "wrong_workspace",
+  "connection_changed",
+  "authorization_failed",
+  "unavailable",
+])("renders and clears the %s outcome", async (outcome) => {
+  show(`?tab=slack-workspaces&slack_result=${outcome}`);
+  await waitFor(() =>
+    expect(screen.getByTestId("location").textContent).not.toContain(
+      "slack_result",
+    ),
+  );
+  expect(mocks.invalidate).toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: /dismiss|close/i })).toBeTruthy();
+});
+it("disconnects the generation the administrator confirmed", () => {
+  show();
+  fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+  fireEvent.click(screen.getByRole("button", { name: "Disconnect workspace" }));
+  expect(mocks.mutate).toHaveBeenCalledWith(
+    expect.objectContaining({
+      request: {
+        disconnectSlackDirectoryConnectionRequestBody: {
+          id: "connection-one",
+          generation: "generation-one",
+        },
+      },
+    }),
+  );
+});
+
+it("requires confirmation again when the workspace changed", () => {
+  const view = show();
+  fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+  mocks.generation = "generation-two";
+  view.refresh();
+  fireEvent.click(screen.getByRole("button", { name: "Disconnect workspace" }));
+  expect(mocks.mutate).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Disconnect workspace" }));
+  expect(mocks.mutate).toHaveBeenCalledWith(
+    expect.objectContaining({
+      request: {
+        disconnectSlackDirectoryConnectionRequestBody: {
+          id: "connection-one",
+          generation: "generation-two",
+        },
+      },
+    }),
+  );
+});

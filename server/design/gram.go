@@ -1,6 +1,7 @@
 package design
 
 import (
+	_ "github.com/speakeasy-api/gram/server/design/slackdirectoryconnections"
 	. "goa.design/goa/v3/dsl"
 	"goa.design/goa/v3/expr"
 

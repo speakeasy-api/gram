@@ -62561,6 +62561,276 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdateSkill
+    /rpc/slackDirectoryConnections.begin:
+        post:
+            operationId: beginSlackDirectoryConnection
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/BeginSlackDirectoryConnectionRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BeginResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+            security:
+                - session_header_Gram-Session: []
+            summary: begin slackDirectoryConnections
+            tags:
+                - slackDirectoryConnections
+            x-speakeasy-name-override: begin
+            x-speakeasy-react-hook:
+                name: BeginSlackDirectoryConnection
+    /rpc/slackDirectoryConnections.disconnect:
+        post:
+            operationId: disconnectSlackDirectoryConnection
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DisconnectSlackDirectoryConnectionRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SlackDirectoryConnection'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+            security:
+                - session_header_Gram-Session: []
+            summary: disconnect slackDirectoryConnections
+            tags:
+                - slackDirectoryConnections
+            x-speakeasy-name-override: disconnect
+            x-speakeasy-react-hook:
+                name: DisconnectSlackDirectoryConnection
+    /rpc/slackDirectoryConnections.list:
+        get:
+            operationId: listSlackDirectoryConnections
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+            security:
+                - session_header_Gram-Session: []
+            summary: list slackDirectoryConnections
+            tags:
+                - slackDirectoryConnections
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: SlackDirectoryConnections
     /rpc/spendrules.archiveRule:
         post:
             description: 'Archive a budget rule. There is no delete: archiving ends the rule''s lineage while retaining its slug, version history, and events. Any open circuits for the rule close on the next evaluation cycle.'
@@ -79980,6 +80250,21 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
+        BeginResponseBody:
+            type: object
+            properties:
+                authorization_url:
+                    type: string
+                    description: Slack authorization URL bound to the current session.
+            required:
+                - authorization_url
+        BeginSlackDirectoryConnectionRequestBody:
+            type: object
+            properties:
+                connection_id:
+                    type: string
+                    description: Reconnect this workspace.
+                    format: uuid
         BillingEmail:
             type: object
             properties:
@@ -84453,6 +84738,20 @@ components:
                     minLength: 1
             required:
                 - id
+        DisconnectSlackDirectoryConnectionRequestBody:
+            type: object
+            properties:
+                generation:
+                    type: string
+                    description: Generation last read by the administrator.
+                    format: uuid
+                id:
+                    type: string
+                    description: Durable organization workspace connection ID.
+                    format: uuid
+            required:
+                - id
+                - generation
         DiscoverProtectedResourceMetadataRequestBody:
             type: object
             properties:
@@ -90566,6 +90865,20 @@ components:
                     description: The list of resources
             required:
                 - resources
+        ListResponseBody:
+            type: object
+            properties:
+                authorization_configured:
+                    type: boolean
+                    description: Whether the deployment can start Slack OAuth.
+                connections:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SlackDirectoryConnection'
+                    description: Workspace connections in creation order.
+            required:
+                - connections
+                - authorization_configured
         ListRiskEvalReviewsResult:
             type: object
             properties:
@@ -102084,6 +102397,55 @@ components:
                 - skill_version_id
                 - metrics
                 - trend
+        SlackDirectoryConnection:
+            type: object
+            properties:
+                disconnected_at:
+                    type: string
+                    description: When credentials were removed.
+                    format: date-time
+                generation:
+                    type: string
+                    description: Connection generation used to reject stale changes.
+                    format: uuid
+                granted_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: Permissions granted by Slack.
+                id:
+                    type: string
+                    description: Durable organization workspace connection ID.
+                    format: uuid
+                last_error_code:
+                    type: string
+                    description: Bounded authorization failure code, when known.
+                status:
+                    type: string
+                    description: Authorization status, independent of directory sync.
+                    enum:
+                        - connected
+                        - disconnected
+                        - reconnect_required
+                updated_at:
+                    type: string
+                    description: Last connection change timestamp.
+                    format: date-time
+                workspace_id:
+                    type: string
+                    description: Verified Slack workspace ID.
+                workspace_name:
+                    type: string
+                    description: Workspace display name from Slack.
+            description: An organization Slack workspace authorization. Authorization does not indicate directory sync or invocation protection.
+            required:
+                - id
+                - workspace_id
+                - workspace_name
+                - status
+                - generation
+                - granted_scopes
+                - updated_at
         SourceEnvironmentLink:
             type: object
             properties:
@@ -109008,6 +109370,8 @@ tags:
       description: Manage organization-wide skill efficacy sampling settings.
     - name: skills
       description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
+    - name: slackDirectoryConnections
+      description: Manage organization-wide Slack workspace authorizations, independently of project runtime installations.
     - name: spendRules
       description: Manage budget rules, view budget events, and preview actor targeting.
     - name: telemetry

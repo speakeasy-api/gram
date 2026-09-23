@@ -185,6 +185,8 @@ GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_DEVIDP_HOST}}:{{env.GRAM_DEVIDP_PO
 GRAM_DEVIDP_DB = "file:{{ config_root }}/local/devidp/devidp.db"
 GRAM_IDP_BASE_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/oauth2-1"
 GRAM_IDP_CLIENT_ID = "gram-local-dev"
+GRAM_SLACK_DIRECTORY_CLIENT_ID = "unset"
+GRAM_SLACK_DIRECTORY_CLIENT_SECRET = "unset"
 ## Shared secret used by Gram clients to authenticate to dev-idp. `./zero`
 ## generates a per-checkout value in mise.local.toml.
 GRAM_IDP_CLIENT_SECRET = "unset"

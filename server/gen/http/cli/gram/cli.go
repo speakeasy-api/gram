@@ -85,6 +85,7 @@ import (
 	riskc "github.com/speakeasy-api/gram/server/gen/http/risk/client"
 	skillefficacyc "github.com/speakeasy-api/gram/server/gen/http/skill_efficacy/client"
 	skillsc "github.com/speakeasy-api/gram/server/gen/http/skills/client"
+	slackdirectoryconnectionsc "github.com/speakeasy-api/gram/server/gen/http/slack_directory_connections/client"
 	spendrulesc "github.com/speakeasy-api/gram/server/gen/http/spend_rules/client"
 	telemetryc "github.com/speakeasy-api/gram/server/gen/http/telemetry/client"
 	templatesc "github.com/speakeasy-api/gram/server/gen/http/templates/client"
@@ -181,6 +182,7 @@ func UsageCommands() []string {
 		"risk (create-risk-policy|list-risk-policies|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
+		"slack-directory-connections (list|begin|disconnect)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-meta-mcp-server-usage|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-clients|get-tool-usage-client-tool-breakdown|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -3366,6 +3368,19 @@ func ParseEndpoint(
 		skillsListDistributionsApikeyTokenFlag      = skillsListDistributionsFlags.String("apikey-token", "", "")
 		skillsListDistributionsProjectSlugInputFlag = skillsListDistributionsFlags.String("project-slug-input", "", "")
 
+		slackDirectoryConnectionsFlags = flag.NewFlagSet("slack-directory-connections", flag.ContinueOnError)
+
+		slackDirectoryConnectionsListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
+		slackDirectoryConnectionsListSessionTokenFlag = slackDirectoryConnectionsListFlags.String("session-token", "", "")
+
+		slackDirectoryConnectionsBeginFlags            = flag.NewFlagSet("begin", flag.ExitOnError)
+		slackDirectoryConnectionsBeginBodyFlag         = slackDirectoryConnectionsBeginFlags.String("body", "REQUIRED", "")
+		slackDirectoryConnectionsBeginSessionTokenFlag = slackDirectoryConnectionsBeginFlags.String("session-token", "", "")
+
+		slackDirectoryConnectionsDisconnectFlags            = flag.NewFlagSet("disconnect", flag.ExitOnError)
+		slackDirectoryConnectionsDisconnectBodyFlag         = slackDirectoryConnectionsDisconnectFlags.String("body", "REQUIRED", "")
+		slackDirectoryConnectionsDisconnectSessionTokenFlag = slackDirectoryConnectionsDisconnectFlags.String("session-token", "", "")
+
 		spendRulesFlags = flag.NewFlagSet("spend-rules", flag.ContinueOnError)
 
 		spendRulesCreateSpendRuleFlags                = flag.NewFlagSet("create-spend-rule", flag.ExitOnError)
@@ -5209,6 +5224,11 @@ func ParseEndpoint(
 	skillsGetSharedFlags.Usage = skillsGetSharedUsage
 	skillsListDistributionsFlags.Usage = skillsListDistributionsUsage
 
+	slackDirectoryConnectionsFlags.Usage = slackDirectoryConnectionsUsage
+	slackDirectoryConnectionsListFlags.Usage = slackDirectoryConnectionsListUsage
+	slackDirectoryConnectionsBeginFlags.Usage = slackDirectoryConnectionsBeginUsage
+	slackDirectoryConnectionsDisconnectFlags.Usage = slackDirectoryConnectionsDisconnectUsage
+
 	spendRulesFlags.Usage = spendRulesUsage
 	spendRulesCreateSpendRuleFlags.Usage = spendRulesCreateSpendRuleUsage
 	spendRulesListSpendRulesFlags.Usage = spendRulesListSpendRulesUsage
@@ -5611,6 +5631,8 @@ func ParseEndpoint(
 			svcf = skillEfficacyFlags
 		case "skills":
 			svcf = skillsFlags
+		case "slack-directory-connections":
+			svcf = slackDirectoryConnectionsFlags
 		case "spend-rules":
 			svcf = spendRulesFlags
 		case "telemetry":
@@ -7657,6 +7679,19 @@ func ParseEndpoint(
 
 			case "list-distributions":
 				epf = skillsListDistributionsFlags
+
+			}
+
+		case "slack-directory-connections":
+			switch epn {
+			case "list":
+				epf = slackDirectoryConnectionsListFlags
+
+			case "begin":
+				epf = slackDirectoryConnectionsBeginFlags
+
+			case "disconnect":
+				epf = slackDirectoryConnectionsDisconnectFlags
 
 			}
 
@@ -10407,6 +10442,19 @@ func ParseEndpoint(
 			case "list-distributions":
 				endpoint = c.ListDistributions()
 				data, err = skillsc.BuildListDistributionsPayload(*skillsListDistributionsSkillIDFlag, *skillsListDistributionsPluginIDFlag, *skillsListDistributionsCursorFlag, *skillsListDistributionsLimitFlag, *skillsListDistributionsSessionTokenFlag, *skillsListDistributionsApikeyTokenFlag, *skillsListDistributionsProjectSlugInputFlag)
+			}
+		case "slack-directory-connections":
+			c := slackdirectoryconnectionsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list":
+				endpoint = c.List()
+				data, err = slackdirectoryconnectionsc.BuildListPayload(*slackDirectoryConnectionsListSessionTokenFlag)
+			case "begin":
+				endpoint = c.Begin()
+				data, err = slackdirectoryconnectionsc.BuildBeginPayload(*slackDirectoryConnectionsBeginBodyFlag, *slackDirectoryConnectionsBeginSessionTokenFlag)
+			case "disconnect":
+				endpoint = c.Disconnect()
+				data, err = slackdirectoryconnectionsc.BuildDisconnectPayload(*slackDirectoryConnectionsDisconnectBodyFlag, *slackDirectoryConnectionsDisconnectSessionTokenFlag)
 			}
 		case "spend-rules":
 			c := spendrulesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -25274,6 +25322,77 @@ func skillsListDistributionsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills list-distributions --skill-id \"550e8400-e29b-41d4-a716-446655440000\" --plugin-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// slackDirectoryConnectionsUsage displays the usage of the
+// slack-directory-connections command and its subcommands.
+func slackDirectoryConnectionsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage organization-wide Slack workspace authorizations, independently of project runtime installations.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] slack-directory-connections COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list: List implements list.`)
+	fmt.Fprintln(os.Stderr, `    begin: Begin implements begin.`)
+	fmt.Fprintln(os.Stderr, `    disconnect: Disconnect implements disconnect.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s slack-directory-connections COMMAND --help\n", os.Args[0])
+}
+func slackDirectoryConnectionsListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] slack-directory-connections list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List implements list.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack-directory-connections list --session-token \"abc123\"")
+}
+
+func slackDirectoryConnectionsBeginUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] slack-directory-connections begin", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Begin implements begin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack-directory-connections begin --body '{\n      \"connection_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func slackDirectoryConnectionsDisconnectUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] slack-directory-connections disconnect", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Disconnect implements disconnect.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack-directory-connections disconnect --body '{\n      \"generation\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 // spendRulesUsage displays the usage of the spend-rules command and its

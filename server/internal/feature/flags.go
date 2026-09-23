@@ -3,6 +3,10 @@ package feature
 type Flag string
 
 const (
+	// FlagClaudeTagSupport gates organization Slack directory connections in the server and dashboard.
+	// Targeted by the PostHog organization group key (org slug); fails closed.
+	FlagClaudeTagSupport Flag = "claude-tag-support"
+
 	FlagSpeakeasyOpenAPIParserV0 Flag = "speakeasy-openapi-parser-v0"
 	FlagClickhouseToolMetrics    Flag = "clickhouse-tool-metrics"
 	FlagAssistants               Flag = "assistants"

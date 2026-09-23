@@ -64,6 +64,7 @@ const (
 	subjectTypeSessionQuarantine           subjectType = "session_quarantine"
 	subjectTypeSkill                       subjectType = "skill"
 	subjectTypeSkillEfficacySettings       subjectType = "skill_efficacy_settings"
+	subjectTypeSlackDirectoryConnection    subjectType = "slack_directory_connection"
 	subjectTypeSpendRule                   subjectType = "spend_rule"
 	subjectTypeTemplate                    subjectType = "template"
 	subjectTypeToolset                     subjectType = "toolset"

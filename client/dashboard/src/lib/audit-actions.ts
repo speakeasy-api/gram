@@ -8,6 +8,8 @@ import { assertNever } from "@/lib/utils";
  * the moment the string lands in this list.
  */
 export const AUDIT_ACTIONS = [
+  "slack-directory-connection:authorize",
+  "slack-directory-connection:disconnect",
   "access_challenge:resolve",
   "access_member:update_role",
   "access_role:create",
@@ -294,6 +296,10 @@ export function isAuditAction(action: string): action is AuditAction {
  */
 export function staticActionPhrase(action: AuditAction): string {
   switch (action) {
+    case "slack-directory-connection:authorize":
+      return "authorized Slack workspace";
+    case "slack-directory-connection:disconnect":
+      return "disconnected Slack workspace";
     case "access_challenge:resolve":
       return "resolved access challenge";
     case "access_member:update_role":

@@ -616,6 +616,9 @@ trackedFiles:
   src/funcs/skillsUndistribute.ts: {}
   src/funcs/skillsUnshare.ts: {}
   src/funcs/skillsUpdate.ts: {}
+  src/funcs/slackDirectoryConnectionsBegin.ts: {}
+  src/funcs/slackDirectoryConnectionsDisconnect.ts: {}
+  src/funcs/slackDirectoryConnectionsList.ts: {}
   src/funcs/spendRulesActorAttributesList.ts: {}
   src/funcs/spendRulesEventsList.ts: {}
   src/funcs/spendRulesOverviewGet.ts: {}
@@ -857,6 +860,8 @@ trackedFiles:
   src/models/components/authzchallenge.ts: {}
   src/models/components/awsiamcredential.ts: {}
   src/models/components/awskmskey.ts: {}
+  src/models/components/beginresponsebody.ts: {}
+  src/models/components/beginslackdirectoryconnectionrequestbody.ts: {}
   src/models/components/billingemail.ts: {}
   src/models/components/builtinexclusioncategory.ts: {}
   src/models/components/builtinexclusionentry.ts: {}
@@ -991,6 +996,7 @@ trackedFiles:
   src/models/components/directorygroupoption.ts: {}
   src/models/components/directoryrolemapping.ts: {}
   src/models/components/disableopenrouterkeyrequestbody.ts: {}
+  src/models/components/disconnectslackdirectoryconnectionrequestbody.ts: {}
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
   src/models/components/dismissskillsuggestionrequestbody.ts: {}
   src/models/components/distributeonboardingcandidaterequestbody.ts: {}
@@ -1262,6 +1268,7 @@ trackedFiles:
   src/models/components/listremotesessionissuersresult.ts: {}
   src/models/components/listremotesessionsresult.ts: {}
   src/models/components/listresourcesresult.ts: {}
+  src/models/components/listresponsebody.ts: {}
   src/models/components/listriskevalreviewsresult.ts: {}
   src/models/components/listriskexclusionsresult.ts: {}
   src/models/components/listriskpoliciesresult.ts: {}
@@ -1645,6 +1652,7 @@ trackedFiles:
   src/models/components/skillvalidationerror.ts: {}
   src/models/components/skillversion.ts: {}
   src/models/components/skillversioninsight.ts: {}
+  src/models/components/slackdirectoryconnection.ts: {}
   src/models/components/sourceenvironmentlink.ts: {}
   src/models/components/spendbreakdownresponse.ts: {}
   src/models/components/spendbucket.ts: {}
@@ -1885,6 +1893,7 @@ trackedFiles:
   src/models/operations/attachusersessionissuer.ts: {}
   src/models/operations/authcallback.ts: {}
   src/models/operations/authlogin.ts: {}
+  src/models/operations/beginslackdirectoryconnection.ts: {}
   src/models/operations/cancelstripesubscription.ts: {}
   src/models/operations/captureevent.ts: {}
   src/models/operations/checkdomainhealth.ts: {}
@@ -2024,6 +2033,7 @@ trackedFiles:
   src/models/operations/detachusersessionissuer.ts: {}
   src/models/operations/disableadminopenrouterkey.ts: {}
   src/models/operations/disablewebhooks.ts: {}
+  src/models/operations/disconnectslackdirectoryconnection.ts: {}
   src/models/operations/discoverremotemcpprotectedresourcemetadata.ts: {}
   src/models/operations/dismissplatformmcponboarding.ts: {}
   src/models/operations/dismissskillsuggestion.ts: {}
@@ -2317,6 +2327,7 @@ trackedFiles:
   src/models/operations/listskillsuggestions.ts: {}
   src/models/operations/listskilltags.ts: {}
   src/models/operations/listskillversions.ts: {}
+  src/models/operations/listslackdirectoryconnections.ts: {}
   src/models/operations/listspendruleactorattributes.ts: {}
   src/models/operations/listspendruleevents.ts: {}
   src/models/operations/listspendrules.ts: {}
@@ -2661,6 +2672,7 @@ trackedFiles:
   src/react-query/auditLogs.core.ts: {}
   src/react-query/auditLogs.ts: {}
   src/react-query/batchKillswitchUserBadges.ts: {}
+  src/react-query/beginSlackDirectoryConnection.ts: {}
   src/react-query/builtinExclusions.core.ts: {}
   src/react-query/builtinExclusions.ts: {}
   src/react-query/cancelStripeSubscription.ts: {}
@@ -2814,6 +2826,7 @@ trackedFiles:
   src/react-query/directoryRoleMappings.ts: {}
   src/react-query/disableAdminOpenRouterKey.ts: {}
   src/react-query/disableWebhooks.ts: {}
+  src/react-query/disconnectSlackDirectoryConnection.ts: {}
   src/react-query/discoverRemoteMcpProtectedResourceMetadata.ts: {}
   src/react-query/dismissPlatformMCPOnboarding.ts: {}
   src/react-query/dismissSkillSuggestion.ts: {}
@@ -3461,6 +3474,8 @@ trackedFiles:
   src/react-query/skillVersions.ts: {}
   src/react-query/skills.core.ts: {}
   src/react-query/skills.ts: {}
+  src/react-query/slackDirectoryConnections.core.ts: {}
+  src/react-query/slackDirectoryConnections.ts: {}
   src/react-query/spendRulesActorAttributes.core.ts: {}
   src/react-query/spendRulesActorAttributes.ts: {}
   src/react-query/spendRulesArchiveRule.ts: {}
@@ -3707,6 +3722,7 @@ trackedFiles:
   src/sdk/signals.ts: {}
   src/sdk/skillefficacy.ts: {}
   src/sdk/skills.ts: {}
+  src/sdk/slackdirectoryconnections.ts: {}
   src/sdk/spendrules.ts: {}
   src/sdk/telemetry.ts: {}
   src/sdk/templates.ts: {}
@@ -4039,6 +4055,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  beginSlackDirectoryConnection:
+    speakeasy-default-begin-slack-directory-connection:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"authorization_url": "https://inconsequential-plastic.info/"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   blockShadowMCPInventoryServer:
     speakeasy-default-block-shadow-MCP-inventory-server:
       requestBody:
@@ -4050,6 +4077,16 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  callbackSlackDirectoryConnection:
+    speakeasy-default-callback-slack-directory-connection:
+      parameters:
+        query:
+          state: "Mississippi"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   cancelStripeSubscription:
     speakeasy-default-cancel-stripe-subscription:
       responses:
@@ -5727,6 +5764,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  disconnectSlackDirectoryConnection:
+    speakeasy-default-disconnect-slack-directory-connection:
+      requestBody:
+        application/json: {"generation": "6823eaf6-44ea-425d-8c11-239c2366c0cc", "id": "e13c0d80-47ed-4cc5-bff8-b227e9e0867e"}
+      responses:
+        "200":
+          application/json: {"generation": "1b74e91f-8b01-4f39-93a7-82a8e6540723", "granted_scopes": ["<value 1>", "<value 2>", "<value 3>"], "id": "06bb2625-a5e6-4019-be53-d5421693e21a", "status": "reconnect_required", "updated_at": "2025-05-02T19:36:43.715Z", "workspace_id": "<id>", "workspace_name": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   discoverRemoteMcpProtectedResourceMetadata:
     speakeasy-default-discover-remote-mcp-protected-resource-metadata:
       requestBody:
@@ -9296,6 +9344,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listSlackDirectoryConnections:
+    speakeasy-default-list-slack-directory-connections:
+      responses:
+        "200":
+          application/json: {"authorization_configured": true, "connections": [{"generation": "ea2b909c-5bd5-40d7-b92b-c3fbfad348cf", "granted_scopes": ["<value 1>", "<value 2>"], "id": "f58b42f2-9778-4553-98bb-cf5e6d5656c4", "status": "disconnected", "updated_at": "2024-07-04T20:13:28.363Z", "workspace_id": "<id>", "workspace_name": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listSpendRuleActorAttributes:
     speakeasy-default-list-spend-rule-actor-attributes:
       responses:
