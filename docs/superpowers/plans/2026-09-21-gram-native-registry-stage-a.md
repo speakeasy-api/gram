@@ -214,6 +214,9 @@ assert len(set(names)) == 2
 CREATE TABLE IF NOT EXISTS mcp_registry_entries (
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   data jsonb NOT NULL,
+  CONSTRAINT mcp_registry_entries_name_check CHECK (COALESCE(
+    jsonb_typeof(data #> '{server,name}') = 'string'
+    AND data #>> '{server,name}' <> '', false)),
   published boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
@@ -222,7 +225,9 @@ CREATE UNIQUE INDEX mcp_registry_entries_name_key
   ON mcp_registry_entries ((data #>> '{server,name}'));
 ```
 
-Service validation requires the name; this migration does not add enumeration/value checks, legacy foreign keys, an organization column or a second name column.
+Service validation requires the name; the explicit user-approved policy exception adds only the narrow identity CHECK above. No full-schema CHECK, case-folding, trimming, enumeration checks, legacy foreign keys, organization column or second name column. Invalid nonidentity fields remain readable and repairable.
+
+**Identity hardening evidence (2026-09-23):** Atlas-generated incremental migration validated and all 431 migrations replayed successfully into disposable PostgreSQL. Atlas lint reports the expected PG305 scan warning for this brand-new table. Historical publication evidence and task checkboxes above/below remain unchanged; no production deployment is claimed. Durable application-layer regressions cover 13 missing/null/nonstring/empty exact-path identities with named CHECK violations on insert and update, rejected-update row preservation, duplicate names across all published/unpublished combinations, and invalid nonidentity field repair. Combined insert/update regressions belong to the mutations layer where `UpdateEntry` first exists; service and discovery fixture updates stay in their owning layers.
 
 - [ ] Generate and lint locally:
 

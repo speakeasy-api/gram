@@ -64,7 +64,11 @@ Add one Gram-owned table, provisionally `mcp_registry_entries`:
 Use existing migrations/query tooling. Require nonnull columns and a database
 unique constraint/index on the name extracted from `data.server.name`, including
 unpublished rows. No separate name column is necessary initially. Validate the
-name's presence/type before accepting a write. `id` and `server.name` are immutable
+name's presence/type before accepting a write. As an explicit user-approved policy
+exception, require the narrow database CHECK `mcp_registry_entries_name_check`: the
+exact `data.server.name` path must contain a nonempty JSON string. Do not trim or
+case-fold identity or enforce the full record schema in SQL; invalid nonidentity
+fields remain readable by name and repairable. `id` and `server.name` are immutable
 after creation; other fields may change subject to validation and reference guards.
 
 The entry UUID is NOT the legacy Pulse registry/provider UUID. Existing attachments
