@@ -56,3 +56,12 @@ email addresses, account identifiers, or customer account-context payloads in
 these two records; tool descriptions use illustrative examples and metadata
 contains public vendor discovery/authentication declarations. No records were
 redacted, and the other 60 source records were not copied.
+
+Identity is the exact, case-sensitive `server.name` string for create, import,
+lookup, uniqueness and immutability checks. Do not lowercase approved names;
+case-insensitive search does not change identity semantics.
+
+`TestMetaschemaIntegrity` pins the reviewed bundle bytes. Its parsed resources
+were compared against all nine resources in the pinned Go module directory;
+when deliberately updating the bundle, repeat that comparison before updating
+the digest.

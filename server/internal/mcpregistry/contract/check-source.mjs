@@ -10,13 +10,13 @@ const sourceFile = resolve(source, "packages/registry-api/src/Schema.ts");
 const require = createRequire(
   resolve(source, "packages/registry-api/package.json"),
 );
-const { Schema } = await import(pathToFileURL(require.resolve("effect")).href);
-const { ServerResponse } = await import(pathToFileURL(sourceFile).href);
 assert.equal(
   createHash("sha256").update(readFileSync(sourceFile)).digest("hex"),
   "775a4ee2c905874c4b3155452e3fc234d155ef79cb4fb17f40c46f2a9aa70fb5",
   "pinned schema source hash",
 );
+const { Schema } = await import(pathToFileURL(require.resolve("effect")).href);
+const { ServerResponse } = await import(pathToFileURL(sourceFile).href);
 const document = Schema.toJsonSchemaDocument(ServerResponse);
 assert.deepEqual(document.definitions, {});
 const exported = {
@@ -38,7 +38,10 @@ const read = (name) =>
 assert.deepEqual(exported, read("./record.schema.json"));
 for (const c of read("./conformance.json"))
   assert.equal(Schema.is(ServerResponse)(c.record), c.valid, c.name);
-for (const record of read("../baseline/manifest.json").records) {
+const manifest = read("../baseline/manifest.json");
+assert.equal(manifest.count, 2, "starter manifest count");
+assert.equal(manifest.records.length, 2, "starter manifest records length");
+for (const record of manifest.records) {
   const raw = readFileSync(
     resolve(source, "data/servers", record.file.slice("records/".length)),
   );

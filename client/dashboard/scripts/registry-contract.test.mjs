@@ -52,3 +52,10 @@ test("two-record starter baseline", () => {
       true,
     );
 });
+
+for (const c of read("./schema-conformance.json"))
+  test(c.name, () => {
+    if (c.valid)
+      assert.doesNotThrow(() => compile(c.schema, Validator, format));
+    else assert.throws(() => compile(c.schema, Validator, format));
+  });

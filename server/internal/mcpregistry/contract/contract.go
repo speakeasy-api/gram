@@ -38,9 +38,20 @@ func Compile(raw []byte) (*jsonschema.Schema, error) {
 			if f, ok := n["format"].(string); ok && formats[f] == nil {
 				return fmt.Errorf("unsupported contract format")
 			}
-			for _, child := range n {
-				if err := check(child); err != nil {
-					return err
+			for keyword, child := range n {
+				switch keyword {
+				case "$defs", "definitions", "properties", "patternProperties", "dependentSchemas":
+					if schemas, ok := child.(map[string]any); ok {
+						for _, schema := range schemas {
+							if err := check(schema); err != nil {
+								return err
+							}
+						}
+					}
+				case "allOf", "anyOf", "oneOf", "prefixItems", "items", "contains", "additionalProperties", "propertyNames", "not", "if", "then", "else", "unevaluatedItems", "unevaluatedProperties":
+					if err := check(child); err != nil {
+						return err
+					}
 				}
 			}
 		case []any:
