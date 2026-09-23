@@ -49,6 +49,7 @@ export function buildRiskOverviewQuery(
     queryKey: queryKeyRiskOverview({
       from: request?.from,
       to: request?.to,
+      mcpServerId: request?.mcpServerId,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
@@ -81,6 +82,7 @@ export function queryKeyRiskOverview(
   parameters: {
     from?: Date | undefined;
     to?: Date | undefined;
+    mcpServerId?: string | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

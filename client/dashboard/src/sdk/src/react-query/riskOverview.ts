@@ -110,6 +110,7 @@ export function setRiskOverviewData(
     parameters: {
       from?: Date | undefined;
       to?: Date | undefined;
+      mcpServerId?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -128,6 +129,7 @@ export function invalidateRiskOverview(
     [parameters: {
       from?: Date | undefined;
       to?: Date | undefined;
+      mcpServerId?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
