@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
   list: vi.fn(),
   invalidate: vi.fn(),
+  begin: vi.fn(),
 }));
 vi.mock("nuqs", async (original) => {
   const actual = await original<typeof import("nuqs")>();
@@ -78,7 +79,7 @@ vi.mock("@gram/client/react-query/slackDirectoryConnections.js", () => ({
 }));
 vi.mock("@gram/client/react-query/beginSlackDirectoryConnection.js", () => ({
   useBeginSlackDirectoryConnectionMutation: () => ({
-    mutate: vi.fn(),
+    mutate: mocks.begin,
     isPending: false,
     error: null,
   }),
@@ -142,14 +143,32 @@ it("disables connect when the deployment is unconfigured", () => {
   expect(screen.getByText(/Ask your deployment administrator/)).toBeTruthy();
 });
 it.each([
-  "connected",
-  "cancelled",
-  "invalid_state",
-  "wrong_workspace",
-  "connection_changed",
-  "authorization_failed",
-  "unavailable",
-])("renders and clears the %s outcome", async (outcome) => {
+  ["connected", "Slack workspace connected."],
+  [
+    "cancelled",
+    "Slack authorization was cancelled. Your connections have not changed.",
+  ],
+  [
+    "invalid_state",
+    "This authorization link expired or belongs to another session. Connect Slack again.",
+  ],
+  [
+    "wrong_workspace",
+    "That is a different Slack workspace. Reconnect and choose the workspace shown here.",
+  ],
+  [
+    "connection_changed",
+    "The workspace state changed during authorization. Try connecting again.",
+  ],
+  [
+    "authorization_failed",
+    "Slack authorization failed. Try connecting again, or contact your administrator.",
+  ],
+  [
+    "unavailable",
+    "Slack connections are unavailable or your access changed. Return to Identity and try again.",
+  ],
+])("renders and clears the %s outcome", async (outcome, message) => {
   show(`?tab=slack-workspaces&slack_result=${outcome}`);
   await waitFor(() =>
     expect(screen.getByTestId("location").textContent).not.toContain(
@@ -157,8 +176,10 @@ it.each([
     ),
   );
   expect(mocks.invalidate).toHaveBeenCalled();
+  expect(screen.getByText(message)).toBeTruthy();
   expect(screen.getByRole("button", { name: /dismiss|close/i })).toBeTruthy();
 });
+
 it("disconnects the generation the administrator confirmed", () => {
   show();
   fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
@@ -173,6 +194,33 @@ it("disconnects the generation the administrator confirmed", () => {
       },
     }),
   );
+});
+
+it.each(["__proto__", "constructor", "toString", "unexpected"])(
+  "ignores an unknown %s callback outcome",
+  async (outcome) => {
+    show(`?tab=slack-workspaces&slack_result=${outcome}`);
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).not.toContain(
+        "slack_result",
+      ),
+    );
+    expect(screen.getByRole("button", { name: "Connect Slack" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /dismiss|close/i })).toBeNull();
+  },
+);
+
+it.each([
+  "http://slack.com/oauth/v2/authorize",
+  "https://example.com/oauth/v2/authorize",
+  "https://slack.com/other",
+])("rejects an unexpected authorization destination %s", (authorizationUrl) => {
+  mocks.begin.mockImplementation((_request, options) =>
+    options.onSuccess({ authorizationUrl }),
+  );
+  show();
+  fireEvent.click(screen.getByRole("button", { name: "Connect Slack" }));
+  expect(screen.getByText(/invalid authorization link/)).toBeTruthy();
 });
 
 it("requires confirmation again when the workspace changed", () => {

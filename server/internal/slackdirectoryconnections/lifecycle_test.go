@@ -257,9 +257,11 @@ func TestConcurrentCallbackConsumesStateOnce(t *testing.T) {
 	state := begin(t, ctx, f, nil)
 	f.provider.On("Exchange", mock.Anything, "concurrent").Return(&slackdirectoryconnections.Authorization{WorkspaceID: "TEXAMPLE01", Scopes: []string{"users:read", "users:read.email"}, Tokens: slackdirectoryconnections.TokenBundle{Version: 1, AccessToken: "synthetic"}}, nil).Once()
 	results := make(chan string, 2)
+	start := make(chan struct{})
 	var workers sync.WaitGroup
 	for range 2 {
 		workers.Go(func() {
+			<-start
 			result, err := f.service.Callback(ctx, &slackdirectoryconnections.CallbackPayload{SessionToken: nil, State: state, Code: conv.PtrEmpty("concurrent"), Error: nil})
 			if err != nil {
 				results <- "unexpected_error"
@@ -268,6 +270,7 @@ func TestConcurrentCallbackConsumesStateOnce(t *testing.T) {
 			results <- result.Location
 		})
 	}
+	close(start)
 	workers.Wait()
 	close(results)
 	connected, rejected := 0, 0
@@ -300,4 +303,13 @@ func TestExpiredCredentialsRequireReconnect(t *testing.T) {
 	serialized, err := json.Marshal(list) //nolint:musttag // Verify generated service views never contain credentials.
 	require.NoError(t, err)
 	require.NotContains(t, string(serialized), "synthetic")
+	connection := list.Connections[0]
+	_, err = f.service.Disconnect(ctx, &gen.DisconnectPayload{SessionToken: nil, ID: connection.ID, Generation: connection.Generation})
+	require.NoError(t, err)
+	entry, err := audittest.LatestAuditLogByAction(ctx, f.db, audit.ActionSlackDirectoryConnectionDisconnect)
+	require.NoError(t, err)
+	var snapshot map[string]any
+	require.NoError(t, json.Unmarshal(entry.BeforeSnapshot, &snapshot))
+	require.Equal(t, "reconnect_required", snapshot["Status"])
+	require.NotContains(t, string(entry.BeforeSnapshot), "synthetic")
 }

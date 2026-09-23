@@ -1481,7 +1481,7 @@ func newStartCommand() *cli.Command {
 
 			var slackDirectoryProvider slackdirectoryconnections.Provider
 			if c.String("slack-directory-client-id") != "" && c.String("slack-directory-client-id") != "unset" && c.String("slack-directory-client-secret") != "" && c.String("slack-directory-client-secret") != "unset" {
-				callbackURL := serverURL.ResolveReference(&url.URL{Path: slackdirectoryconnections.CallbackPath})
+				callbackURL := serverURL.JoinPath(slackdirectoryconnections.CallbackPath)
 				slackDirectoryProvider = slackdirectoryconnections.NewOAuthProvider(slackapi.NewClient("", guardianPolicy.PooledClient()), c.String("slack-directory-client-id"), c.String("slack-directory-client-secret"), callbackURL.String())
 			}
 			slackdirectoryconnections.Attach(mux, slackdirectoryconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags, cache.NewRedisCacheAdapter(redisClient), encryptionClient, slackDirectoryProvider, siteURL))

@@ -106,22 +106,27 @@ func (s *Service) List(ctx context.Context, _ *gen.ListPayload) (*gen.ListResult
 	}
 	result := &gen.ListResult{Connections: make([]*gen.SlackDirectoryConnection, 0, len(rows)), AuthorizationConfigured: s.provider != nil}
 	for _, row := range rows {
-		view := mv.BuildSlackDirectoryConnectionView(row)
-		if view.Status == "connected" {
-			plaintext, decryptErr := s.encryption.Decrypt(row.CredentialsEncrypted.String)
-			var tokens TokenBundle
-			if decryptErr != nil || json.Unmarshal([]byte(plaintext), &tokens) != nil || tokens.Version != 1 || tokens.AccessToken == "" {
-				s.logger.WarnContext(ctx, "Slack connection credential unavailable", attr.SlogResourceID(row.ID.String()))
-				view.Status = "reconnect_required"
-				view.LastErrorCode = conv.PtrEmpty("credential_unavailable")
-			} else if tokens.ExpiresAt != nil && !time.Now().Before(*tokens.ExpiresAt) {
-				view.Status = "reconnect_required"
-				view.LastErrorCode = conv.PtrEmpty("authorization_expired")
-			}
-		}
+		view := s.connectionView(ctx, row)
 		result.Connections = append(result.Connections, view)
 	}
 	return result, nil
+}
+
+func (s *Service) connectionView(ctx context.Context, row repo.SlackDirectoryConnection) *gen.SlackDirectoryConnection {
+	view := mv.BuildSlackDirectoryConnectionView(row)
+	if view.Status == "connected" {
+		plaintext, decryptErr := s.encryption.Decrypt(row.CredentialsEncrypted.String)
+		var tokens TokenBundle
+		if decryptErr != nil || json.Unmarshal([]byte(plaintext), &tokens) != nil || tokens.Version != 1 || tokens.AccessToken == "" {
+			s.logger.WarnContext(ctx, "Slack connection credential unavailable", attr.SlogResourceID(row.ID.String()))
+			view.Status = "reconnect_required"
+			view.LastErrorCode = conv.PtrEmpty("credential_unavailable")
+		} else if tokens.ExpiresAt != nil && !time.Now().Before(*tokens.ExpiresAt) {
+			view.Status = "reconnect_required"
+			view.LastErrorCode = conv.PtrEmpty("authorization_expired")
+		}
+	}
+	return view
 }
 
 type oauthState struct {
@@ -253,13 +258,13 @@ func (s *Service) saveAuthorization(ctx context.Context, ac *contextvalues.AuthC
 		if state.Generations[authorization.WorkspaceID] != before.Generation || (state.ConnectionID != uuid.Nil && state.ConnectionID != before.ID) {
 			return pgx.ErrNoRows
 		}
-		previous = mv.BuildSlackDirectoryConnectionView(before)
+		previous = s.connectionView(ctx, before)
 		row, err = queries.AuthorizeSlackDirectoryConnection(ctx, repo.AuthorizeSlackDirectoryConnectionParams{OrganizationID: ac.ActiveOrganizationID, ID: before.ID, SlackTeamID: authorization.WorkspaceID, SlackTeamName: conv.ToPGTextEmpty(authorization.WorkspaceName), CredentialsEncrypted: conv.ToPGText(ciphertext), GrantedScopes: authorization.Scopes, Generation: uuid.New(), ExpectedGeneration: before.Generation})
 	}
 	if err != nil {
 		return fmt.Errorf("save workspace authorization: %w", err)
 	}
-	if err := s.audit.LogSlackDirectoryConnectionAuthorize(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: ac.ActiveOrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ConnectionURN: urn.NewSlackDirectoryConnection(row.ID), ConnectionSnapshotBefore: previous, ConnectionSnapshotAfter: mv.BuildSlackDirectoryConnectionView(row)}); err != nil {
+	if err := s.audit.LogSlackDirectoryConnectionAuthorize(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: ac.ActiveOrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ConnectionURN: urn.NewSlackDirectoryConnection(row.ID), ConnectionSnapshotBefore: previous, ConnectionSnapshotAfter: s.connectionView(ctx, row)}); err != nil {
 		return fmt.Errorf("audit workspace authorization: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -301,8 +306,8 @@ func (s *Service) Disconnect(ctx context.Context, p *gen.DisconnectPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not disconnect Slack workspace").LogError(ctx, s.logger)
 	}
-	result := mv.BuildSlackDirectoryConnectionView(row)
-	if err := s.audit.LogSlackDirectoryConnectionDisconnect(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: ac.ActiveOrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ConnectionURN: urn.NewSlackDirectoryConnection(row.ID), ConnectionSnapshotBefore: mv.BuildSlackDirectoryConnectionView(before), ConnectionSnapshotAfter: result}); err != nil {
+	result := s.connectionView(ctx, row)
+	if err := s.audit.LogSlackDirectoryConnectionDisconnect(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: ac.ActiveOrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ConnectionURN: urn.NewSlackDirectoryConnection(row.ID), ConnectionSnapshotBefore: s.connectionView(ctx, before), ConnectionSnapshotAfter: result}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not audit Slack disconnection").LogError(ctx, s.logger)
 	}
 	if err := tx.Commit(ctx); err != nil {

@@ -454,3 +454,9 @@ and exact remote-session attachment checks, or
 and commit the SQL change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
 the PR, don't commit them.
+
+## Slack workspaces
+
+With `claude-tag-support` enabled for the organization and an ordinary `org:admin` session, open Organization Identity > Slack workspaces. The seed shows Acme Engineering as disconnected and Acme Operations as requiring authorization. Both have no usable credentials. When the dedicated app is unconfigured, Connect Slack and Reconnect are disabled. Disconnecting Acme Operations requires confirmation and changes its status to disconnected. Reseeding restores the two history rows with fresh connection generations.
+
+The mutation check runs only in the local organization. Support sessions cannot use these endpoints. Live Slack authorization requires dedicated app credentials and a registered callback; the seeded rows do not demonstrate an OAuth exchange.

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func protocolProvider(t *testing.T, change func(map[string]any), verifiedTeam string) *slackdirectoryconnections.OAuthProvider {
+func protocolProvider(t *testing.T, change func(map[string]any), verifiedTeam string, beforeVerify ...func()) *slackdirectoryconnections.OAuthProvider {
 	t.Helper()
 	type requestCheck struct {
 		ClientID      string
@@ -52,12 +52,25 @@ func protocolProvider(t *testing.T, change func(map[string]any), verifiedTeam st
 		checks <- requestCheck{ClientID: id, Secret: secret, BasicAuth: ok, ParseError: parseErr, RedirectURI: r.Form.Get("redirect_uri"), EncodeError: encodeErr, Method: "oauth"}
 	})
 	mux.HandleFunc("/auth.test", func(w http.ResponseWriter, r *http.Request) {
+		for _, hook := range beforeVerify {
+			hook()
+		}
 		encodeErr := json.NewEncoder(w).Encode(map[string]any{"ok": true, "team_id": verifiedTeam, "team": "Example workspace"})
 		checks <- requestCheck{Authorization: r.Header.Get("Authorization"), EncodeError: encodeErr, Method: "verify"}
 	})
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 	return slackdirectoryconnections.NewOAuthProvider(slackapi.NewClient(server.URL, server.Client()), "synthetic-client", "synthetic-secret", "https://dashboard.example/slack-directory/callback")
+}
+
+func TestProviderExpiryStartsBeforeVerification(t *testing.T) {
+	t.Parallel()
+	verificationStarted := make(chan time.Time, 1)
+	p := protocolProvider(t, nil, "TEXAMPLE01", func() { verificationStarted <- time.Now() })
+	result, err := p.Exchange(t.Context(), "synthetic-code")
+	require.NoError(t, err)
+	require.NotNil(t, result.Tokens.ExpiresAt)
+	require.True(t, result.Tokens.ExpiresAt.Before((<-verificationStarted).Add(12*time.Hour)))
 }
 
 func TestProviderWorkspaceInstallAndRotation(t *testing.T) {

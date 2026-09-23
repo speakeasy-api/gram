@@ -112,7 +112,11 @@ function SlackWorkspacesContent(): JSX.Element {
       {
         onSuccess: (response) => {
           const destination = safeExternalHttpUrl(response.authorizationUrl);
-          if (!destination) {
+          if (
+            !destination ||
+            new URL(destination).origin !== "https://slack.com" ||
+            new URL(destination).pathname !== "/oauth/v2/authorize"
+          ) {
             setRedirectError(
               "Slack returned an invalid authorization link. Please try again.",
             );
@@ -129,7 +133,8 @@ function SlackWorkspacesContent(): JSX.Element {
       disconnect.reset();
     }
   };
-  const notice = outcome ? outcomes[outcome] : undefined;
+  const notice =
+    outcome && Object.hasOwn(outcomes, outcome) ? outcomes[outcome] : undefined;
 
   return (
     <section className="max-w-4xl space-y-6" aria-label="Slack workspaces">

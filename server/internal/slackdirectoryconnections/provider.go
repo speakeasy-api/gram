@@ -69,6 +69,7 @@ func (p *OAuthProvider) Exchange(ctx context.Context, code string) (*Authorizati
 	}
 	req.SetBasicAuth(p.clientID, p.clientSecret)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	issuedAt := time.Now()
 	resp, err := p.api.HTTPClient().Do(req)
 	if err != nil {
 		return nil, providerFailure("transport")
@@ -129,7 +130,7 @@ func (p *OAuthProvider) Exchange(ctx context.Context, code string) (*Authorizati
 		if result.RefreshToken == "" || result.ExpiresIn > 365*24*60*60 {
 			return nil, providerFailure("rotation_invalid")
 		}
-		expiresAt = new(time.Now().Add(time.Duration(result.ExpiresIn) * time.Second))
+		expiresAt = new(issuedAt.Add(time.Duration(result.ExpiresIn) * time.Second))
 	}
 	return &Authorization{WorkspaceID: identity.TeamID, WorkspaceName: identity.Team, Scopes: scopes, Tokens: TokenBundle{Version: 1, AccessToken: result.AccessToken, RefreshToken: result.RefreshToken, ExpiresAt: expiresAt, TokenType: result.TokenType}}, nil
 }

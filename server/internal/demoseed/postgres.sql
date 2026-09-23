@@ -707,9 +707,9 @@ BEGIN
     (id, organization_id, slack_team_id, slack_team_name, generation, health, disconnected_at)
   VALUES
     (demo.det_uuid('gram-demo-slackconn-1'), demo_org, 'T0DEMO0001', 'Acme Engineering',
-     demo.det_uuid('gram-demo-slackconn-generation-1'), 'disconnected', now() - interval '2 days'),
+     gen_random_uuid(), 'disconnected', now() - interval '2 days'),
     (demo.det_uuid('gram-demo-slackconn-2'), demo_org, 'T0DEMO0002', 'Acme Operations',
-     demo.det_uuid('gram-demo-slackconn-generation-2'), 'pending', NULL);
+     gen_random_uuid(), 'pending', NULL);
 
   -- Directory profiles: feed spend-rule audiences, enrollment attributes, and
   -- mirror the user.attributes.* identity on the ClickHouse telemetry.
