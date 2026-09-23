@@ -23,6 +23,9 @@ const shadowMCPInventoryUpsertTimeout = 10 * time.Second
 // (DNO-521/DNO-606). WithoutCancel keeps the work alive after the hook
 // response is sent; the re-bound timeout keeps it from living forever.
 func (s *Service) upsertShadowMCPInventoryURLs(ctx context.Context, orgID string, projectID string, sessionID string, entries []MCPServerEntry) {
+	ctx, span := s.tracer.Start(ctx, "hooks.upsertShadowMCPInventoryURLs")
+	defer span.End()
+
 	if s.telemetryLogger == nil || projectID == "" || len(entries) == 0 {
 		return
 	}
