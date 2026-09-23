@@ -130,12 +130,19 @@ the token was valid may continue streaming after its expiry.
 
 ## Key rotation
 
-Publish the next key alongside the active key on every replica. Once the last
-replica serving the old JWKS has stopped, wait the full five-minute cache
-lifetime before switching signing keys. Keep the retiring public key until all
-old signer replicas have stopped and their last tokens have expired, including
-clock tolerance. Clients that cached the old key can still accept its tokens
-after you remove it from the JWKS.
+The infrastructure uses a 180-day rotation timer. Keys rotate on the next
+Terraform apply after that timer expires. The private key and public key are
+stored together and loaded when serving replicas restart.
+
+During the rollout, replicas can serve different JWKS versions. A verifier can
+briefly reject a valid assertion even after refreshing on an unknown `kid`.
+Keep enforcing signature verification during this window. The five-minute JWKS
+cache lifetime and 60-second assertion lifetime are unchanged.
+
+Uninterrupted rotation would require publishing the next public key on every
+replica, waiting the five-minute cache lifetime, then switching signers while
+retaining the old public key until its last assertions expire. The infrastructure
+does not automate that staged rollout.
 
 ## Tool-call records
 
