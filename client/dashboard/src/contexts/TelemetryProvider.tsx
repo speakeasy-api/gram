@@ -39,6 +39,10 @@ export function failOpenMissingFlags(telemetry: Telemetry): Telemetry {
       const result = telemetry.isFeatureEnabled(flag, options);
       return result === undefined ? true : result;
     }) as Telemetry["isFeatureEnabled"],
+    // Variants pass through untouched: a missing multivariate key stays
+    // undefined so callers fall back to the boolean read above rather than
+    // inventing a variant.
+    getFeatureFlag: telemetry.getFeatureFlag.bind(telemetry),
     onFeatureFlags: telemetry.onFeatureFlags.bind(telemetry),
     capture: telemetry.capture.bind(telemetry),
     identify: telemetry.identify.bind(telemetry),

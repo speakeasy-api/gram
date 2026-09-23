@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	ListClients               goa.Endpoint
 	GetClient                 goa.Endpoint
+	GetClientDelegationStatus goa.Endpoint
 	GetClientDeletePreflight  goa.Endpoint
 	ListClientMcpServers      goa.Endpoint
 	CreateClient              goa.Endpoint
@@ -38,6 +39,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		ListClients:               NewListClientsEndpoint(s, a.APIKeyAuth),
 		GetClient:                 NewGetClientEndpoint(s, a.APIKeyAuth),
+		GetClientDelegationStatus: NewGetClientDelegationStatusEndpoint(s, a.APIKeyAuth),
 		GetClientDeletePreflight:  NewGetClientDeletePreflightEndpoint(s, a.APIKeyAuth),
 		ListClientMcpServers:      NewListClientMcpServersEndpoint(s, a.APIKeyAuth),
 		CreateClient:              NewCreateClientEndpoint(s, a.APIKeyAuth),
@@ -56,6 +58,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListClients = m(e.ListClients)
 	e.GetClient = m(e.GetClient)
+	e.GetClientDelegationStatus = m(e.GetClientDelegationStatus)
 	e.GetClientDeletePreflight = m(e.GetClientDeletePreflight)
 	e.ListClientMcpServers = m(e.ListClientMcpServers)
 	e.CreateClient = m(e.CreateClient)
@@ -135,6 +138,30 @@ func NewGetClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 			return nil, err
 		}
 		return s.GetClient(ctx, p)
+	}
+}
+
+// NewGetClientDelegationStatusEndpoint returns an endpoint function that calls
+// the method "getClientDelegationStatus" of service
+// "organizationRemoteSessionClients".
+func NewGetClientDelegationStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetClientDelegationStatusPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetClientDelegationStatus(ctx, p)
 	}
 }
 

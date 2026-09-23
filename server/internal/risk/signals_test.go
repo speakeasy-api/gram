@@ -86,6 +86,12 @@ func TestGetRiskSignals_ClickHouse(t *testing.T) {
 	// Foreign tenant: invisible to signals.
 	rows = append(rows, chOverviewFinding(t, uuid.New(), "org_"+uuid.NewString(), chatA, msg(), from.Add(42*time.Hour), "gitleaks", "secret.github_pat", "alice@example.com"))
 
+	// Shadow engine-comparison row: invisible to signals. A distinct user so a
+	// leak would also inflate the user counts.
+	shadowRow := chOverviewFinding(t, projectID, orgID, chatA, msg(), from.Add(42*time.Hour), "gitleaks", "secret.github_pat", "carol@example.com")
+	shadowRow.Shadow = true
+	rows = append(rows, shadowRow)
+
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, rows))
 

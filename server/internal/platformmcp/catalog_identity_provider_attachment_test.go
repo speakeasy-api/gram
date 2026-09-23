@@ -1,11 +1,13 @@
 package platformmcp
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -34,12 +36,25 @@ func TestIdentityProviderDynamicRegistrationErrorTreatsTimeoutAndRateLimitAsRetr
 	t.Parallel()
 
 	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError} {
-		err := identityProviderDynamicRegistrationError(&remotesessions.DynamicClientRegistrationError{StatusCode: status})
+		err := identityProviderDynamicRegistrationError(&registration.HTTPError{StatusCode: status})
 		require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnavailable, status)
 	}
 
-	err := identityProviderDynamicRegistrationError(&remotesessions.DynamicClientRegistrationError{StatusCode: http.StatusBadRequest})
+	err := identityProviderDynamicRegistrationError(&registration.HTTPError{StatusCode: http.StatusBadRequest, ProviderMessage: "provider-controlled detail"})
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
+	require.NotContains(t, err.Error(), "provider-controlled detail")
+}
+
+// A caller hanging up mid-registration is not an attachment outcome. Reporting
+// it as unavailable would blame the provider for something it never did.
+func TestIdentityProviderDynamicRegistrationErrorPreservesCallerCancellation(t *testing.T) {
+	t.Parallel()
+
+	err := identityProviderDynamicRegistrationError(context.Canceled)
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotErrorIs(t, err, ErrIdentityProviderAttachmentUnavailable)
+	require.NotErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
 }
 
 func TestValidBrowserCatalogDynamicClientRequiresConfidentialClient(t *testing.T) {

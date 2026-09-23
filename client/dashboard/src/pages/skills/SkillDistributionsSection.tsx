@@ -1,9 +1,9 @@
-import { RequireScope } from "@/components/require-scope";
+import { RequirePluginWrite } from "@/components/require-plugin-write";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
-import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import type { PluginSkillDistribution } from "@gram/client/models/components/pluginskilldistribution.js";
@@ -29,8 +29,8 @@ export function SkillDistributionsSection({
 }: {
   skillId: string;
 }): JSX.Element {
-  const project = useProject();
   const queryClient = useQueryClient();
+  const canWritePlugin = usePluginWriteAccess();
   const routes = useRoutes();
   const distributionsQuery = useSkillDistributionsInfinite(
     { skillId, limit: 50 },
@@ -50,6 +50,7 @@ export function SkillDistributionsSection({
   const handleUndistribute = async (
     distribution: PluginSkillDistribution,
   ): Promise<void> => {
+    if (!canWritePlugin) return;
     try {
       await undistribute.mutateAsync({
         request: {
@@ -96,7 +97,7 @@ export function SkillDistributionsSection({
             >
               <div className="min-w-0">
                 <Link
-                  to={routes.plugins.detail.href(distribution.pluginId)}
+                  to={`${routes.plugins.detail.href(distribution.pluginId)}?skillId=${encodeURIComponent(skillId)}`}
                   className="text-sm font-medium hover:underline"
                 >
                   {distribution.pluginName}
@@ -112,11 +113,7 @@ export function SkillDistributionsSection({
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <VersionTrackingBadge distribution={distribution} />
-                <RequireScope
-                  scope="skill:write"
-                  resourceId={project.id}
-                  level="component"
-                >
+                <RequirePluginWrite>
                   <Button
                     type="button"
                     variant="tertiary"
@@ -129,7 +126,7 @@ export function SkillDistributionsSection({
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
-                </RequireScope>
+                </RequirePluginWrite>
               </div>
             </li>
           ))}

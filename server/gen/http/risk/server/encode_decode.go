@@ -1854,6 +1854,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		var (
 			policyID         *string
 			chatID           *string
+			mcpServerID      *string
 			category         *string
 			ruleID           *string
 			userID           *string
@@ -1884,6 +1885,13 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		}
 		if chatID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", *chatID, goa.FormatUUID))
+		}
+		mcpServerIDRaw := qp.Get("mcp_server_id")
+		if mcpServerIDRaw != "" {
+			mcpServerID = &mcpServerIDRaw
+		}
+		if mcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
 		}
 		categoryRaw := qp.Get("category")
 		if categoryRaw != "" {
@@ -1979,7 +1987,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRiskResultsPayload(policyID, chatID, category, ruleID, userID, externalUserIds, uniqueMatch, nonAssistant, assistantID, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsPayload(policyID, chatID, mcpServerID, category, ruleID, userID, externalUserIds, uniqueMatch, nonAssistant, assistantID, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2182,6 +2190,7 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 		var (
 			policyID         *string
 			chatID           *string
+			mcpServerID      *string
 			category         *string
 			ruleID           *string
 			userID           *string
@@ -2211,6 +2220,13 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 		}
 		if chatID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", *chatID, goa.FormatUUID))
+		}
+		mcpServerIDRaw := qp.Get("mcp_server_id")
+		if mcpServerIDRaw != "" {
+			mcpServerID = &mcpServerIDRaw
+		}
+		if mcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
 		}
 		categoryRaw := qp.Get("category")
 		if categoryRaw != "" {
@@ -2305,7 +2321,7 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRiskResultsForAgentPayload(policyID, chatID, category, ruleID, userID, uniqueMatch, nonAssistant, assistantID, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsForAgentPayload(policyID, chatID, mcpServerID, category, ruleID, userID, uniqueMatch, nonAssistant, assistantID, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -11945,29 +11961,40 @@ func marshalRiskSessionQuarantineToSessionQuarantineResponseBody(v *risk.Session
 // *RiskResultResponseBody from a value of type *types.RiskResult.
 func marshalTypesRiskResultToRiskResultResponseBody(v *types.RiskResult) *RiskResultResponseBody {
 	res := &RiskResultResponseBody{
-		ID:                v.ID,
-		PolicyID:          v.PolicyID,
-		PolicyVersion:     v.PolicyVersion,
-		BlockID:           v.BlockID,
-		ChatMessageID:     v.ChatMessageID,
-		ChatContentPartID: v.ChatContentPartID,
-		ChatID:            v.ChatID,
-		ChatTitle:         v.ChatTitle,
-		UserID:            v.UserID,
-		Source:            v.Source,
-		RuleID:            v.RuleID,
-		Description:       v.Description,
-		Match:             v.Match,
-		StartPos:          v.StartPos,
-		EndPos:            v.EndPos,
-		Confidence:        v.Confidence,
-		MatchRedacted:     v.MatchRedacted,
-		CreatedAt:         v.CreatedAt,
-		FalsePositiveAt:   v.FalsePositiveAt,
-		SuppressedAt:      v.SuppressedAt,
-		SuppressedReason:  v.SuppressedReason,
-		SuppressedDetail:  v.SuppressedDetail,
-		ExclusionID:       v.ExclusionID,
+		ID:                 v.ID,
+		PolicyID:           v.PolicyID,
+		PolicyVersion:      v.PolicyVersion,
+		ExecutionID:        v.ExecutionID,
+		McpServerID:        v.McpServerID,
+		MetaMcpServerID:    v.MetaMcpServerID,
+		ToolsetID:          v.ToolsetID,
+		ToolName:           v.ToolName,
+		Phase:              v.Phase,
+		MediationSurface:   v.MediationSurface,
+		McpMethod:          v.McpMethod,
+		PrincipalKind:      v.PrincipalKind,
+		IdentityStamped:    v.IdentityStamped,
+		EnforcementOutcome: v.EnforcementOutcome,
+		BlockID:            v.BlockID,
+		ChatMessageID:      v.ChatMessageID,
+		ChatContentPartID:  v.ChatContentPartID,
+		ChatID:             v.ChatID,
+		ChatTitle:          v.ChatTitle,
+		UserID:             v.UserID,
+		Source:             v.Source,
+		RuleID:             v.RuleID,
+		Description:        v.Description,
+		Match:              v.Match,
+		StartPos:           v.StartPos,
+		EndPos:             v.EndPos,
+		Confidence:         v.Confidence,
+		MatchRedacted:      v.MatchRedacted,
+		CreatedAt:          v.CreatedAt,
+		FalsePositiveAt:    v.FalsePositiveAt,
+		SuppressedAt:       v.SuppressedAt,
+		SuppressedReason:   v.SuppressedReason,
+		SuppressedDetail:   v.SuppressedDetail,
+		ExclusionID:        v.ExclusionID,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))
@@ -12011,21 +12038,32 @@ func marshalTypesRiskSpanToRiskSpanResponseBody(v *types.RiskSpan) *RiskSpanResp
 // *types.RiskResultRedacted.
 func marshalTypesRiskResultRedactedToRiskResultRedactedResponseBody(v *types.RiskResultRedacted) *RiskResultRedactedResponseBody {
 	res := &RiskResultRedactedResponseBody{
-		ID:                v.ID,
-		PolicyID:          v.PolicyID,
-		PolicyVersion:     v.PolicyVersion,
-		ChatMessageID:     v.ChatMessageID,
-		ChatContentPartID: v.ChatContentPartID,
-		ChatID:            v.ChatID,
-		ChatTitle:         v.ChatTitle,
-		UserID:            v.UserID,
-		Source:            v.Source,
-		RuleID:            v.RuleID,
-		Description:       v.Description,
-		MatchRedacted:     v.MatchRedacted,
-		PositionKnown:     v.PositionKnown,
-		Confidence:        v.Confidence,
-		CreatedAt:         v.CreatedAt,
+		ID:                 v.ID,
+		PolicyID:           v.PolicyID,
+		PolicyVersion:      v.PolicyVersion,
+		ExecutionID:        v.ExecutionID,
+		McpServerID:        v.McpServerID,
+		MetaMcpServerID:    v.MetaMcpServerID,
+		ToolsetID:          v.ToolsetID,
+		ToolName:           v.ToolName,
+		Phase:              v.Phase,
+		MediationSurface:   v.MediationSurface,
+		McpMethod:          v.McpMethod,
+		PrincipalKind:      v.PrincipalKind,
+		IdentityStamped:    v.IdentityStamped,
+		EnforcementOutcome: v.EnforcementOutcome,
+		ChatMessageID:      v.ChatMessageID,
+		ChatContentPartID:  v.ChatContentPartID,
+		ChatID:             v.ChatID,
+		ChatTitle:          v.ChatTitle,
+		UserID:             v.UserID,
+		Source:             v.Source,
+		RuleID:             v.RuleID,
+		Description:        v.Description,
+		MatchRedacted:      v.MatchRedacted,
+		PositionKnown:      v.PositionKnown,
+		Confidence:         v.Confidence,
+		CreatedAt:          v.CreatedAt,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))

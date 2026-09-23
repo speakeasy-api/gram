@@ -1,12 +1,76 @@
 # Per-worktree infra. `git:workinit` sets a unique COMPOSE_PROJECT_NAME and
 # `zero:remap-ports` remaps the host ports, so each worktree gets its own
-# Postgres, Redis, and ClickHouse without colliding.
+# Postgres, Redis, ClickHouse, and Temporal without colliding.
 # Services shared safely through explicit worktree namespaces live in
-# compose.shared.yml and run once for the whole machine: Temporal, Pub/Sub,
+# compose.shared.yml and run once for the whole machine: Pub/Sub,
 # Presidio, and the LGTM observability stack.
 name: ${COMPOSE_PROJECT_NAME:-gram}
 
 services:
+  gram-temporal:
+    image: temporalio/temporal:1.8.1@sha256:59561b9ef060eaeb1f46cb6a1842d6cbdd8a393eb3b6d315ecef5fe2f0b1d7a6
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${TEMPORAL_PORT:-17233}:7233"
+      - "127.0.0.1:${TEMPORAL_WEB_PORT:-18233}:8233"
+    environment:
+      # The dev server is a single Go process, so its footprint is governed by
+      # the Go runtime rather than by cgroup limits. GOMEMLIMIT is a soft heap
+      # target, not a hard RSS cap. Each server handles only this worktree.
+      GOMEMLIMIT: 256MiB
+      # Per-P allocator caches and GC workers scale with core count; the dev
+      # server never needs the whole host.
+      GOMAXPROCS: 4
+    entrypoint: ["temporal"]
+    command: [
+        "server",
+        "start-dev",
+        "--ip",
+        "0.0.0.0",
+        "--ui-ip",
+        "0.0.0.0",
+        "--namespace",
+        "${TEMPORAL_NAMESPACE:-default}",
+        "--db-filename",
+        "/home/temporal/dev.db",
+        # Allow readers alongside a writer and wait briefly for SQLite locks.
+        "--sqlite-pragma",
+        "journal_mode=WAL",
+        "--sqlite-pragma",
+        "synchronous=NORMAL",
+        "--sqlite-pragma",
+        "busy_timeout=5000",
+        # Temporal's history cache is count-bounded by default (128k mutable
+        # state entries host-wide), which puts no ceiling on bytes. Switch it to
+        # a size-based limit so the live heap stays bounded and GOMEMLIMIT does
+        # not turn into GC thrash. 1.31 dropped the shard-level cache, so
+        # hostLevelCacheMaxSizeBytes is the only size knob left.
+        "--dynamic-config-value",
+        "history.cacheSizeBasedLimit=true",
+        "--dynamic-config-value",
+        "history.hostLevelCacheMaxSizeBytes=67108864",
+        "--dynamic-config-value",
+        "history.eventsCacheMaxSizeBytes=2097152",
+        "--dynamic-config-value",
+        'history.cacheTTL="5m"',
+        "--dynamic-config-value",
+        'history.eventsCacheTTL="5m"',
+        # A local worker does not need the default four task queue
+        # partitions, each of which carries its own manager and buffers.
+        "--dynamic-config-value",
+        "matching.numTaskqueueReadPartitions=1",
+        "--dynamic-config-value",
+        "matching.numTaskqueueWritePartitions=1",
+      ]
+    volumes:
+      # A new name avoids reviving volumes from the previous local setup.
+      - temporal_local_data:/home/temporal
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health"]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+
   gram-db:
     image: pgvector/pgvector:pg17
     restart: unless-stopped
@@ -99,6 +163,8 @@ services:
       retries: 5
 
 volumes:
+  temporal_local_data:
+    driver: local
   postgres_data:
     driver: local
   cache_data:

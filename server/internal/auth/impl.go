@@ -438,6 +438,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 				Whitelisted:    true,
 				ProvisionTrial: true,
 				ActorEmail:     userInfo.Email,
+				CreationSource: orgprovision.SourceSignup,
 			})
 			if err != nil {
 				return s.redirectSignupError(ctx, payload, err)
@@ -865,6 +866,9 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		Slug:        selected.Slug,
 		WorkosID:    conv.PtrToPGText(selected.WorkosID),
 		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+		// Switching into an organization says nothing about what created it,
+		// and null leaves whatever was recorded alone.
+		CreationSource: pgtype.Text{String: "", Valid: false},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").LogError(ctx, s.logger)
 	}
@@ -1148,6 +1152,9 @@ func (s *Service) applySignupWhitelist(ctx context.Context, organizations []sess
 		Slug:        orgMetadata.Slug,
 		WorkosID:    orgMetadata.WorkosID,
 		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+		// Whitelisting an existing organization is not creating one. Null so
+		// the source the creating flow recorded survives this write.
+		CreationSource: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return "", orgRepo.OrganizationMetadatum{}, fmt.Errorf("whitelist organization for signup: %w", err)
@@ -1172,6 +1179,11 @@ type orgProvisionOptions struct {
 	// unauthenticated callback, which has no auth context to read it from.
 	// Empty stores no display name, leaving the entry showing a bare actor id.
 	ActorEmail string
+
+	// CreationSource names the flow asking for the organization, one of the
+	// orgprovision source constants. It is recorded on the row for admin
+	// operators to read and decides nothing.
+	CreationSource string
 }
 
 // provisionOrgForUser creates an organization and attaches a user to it as the
@@ -1234,6 +1246,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		Whitelisted:    true,
 		ProvisionTrial: true,
 		ActorEmail:     conv.PtrValOr(authCtx.Email, ""),
+		CreationSource: orgprovision.SourceSignup,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error creating organization").LogError(ctx, s.logger)
@@ -1261,6 +1274,7 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 		Whitelisted:    true,
 		ProvisionTrial: false,
 		ActorEmail:     userInfo.Email,
+		CreationSource: orgprovision.SourceAssistants,
 	})
 	if err != nil {
 		return "", err
@@ -1332,6 +1346,9 @@ func (s *Service) persistProvisionedOrganization(
 		Slug:        slug,
 		WorkosID:    pgtype.Text{String: provisionedOrg.WorkOSOrganizationID, Valid: provisionedOrg.WorkOSOrganizationID != ""},
 		Whitelisted: pgtype.Bool{Bool: opts.Whitelisted, Valid: true},
+		// Empty writes null rather than an empty string, so "nothing recorded a
+		// source" stays one value on the read side.
+		CreationSource: conv.ToPGTextEmpty(opts.CreationSource),
 	})
 	if err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create organization metadata: %w", err)

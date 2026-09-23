@@ -181,6 +181,55 @@ describe("Overview", () => {
     ).toBeNull();
   });
 
+  it("marks an organization a platform admin created", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      creation_source: "platform_admin",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Details" });
+    const createdVia = valueBeside("Created via");
+    expect(createdVia.textContent).toContain("Platform admin");
+    // The flow, not just who ran it: "Platform admin" alone leaves an operator
+    // to guess whether the organization is a prospect or an internal fixture.
+    expect(createdVia.textContent).toContain("PROSPECT FLOW");
+  });
+
+  it("names a self-serve organization without marking it a prospect", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      creation_source: "signup",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Details" });
+    expect(valueBeside("Created via").textContent).toBe("Self-serve signup");
+    expect(screen.queryByText("PROSPECT FLOW")).toBeNull();
+  });
+
+  it("says nothing was recorded for an organization without a source", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      creation_source: undefined,
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Details" });
+    const createdVia = valueBeside("Created via");
+    // Not "-": every other absent field on this record is a value the operator
+    // could set, and this one is a fact about the past that nobody wrote down.
+    expect(createdVia.textContent).toBe("Not recorded");
+    expect(createdVia.querySelector(".text-muted-foreground")).toBeTruthy();
+    expect(screen.queryByText("PROSPECT FLOW")).toBeNull();
+  });
+
   it("matches the approved active-trial hierarchy", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,

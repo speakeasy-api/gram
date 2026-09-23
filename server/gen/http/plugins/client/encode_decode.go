@@ -19,6 +19,513 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// BuildListDistributionPluginsRequest instantiates a HTTP request object with
+// method and path set to call the "plugins" service "listDistributionPlugins"
+// endpoint
+func (c *Client) BuildListDistributionPluginsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListDistributionPluginsPluginsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("plugins", "listDistributionPlugins", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListDistributionPluginsRequest returns an encoder for requests sent to
+// the plugins listDistributionPlugins server.
+func EncodeListDistributionPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*plugins.ListDistributionPluginsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("plugins", "listDistributionPlugins", "*plugins.ListDistributionPluginsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("skill_id", p.SkillID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListDistributionPluginsResponse returns a decoder for responses
+// returned by the plugins listDistributionPlugins endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListDistributionPluginsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeListDistributionPluginsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListDistributionPluginsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listDistributionPlugins", err)
+			}
+			err = ValidateListDistributionPluginsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listDistributionPlugins", err)
+			}
+			res := NewListDistributionPluginsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListDistributionPluginsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listDistributionPlugins", err)
+			}
+			err = ValidateListDistributionPluginsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listDistributionPlugins", err)
+			}
+			return nil, NewListDistributionPluginsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListDistributionPluginsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listDistributionPlugins", err)
+			}
+			err = ValidateListDistributionPluginsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listDistributionPlugins", err)
+			}
+			return nil, NewListDistributionPluginsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListDistributionPluginsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listDistributionPlugins", err)
+			}
+			err = ValidateListDistributionPluginsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listDistributionPlugins", err)
+			}
+			return nil, NewListDistributionPluginsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListDistributionPluginsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listDistributionPlugins", err)
+			}
+			err = ValidateListDistributionPluginsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listDistributionPlugins", err)
+			}
+			return nil, NewListDistributionPluginsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListDistributionPluginsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listDistributionPlugins", err)
+			}
+			err = ValidateListDistributionPluginsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listDistributionPlugins", err)
+			}
+			return nil, NewListDistributionPluginsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListDistributionPluginsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listDistributionPlugins", err)
+			}
+			err = ValidateListDistributionPluginsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listDistributionPlugins", err)
+			}
+			return nil, NewListDistributionPluginsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListDistributionPluginsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listDistributionPlugins", err)
+			}
+			err = ValidateListDistributionPluginsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listDistributionPlugins", err)
+			}
+			return nil, NewListDistributionPluginsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListDistributionPluginsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "listDistributionPlugins", err)
+				}
+				err = ValidateListDistributionPluginsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "listDistributionPlugins", err)
+				}
+				return nil, NewListDistributionPluginsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListDistributionPluginsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "listDistributionPlugins", err)
+				}
+				err = ValidateListDistributionPluginsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "listDistributionPlugins", err)
+				}
+				return nil, NewListDistributionPluginsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("plugins", "listDistributionPlugins", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListDistributionPluginsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listDistributionPlugins", err)
+			}
+			err = ValidateListDistributionPluginsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listDistributionPlugins", err)
+			}
+			return nil, NewListDistributionPluginsGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ListDistributionPluginsUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "listDistributionPlugins", err)
+			}
+			err = ValidateListDistributionPluginsUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "listDistributionPlugins", err)
+			}
+			return nil, NewListDistributionPluginsUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("plugins", "listDistributionPlugins", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetDistributionPluginRequest instantiates a HTTP request object with
+// method and path set to call the "plugins" service "getDistributionPlugin"
+// endpoint
+func (c *Client) BuildGetDistributionPluginRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetDistributionPluginPluginsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("plugins", "getDistributionPlugin", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetDistributionPluginRequest returns an encoder for requests sent to
+// the plugins getDistributionPlugin server.
+func EncodeGetDistributionPluginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*plugins.GetDistributionPluginPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("plugins", "getDistributionPlugin", "*plugins.GetDistributionPluginPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("skill_id", p.SkillID)
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetDistributionPluginResponse returns a decoder for responses returned
+// by the plugins getDistributionPlugin endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeGetDistributionPluginResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeGetDistributionPluginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetDistributionPluginResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getDistributionPlugin", err)
+			}
+			err = ValidateGetDistributionPluginResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getDistributionPlugin", err)
+			}
+			res := NewGetDistributionPluginDistributionPluginOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetDistributionPluginUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getDistributionPlugin", err)
+			}
+			err = ValidateGetDistributionPluginUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getDistributionPlugin", err)
+			}
+			return nil, NewGetDistributionPluginUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetDistributionPluginForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getDistributionPlugin", err)
+			}
+			err = ValidateGetDistributionPluginForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getDistributionPlugin", err)
+			}
+			return nil, NewGetDistributionPluginForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetDistributionPluginBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getDistributionPlugin", err)
+			}
+			err = ValidateGetDistributionPluginBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getDistributionPlugin", err)
+			}
+			return nil, NewGetDistributionPluginBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetDistributionPluginNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getDistributionPlugin", err)
+			}
+			err = ValidateGetDistributionPluginNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getDistributionPlugin", err)
+			}
+			return nil, NewGetDistributionPluginNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetDistributionPluginConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getDistributionPlugin", err)
+			}
+			err = ValidateGetDistributionPluginConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getDistributionPlugin", err)
+			}
+			return nil, NewGetDistributionPluginConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetDistributionPluginUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getDistributionPlugin", err)
+			}
+			err = ValidateGetDistributionPluginUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getDistributionPlugin", err)
+			}
+			return nil, NewGetDistributionPluginUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetDistributionPluginInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getDistributionPlugin", err)
+			}
+			err = ValidateGetDistributionPluginInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getDistributionPlugin", err)
+			}
+			return nil, NewGetDistributionPluginInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetDistributionPluginInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "getDistributionPlugin", err)
+				}
+				err = ValidateGetDistributionPluginInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "getDistributionPlugin", err)
+				}
+				return nil, NewGetDistributionPluginInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetDistributionPluginUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "getDistributionPlugin", err)
+				}
+				err = ValidateGetDistributionPluginUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "getDistributionPlugin", err)
+				}
+				return nil, NewGetDistributionPluginUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("plugins", "getDistributionPlugin", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetDistributionPluginGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getDistributionPlugin", err)
+			}
+			err = ValidateGetDistributionPluginGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getDistributionPlugin", err)
+			}
+			return nil, NewGetDistributionPluginGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body GetDistributionPluginUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getDistributionPlugin", err)
+			}
+			err = ValidateGetDistributionPluginUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getDistributionPlugin", err)
+			}
+			return nil, NewGetDistributionPluginUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("plugins", "getDistributionPlugin", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListPluginsRequest instantiates a HTTP request object with method and
 // path set to call the "plugins" service "listPlugins" endpoint
 func (c *Client) BuildListPluginsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -4304,6 +4811,20 @@ func DecodeUpdateMarketplaceSettingsResponse(decoder func(*http.Response) goahtt
 			return nil, goahttp.ErrInvalidResponse("plugins", "updateMarketplaceSettings", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalDistributionPluginResponseBodyToPluginsDistributionPlugin builds a
+// value of type *plugins.DistributionPlugin from a value of type
+// *DistributionPluginResponseBody.
+func unmarshalDistributionPluginResponseBodyToPluginsDistributionPlugin(v *DistributionPluginResponseBody) *plugins.DistributionPlugin {
+	res := &plugins.DistributionPlugin{
+		ID:          *v.ID,
+		Name:        *v.Name,
+		Description: v.Description,
+		IsDefault:   *v.IsDefault,
+	}
+
+	return res
 }
 
 // unmarshalPluginResponseBodyToPluginsPlugin builds a value of type

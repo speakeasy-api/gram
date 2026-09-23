@@ -1,3 +1,6 @@
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
+import { useOrganization } from "@/contexts/Auth";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { CreateResourceCard } from "@/components/create-resource-card";
 import { type FilterValue, useFilterState } from "@/components/filters";
 import { InputField } from "@/components/moon/input-field";
@@ -62,7 +65,36 @@ export function PluginsRoot(): JSX.Element {
   return <Outlet />;
 }
 
-export default function Plugins(): JSX.Element {
+export default function Plugins(): JSX.Element | null {
+  const { hasScope, isLoading } = useRBAC();
+  const organization = useOrganization();
+  const canWritePlugin = usePluginWriteAccess();
+  if (isLoading) return null;
+  if (!canWritePlugin && !hasScope("org:read", organization.id)) return null;
+  return hasScope("org:admin", organization.id) ? (
+    <PluginsWithMarketplaceSettings />
+  ) : (
+    <PluginsContent />
+  );
+}
+
+function PluginsWithMarketplaceSettings(): JSX.Element {
+  const scope = usePluginQueryScope();
+  const { data } = useMarketplaceSettingsSuspense(scope);
+  return <PluginsContent marketplaceSettings={data} />;
+}
+
+function PluginsContent({
+  marketplaceSettings = {
+    defaultName: "",
+    effectiveName: "",
+    observabilityEnabled: false,
+  },
+}: {
+  marketplaceSettings?: ReturnType<
+    typeof useMarketplaceSettingsSuspense
+  >["data"];
+}): JSX.Element {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isManageCollaboratorsOpen, setIsManageCollaboratorsOpen] =
@@ -72,17 +104,17 @@ export default function Plugins(): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
 
-  const { data } = usePluginsSuspense();
+  const scope = usePluginQueryScope();
+  const { data } = usePluginsSuspense(scope);
   // Polled so the marketplace card and per-plugin sync badges pick up the
   // Temporal generator-rollout schedule's auto-sync without a manual refresh.
-  const { data: publishStatus } = usePublishStatusSuspense(
-    undefined,
-    undefined,
-    { refetchInterval: 5_000 },
-  );
-  const { data: marketplaceSettings } = useMarketplaceSettingsSuspense();
+  const { data: publishStatus } = usePublishStatusSuspense(scope, undefined, {
+    refetchInterval: 5_000,
+  });
   const { hasScope } = useRBAC();
-  const canManageMarketplace = hasScope("org:admin");
+  const canWritePlugin = usePluginWriteAccess();
+  const organization = useOrganization();
+  const canManageMarketplace = hasScope("org:admin", organization.id);
   const { fetch: authFetch } = useFetcher();
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
@@ -176,6 +208,7 @@ export default function Plugins(): JSX.Element {
 
   const handleCreate: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
+    if (!canWritePlugin) return;
     const formData = new FormData(e.currentTarget);
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
@@ -198,6 +231,7 @@ export default function Plugins(): JSX.Element {
   const { mutate: publishMutate } = publishMutation;
   const handlePublish = useCallback(
     (githubUsernames: string[]) => {
+      if (!canWritePlugin) return;
       publishModeRef.current = "publish";
       publishMutate({
         security: { sessionHeaderGramSession: "" },
@@ -206,10 +240,11 @@ export default function Plugins(): JSX.Element {
         },
       });
     },
-    [publishMutate],
+    [canWritePlugin, publishMutate],
   );
   const handleAddCollaborators = useCallback(
     (githubUsernames: string[]) => {
+      if (!canManageMarketplace) return;
       publishModeRef.current = "manage";
       publishMutate({
         security: { sessionHeaderGramSession: "" },
@@ -218,7 +253,7 @@ export default function Plugins(): JSX.Element {
         },
       });
     },
-    [publishMutate],
+    [canManageMarketplace, publishMutate],
   );
 
   const [marketplaceNameInput, setMarketplaceNameInput] = useState(
@@ -251,6 +286,7 @@ export default function Plugins(): JSX.Element {
     trimmedMarketplaceName !== currentMarketplaceName.trim();
 
   const handleOpenMarketplaceSettings = () => {
+    if (!canManageMarketplace) return;
     // Reset the input to the persisted value so reopening discards unsaved
     // edits. Falls back to the computed default name (not "") when unset —
     // otherwise the field shows only ghost placeholder text with nothing to
@@ -267,6 +303,7 @@ export default function Plugins(): JSX.Element {
   };
 
   const handleSaveMarketplaceName = () => {
+    if (!canManageMarketplace) return;
     updateMarketplaceSettingsMutation.mutate(
       {
         security: { sessionHeaderGramSession: "" },
@@ -330,13 +367,13 @@ export default function Plugins(): JSX.Element {
     );
   };
 
-  const createCard = (
+  const createCard = canWritePlugin ? (
     <CreateResourceCard
       title="New Plugin"
       description="Bundle MCP servers and hooks for distribution to supported coding agents."
       onClick={() => setIsCreateDialogOpen(true)}
     />
-  );
+  ) : null;
 
   return (
     <>
@@ -368,7 +405,8 @@ export default function Plugins(): JSX.Element {
         }}
       >
         <Stack direction="vertical" gap={8}>
-          {publishStatus?.configured &&
+          {canManageMarketplace &&
+            publishStatus?.configured &&
             (publishStatus.connected && publishStatus.repoUrl ? (
               publishStatus.hasCollaborators === false ? (
                 <>
@@ -378,9 +416,13 @@ export default function Plugins(): JSX.Element {
                       marketplaceSettings.marketplaceName ??
                       marketplaceSettings.defaultName
                     }
-                    onSetup={handleStartSetup}
-                    onAddCollaborators={() =>
-                      setIsManageCollaboratorsOpen(true)
+                    onSetup={
+                      canManageMarketplace ? handleStartSetup : undefined
+                    }
+                    onAddCollaborators={
+                      canManageMarketplace
+                        ? () => setIsManageCollaboratorsOpen(true)
+                        : undefined
                     }
                     observabilityEnabled={
                       marketplaceSettings.observabilityEnabled
@@ -392,11 +434,19 @@ export default function Plugins(): JSX.Element {
                 <>
                   <MarketplaceCard
                     publishStatus={publishStatus}
-                    onManageCollaborators={() =>
-                      setIsManageCollaboratorsOpen(true)
+                    onManageCollaborators={
+                      canManageMarketplace
+                        ? () => setIsManageCollaboratorsOpen(true)
+                        : undefined
                     }
-                    onRename={handleOpenMarketplaceSettings}
-                    onSync={() => handlePublish([])}
+                    onRename={
+                      canManageMarketplace
+                        ? handleOpenMarketplaceSettings
+                        : undefined
+                    }
+                    onSync={
+                      canWritePlugin ? () => handlePublish([]) : undefined
+                    }
                     isSyncing={publishMutation.isPending}
                     observabilityEnabled={
                       marketplaceSettings.observabilityEnabled
@@ -413,8 +463,12 @@ export default function Plugins(): JSX.Element {
                     marketplaceSettings.marketplaceName ??
                     marketplaceSettings.defaultName
                   }
-                  onSetup={handleStartSetup}
-                  onAddCollaborators={() => setIsManageCollaboratorsOpen(true)}
+                  onSetup={canManageMarketplace ? handleStartSetup : undefined}
+                  onAddCollaborators={
+                    canManageMarketplace
+                      ? () => setIsManageCollaboratorsOpen(true)
+                      : undefined
+                  }
                   observabilityEnabled={
                     marketplaceSettings.observabilityEnabled
                   }
@@ -428,39 +482,53 @@ export default function Plugins(): JSX.Element {
             in your coding agent, then any new MCP servers will become instantly
             available for installation.
           </Text>
+          {!canManageMarketplace &&
+            canWritePlugin &&
+            publishStatus?.connected && (
+              <Button
+                onClick={() => handlePublish([])}
+                disabled={publishMutation.isPending}
+              >
+                Sync plugins
+              </Button>
+            )}
           <PluginGrid
             plugins={filteredPlugins}
-            publishStatus={publishStatus}
+            publishStatus={canManageMarketplace ? publishStatus : undefined}
             searchQuery={hasPlugins ? search : ""}
             createCard={createCard}
           />
-          <div className="flex items-center gap-3">
-            <div className="border-border flex-1 border-t" />
-            <Text
-              small
-              muted
-              className="shrink-0 font-mono text-xs tracking-wide uppercase"
-            >
-              Platform Plugins
-            </Text>
-            <div className="border-border flex-1 border-t" />
-          </div>
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <ObservabilityPluginCard
-              publishStatus={publishStatus}
-              enabled={marketplaceSettings.observabilityEnabled}
-              canToggle={canManageMarketplace}
-              isToggling={updateMarketplaceSettingsMutation.isPending}
-              onEnabledChange={handleObservabilityEnabledChange}
-              isDownloadMenuOpen={isObservabilityDownloadMenuOpen}
-              onDownloadMenuOpenChange={setIsObservabilityDownloadMenuOpen}
-              isDownloading={isDownloadingObservability !== null}
-              onDownload={(platform) => {
-                void handleObservabilityDownload(platform);
-              }}
-            />
-            <PlatformMCPPluginCard />
-          </div>
+          {canManageMarketplace && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="border-border flex-1 border-t" />
+                <Text
+                  small
+                  muted
+                  className="shrink-0 font-mono text-xs tracking-wide uppercase"
+                >
+                  Platform Plugins
+                </Text>
+                <div className="border-border flex-1 border-t" />
+              </div>
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <ObservabilityPluginCard
+                  publishStatus={publishStatus}
+                  enabled={marketplaceSettings.observabilityEnabled}
+                  canToggle={canManageMarketplace}
+                  isToggling={updateMarketplaceSettingsMutation.isPending}
+                  onEnabledChange={handleObservabilityEnabledChange}
+                  isDownloadMenuOpen={isObservabilityDownloadMenuOpen}
+                  onDownloadMenuOpenChange={setIsObservabilityDownloadMenuOpen}
+                  isDownloading={isDownloadingObservability !== null}
+                  onDownload={(platform) => {
+                    void handleObservabilityDownload(platform);
+                  }}
+                />
+                <PlatformMCPPluginCard />
+              </div>
+            </>
+          )}
         </Stack>
       </ResourceListPage>
 

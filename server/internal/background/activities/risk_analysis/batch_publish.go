@@ -23,17 +23,29 @@ const publishAckTimeout = 10 * time.Second
 // and scan-request ids are deterministic, so replays converge instead of
 // duplicating rows.
 func drainPublishAcks(ctx context.Context, errMsg string, results []gcp.PublishResult) error {
+	_, err := countPublishAcks(ctx, errMsg, results)
+	return err
+}
+
+// countPublishAcks waits for every result like drainPublishAcks and also
+// reports how many were acknowledged, so a caller that tolerates a partial
+// publish can count the messages that did reach the topic and the ones that
+// did not (len(results) - acked) separately.
+func countPublishAcks(ctx context.Context, errMsg string, results []gcp.PublishResult) (acked int, err error) {
 	waitParent := context.WithoutCancel(ctx)
 	var errs error
 	for _, res := range results {
 		waitCtx, cancel := context.WithTimeout(waitParent, publishAckTimeout)
 		_, err := res.Get(waitCtx)
 		cancel()
+		if err == nil {
+			acked++
+		}
 		errs = errors.Join(errs, err)
 		activity.RecordHeartbeat(ctx, "publish_ack")
 	}
 	if errs != nil {
-		return fmt.Errorf("%s: %w", errMsg, errs)
+		return acked, fmt.Errorf("%s: %w", errMsg, errs)
 	}
-	return nil
+	return acked, nil
 }

@@ -96,5 +96,6 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	if err != nil {
 		return nil, fmt.Errorf("initialize MCP service: %w", err)
 	}
+	service.SetFederatedLoginConsumer(mcp.NewFederatedDelegationConsumer(remotesessions.NewDelegationService(d.DB, d.Encryption, d.Challenges)))
 	return service, nil
 }

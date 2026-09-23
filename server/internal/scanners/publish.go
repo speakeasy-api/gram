@@ -26,6 +26,13 @@ type FindingMetadata struct {
 	OrganizationID    string
 	RiskPolicyID      string
 	RiskPolicyVersion int64
+
+	// Shadow marks every published finding as an engine-comparison record:
+	// the LLM analyzer's verdict under the shadow risk engine mode, never
+	// enforced, stored by the ClickHouse writer as shadow = 1 and hidden from
+	// every user-facing read path. False for the enforcing engines. Part of
+	// the deterministic finding id, so the marker is immutable per id.
+	Shadow bool
 }
 
 func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher[*riskv1.Finding], meta FindingMetadata, findings []Finding, logPrefix string) (int, []string, error) {
@@ -107,6 +114,7 @@ func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding
 			// (suppression/unsuppression) are built elsewhere and never pass
 			// through here.
 			EventKind: new(chrepo.EventKindFinding),
+			Shadow:    &meta.Shadow,
 		}.Build()
 
 		results = append(results, pub.Publish(ctx, msg))
@@ -143,5 +151,13 @@ func deterministicFindingID(meta FindingMetadata, finding Finding) uuid.UUID {
 		strconv.Itoa(finding.EndPos),
 		finding.Match,
 	)
+	// The shadow marker is part of the identity so an organization moving
+	// between the llm and shadow modes (or a redelivery across that switch)
+	// never lands shadow = 1 and shadow = 0 copies under one id, which the
+	// read-time per-id dedup would otherwise collapse. Appended only when set
+	// so every previously minted enforcing id stays stable.
+	if meta.Shadow {
+		parts = append(parts, "shadow")
+	}
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:finding:"+strings.Join(parts, "\x00")))
 }

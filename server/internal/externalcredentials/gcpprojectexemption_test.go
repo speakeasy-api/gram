@@ -16,7 +16,7 @@ func TestCreateGcpIamCredential_PlatformAdminExemptsGramProjectTarget(t *testing
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx)), &gen.CreateGcpIamCredentialPayload{
+	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx), ti), &gen.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "gcp-staff-dogfood",
 		ImpersonateServiceAccount: gramProjectServiceAccount("internal"),
@@ -35,7 +35,7 @@ func TestCreateGcpIamCredential_PlatformAdminStillRefusedMalformedTarget(t *test
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	_, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx)), &gen.CreateGcpIamCredentialPayload{
+	_, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx), ti), &gen.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "gcp-staff-malformed",
 		ImpersonateServiceAccount: "123456789012-compute@developer.gserviceaccount.com",
@@ -50,7 +50,7 @@ func TestCreateGcpIamCredential_PlatformAdminRecordsNoExemptionForCustomerTarget
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx)), &gen.CreateGcpIamCredentialPayload{
+	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx), ti), &gen.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "gcp-staff-ordinary-target",
 		ImpersonateServiceAccount: "signer@customer-project.iam.gserviceaccount.com",
@@ -68,7 +68,7 @@ func TestUpdateGcpIamCredential_OrgAdminRenamesExemptedCredential(t *testing.T) 
 	ctx, ti := newTestService(t)
 
 	target := gramProjectServiceAccount("internal")
-	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx)), &gen.CreateGcpIamCredentialPayload{
+	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx), ti), &gen.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "gcp-exempt-before-rename",
 		ImpersonateServiceAccount: target,
@@ -94,7 +94,7 @@ func TestUpdateGcpIamCredential_ExemptionSurvivesCaseDifference(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx)), &gen.CreateGcpIamCredentialPayload{
+	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx), ti), &gen.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "gcp-exempt-case",
 		ImpersonateServiceAccount: gramProjectServiceAccount("internal"),
@@ -124,7 +124,7 @@ func TestUpdateGcpIamCredential_ExemptionDoesNotTransferToAnotherGramProjectTarg
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx)), &gen.CreateGcpIamCredentialPayload{
+	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx), ti), &gen.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "gcp-exempt-pinned",
 		ImpersonateServiceAccount: gramProjectServiceAccount("internal"),
@@ -149,7 +149,7 @@ func TestUpdateGcpIamCredential_ExemptionLostByRoundTrip(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	target := gramProjectServiceAccount("internal")
-	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx)), &gen.CreateGcpIamCredentialPayload{
+	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx), ti), &gen.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "gcp-exempt-round-trip",
 		ImpersonateServiceAccount: target,
@@ -198,7 +198,7 @@ func TestVerifyGcpIamCredential_HonorsStoredExemption(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx)), &gen.CreateGcpIamCredentialPayload{
+	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx), ti), &gen.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "gcp-exempt-verify",
 		ImpersonateServiceAccount: gramProjectServiceAccount("internal"),
@@ -224,7 +224,7 @@ func TestUpdateGcpIamCredential_PlatformAdminGrantsExemptionOnUpdate(t *testing.
 	created := createGCPUnscreenedCredentialDirect(t, ctx, ti, "gcp-legacy-to-lift")
 	requireSkipProjectVerification(t, ctx, ti, created.ID, false)
 
-	_, err := ti.service.UpdateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx)), &gen.UpdateGcpIamCredentialPayload{
+	_, err := ti.service.UpdateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx), ti), &gen.UpdateGcpIamCredentialPayload{
 		ID:                        created.ID,
 		SessionToken:              nil,
 		Name:                      "gcp-legacy-lifted",
@@ -244,7 +244,7 @@ func TestUpdateGcpIamCredential_RepointingExemptedCredentialIsANewGrant(t *testi
 	t.Parallel()
 	ctx, ti, logs := newTestServiceWithLogs(t)
 
-	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx)), &gen.CreateGcpIamCredentialPayload{
+	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx), ti), &gen.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "gcp-exempt-repointed",
 		ImpersonateServiceAccount: gramProjectServiceAccount("internal"),
@@ -252,7 +252,7 @@ func TestUpdateGcpIamCredential_RepointingExemptedCredentialIsANewGrant(t *testi
 	require.NoError(t, err)
 	require.Equal(t, 1, strings.Count(logs.String(), "exempted a gcp iam credential from own-project screening"))
 
-	updated, err := ti.service.UpdateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx)), &gen.UpdateGcpIamCredentialPayload{
+	updated, err := ti.service.UpdateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx), ti), &gen.UpdateGcpIamCredentialPayload{
 		ID:                        cred.ID,
 		SessionToken:              nil,
 		Name:                      "gcp-exempt-repointed",
@@ -274,7 +274,7 @@ func TestUpdateGcpIamCredential_CarryingExemptionForwardIsNotLogged(t *testing.T
 	ctx, ti, logs := newTestServiceWithLogs(t)
 
 	target := gramProjectServiceAccount("internal")
-	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx)), &gen.CreateGcpIamCredentialPayload{
+	cred, err := ti.service.CreateGcpIamCredential(withAdmin(t, orgAdmin(t, ctx), ti), &gen.CreateGcpIamCredentialPayload{
 		SessionToken:              nil,
 		Name:                      "gcp-exempt-resaved",
 		ImpersonateServiceAccount: target,

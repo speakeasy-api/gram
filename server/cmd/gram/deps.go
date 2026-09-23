@@ -1637,9 +1637,10 @@ func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog
 	}
 
 	provisioner, err := identityproviderconnections.NewProvisioner(logger, db, gcpIdentity, kmsClients, auditLogger, identityproviderconnections.Config{
-		KeyRing:             keyRing,
-		SigningCredentialID: credentialID,
-		ServerURL:           serverURL,
+		KeyRing:               keyRing,
+		SigningCredentialID:   credentialID,
+		SigningServiceAccount: strings.TrimSpace(c.String(identityProviderSigningServiceAccount)),
+		ServerURL:             serverURL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build identity provider connections provisioner: %w", err)

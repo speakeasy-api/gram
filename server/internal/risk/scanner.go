@@ -194,6 +194,7 @@ func callFingerprint(text string) string {
 const (
 	meterRiskLLMPolicyEvaluations = "risk.llm.policy_evaluations"
 	meterRiskLLMPolicyDuration    = "risk.llm.policy_duration"
+	meterRiskLLMShadowComparison  = "risk.llm.shadow_comparison"
 
 	// llmPolicyOutcomeClean, llmPolicyOutcomeMatched and
 	// llmPolicyOutcomeDeadLetter are the outcomes of one policy evaluation on
@@ -202,11 +203,35 @@ const (
 	llmPolicyOutcomeMatched    = "matched"
 	llmPolicyOutcomeDeadLetter = "dead_letter"
 
-	// failModeOpen and failModeClosed label a degraded Pub/Sub enforcement
-	// lane by what the scan did next: legacy lanes fall back to allowing the
-	// event, the LLM analyzer lane denies it.
+	// Outcomes of one shadow comparison: the LLM analyzer lane's verdict for
+	// a policy set against the legacy engines' verdict for the same policy
+	// and event. Only the legacy verdict enforces. llm_unavailable and
+	// legacy_unavailable say one side produced no usable verdict;
+	// input_truncated says the dispatcher size-limited the content the
+	// remote lanes saw, so the two verdicts are not over the same input.
+	shadowComparisonAgreeClean        = "agree_clean"
+	shadowComparisonAgreeMatch        = "agree_match"
+	shadowComparisonLLMOnly           = "llm_only"
+	shadowComparisonLegacyOnly        = "legacy_only"
+	shadowComparisonLLMUnavailable    = "llm_unavailable"
+	shadowComparisonLegacyUnavailable = "legacy_unavailable"
+	shadowComparisonInputTruncated    = "input_truncated"
+
+	// failModeOpen, failModeClosed and failModeShadow label a degraded
+	// Pub/Sub enforcement lane by what the scan did next: legacy lanes fall
+	// back to allowing the event, the LLM analyzer lane denies it in the llm
+	// engine mode, and in the shadow engine mode its result is only compared
+	// so its outage changes nothing.
 	failModeOpen   = "open"
 	failModeClosed = "closed"
+	failModeShadow = "shadow"
+
+	// realtimeStreamsExecutionPath is the execution path of a Pub/Sub
+	// enforcement lane whose reply enforces; realtimeShadowExecutionPath
+	// marks the LLM analyzer lane of the shadow engine mode, whose reply is
+	// compared with the legacy verdict and never enforced.
+	realtimeStreamsExecutionPath = "realtime_streams"
+	realtimeShadowExecutionPath  = "realtime_shadow"
 )
 
 type scannerMetrics struct {
@@ -215,6 +240,7 @@ type scannerMetrics struct {
 	pubsubDegraded       metric.Int64Counter
 	llmPolicyEvaluations metric.Int64Counter
 	llmPolicyDuration    metric.Float64Histogram
+	llmShadowComparison  metric.Int64Counter
 }
 
 func newScannerMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *scannerMetrics {
@@ -268,12 +294,22 @@ func newScannerMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) 
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskLLMPolicyDuration), attr.SlogError(err))
 	}
 
+	llmShadowComparison, err := meter.Int64Counter(
+		meterRiskLLMShadowComparison,
+		metric.WithDescription("Shadow engine mode comparisons of the LLM analyzer verdict with the enforcing legacy verdict, per policy and outcome"),
+		metric.WithUnit("{comparison}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskLLMShadowComparison), attr.SlogError(err))
+	}
+
 	return &scannerMetrics{
 		scanDuration:         scanDuration,
 		scanResults:          scanResults,
 		pubsubDegraded:       pubsubDegraded,
 		llmPolicyEvaluations: llmPolicyEvaluations,
 		llmPolicyDuration:    llmPolicyDuration,
+		llmShadowComparison:  llmShadowComparison,
 	}
 }
 
@@ -542,30 +578,60 @@ func (s *Scanner) scanForEnforcement(
 		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
 	}
 
-	// The LLM analyzer flag switches the engine behind gitleaks, presidio and
+	// The risk engine mode selects the engine behind gitleaks, presidio and
 	// prompt_injection sources for the whole org. Resolved once, only when a
 	// policy actually has a covered source, on the parent ctx like the
-	// prompt-policy flag above. The slug rides along for the lane's telemetry.
-	llmMode, orgSlug := false, ""
+	// prompt-policy flag above. The slug rides along for the LLM lane's
+	// telemetry.
+	mode, orgSlug := feature.VariantRiskLLMOff, ""
 	if slices.ContainsFunc(applicablePolicies, func(p repo.RiskPolicy) bool {
 		return llmanalyzer.CoversAnySource(p.Sources)
 	}) {
-		llmMode, orgSlug = policyflags.ProjectFlagState(ctx, s.logger, s.repo, s.flags, organizationID, projectID, feature.FlagRiskLLMAnalyzer)
+		mode, orgSlug = policyflags.ProjectFlagMode(ctx, s.logger, s.repo, s.flags, organizationID, projectID, feature.FlagRiskLLMAnalyzer)
 	}
-	span.SetAttributes(attribute.Bool("gram.risk.llm_mode", llmMode))
+	span.SetAttributes(attribute.String("gram.risk.llm_engine", string(mode)))
 
-	var pubsubFindings map[string][]scanners.Finding
-	switch {
-	case llmMode:
+	// legacyFindings holds the gitleaks and presidio Pub/Sub lanes' findings
+	// by source and stays nil when those lanes were not dispatched, in which
+	// case the in-process engines run. llmFindings holds the LLM analyzer
+	// lane's findings and stays nil when that lane was not dispatched.
+	var legacyFindings map[string][]scanners.Finding
+	var llmFindings []scanners.Finding
+	var laneTruncated bool
+	legacyLanesOn := func() bool {
+		return len(applicablePolicies) > 0 && s.projectFlagEnabled(ctx, organizationID, projectID, feature.FlagRiskEnforcementPubsub)
+	}
+	switch mode {
+	case feature.VariantRiskLLMLLM:
 		// One LLM lane replaces the gitleaks and presidio lanes for the org,
 		// regardless of the Pub/Sub enforcement flag, and never falls back to
 		// the in-process engines. A degraded lane surfaces as a dead-letter
 		// sentinel in scanPolicy, which also marks the scan incomplete.
-		pubsubFindings = s.dispatchLLMEnforcement(ctx, request, orgSlug, applicablePolicies)
-	case len(applicablePolicies) > 0 && s.projectFlagEnabled(ctx, organizationID, projectID, feature.FlagRiskEnforcementPubsub):
-		pubsubFindings, err = s.dispatchEnforcement(ctx, request.Provenance, text, applicablePolicies, incomplete)
-		if err != nil {
-			return nil, err
+		_, llmFindings, _ = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
+			legacy:           false,
+			llm:              true,
+			llmExecutionPath: realtimeStreamsExecutionPath,
+			llmFailMode:      failModeClosed,
+		})
+	case feature.VariantRiskLLMShadow:
+		// The legacy lanes travel exactly as in the off mode, joined by the
+		// LLM lane in the same request so both engines judge identical
+		// content, and the scan waits for every lane. scanPolicy enforces
+		// from the legacy results alone and only compares the LLM verdict.
+		legacyFindings, llmFindings, laneTruncated = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
+			legacy:           legacyLanesOn(),
+			llm:              true,
+			llmExecutionPath: realtimeShadowExecutionPath,
+			llmFailMode:      failModeShadow,
+		})
+	default:
+		if legacyLanesOn() {
+			legacyFindings, _, _ = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
+				legacy:           true,
+				llm:              false,
+				llmExecutionPath: "",
+				llmFailMode:      "",
+			})
 		}
 	}
 	hasQuarantinePolicy := slices.ContainsFunc(applicablePolicies, func(p repo.RiskPolicy) bool {
@@ -587,7 +653,7 @@ func (s *Scanner) scanForEnforcement(
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range applicablePolicies {
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, promptPoliciesOn, llmMode, pubsubFindings, incomplete)
+			result, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, promptPoliciesOn, mode, legacyFindings, llmFindings, laneTruncated, incomplete)
 			if scanErr != nil {
 				incomplete.Store(true)
 				if errors.Is(scanErr, context.Canceled) {
@@ -766,12 +832,17 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
 //
-// Under llmMode the sources the LLM analyzer covers (gitleaks, presidio,
-// prompt_injection and the flag-only destructive sources) read the lane's
-// findings from pubsubFindings[llmanalyzer.Source] instead of running any
-// in-process engine, and a dead-letter sentinel on that lane fails the policy
-// closed for every action.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, llmMode bool, pubsubFindings map[string][]scanners.Finding, incomplete *atomic.Bool) (result *ScanResult, retErr error) {
+// legacyFindings carries the gitleaks and presidio Pub/Sub lanes' findings
+// by source; when it is nil those engines run in-process. llmFindings
+// carries the LLM analyzer lane's findings. In the llm engine mode the
+// sources the analyzer covers (gitleaks, presidio, prompt_injection and the
+// flag-only destructive sources) read llmFindings instead of running any
+// engine, and a dead-letter sentinel on that lane fails the policy closed
+// for every action. In the shadow engine mode the policy enforces from the
+// legacy engines exactly as in the off mode, and llmFindings is only
+// compared with that verdict; truncated says the dispatcher size-limited
+// the content the remote lanes saw, which makes that comparison moot.
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, mode feature.Variant, legacyFindings map[string][]scanners.Finding, llmFindings []scanners.Finding, truncated bool, incomplete *atomic.Bool) (result *ScanResult, retErr error) {
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -786,13 +857,45 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 		}
 		span.End()
 	}()
-	if llmMode && policy.PolicyType != ra.PolicyTypePromptBased && llmanalyzer.CoversAnySource(policy.Sources) {
+	llmMode := mode == feature.VariantRiskLLMLLM
+	llmCovered := policy.PolicyType != ra.PolicyTypePromptBased && llmanalyzer.CoversAnySource(policy.Sources)
+	if llmMode && llmCovered {
 		policyStarted := time.Now()
 		defer func() {
 			if retErr != nil {
 				return
 			}
-			s.recordLLMPolicyEvaluation(ctx, policy, result, time.Since(policyStarted))
+			s.recordLLMPolicyEvaluation(ctx, policy, llmPolicyOutcome(result), time.Since(policyStarted))
+		}()
+	}
+	// The shadow comparison needs the policy's message view, category scope
+	// and finding filter, which are built below; they are declared here so
+	// the deferred comparison sees them, and filter stays nil on the returns
+	// that precede it. legacyUnavailable is set wherever a legacy engine
+	// produced no usable verdict for an in-scope source (a missing or
+	// dead-lettered lane, an incomplete in-process scan), so the comparison
+	// does not read that as clean.
+	var (
+		view              ra.MessageView
+		categoryScope     ra.CategoryScope
+		filter            func([]scanners.Finding) []scanners.Finding
+		legacyUnavailable bool
+	)
+	if mode == feature.VariantRiskLLMShadow && llmCovered {
+		policyStarted := time.Now()
+		defer func() {
+			if retErr != nil || filter == nil {
+				return
+			}
+			s.recordShadowComparison(ctx, policy, shadowComparisonInput{
+				legacy:            result,
+				legacyUnavailable: legacyUnavailable,
+				llmFindings:       llmFindings,
+				truncated:         truncated,
+				view:              view,
+				categoryScope:     categoryScope,
+				filter:            filter,
+			}, time.Since(policyStarted))
 		}()
 	}
 	provenance := baseProvenance
@@ -804,7 +907,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 
 	// Build the structured view once; the application predicates and custom
 	// rules both evaluate against it.
-	view := realtimeMessageView(text, messageType, toolName)
+	view = realtimeMessageView(text, messageType, toolName)
 
 	// Per-category detection scopes are the only scoping surface.
 	eng := s.celEng
@@ -812,7 +915,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 	if err != nil {
 		return nil, fmt.Errorf("compile detection scopes: %w", err)
 	}
-	categoryScope := ra.NewCategoryScope(s.recommended, specified)
+	categoryScope = ra.NewCategoryScope(s.recommended, specified)
 
 	if policy.PolicyType == ra.PolicyTypePromptBased {
 		if !categoryScope.SourceInScope(view, promptpolicy.Source) {
@@ -833,7 +936,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 		return nil, fmt.Errorf("list exclusions: %w", err)
 	}
 	exclusions := ra.NewExclusionSet(exclusionRows)
-	filter := func(findings []scanners.Finding) []scanners.Finding {
+	filter = func(findings []scanners.Finding) []scanners.Finding {
 		return exclusions.FilterFindings(disabled.FilterFindings(findings))
 	}
 
@@ -890,7 +993,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 			// apply: those only ever silence real verdicts, never the lane's
 			// own outage signal, or an exclusion would turn a degraded lane
 			// into an allow.
-			laneFindings := llmanalyzer.FindingsForSource(pubsubFindings[llmanalyzer.Source], source)
+			laneFindings := llmanalyzer.FindingsForSource(llmFindings, source)
 			var sentinel *scanners.Finding
 			verdicts := make([]scanners.Finding, 0, len(laneFindings))
 			for i := range laneFindings {
@@ -947,27 +1050,32 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 		}
 		// Missing remote lanes are not successful empty results. Check after
 		// scope filtering so irrelevant detectors cannot fail this policy.
-		if pubsubFindings != nil && (source == ra.SourceGitleaks || source == ra.SourcePresidio) {
-			findings, ok := pubsubFindings[source]
+		// Only the legacy lanes count: an LLM lane dispatched alongside them
+		// never makes a legacy source skip its in-process engine.
+		if legacyFindings != nil && (source == ra.SourceGitleaks || source == ra.SourcePresidio) {
+			findings, ok := legacyFindings[source]
 			if !ok {
 				incomplete.Store(true)
+				legacyUnavailable = true
 			}
 			for _, finding := range findings {
 				if finding.DeadLetterReason != "" {
 					incomplete.Store(true)
+					legacyUnavailable = true
 				}
 			}
 		}
 		switch source {
 		case ra.SourceGitleaks:
-			gitleaksFindings := pubsubFindings[ra.SourceGitleaks]
-			if pubsubFindings == nil {
+			gitleaksFindings := legacyFindings[ra.SourceGitleaks]
+			if legacyFindings == nil {
 				scanStarted := time.Now()
 				gitleaksResult, scanErr := s.scanGitleaks(ctx, text)
 				s.recordRealtimeResult(ctx, metering.RiskGitleaks(), provenance, gitleaksResult, scanStarted)
 				gitleaksFindings, err = gitleaksResult.Findings, scanErr
 				if !gitleaksResult.Completed {
 					incomplete.Store(true)
+					legacyUnavailable = true
 				}
 				if err != nil {
 					return failWithHeldSentinel(fmt.Errorf("gitleaks scan: %w", err))
@@ -992,11 +1100,12 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 			}
 		case ra.SourcePresidio:
 			var presidioFindings []scanners.Finding
-			if pubsubFindings != nil {
-				presidioFindings = filterPresidioFindings(pubsubFindings[ra.SourcePresidio], policy)
+			if legacyFindings != nil {
+				presidioFindings = filterPresidioFindings(legacyFindings[ra.SourcePresidio], policy)
 			} else {
 				if s.piiScanner == nil {
 					incomplete.Store(true)
+					legacyUnavailable = true
 					continue
 				}
 				scanStarted := time.Now()
@@ -1012,6 +1121,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 				}
 				if len(batchResults) != 1 || !batchResults[0].Completed {
 					incomplete.Store(true)
+					legacyUnavailable = true
 				}
 				if len(batchResults) > 0 {
 					s.recordRealtimeResult(ctx, metering.RiskPresidio(), provenance, batchResults[0], scanStarted)
@@ -1021,6 +1131,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 			for _, finding := range presidioFindings {
 				if finding.DeadLetterReason != "" {
 					incomplete.Store(true)
+					legacyUnavailable = true
 				}
 			}
 			if len(presidioFindings) > 0 {
@@ -1069,6 +1180,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 			scanResult, verdict, err := s.piScanner.ScanWithVerdict(ctx, text, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, judgemessage.New(messageType, toolName, text))
 			if !scanResult.Completed {
 				incomplete.Store(true)
+				legacyUnavailable = true
 			}
 			scanProvenance := provenance
 			scanProvenance.Model = verdict.Model
@@ -1205,66 +1317,141 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 	}, nil
 }
 
-func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance metering.RiskProvenance, text string, policies []repo.RiskPolicy, incomplete *atomic.Bool) (map[string][]scanners.Finding, error) {
-	lanes := make([]enforcereply.Lane, 0, 2)
-	origins := make(map[enforcereply.Lane]metering.RiskProvenance, 2)
-	addLane := func(scanner riskv1.EnforcementScanner, source string) {
-		lane := enforcereply.Lane{Scanner: scanner, PolicyID: ""}
-		for _, policy := range policies {
-			if !slices.Contains(policy.Sources, source) {
-				continue
-			}
-			origin := baseProvenance
-			origin.RiskPolicyID = policy.ID
-			origin.RiskPolicyVersion = policy.Version
-			origin.PolicyLinkReason = ""
-			origin.ExecutionPath = "realtime_streams"
-			origins[lane] = origin
-			lanes = append(lanes, lane)
-			return
+// laneDispatch says which Pub/Sub enforcement lanes one scan publishes in
+// its single request and how a degraded LLM analyzer lane is treated.
+type laneDispatch struct {
+	// legacy publishes the gitleaks and presidio lanes for the policies that
+	// configure those sources.
+	legacy bool
+
+	// llm publishes the LLM analyzer lane when a policy has a covered source.
+	llm bool
+
+	// llmExecutionPath is the execution path stamped on the LLM lane's
+	// origin: realtimeStreamsExecutionPath when its reply enforces,
+	// realtimeShadowExecutionPath when it is only compared.
+	llmExecutionPath string
+
+	// llmFailMode classifies a degraded LLM lane on the pubsub_degraded
+	// metric: failModeClosed when its sentinel denies, failModeShadow when
+	// its result is only compared.
+	llmFailMode string
+}
+
+// dispatchEnforcementLanes publishes the lanes the plan requests in one
+// request and waits for all of them. legacy maps each legacy lane's source to
+// its findings and is nil when no legacy lane was requested; a requested lane
+// that produced no usable reply is absent from the map, so scanPolicy marks
+// it incomplete and the scan fails open for it. llm is the LLM analyzer
+// lane's findings and is nil when that lane was not requested or no policy
+// has a covered source; a degraded LLM lane yields the analyzer's dead-letter
+// sentinel, which denies in the llm engine mode and only counts as
+// unavailable in the shadow engine mode. The LLM lane stands in for every
+// covered source of every policy, so the request carries the whole message
+// once and its origin is the first policy with a covered source. truncated
+// reports that the dispatcher size-limited the content before publishing,
+// so the remote lanes judged less than the in-process engines did.
+func (s *Scanner) dispatchEnforcementLanes(ctx context.Context, request RealtimeScanRequest, orgSlug string, policies []repo.RiskPolicy, incomplete *atomic.Bool, plan laneDispatch) (legacy map[string][]scanners.Finding, llm []scanners.Finding, truncated bool) {
+	text := request.Text
+	origins := make(map[enforcereply.Lane]metering.RiskProvenance, 3)
+	var legacyLanes []enforcereply.Lane
+	if plan.legacy {
+		legacy = make(map[string][]scanners.Finding, 2)
+		legacyLanes = legacyEnforcementLanes(request.Provenance, policies, origins)
+	}
+	lanes := legacyLanes
+	llmLane := enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER, PolicyID: ""}
+	llmRequested := false
+	if plan.llm {
+		if origin, ok := llmEnforcementOrigin(request.Provenance, policies, plan.llmExecutionPath); ok {
+			origins[llmLane] = origin
+			lanes = append(slices.Clone(legacyLanes), llmLane)
+			llmRequested = true
 		}
 	}
-	addLane(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, ra.SourceGitleaks)
-	addLane(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO, ra.SourcePresidio)
-	findings := make(map[string][]scanners.Finding, len(lanes))
 	if len(lanes) == 0 {
-		return findings, nil
-	}
-	if s.dispatcher == nil {
-		for _, lane := range lanes {
-			s.recordPubsubDegraded(ctx, lane, "unavailable", nil, failModeOpen)
-		}
-		return findings, nil
+		return legacy, nil, false
 	}
 
-	presidioThreshold := presidioDispatchThreshold(policies)
-	outcome, err := s.dispatcher.Dispatch(ctx, enforcereply.DispatchRequest{
-		OrganizationID:         baseProvenance.OrganizationID,
+	failLLM := func(reason string, err error) {
+		// A caller that gave up has nothing left to enforce: the lane still
+		// yields its sentinel, but its abandonment is not counted as
+		// degradation.
+		if !errors.Is(err, context.Canceled) {
+			s.recordPubsubDegraded(ctx, llmLane, reason, err, plan.llmFailMode)
+		}
+		llm = llmanalyzer.DeadLetterResult(reason).Findings
+	}
+	if s.dispatcher == nil {
+		for _, lane := range legacyLanes {
+			s.recordPubsubDegraded(ctx, lane, "unavailable", nil, failModeOpen)
+		}
+		if llmRequested {
+			failLLM("unavailable", nil)
+		}
+		return legacy, llm, false
+	}
+
+	dispatch := enforcereply.DispatchRequest{
+		OrganizationID:         request.Provenance.OrganizationID,
 		OrganizationSlug:       "",
-		ProjectID:              baseProvenance.ProjectID.String(),
+		ProjectID:              request.Provenance.ProjectID.String(),
 		Content:                text,
 		Body:                   "",
 		ToolName:               "",
 		MessageType:            "",
 		ToolCalls:              nil,
 		PresidioEntities:       nil,
-		PresidioScoreThreshold: presidioThreshold,
+		PresidioScoreThreshold: nil,
 		Lanes:                  lanes,
 		Origins:                origins,
-	})
+	}
+	if len(legacyLanes) > 0 {
+		dispatch.PresidioScoreThreshold = presidioDispatchThreshold(policies)
+	}
+	if llmRequested {
+		// A tool request's text is the call's JSON input, so it travels as
+		// the single tool call the model evaluates; every other message type
+		// is body text. The harness tool call id, when known, lets the prompt
+		// show the model the id the agent used. The legacy lanes read only
+		// Content and their own origins.
+		dispatch.OrganizationSlug = orgSlug
+		dispatch.ToolName = request.ToolName
+		dispatch.MessageType = request.MessageType
+		dispatch.Body = text
+		if request.MessageType == message.ToolRequest && request.ToolName != "" {
+			dispatch.Body = ""
+			dispatch.ToolCalls = []enforcereply.ToolCall{{ID: request.ToolCallID, Name: request.ToolName, Arguments: text}}
+		}
+	}
+	outcome, err := s.dispatcher.Dispatch(ctx, dispatch)
 	if err != nil {
-		for _, lane := range lanes {
+		for _, lane := range legacyLanes {
 			s.recordPubsubDegraded(ctx, lane, "dispatch_error", err, failModeOpen)
 		}
-		return findings, nil
+		if llmRequested {
+			failLLM("dispatch_error", err)
+		}
+		return legacy, llm, false
 	}
 	if outcome.Truncated {
-		incomplete.Store(true)
-		// The dispatcher already logs the truncation; only annotate the span here.
+		// Truncated content leaves the legacy lanes with an incomplete scan;
+		// the dispatcher already logs the truncation, so only annotate here.
+		if len(legacyLanes) > 0 {
+			incomplete.Store(true)
+		}
+		if llmRequested && plan.llmFailMode == failModeClosed {
+			// The enforcing LLM lane judged at most the dispatcher's prefix;
+			// the omitted tail was never scanned, so the scan is incomplete
+			// whatever the lane replies. The degradation is counted below,
+			// once the lane's outcome is known, so a truncated request that
+			// also failed is counted once, under its failure.
+			incomplete.Store(true)
+		}
 		trace.SpanFromContext(ctx).SetAttributes(attr.RiskEnforcementTruncated(true))
 	}
 
-	for _, lane := range lanes {
+	for _, lane := range legacyLanes {
 		source := ra.SourceGitleaks
 		if lane.Scanner == riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO {
 			source = ra.SourcePresidio
@@ -1279,88 +1466,68 @@ func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance meteri
 			s.recordPubsubDegraded(ctx, lane, reason, laneErr, failModeOpen)
 			continue
 		}
-		findings[source] = converted
+		legacy[source] = converted
 	}
-	return findings, nil
+	if llmRequested {
+		converted, reason, laneErr := laneFindings(text, llmanalyzer.Source, llmLane, outcome)
+		switch {
+		case reason != "":
+			failLLM(reason, laneErr)
+		case outcome.Truncated && plan.llmFailMode == failModeClosed:
+			// The enforcing lane answered for the prefix only. Its verdict
+			// on that prefix still applies (a hit still denies), but the
+			// lane counts as degraded, failing open for the tail.
+			s.recordPubsubDegraded(ctx, llmLane, "truncated", nil, failModeOpen)
+			llm = converted
+		default:
+			llm = converted
+		}
+	}
+	return legacy, llm, outcome.Truncated
 }
 
-// dispatchLLMEnforcement publishes one LLM analyzer lane for the event and
-// returns its findings under llmanalyzer.Source. The lane stands in for every
-// covered source of every policy, so the request carries the whole message
-// once and the origin is the first policy with a covered source. The lane
-// fails closed: whenever no valid OK reply arrives, the returned findings are
-// the analyzer's dead-letter sentinel, which scanPolicy turns into a deny for
-// every covered policy.
-func (s *Scanner) dispatchLLMEnforcement(ctx context.Context, request RealtimeScanRequest, orgSlug string, policies []repo.RiskPolicy) map[string][]scanners.Finding {
-	lane := enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER, PolicyID: ""}
-	findings := make(map[string][]scanners.Finding, 1)
-	failClosed := func(reason string, err error) map[string][]scanners.Finding {
-		// A caller that gave up has nothing left to enforce: the lane still
-		// fails closed, but its abandonment is not counted as degradation.
-		if !errors.Is(err, context.Canceled) {
-			s.recordPubsubDegraded(ctx, lane, reason, err, failModeClosed)
+// legacyEnforcementLanes returns the gitleaks and presidio lanes for the
+// policies that configure those sources, recording each lane's origin — the
+// first policy with the source — in origins.
+func legacyEnforcementLanes(baseProvenance metering.RiskProvenance, policies []repo.RiskPolicy, origins map[enforcereply.Lane]metering.RiskProvenance) []enforcereply.Lane {
+	lanes := make([]enforcereply.Lane, 0, 2)
+	addLane := func(scanner riskv1.EnforcementScanner, source string) {
+		lane := enforcereply.Lane{Scanner: scanner, PolicyID: ""}
+		for _, policy := range policies {
+			if !slices.Contains(policy.Sources, source) {
+				continue
+			}
+			origin := baseProvenance
+			origin.RiskPolicyID = policy.ID
+			origin.RiskPolicyVersion = policy.Version
+			origin.PolicyLinkReason = ""
+			origin.ExecutionPath = realtimeStreamsExecutionPath
+			origins[lane] = origin
+			lanes = append(lanes, lane)
+			return
 		}
-		findings[llmanalyzer.Source] = llmanalyzer.DeadLetterResult(reason).Findings
-		return findings
 	}
+	addLane(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, ra.SourceGitleaks)
+	addLane(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO, ra.SourcePresidio)
+	return lanes
+}
 
-	var origin metering.RiskProvenance
-	found := false
+// llmEnforcementOrigin returns the LLM analyzer lane's origin, attributed to
+// the first policy with a covered source. ok is false when no policy has one,
+// in which case the lane is not dispatched.
+func llmEnforcementOrigin(baseProvenance metering.RiskProvenance, policies []repo.RiskPolicy, executionPath string) (origin metering.RiskProvenance, ok bool) {
 	for _, policy := range policies {
 		if !llmanalyzer.CoversAnySource(policy.Sources) {
 			continue
 		}
-		origin = request.Provenance
+		origin = baseProvenance
 		origin.RiskPolicyID = policy.ID
 		origin.RiskPolicyVersion = policy.Version
 		origin.PolicyLinkReason = ""
-		origin.ExecutionPath = "realtime_streams"
-		found = true
-		break
+		origin.ExecutionPath = executionPath
+		return origin, true
 	}
-	if !found {
-		return findings
-	}
-	if s.dispatcher == nil {
-		return failClosed("unavailable", nil)
-	}
-
-	// A tool request's text is the call's JSON input, so it travels as the
-	// single tool call the model evaluates; every other message type is body
-	// text. The harness tool call id, when known, lets the prompt show the
-	// model the id the agent used.
-	body := request.Text
-	var toolCalls []enforcereply.ToolCall
-	if request.MessageType == message.ToolRequest && request.ToolName != "" {
-		body = ""
-		toolCalls = []enforcereply.ToolCall{{ID: request.ToolCallID, Name: request.ToolName, Arguments: request.Text}}
-	}
-	outcome, err := s.dispatcher.Dispatch(ctx, enforcereply.DispatchRequest{
-		OrganizationID:         request.Provenance.OrganizationID,
-		OrganizationSlug:       orgSlug,
-		ProjectID:              request.Provenance.ProjectID.String(),
-		Content:                request.Text,
-		Body:                   body,
-		ToolName:               request.ToolName,
-		MessageType:            request.MessageType,
-		ToolCalls:              toolCalls,
-		PresidioEntities:       nil,
-		PresidioScoreThreshold: nil,
-		Lanes:                  []enforcereply.Lane{lane},
-		Origins:                map[enforcereply.Lane]metering.RiskProvenance{lane: origin},
-	})
-	if err != nil {
-		return failClosed("dispatch_error", err)
-	}
-	if outcome.Truncated {
-		trace.SpanFromContext(ctx).SetAttributes(attr.RiskEnforcementTruncated(true))
-	}
-	converted, reason, laneErr := laneFindings(request.Text, llmanalyzer.Source, lane, outcome)
-	if reason != "" {
-		return failClosed(reason, laneErr)
-	}
-	findings[llmanalyzer.Source] = converted
-	return findings
+	return baseProvenance, false
 }
 
 // laneFindings folds one lane of a dispatch outcome into findings for source.
@@ -1533,17 +1700,120 @@ func (s *Scanner) recordPubsubDegraded(ctx context.Context, lane enforcereply.La
 	}
 }
 
+// llmPolicyOutcome classifies a policy's enforcing result in the llm engine
+// mode: the lane's sentinel, a verdict from the lane, or nothing from it.
+func llmPolicyOutcome(result *ScanResult) string {
+	switch {
+	case result.AnalysisUnavailable():
+		return llmPolicyOutcomeDeadLetter
+	case result != nil && result.Source == llmanalyzer.Source:
+		return llmPolicyOutcomeMatched
+	default:
+		return llmPolicyOutcomeClean
+	}
+}
+
+// realtimeLegacySources lists the covered policy sources the legacy realtime
+// path evaluates, in-process or over its Pub/Sub lanes. The flag-only
+// destructive sources never produce a realtime legacy verdict, so the shadow
+// comparison leaves them out rather than count every model verdict on them
+// as llm_only.
+var realtimeLegacySources = []string{ra.SourceGitleaks, ra.SourcePresidio, ra.SourcePromptInjection}
+
+// shadowComparisonInput is what recordShadowComparison sets against each
+// other for one policy: the legacy engines' enforcing result and whether any
+// of them produced no usable verdict, the LLM analyzer lane's findings and
+// whether the dispatcher truncated the content those saw, and the policy's
+// view, scope and finding filter.
+type shadowComparisonInput struct {
+	legacy            *ScanResult
+	legacyUnavailable bool
+	llmFindings       []scanners.Finding
+	truncated         bool
+	view              ra.MessageView
+	categoryScope     ra.CategoryScope
+	filter            func([]scanners.Finding) []scanners.Finding
+}
+
+// recordShadowComparison sets the LLM analyzer lane's verdict for a policy
+// against the legacy engines' enforcing result for the same event and counts
+// the outcome, alongside the policy evaluation the llm engine mode would
+// have recorded for the lane's verdict. Only the policy's in-scope sources
+// with a realtime legacy engine are compared; a policy with none (a
+// destructive-only policy, or one whose detection scope excludes every such
+// source) has no legacy verdict to compare and records nothing. The lane's
+// findings pass the same scope, exclusion and disabled-rule filters the
+// legacy findings passed, so a verdict an exclusion would have silenced does
+// not count as llm_only. A legacy result from a custom rule says nothing
+// about the covered sources, which are only reached by that result when none
+// of them matched.
+func (s *Scanner) recordShadowComparison(ctx context.Context, policy repo.RiskPolicy, in shadowComparisonInput, duration time.Duration) {
+	compared := 0
+	llmMatched := false
+	for _, source := range policy.Sources {
+		if !slices.Contains(realtimeLegacySources, source) || !in.categoryScope.SourceInScope(in.view, source) {
+			continue
+		}
+		compared++
+		laneFindings := llmanalyzer.FindingsForSource(in.llmFindings, source)
+		verdicts := make([]scanners.Finding, 0, len(laneFindings))
+		for _, finding := range laneFindings {
+			if !llmanalyzer.IsDeadLetter(finding) {
+				verdicts = append(verdicts, finding)
+			}
+		}
+		if len(in.categoryScope.FilterFindings(in.view, in.filter(verdicts))) > 0 {
+			llmMatched = true
+		}
+	}
+	if compared == 0 {
+		return
+	}
+	// The sentinel is detected on the lane's raw findings, not per source:
+	// the lane answers for every covered source at once, so its outage is
+	// the same whichever sources the policy compares.
+	llmUnavailable := in.llmFindings == nil || slices.ContainsFunc(in.llmFindings, llmanalyzer.IsDeadLetter)
+	legacy := in.legacy
+	legacyUnavailable := in.legacyUnavailable || (legacy != nil && legacy.DeadLetterReason != "")
+	legacyMatched := legacy != nil && legacy.DeadLetterReason == "" && legacy.Source != ra.SourceCustom
+
+	comparison := shadowComparisonAgreeClean
+	llmOutcome := llmPolicyOutcomeClean
+	switch {
+	case llmUnavailable:
+		comparison, llmOutcome = shadowComparisonLLMUnavailable, llmPolicyOutcomeDeadLetter
+	case in.truncated:
+		// The remote lanes judged a size-limited copy of the content while
+		// the in-process engines read all of it; the verdicts are not over
+		// the same input, so neither agreement nor disagreement is recorded.
+		comparison = shadowComparisonInputTruncated
+	case legacyUnavailable:
+		comparison = shadowComparisonLegacyUnavailable
+	case legacyMatched && llmMatched:
+		comparison = shadowComparisonAgreeMatch
+	case legacyMatched:
+		comparison = shadowComparisonLegacyOnly
+	case llmMatched:
+		comparison = shadowComparisonLLMOnly
+	}
+	if llmMatched && !llmUnavailable {
+		llmOutcome = llmPolicyOutcomeMatched
+	}
+	if s.metrics.llmShadowComparison != nil {
+		s.metrics.llmShadowComparison.Add(ctx, 1, metric.WithAttributes(
+			attr.OrganizationID(policy.OrganizationID),
+			attr.RiskPolicyID(policy.ID.String()),
+			attr.RiskScanMode(llmanalyzer.ScanModeSync),
+			attr.Outcome(comparison),
+		))
+	}
+	s.recordLLMPolicyEvaluation(ctx, policy, llmOutcome, duration)
+}
+
 // recordLLMPolicyEvaluation counts one policy evaluation on the LLM analyzer
 // lane and its duration, so the sync lane reports the same dimensions as the
 // batch lane's async counter.
-func (s *Scanner) recordLLMPolicyEvaluation(ctx context.Context, policy repo.RiskPolicy, result *ScanResult, duration time.Duration) {
-	outcome := llmPolicyOutcomeClean
-	switch {
-	case result.AnalysisUnavailable():
-		outcome = llmPolicyOutcomeDeadLetter
-	case result != nil && result.Source == llmanalyzer.Source:
-		outcome = llmPolicyOutcomeMatched
-	}
+func (s *Scanner) recordLLMPolicyEvaluation(ctx context.Context, policy repo.RiskPolicy, outcome string, duration time.Duration) {
 	attrs := metric.WithAttributes(
 		attr.OrganizationID(policy.OrganizationID),
 		attr.RiskPolicyID(policy.ID.String()),

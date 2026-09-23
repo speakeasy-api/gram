@@ -110,7 +110,7 @@ type Service struct {
 	networkIngressTelemetry   *networkingress.Telemetry
 	identityCoverage          *mcptoolexecution.IdentityCoverageCheckpoint
 	hostedToolsCallCheckpoint *mcptoolexecution.HostedCheckpoint
-	scanEvaluator             mcpriskscan.Evaluator
+	scanEvaluator             *mcpriskscan.Evaluator
 	guardianPolicy            *guardian.Policy
 	db                        *pgxpool.Pool
 	authRepo                  *auth_repo.Queries
@@ -142,6 +142,9 @@ type Service struct {
 	// the token and revocation endpoints. Nil without Redis, in which case
 	// assertion clients are refused rather than admitted unverified.
 	clientAssertionVerifier *privatekeyjwt.Verifier
+	// workloadGrant runs the workload assertion grant's stages. Nil on a
+	// surface without Redis, which refuses the grant.
+	workloadGrant *workloadGrant
 	// idJAGValidator authenticates enterprise identity grants, enforces replay
 	// protection, and resolves their subjects to provisioned Gram users.
 	idJAGValidator *idjag.Validator
@@ -455,6 +458,7 @@ func NewService(
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
 		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
+		workloadGrant:             newWorkloadGrant(db, redisClient, guardianPolicy, meterProvider, logger),
 		idJAGValidator:            idJAGValidator,
 		aiToolBlockReads:          defaultAIToolBlockReads(),
 		toolProxy: gateway.NewToolProxy(

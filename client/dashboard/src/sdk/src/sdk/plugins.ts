@@ -8,10 +8,12 @@ import { pluginsDeletePlugin } from "../funcs/pluginsDeletePlugin.js";
 import { pluginsDownloadCodexInstallScript } from "../funcs/pluginsDownloadCodexInstallScript.js";
 import { pluginsDownloadObservabilityPlugin } from "../funcs/pluginsDownloadObservabilityPlugin.js";
 import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPackage.js";
+import { pluginsGetDistributionPlugin } from "../funcs/pluginsGetDistributionPlugin.js";
 import { pluginsGetMarketplaceSettings } from "../funcs/pluginsGetMarketplaceSettings.js";
 import { pluginsGetPlugin } from "../funcs/pluginsGetPlugin.js";
 import { pluginsGetPublishStatus } from "../funcs/pluginsGetPublishStatus.js";
 import { pluginsListAudiences } from "../funcs/pluginsListAudiences.js";
+import { pluginsListDistributionPlugins } from "../funcs/pluginsListDistributionPlugins.js";
 import { pluginsListPlugins } from "../funcs/pluginsListPlugins.js";
 import { pluginsPublishPlugins } from "../funcs/pluginsPublishPlugins.js";
 import { pluginsRemovePluginServer } from "../funcs/pluginsRemovePluginServer.js";
@@ -20,7 +22,9 @@ import { pluginsUpdateMarketplaceSettings } from "../funcs/pluginsUpdateMarketpl
 import { pluginsUpdatePlugin } from "../funcs/pluginsUpdatePlugin.js";
 import { pluginsUpdatePluginServer } from "../funcs/pluginsUpdatePluginServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { DistributionPlugin } from "../models/components/distributionplugin.js";
 import { ListAudiencesResult } from "../models/components/listaudiencesresult.js";
+import { ListDistributionPluginsResult } from "../models/components/listdistributionpluginsresult.js";
 import { ListPluginsResult } from "../models/components/listpluginsresult.js";
 import { MarketplaceSettingsResult } from "../models/components/marketplacesettingsresult.js";
 import { Plugin } from "../models/components/plugin.js";
@@ -57,6 +61,10 @@ import {
   DownloadPluginPackageSecurity,
 } from "../models/operations/downloadpluginpackage.js";
 import {
+  GetDistributionPluginRequest,
+  GetDistributionPluginSecurity,
+} from "../models/operations/getdistributionplugin.js";
+import {
   GetMarketplaceSettingsRequest,
   GetMarketplaceSettingsSecurity,
 } from "../models/operations/getmarketplacesettings.js";
@@ -72,6 +80,10 @@ import {
   ListAudiencesRequest,
   ListAudiencesSecurity,
 } from "../models/operations/listaudiences.js";
+import {
+  ListDistributionPluginsRequest,
+  ListDistributionPluginsSecurity,
+} from "../models/operations/listdistributionplugins.js";
 import {
   ListPluginsRequest,
   ListPluginsSecurity,
@@ -218,6 +230,25 @@ export class Plugins extends ClientSDK {
   }
 
   /**
+   * getDistributionPlugin plugins
+   *
+   * @remarks
+   * Get minimal distribution target metadata for a skill the caller can read. Requires skill:read, not org:read.
+   */
+  async getDistributionPlugin(
+    request: GetDistributionPluginRequest,
+    security?: GetDistributionPluginSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<DistributionPlugin> {
+    return unwrapAsync(pluginsGetDistributionPlugin(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getMarketplaceSettings plugins
    *
    * @remarks
@@ -286,6 +317,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListAudiencesResult> {
     return unwrapAsync(pluginsListAudiences(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listDistributionPlugins plugins
+   *
+   * @remarks
+   * List minimal distribution targets for a skill the caller can read. Requires skill:read, not org:read.
+   */
+  async listDistributionPlugins(
+    request: ListDistributionPluginsRequest,
+    security?: ListDistributionPluginsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListDistributionPluginsResult> {
+    return unwrapAsync(pluginsListDistributionPlugins(
       this,
       request,
       security,

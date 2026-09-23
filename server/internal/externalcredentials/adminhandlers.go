@@ -3,6 +3,7 @@ package externalcredentials
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -78,10 +79,25 @@ func requireNoLiveManagedKeys(ctx context.Context, logger *slog.Logger, q *repo.
 	return true, nil
 }
 
-func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.CreateGcpIamPlatformCredentialPayload) (*adminecgen.GcpIamCredential, error) {
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+// platformOwnProjectExemption records the own-project exemption on a platform
+// credential whose target is a service account in Gram's own project. Platform
+// rows back Gram's own signing keys, so that is the expected shape; the
+// provisioner screens the stored row at use and would refuse it otherwise.
+func (s *Service) platformOwnProjectExemption(ctx context.Context, logger *slog.Logger, target pgtype.Text) (bool, error) {
+	if !target.Valid || strings.TrimSpace(target.String) == "" {
+		return false, nil
+	}
+	kind, _, err := s.gcpIdentity.ImpersonationTargetProblem(ctx, logger, strings.TrimSpace(target.String))
 	if err != nil {
-		return nil, err
+		return false, oops.E(oops.CodeUnexpected, err, "cannot validate impersonate_service_account right now, try again shortly").LogError(ctx, logger)
+	}
+	return kind == gcpauth.TargetOwnProject, nil
+}
+
+func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.CreateGcpIamPlatformCredentialPayload) (*adminecgen.GcpIamCredential, error) {
+	authCtx, logger, err := auth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
+	if err != nil {
+		return nil, fmt.Errorf("authorize platform credential request: %w", err)
 	}
 
 	name := strings.TrimSpace(payload.Name)
@@ -95,6 +111,10 @@ func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *a
 		wifProviderID:             payload.WifProviderID,
 		wifProjectNumber:          payload.WifProjectNumber,
 	})
+	if err != nil {
+		return nil, err
+	}
+	exempt, err := s.platformOwnProjectExemption(ctx, logger, cols.ImpersonateServiceAccount)
 	if err != nil {
 		return nil, err
 	}
@@ -118,17 +138,13 @@ func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *a
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating platform external credential").LogError(ctx, logger)
 	}
 
-	// The platform tier screens no impersonation target at all, so it has
-	// nothing to be exempted from. These rows also carry a NULL organization_id,
-	// which no external key can join to, so they are never screened at runtime
-	// either.
 	gcp, err := q.CreateGcpIamCredential(ctx, repo.CreateGcpIamCredentialParams{
 		ExternalCredentialID:      ec.ID,
 		ImpersonateServiceAccount: cols.ImpersonateServiceAccount,
 		WifPoolID:                 cols.WifPoolID,
 		WifProviderID:             cols.WifProviderID,
 		WifProjectNumber:          cols.WifProjectNumber,
-		SkipProjectVerification:   false,
+		SkipProjectVerification:   exempt,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating platform gcp iam credential").LogError(ctx, logger)
@@ -139,6 +155,9 @@ func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *a
 	}
 
 	logPlatformMutation(ctx, logger, authCtx, "create", "gcp_iam_credential", ec.ID.String())
+	if exempt {
+		logExemptionGranted(ctx, logger, authCtx, ec.ID, cols.ImpersonateServiceAccount.String)
+	}
 
 	return mv.BuildPlatformGcpIamCredentialView(ec, gcp), nil
 }
@@ -146,9 +165,9 @@ func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *a
 // UpdateGcpIamPlatformCredential replaces a platform GCP credential's name and
 // auth configuration (full replace, like the organization update).
 func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.UpdateGcpIamPlatformCredentialPayload) (*adminecgen.GcpIamCredential, error) {
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	authCtx, logger, err := auth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authorize platform credential request: %w", err)
 	}
 
 	id, err := uuid.Parse(payload.ID)
@@ -171,6 +190,11 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 		return nil, err
 	}
 
+	exempt, err := s.platformOwnProjectExemption(ctx, logger, cols.ImpersonateServiceAccount)
+	if err != nil {
+		return nil, err
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating platform external credential").LogError(ctx, logger)
@@ -182,7 +206,7 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 	// Confirm the id is a platform gcp_iam credential (organization_id NULL,
 	// project_id NULL, provider gcp_iam) before touching the subtype, whose
 	// update is keyed on the id alone.
-	_, err = q.GetGcpIamCredential(ctx, repo.GetGcpIamCredentialParams{ID: id, OrganizationID: platformOrganizationID})
+	prior, err := q.GetGcpIamCredential(ctx, repo.GetGcpIamCredentialParams{ID: id, OrganizationID: platformOrganizationID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "platform gcp iam credential not found")
@@ -219,7 +243,7 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 		WifPoolID:                 cols.WifPoolID,
 		WifProviderID:             cols.WifProviderID,
 		WifProjectNumber:          cols.WifProjectNumber,
-		SkipProjectVerification:   false,
+		SkipProjectVerification:   exempt,
 		ExternalCredentialID:      id,
 	})
 	if err != nil {
@@ -231,6 +255,11 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 	}
 
 	logPlatformMutation(ctx, logger, authCtx, "update", "gcp_iam_credential", ec.ID.String())
+	// A rename that keeps an exempted target is not a new grant.
+	carried := prior.GcpIamCredential.SkipProjectVerification && strings.EqualFold(strings.TrimSpace(prior.GcpIamCredential.ImpersonateServiceAccount.String), strings.TrimSpace(cols.ImpersonateServiceAccount.String))
+	if exempt && !carried {
+		logExemptionGranted(ctx, logger, authCtx, id, cols.ImpersonateServiceAccount.String)
+	}
 
 	return mv.BuildPlatformGcpIamCredentialView(ec, gcp), nil
 }
@@ -341,9 +370,9 @@ func (s *Service) VerifyGcpIamPlatformCredential(ctx context.Context, payload *a
 }
 
 func (s *Service) DeleteGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.DeleteGcpIamPlatformCredentialPayload) error {
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	authCtx, logger, err := auth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
 	if err != nil {
-		return err
+		return fmt.Errorf("authorize platform credential request: %w", err)
 	}
 
 	id, err := uuid.Parse(payload.ID)

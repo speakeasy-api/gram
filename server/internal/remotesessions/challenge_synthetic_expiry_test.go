@@ -182,6 +182,10 @@ type syntheticExpiryEnv struct {
 	// issuerMetadata and issuerMetadataReader are set by withIssuerMetadataRefresh.
 	issuerMetadata       *remotesessions.IssuerMetadataRefresher
 	issuerMetadataReader *sdkmetric.ManualReader
+	// registrationTelemetryReader is set by withRegistrationTelemetry and reads
+	// the meter the manager (and the rotator it builds) records registration
+	// failures on.
+	registrationTelemetryReader *sdkmetric.ManualReader
 }
 
 // callback drives HandleRemoteLoginCallback with the given query string, as
@@ -218,6 +222,9 @@ type syntheticLoginOptions struct {
 	idTokenIssuer *idTokenIssuer
 	// wrapVerifier, when set, decorates the verifier so a test can act mid-verification.
 	wrapVerifier func(remotesessions.IDTokenVerifier) remotesessions.IDTokenVerifier
+	// registrationTelemetry gives the manager a readable meter so a test can
+	// assert on recorded client-registration failures.
+	registrationTelemetry bool
 	// keyCache, when set, backs the key resolver so a test can seed key-set state.
 	keyCache jwks.Cache
 	// signingAlgs is the issuer row's id_token_signing_alg_values_supported.
@@ -250,6 +257,10 @@ func withTunnels(tunnels *tunnelrouting.HTTPClient) syntheticLoginOption {
 
 func withMaxDBConns(maxConns int32) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.maxDBConns = maxConns }
+}
+
+func withRegistrationTelemetry() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.registrationTelemetry = true }
 }
 
 func withIssuerScopes(scopes ...string) syntheticLoginOption {
@@ -432,10 +443,16 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		managerOptions = append(managerOptions, remotesessions.WithSessionEnricher(enricher))
 		refreshOptions = append(refreshOptions, remotesessions.WithRefreshSessionEnricher(enricher))
 	}
+	managerMeterProvider := testenv.NewMeterProvider(t)
+	var registrationTelemetryReader *sdkmetric.ManualReader
+	if options.registrationTelemetry {
+		registrationTelemetryReader = sdkmetric.NewManualReader()
+		managerMeterProvider = sdkmetric.NewMeterProvider(sdkmetric.WithReader(registrationTelemetryReader))
+	}
 	mgr := remotesessions.NewChallengeManager(
 		logger,
 		testenv.NewTracerProvider(t),
-		testenv.NewMeterProvider(t),
+		managerMeterProvider,
 		ti.conn,
 		enc,
 		policy,
@@ -572,6 +589,8 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 
 		issuerMetadata:       issuerMetadata,
 		issuerMetadataReader: issuerMetadataReader,
+
+		registrationTelemetryReader: registrationTelemetryReader,
 	}
 	cbW, callbackErr := env.callback(t, cbQuery.Encode())
 

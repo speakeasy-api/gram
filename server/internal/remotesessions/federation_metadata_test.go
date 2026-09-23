@@ -68,6 +68,57 @@ func TestFederatedEndpointHostPolicy(t *testing.T) {
 	require.ErrorIs(t, m.validateFederatedMetadataHosts(t.Context(), p.issuer, p.metadata), ErrFederatedConfiguration, "browser redirect does not use tunnel")
 }
 
+func TestFederatedMetadataScopePresenceCache(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, scopes string
+		enabled      bool
+	}{
+		{"omitted", "", true},
+		{"null", `null`, false},
+		{"empty", `[]`, false},
+		{"excluded", `["openid","email"]`, false},
+		{"advertised", `["openid","email","offline_access"]`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			mr := miniredis.RunT(t)
+			rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+			t.Cleanup(func() { require.NoError(t, rc.Close()) })
+			p := federatedFixture(t)
+			m := &ChallengeManager{policy: federatedPublicPolicy(t), locks: cache.NewRedisCacheAdapter(rc)}
+			body, err := json.Marshal(p.metadata)
+			require.NoError(t, err)
+			var fields map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(body, &fields))
+			delete(fields, "scopes_supported")
+			if tc.scopes != "" {
+				fields["scopes_supported"] = json.RawMessage(tc.scopes)
+			}
+			body, err = json.Marshal(fields)
+			require.NoError(t, err)
+			calls := 0
+			doer := federatedHTTPDoerFunc(func(*http.Request) (*http.Response, error) {
+				calls++
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(string(body)))}, nil
+			})
+			for range 2 {
+				p.metadata, err = m.loadFederatedMetadata(t.Context(), p.organizationID, p.issuer, doer)
+				require.NoError(t, err)
+				policy, err := p.OfflinePolicy()
+				require.NoError(t, err)
+				require.Equal(t, tc.enabled, policy.Enabled)
+			}
+			require.Equal(t, 1, calls, "second resolution must use the serialized cache entry")
+			var shared rfc8414Document
+			require.NoError(t, json.Unmarshal(body, &shared))
+			if tc.scopes == "null" {
+				require.Nil(t, shared.ScopesSupported, "shared discovery semantics remain unchanged")
+			}
+		})
+	}
+}
+
 func TestFederatedMetadataCache(t *testing.T) {
 	t.Parallel()
 	mr := miniredis.RunT(t)

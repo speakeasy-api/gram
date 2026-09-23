@@ -412,7 +412,7 @@ function OrgHomeInner() {
             </Card.Dashboard>
           </main>
 
-          <aside className="flex flex-col gap-8 xl:sticky xl:top-4 xl:self-start">
+          <aside className="flex flex-col gap-8 xl:sticky xl:top-[calc(var(--page-sticky-top,0px)+1rem)] xl:self-start">
             <RecentChallengesCompact />
             <RecentActivityCompact logs={auditLogs} />
           </aside>

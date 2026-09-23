@@ -17,6 +17,12 @@ import (
 
 // Manage distributable plugin bundles of MCP servers and hooks.
 type Service interface {
+	// List minimal distribution targets for a skill the caller can read. Requires
+	// skill:read, not org:read.
+	ListDistributionPlugins(context.Context, *ListDistributionPluginsPayload) (res *ListDistributionPluginsResult, err error)
+	// Get minimal distribution target metadata for a skill the caller can read.
+	// Requires skill:read, not org:read.
+	GetDistributionPlugin(context.Context, *GetDistributionPluginPayload) (res *DistributionPlugin, err error)
 	// List all plugins for the current project.
 	ListPlugins(context.Context, *ListPluginsPayload) (res *ListPluginsResult, err error)
 	// Get a plugin with its servers and assignments.
@@ -92,7 +98,7 @@ const ServiceName = "plugins"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "listAudiences", "downloadPluginPackage", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
+var MethodNames = [19]string{"listDistributionPlugins", "getDistributionPlugin", "listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "listAudiences", "downloadPluginPackage", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
 
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
@@ -132,6 +138,15 @@ type DeletePluginPayload struct {
 	ID               string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// DistributionPlugin is the result type of the plugins service
+// getDistributionPlugin method.
+type DistributionPlugin struct {
+	ID          string
+	Name        string
+	Description *string
+	IsDefault   bool
 }
 
 // DownloadCodexInstallScriptPayload is the payload type of the plugins service
@@ -182,6 +197,15 @@ type DownloadPluginPackageResult struct {
 	ContentDisposition string
 }
 
+// GetDistributionPluginPayload is the payload type of the plugins service
+// getDistributionPlugin method.
+type GetDistributionPluginPayload struct {
+	SkillID          string
+	ID               string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // GetMarketplaceSettingsPayload is the payload type of the plugins service
 // getMarketplaceSettings method.
 type GetMarketplaceSettingsPayload struct {
@@ -215,6 +239,20 @@ type ListAudiencesPayload struct {
 type ListAudiencesResult struct {
 	// Audiences that can be assigned to plugins.
 	Audiences []*PluginAudience
+}
+
+// ListDistributionPluginsPayload is the payload type of the plugins service
+// listDistributionPlugins method.
+type ListDistributionPluginsPayload struct {
+	SkillID          string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListDistributionPluginsResult is the result type of the plugins service
+// listDistributionPlugins method.
+type ListDistributionPluginsResult struct {
+	Plugins []*DistributionPlugin
 }
 
 // ListPluginsPayload is the payload type of the plugins service listPlugins

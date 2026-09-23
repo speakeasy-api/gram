@@ -2,12 +2,8 @@ package mcp
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"time"
 
-	"github.com/go-jose/go-jose/v4/jwt"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
@@ -16,14 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
-	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
-	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
-
-// WorkloadAssertionMaxLifetime is the lifetime ceiling AdmitWorkloadAssertion
-// applies, which a test's replay guard must cover.
-const WorkloadAssertionMaxLifetime = time.Hour
 
 // ErrWorkloadIssuerUntrusted and ErrWorkloadNotAdmitted expose the workload
 // admission sentinels, so a test can tell which stage refused an assertion.
@@ -32,13 +21,9 @@ var (
 	ErrWorkloadNotAdmitted     = errWorkloadNotAdmitted
 )
 
-// AdmitWorkloadAssertion runs the workload grant's stages in token endpoint
-// order against real rows: resolve iss to a workload issuer in the endpoint's
-// tenancy, verify against that issuer's key set, then check admission.
-//
-// iss is read unverified to find the issuer, and sub to seed the expected
-// subject; Verify checks both against the signed assertion before admission.
-// The read uses the verifier's algorithm allowlist.
+// AdmitWorkloadAssertion runs the workload grant's verification stages
+// against real rows with the given verifier and an unlimited issuer lookup
+// budget.
 func AdmitWorkloadAssertion(
 	ctx context.Context,
 	db *pgxpool.Pool,
@@ -47,70 +32,13 @@ func AdmitWorkloadAssertion(
 	audiences []string,
 	raw string,
 ) error {
-	parsed, err := jwt.ParseSigned(raw, jwks.AllowedSignatureAlgorithms())
-	if err != nil {
-		return fmt.Errorf("parse workload assertion: %w", err)
+	grant := &workloadGrant{
+		issuers:    newWorkloadIssuerAdmission(workloadIssuerStoreLookup(db), allowAllWorkloadLookups),
+		identities: workloadIdentityStoreLookup(db),
+		verifier:   verifier,
 	}
-	var claims jwt.Claims
-	if err := parsed.UnsafeClaimsWithoutVerification(&claims); err != nil {
-		return fmt.Errorf("read workload assertion claims: %w", err)
-	}
-
-	projectID := uuid.NullUUID{UUID: endpoint.ProjectID, Valid: endpoint.ProjectID != uuid.Nil}
-
-	admission := newWorkloadIssuerAdmission(
-		func(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (workloadidentity_repo.WorkloadIssuer, bool, error) {
-			issuer, err := workloadidentity.ResolveIssuerByURL(ctx, db, workloadidentity.ResolveIssuerParams{
-				OrganizationID: endpoint.OrganizationID,
-				ProjectID:      projectID,
-				IssuerURL:      issuerURL,
-			})
-			switch {
-			case errors.Is(err, workloadidentity.ErrIssuerNotFound):
-				return workloadidentity_repo.WorkloadIssuer{}, false, nil
-			case err != nil:
-				return workloadidentity_repo.WorkloadIssuer{}, false, fmt.Errorf("resolve workload issuer by url: %w", err)
-			}
-			return issuer, true, nil
-		},
-		allowAllWorkloadLookups,
-	)
-
-	issuer, err := admission.admit(ctx, endpoint, claims.Issuer)
-	if err != nil {
-		return err
-	}
-
-	source, err := workloadIssuerKeySource(endpoint, &issuer)
-	if err != nil {
-		return err
-	}
-
-	expectation := workload.Expectation{
-		Issuer:       issuer.Issuer,
-		Subject:      claims.Subject,
-		KeySource:    source,
-		ReplayIssuer: endpoint.UserSessionIssuerID.String(),
-		ReplayParty:  issuer.ID.String(),
-		Audiences:    audiences,
-		MaxLifetime:  WorkloadAssertionMaxLifetime,
-	}
-	if _, err := verifier.Verify(ctx, raw, expectation); err != nil {
-		return fmt.Errorf("verify workload assertion: %w", err)
-	}
-
-	return admitWorkloadIdentity(ctx, func(ctx context.Context, identity workloadIdentity) (bool, error) {
-		admitted, err := workloadidentity.IsAdmitted(ctx, db, workloadidentity.AdmissionParams{
-			OrganizationID:   identity.OrganizationID,
-			ProjectID:        identity.ProjectID,
-			WorkloadIssuerID: identity.WorkloadIssuerID,
-			Subject:          identity.ExternalSubject,
-		})
-		if err != nil {
-			return false, fmt.Errorf("check workload admission: %w", err)
-		}
-		return admitted, nil
-	}, endpoint, issuer.ID, claims.Subject)
+	_, err := admitWorkloadAssertion(ctx, grant, endpoint, audiences, raw)
+	return err
 }
 
 // VerifyRemoteGrant exposes the grant hook to tests.
@@ -160,6 +88,6 @@ func (s *Service) SetRemoteSessionRecheckPacing(rate ratelimit.Rate, batch int32
 }
 
 // SetRiskScanEvaluator replaces observation only in the test binary.
-func (s *Service) SetRiskScanEvaluator(evaluator mcpriskscan.Evaluator) {
+func (s *Service) SetRiskScanEvaluator(evaluator *mcpriskscan.Evaluator) {
 	s.scanEvaluator = evaluator
 }

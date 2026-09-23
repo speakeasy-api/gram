@@ -422,7 +422,8 @@ func createActiveEnterpriseTrialFixture(t *testing.T, db *pgxpool.Pool) {
 	require.NoError(t, trialsrepo.New(db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
 		OrganizationID: stripeWebhookOrganizationID,
 		Tier:           "enterprise",
-		EndsAt:         pgtype.Timestamptz{Time: time.Now().UTC().Add(7 * 24 * time.Hour), Valid: true},
+		// Keep active fixtures clear of the seven-day ending-soon boundary.
+		EndsAt: pgtype.Timestamptz{Time: time.Now().UTC().Add(14 * 24 * time.Hour), Valid: true},
 	}))
 }
 

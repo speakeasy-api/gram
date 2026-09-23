@@ -371,6 +371,10 @@ func TestWorkloadIssuerAdmission_SpentBudgetIsNotATrustDecision(t *testing.T) {
 	require.ErrorIs(t, err, errWorkloadIssuerLookupRateLimited)
 	require.NotErrorIs(t, err, errWorkloadIssuerUntrusted, "a spent budget decides nothing about the issuer")
 	require.EqualValues(t, 0, lookup.calls.Load(), "a refused charge must cost no query")
+
+	limited, ok := errors.AsType[*workloadIssuerRateLimitedError](err)
+	require.True(t, ok, "the token endpoint reads the limiter's delay from the typed error")
+	require.Equal(t, 3*time.Second, limited.retryAfter)
 }
 
 // An unreachable bucket is not a throttle. Running the lookup anyway would

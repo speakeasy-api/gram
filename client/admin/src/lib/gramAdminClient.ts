@@ -259,6 +259,7 @@ export function organizationFromSdk(
     trial_tier: org.trialTier,
     trial_converted_at: org.trialConvertedAt?.toISOString(),
     trial_demoted_at: org.trialDemotedAt?.toISOString(),
+    creation_source: org.creationSource,
     member_count: org.memberCount,
     created_at: org.createdAt.toISOString(),
     updated_at: org.updatedAt.toISOString(),

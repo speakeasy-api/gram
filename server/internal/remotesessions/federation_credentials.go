@@ -17,7 +17,17 @@ type EphemeralFederatedCredentials struct {
 	refreshToken     string
 	expiresIn        int
 	refreshExpiresIn int64
+	refreshExpiresAt *time.Time
 	receivedAt       time.Time
+}
+
+// RefreshExpiresAt distinguishes an unknown lifetime from an explicitly expired grant.
+func (c EphemeralFederatedCredentials) RefreshExpiresAt() *time.Time {
+	if c.refreshExpiresAt == nil {
+		return nil
+	}
+	value := *c.refreshExpiresAt
+	return &value
 }
 
 func (c EphemeralFederatedCredentials) IDToken() string              { return c.idToken }
@@ -48,7 +58,7 @@ func (i *FederatedIdentity) WithCredentials(consume func(EphemeralFederatedCrede
 	state := i.credentials
 	state.mu.Lock()
 	credentials := state.value
-	state.value = EphemeralFederatedCredentials{idToken: "", refreshToken: "", expiresIn: 0, refreshExpiresIn: 0, receivedAt: time.Time{}}
+	state.value = EphemeralFederatedCredentials{idToken: "", refreshToken: "", expiresIn: 0, refreshExpiresIn: 0, refreshExpiresAt: nil, receivedAt: time.Time{}}
 	state.mu.Unlock()
 	if credentials.idToken == "" {
 		return errors.New("federated credentials unavailable")
@@ -69,7 +79,7 @@ func (i *FederatedIdentity) DiscardCredentials() {
 	}
 	state := i.credentials
 	state.mu.Lock()
-	state.value = EphemeralFederatedCredentials{idToken: "", refreshToken: "", expiresIn: 0, refreshExpiresIn: 0, receivedAt: time.Time{}}
+	state.value = EphemeralFederatedCredentials{idToken: "", refreshToken: "", expiresIn: 0, refreshExpiresIn: 0, refreshExpiresAt: nil, receivedAt: time.Time{}}
 	state.mu.Unlock()
 }
 

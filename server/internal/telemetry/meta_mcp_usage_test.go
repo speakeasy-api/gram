@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type gatewayEvent struct {
@@ -33,7 +32,9 @@ type gatewayEvent struct {
 // under meta_discovery when memberID is empty, else a member tool_call
 // stamped with the gateway id. Each row gets its own trace so it lands in
 // trace_summaries.
-func logGatewayEvent(ctx context.Context, ti *testInstance, e gatewayEvent) {
+func logGatewayEvent(t *testing.T, ctx context.Context, ti *testInstance, e gatewayEvent) {
+	t.Helper()
+
 	attrs := telemetry.HTTPLogAttributes{
 		attr.TraceIDKey: strings.ReplaceAll(uuid.NewString(), "-", ""),
 	}
@@ -53,7 +54,7 @@ func logGatewayEvent(ctx context.Context, ti *testInstance, e gatewayEvent) {
 		attrs[attr.McpServerIDKey] = e.memberID
 	}
 	attrs.RecordStatusCode(e.status)
-	ti.telemLogger.Log(ctx, telemetry.LogParams{
+	require.NoError(t, ti.telemLogger.LogSyncForTest(ctx, telemetry.LogParams{
 		Timestamp: e.at,
 		ToolInfo: telemetry.ToolInfo{
 			ID:             uuid.NewString(),
@@ -66,18 +67,20 @@ func logGatewayEvent(ctx context.Context, ti *testInstance, e gatewayEvent) {
 		},
 		UserInfo:   telemetry.UserInfoByID(""),
 		Attributes: attrs,
-	})
+	}))
 }
 
 // seedGatewayTraffic writes two list_servers, one describe_server, and three
 // member calls (memberA x2 with one 502, memberB x1) for the gateway.
-func seedGatewayTraffic(ctx context.Context, ti *testInstance, projectID, gatewayID, memberA, memberB string, at time.Time) {
-	logGatewayEvent(ctx, ti, gatewayEvent{projectID: projectID, gatewayID: gatewayID, memberID: "", tool: "list_servers", status: 200, at: at})
-	logGatewayEvent(ctx, ti, gatewayEvent{projectID: projectID, gatewayID: gatewayID, memberID: "", tool: "list_servers", status: 200, at: at})
-	logGatewayEvent(ctx, ti, gatewayEvent{projectID: projectID, gatewayID: gatewayID, memberID: "", tool: "describe_server", status: 200, at: at})
-	logGatewayEvent(ctx, ti, gatewayEvent{projectID: projectID, gatewayID: gatewayID, memberID: memberA, tool: "ping", status: 200, at: at})
-	logGatewayEvent(ctx, ti, gatewayEvent{projectID: projectID, gatewayID: gatewayID, memberID: memberA, tool: "ping", status: 502, at: at})
-	logGatewayEvent(ctx, ti, gatewayEvent{projectID: projectID, gatewayID: gatewayID, memberID: memberB, tool: "ping", status: 200, at: at})
+func seedGatewayTraffic(t *testing.T, ctx context.Context, ti *testInstance, projectID, gatewayID, memberA, memberB string, at time.Time) {
+	t.Helper()
+
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: projectID, gatewayID: gatewayID, memberID: "", tool: "list_servers", status: 200, at: at})
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: projectID, gatewayID: gatewayID, memberID: "", tool: "list_servers", status: 200, at: at})
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: projectID, gatewayID: gatewayID, memberID: "", tool: "describe_server", status: 200, at: at})
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: projectID, gatewayID: gatewayID, memberID: memberA, tool: "ping", status: 200, at: at})
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: projectID, gatewayID: gatewayID, memberID: memberA, tool: "ping", status: 502, at: at})
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: projectID, gatewayID: gatewayID, memberID: memberB, tool: "ping", status: 200, at: at})
 }
 
 func TestGetMetaMcpServerUsage_FunnelAndMembers(t *testing.T) {
@@ -91,13 +94,12 @@ func TestGetMetaMcpServerUsage_FunnelAndMembers(t *testing.T) {
 	memberB := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{name: "Member B", slug: "member-b-" + uuid.NewString()[:8]}).mcpServerID.String()
 	addGatewayMember(t, ctx, ti, gateway.ID, uuid.MustParse(memberA), 0)
 	addGatewayMember(t, ctx, ti, gateway.ID, uuid.MustParse(memberB), 1)
-	seedGatewayTraffic(ctx, ti, ti.projectID, gatewayID, memberA, memberB, now)
+	seedGatewayTraffic(t, ctx, ti, ti.projectID, gatewayID, memberA, memberB, now)
 	// Outside the window, another project, and no gateway: none may count.
-	seedGatewayTraffic(ctx, ti, ti.projectID, gatewayID, memberA, memberB, now.Add(-2*time.Hour))
-	seedGatewayTraffic(ctx, ti, uuid.NewString(), gatewayID, memberA, memberB, now)
-	logGatewayEvent(ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: "", memberID: memberA, tool: "ping", status: 200, at: now})
+	seedGatewayTraffic(t, ctx, ti, ti.projectID, gatewayID, memberA, memberB, now.Add(-2*time.Hour))
+	seedGatewayTraffic(t, ctx, ti, uuid.NewString(), gatewayID, memberA, memberB, now)
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: "", memberID: memberA, tool: "ping", status: 200, at: now})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	result, err := ti.service.GetMetaMcpServerUsage(ctx, &gen.GetMetaMcpServerUsagePayload{
 		MetaMcpServerID: gatewayID,
 		From:            now.Add(-time.Hour).Format(time.RFC3339),
@@ -139,12 +141,11 @@ func TestGetObservabilityOverview_MetaMcpServerFilter(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	now := time.Now().UTC()
 	gatewayID := uuid.NewString()
-	seedGatewayTraffic(ctx, ti, ti.projectID, gatewayID, uuid.NewString(), uuid.NewString(), now)
+	seedGatewayTraffic(t, ctx, ti, ti.projectID, gatewayID, uuid.NewString(), uuid.NewString(), now)
 
 	from := now.Add(-time.Hour).Format(time.RFC3339)
 	to := now.Add(time.Hour).Format(time.RFC3339)
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	filter := gatewayID
 	result, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
 		From:            from,
@@ -183,17 +184,16 @@ func TestGetMcpServerActivity_IncludesGateways(t *testing.T) {
 	memberA := uuid.NewString()
 	memberB := uuid.NewString()
 
-	seedGatewayTraffic(ctx, ti, ti.projectID, namedID, memberA, memberB, now)
+	seedGatewayTraffic(t, ctx, ti, ti.projectID, namedID, memberA, memberB, now)
 	// Inside the 90-day lookback but outside the 14-day recent window.
-	logGatewayEvent(ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: namedID, memberID: memberA, tool: "ping", status: 200, at: now.Add(-30 * 24 * time.Hour)})
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: namedID, memberID: memberA, tool: "ping", status: 200, at: now.Add(-30 * 24 * time.Hour)})
 	// A gateway with no Postgres row keeps its id as the label.
-	logGatewayEvent(ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: deletedID, memberID: memberA, tool: "ping", status: 200, at: now})
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: deletedID, memberID: memberA, tool: "ping", status: 200, at: now})
 	// Another project's traffic through the same gateway must not leak in.
-	seedGatewayTraffic(ctx, ti, uuid.NewString(), namedID, memberA, memberB, now)
+	seedGatewayTraffic(t, ctx, ti, uuid.NewString(), namedID, memberA, memberB, now)
 	// A direct (non-gateway) member call must not produce an empty gateway row.
-	logGatewayEvent(ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: "", memberID: memberA, tool: "ping", status: 200, at: now})
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: "", memberID: memberA, tool: "ping", status: 200, at: now})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	result, err := ti.service.GetMcpServerActivity(ctx, &gen.GetMcpServerActivityPayload{RecentWindowDays: 14})
 	require.NoError(t, err)
 
@@ -225,9 +225,8 @@ func TestListToolTraces_HidesGatewayDiscoveryByDefault(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	now := time.Now().UTC()
 	gatewayID := uuid.NewString()
-	seedGatewayTraffic(ctx, ti, ti.projectID, gatewayID, uuid.NewString(), uuid.NewString(), now)
+	seedGatewayTraffic(t, ctx, ti, ti.projectID, gatewayID, uuid.NewString(), uuid.NewString(), now)
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	params := repo.ListToolTracesParams{
 		GramProjectID:    ti.projectID,
 		TimeStart:        now.Add(-time.Hour).UnixNano(),

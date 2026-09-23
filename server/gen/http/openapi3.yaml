@@ -38338,6 +38338,96 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: OrganizationRemoteSessionClient
+    /rpc/organizationRemoteSessionClients.getDelegationStatus:
+        get:
+            description: Read sanitized delegation observations for the current upstream configuration in the last 30 days. Requires org:admin. Never exercises credentials; presence is not proof of future refresh success.
+            operationId: getOrganizationRemoteSessionClientDelegationStatus
+            parameters:
+                - allowEmptyValue: true
+                  description: The remote_session_client id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The remote_session_client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrganizationClientDelegationStatus'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getClientDelegationStatus organizationRemoteSessionClients
+            tags:
+                - organizationRemoteSessionClients
+            x-speakeasy-name-override: getDelegationStatus
+            x-speakeasy-react-hook:
+                name: OrganizationRemoteSessionClientDelegationStatus
     /rpc/organizationRemoteSessionClients.getDeletePreflight:
         get:
             description: 'Authoritative impact summary for deleting a remote_session_client: associated session count, affected MCP server names, and trusted identity-provider login references that must be explicitly unlinked before deletion. Requires org:read.'
@@ -41143,6 +41233,105 @@ paths:
             x-speakeasy-name-override: getDeletePreflight
             x-speakeasy-react-hook:
                 name: OrganizationUserSessionIssuerDeletePreflight
+    /rpc/organizationUserSessionIssuers.getMigratePreflight:
+        get:
+            description: Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. Requires org:read.
+            operationId: getOrganizationUserSessionIssuerMigratePreflight
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer to migrate away from.
+                  in: query
+                  name: source_id
+                  required: true
+                  schema:
+                    description: The user_session_issuer to migrate away from.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The user_session_issuer to migrate onto.
+                  in: query
+                  name: target_id
+                  required: true
+                  schema:
+                    description: The user_session_issuer to migrate onto.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrganizationUserSessionIssuerMigratePreflight'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getIssuerMigratePreflight organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: getMigratePreflight
+            x-speakeasy-react-hook:
+                name: OrganizationUserSessionIssuerMigratePreflight
     /rpc/organizationUserSessionIssuers.list:
         get:
             description: List organization-owned user_session_issuers. Requires org:read.
@@ -41362,6 +41551,180 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: OrganizationUserSessionIssuerCimdClients
+    /rpc/organizationUserSessionIssuers.migrate:
+        post:
+            description: Consolidate a source user_session_issuer onto a target issuer, preserving clients, sessions, attachments, and remote-session credentials before soft-deleting the source. The target must be in the same project or a broader organization scope. Access tokens issued through the authorization_code and refresh_token grants are audience-bound to the issuer, so once a repointed MCP server verifies bearers against the target, outstanding access tokens minted under the source are rejected until the client refreshes. Migrated sessions and refresh tokens keep working, so the refresh succeeds without re-authorization. Tokens from the jwt-bearer (ID-JAG) grant are bound to the resource URL and are unaffected. Requires org:admin.
+            operationId: migrateOrganizationUserSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MigrateIssuerRequestBody2'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MigrateOrganizationUserSessionIssuerResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: migrateIssuer organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: migrate
+            x-speakeasy-react-hook:
+                name: MigrateOrganizationUserSessionIssuer
+    /rpc/organizationUserSessionIssuers.move:
+        post:
+            description: Re-scope a user_session_issuer in the caller's organization. Provide a project_id to make it project-specific, or omit it to make it organization-owned. Existing clients and sessions move with the issuer. Requires org:admin.
+            operationId: moveOrganizationUserSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MoveIssuerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionIssuer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: moveIssuer organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: move
+            x-speakeasy-react-hook:
+                name: MoveOrganizationUserSessionIssuer
     /rpc/organizationUserSessionIssuers.update:
         post:
             description: Update an organization-owned user_session_issuer. Requires org:admin.
@@ -45764,6 +46127,115 @@ paths:
             tags:
                 - plugins
             x-speakeasy-name-override: downloadPluginPackage
+    /rpc/plugins.getDistributionPlugin:
+        get:
+            description: Get minimal distribution target metadata for a skill the caller can read. Requires skill:read, not org:read.
+            operationId: getDistributionPlugin
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: skill_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DistributionPlugin'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getDistributionPlugin plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: getDistributionPlugin
+            x-speakeasy-react-hook:
+                name: DistributionPlugin
     /rpc/plugins.getMarketplaceSettings:
         get:
             description: Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.
@@ -46151,6 +46623,108 @@ paths:
             x-speakeasy-name-override: listAudiences
             x-speakeasy-react-hook:
                 name: Audiences
+    /rpc/plugins.listDistributionPlugins:
+        get:
+            description: List minimal distribution targets for a skill the caller can read. Requires skill:read, not org:read.
+            operationId: listDistributionPlugins
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: skill_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDistributionPluginsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listDistributionPlugins plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: listDistributionPlugins
+            x-speakeasy-react-hook:
+                name: DistributionPlugins
     /rpc/plugins.listPlugins:
         get:
             description: List all plugins for the current project.
@@ -55130,6 +55704,14 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
+                  description: Optional concrete MCP server ID to match exactly.
+                  in: query
+                  name: mcp_server_id
+                  schema:
+                    description: Optional concrete MCP server ID to match exactly.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Optional rule category key to filter by (e.g. secrets, pii, financial).
                   in: query
                   name: category
@@ -55443,6 +56025,14 @@ paths:
                   name: chat_id
                   schema:
                     description: Optional chat ID to filter by.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional concrete MCP server ID to match exactly.
+                  in: query
+                  name: mcp_server_id
+                  schema:
+                    description: Optional concrete MCP server ID to match exactly.
                     format: uuid
                     type: string
                 - allowEmptyValue: true
@@ -75138,6 +75728,9 @@ components:
                     type: string
                     description: The creation date of the organization.
                     format: date-time
+                creation_source:
+                    type: string
+                    description: The flow that created the organization (e.g. signup, assistants, platform_admin). Absent when nothing recorded one. Informational only.
                 disabled_at:
                     type: string
                     description: The time at which the organization was disabled, if any.
@@ -78487,6 +79080,9 @@ components:
                     items:
                         $ref: '#/components/schemas/AgentPolicyGrantForm'
                     description: Optional initial allow-only agent policy ceilings, created atomically with the agent. Effective credential permissions remain limited by the live owner and authorizer.
+                project_id:
+                    type: string
+                    description: Optional project binding. Omit or send an empty string for an organization-wide agent; independent of policy grants and the Gram-Project header.
             required:
                 - name
         CreateAgentPolicyGrantForm:
@@ -80749,6 +81345,42 @@ components:
                     description: Whether the challenge is now declined.
             required:
                 - declined
+        DelegationStatusCount:
+            type: object
+            properties:
+                count:
+                    type: integer
+                    description: Number of humans with this latest outcome.
+                    format: int64
+                    minimum: 0
+                last_credential_obtained_at:
+                    type: string
+                    description: Most recent credential acquisition, distinct from renewal.
+                    format: date-time
+                last_observed_at:
+                    type: string
+                    description: Most recent matching observation.
+                    format: date-time
+                last_refresh_succeeded_at:
+                    type: string
+                    description: Most recent successful assertion renewal.
+                    format: date-time
+                status:
+                    type: string
+                    description: Observed per-human delegation outcome, present only when the top-level status is observed. A configuration_failure count records past per-human failures for the current configuration; it is distinct from top-level configuration_failure, which reports a currently invalid configuration and returns no observations.
+                    enum:
+                        - durable_credential_present
+                        - assertion_only
+                        - offline_unsupported
+                        - offline_not_requested
+                        - refused
+                        - reauthentication_required
+                        - temporary_failure
+                        - configuration_failure
+            description: Sanitized count of the latest observation per human, not a history of token requests.
+            required:
+                - status
+                - count
         DeleteAiScanTargetRequestBody:
             type: object
             properties:
@@ -81499,6 +82131,23 @@ components:
                 plugin_id: 550e8400-e29b-41d4-a716-446655440001
             required:
                 - id
+        DistributionPlugin:
+            type: object
+            properties:
+                description:
+                    type: string
+                id:
+                    type: string
+                    format: uuid
+                is_default:
+                    type: boolean
+                name:
+                    type: string
+            description: Minimal plugin metadata for distributing an authorized skill. Does not expose configuration or assignments.
+            required:
+                - id
+                - name
+                - is_default
         DomainDNSConfig:
             type: object
             properties:
@@ -86699,6 +87348,15 @@ components:
                 - organization_id
                 - provider
                 - schedules
+        ListDistributionPluginsResult:
+            type: object
+            properties:
+                plugins:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DistributionPlugin'
+            required:
+                - plugins
         ListEnvironmentsResult:
             type: object
             properties:
@@ -87452,6 +88110,8 @@ components:
                         - skill:blocked_read
                         - skill:write
                         - skill:blocked_write
+                        - plugin:write
+                        - plugin:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - risk_policy:block
@@ -87495,6 +88155,8 @@ components:
                             - skill:blocked_read
                             - skill:write
                             - skill:blocked_write
+                            - plugin:write
+                            - plugin:blocked_write
                             - risk_policy:evaluate
                             - risk_policy:bypass
                             - risk_policy:block
@@ -88579,6 +89241,10 @@ components:
                     type: string
                 permissions:
                     $ref: '#/components/schemas/AgentPermissions'
+                project_id:
+                    type: string
+                    description: The optional project this agent is scoped to; absent for an organization-wide agent
+                    format: uuid
                 updated_at:
                     type: string
                     format: date-time
@@ -89345,6 +90011,23 @@ components:
             required:
                 - source_id
                 - target_id
+        MigrateIssuerRequestBody2:
+            type: object
+            properties:
+                confirmed_warnings_fingerprint:
+                    type: string
+                    description: The exact warnings_fingerprint returned by the latest preflight. Required when that preflight reports warnings.
+                source_id:
+                    type: string
+                    description: The user_session_issuer to migrate away from; soft-deleted on success.
+                    format: uuid
+                target_id:
+                    type: string
+                    description: The surviving user_session_issuer.
+                    format: uuid
+            required:
+                - source_id
+                - target_id
         MigrateOrganizationRemoteSessionIssuerResult:
             type: object
             properties:
@@ -89361,6 +90044,43 @@ components:
             required:
                 - issuer
                 - clients_migrated
+                - source_deleted
+        MigrateOrganizationUserSessionIssuerResult:
+            type: object
+            properties:
+                cimd_clients_migrated:
+                    type: integer
+                    description: CIMD allowlist entries moved or merged.
+                    format: int64
+                clients_migrated:
+                    type: integer
+                    description: Clients re-pointed to the target.
+                    format: int64
+                consents_migrated:
+                    type: integer
+                    description: Consents normalized to the target scope.
+                    format: int64
+                issuer:
+                    $ref: '#/components/schemas/UserSessionIssuer'
+                remote_sessions_migrated:
+                    type: integer
+                    description: Remote-session credentials whose provenance moved.
+                    format: int64
+                sessions_migrated:
+                    type: integer
+                    description: User sessions re-pointed to the target.
+                    format: int64
+                source_deleted:
+                    type: boolean
+                    description: True when the source issuer was soft-deleted.
+            description: Outcome of consolidating a source user_session_issuer onto a target issuer.
+            required:
+                - issuer
+                - clients_migrated
+                - sessions_migrated
+                - consents_migrated
+                - cimd_clients_migrated
+                - remote_sessions_migrated
                 - source_deleted
         MigrateRemoteSessionIssuerRequestBody:
             type: object
@@ -90231,6 +90951,29 @@ components:
                 - webhooks_enabled
                 - created_at
                 - updated_at
+        OrganizationClientDelegationStatus:
+            type: object
+            properties:
+                observations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DelegationStatusCount'
+                status:
+                    type: string
+                    description: unknown means no current observations; observed means matching observations exist; configuration_failure means the current delegation configuration is known to be invalid, not a per-human observation.
+                    enum:
+                        - unknown
+                        - observed
+                        - configuration_failure
+                window_start:
+                    type: string
+                    description: Inclusive observation window start.
+                    format: date-time
+            description: Latest per-human observations for the current client configuration within 30 days. Unknown when no matching observations exist. A known invalid delegation configuration, including a missing active signing key, reports configuration_failure with no observations. Credential presence does not guarantee future renewal.
+            required:
+                - status
+                - window_start
+                - observations
         OrganizationClientDeletePreflight:
             type: object
             properties:
@@ -90562,6 +91305,70 @@ components:
                 - mcp_servers
                 - toolsets
                 - can_delete
+        OrganizationUserSessionIssuerMigratePreflight:
+            type: object
+            properties:
+                can_migrate:
+                    type: boolean
+                    description: True when no hard blocker is present.
+                cimd_client_count:
+                    type: integer
+                    description: Custom CIMD allowlist entries that would move or merge.
+                    format: int64
+                client_count:
+                    type: integer
+                    description: Clients that would move.
+                    format: int64
+                conflicting_client_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Active OAuth client ids already present on both issuers. Non-empty blocks migration.
+                consent_count:
+                    type: integer
+                    description: User-session consents that would move.
+                    format: int64
+                ema_binding_conflict_count:
+                    type: integer
+                    description: Enterprise-managed authorization bindings already present on the target. Non-zero blocks migration.
+                    format: int64
+                platform_owned:
+                    type: boolean
+                    description: Whether a Platform MCP catalog registration owns either issuer. True blocks migration.
+                principal_binding_conflict_count:
+                    type: integer
+                    description: Active principal bindings that would violate target uniqueness. Non-zero blocks migration.
+                    format: int64
+                remote_session_count:
+                    type: integer
+                    description: Remote-session credentials whose issuer provenance would move.
+                    format: int64
+                session_count:
+                    type: integer
+                    description: User sessions that would move.
+                    format: int64
+                warnings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionIssuerFieldMismatch'
+                    description: Configuration differences that do not block the migration. The target's values become authoritative for future authorization; existing sessions and refresh tokens are unaffected.
+                warnings_fingerprint:
+                    type: string
+                    description: Stable fingerprint of the current warnings. Empty when there are no warnings; otherwise pass this exact value to migrateIssuer to confirm them.
+            description: Authoritative impact summary for consolidating one user_session_issuer onto another.
+            required:
+                - client_count
+                - session_count
+                - consent_count
+                - cimd_client_count
+                - remote_session_count
+                - conflicting_client_ids
+                - principal_binding_conflict_count
+                - ema_binding_conflict_count
+                - platform_owned
+                - warnings
+                - warnings_fingerprint
+                - can_migrate
         OrganizationUserSessionIssuerReference:
             type: object
             properties:
@@ -93303,6 +94110,7 @@ components:
                         - environment:write
                         - skill:read
                         - skill:write
+                        - plugin:write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - chat:read
@@ -94523,10 +95331,24 @@ components:
                     type: integer
                     description: End byte position within the message content.
                     format: int64
+                enforcement_outcome:
+                    type: string
+                    description: Recorded enforcement outcome, independent of policy configuration.
+                    enum:
+                        - logged
+                        - denied
+                        - withheld
+                        - warned_pending
+                        - warned_acknowledged
+                        - warned_abandoned
+                        - quarantined
                 exclusion_id:
                     type: string
                     description: The exclusion rule that suppressed this result. Only set when suppressed_reason is 'rule'.
                     format: uuid
+                execution_id:
+                    type: string
+                    description: Identity of the concrete mediated execution.
                 false_positive_at:
                     type: string
                     description: 'Deprecated: mirror of suppressed_at, kept while clients migrate to the suppressed_* fields. Null when not suppressed.'
@@ -94535,12 +95357,30 @@ components:
                     type: string
                     description: The result ID.
                     format: uuid
+                identity_stamped:
+                    type: boolean
+                    description: Whether MCP identity stamped validated principal provenance.
                 match:
                     type: string
                     description: The matched secret or sensitive data. Null when the caller isn't authorized to see raw match content for this result's chat (see match_redacted).
                 match_redacted:
                     type: string
                     description: Opaque fingerprint of match, in the same `<redacted len=N sha=XXXXXXXX>` form as RiskResultRedacted.match_redacted. Populated whenever match is null so callers without raw access still get a stable, non-reversible correlation token. For shadow_mcp findings this is the original match value passed through verbatim (a non-sensitive server URL or command identifier).
+                mcp_method:
+                    type: string
+                    description: MCP method or equivalent mediated operation.
+                mcp_server_id:
+                    type: string
+                    description: Concrete MCP server that executed the operation.
+                mediation_surface:
+                    type: string
+                    description: Concrete mediation surface where the execution was observed.
+                meta_mcp_server_id:
+                    type: string
+                    description: Outer gateway that routed the execution, when present.
+                phase:
+                    type: string
+                    description: Execution phase inspected by risk.
                 policy_id:
                     type: string
                     description: The risk policy ID.
@@ -94549,6 +95389,9 @@ components:
                     type: integer
                     description: Policy version when this result was produced.
                     format: int64
+                principal_kind:
+                    type: string
+                    description: Credential provenance class resolved by MCP identity.
                 rule_id:
                     type: string
                     description: The matched rule identifier.
@@ -94583,6 +95426,12 @@ components:
                     items:
                         type: string
                     description: Tags from the detection rule.
+                tool_name:
+                    type: string
+                    description: Name of the concrete tool, when applicable.
+                toolset_id:
+                    type: string
+                    description: Toolset serving the execution, when present.
                 user_id:
                     type: string
                     description: The user who owns the chat session.
@@ -94621,13 +95470,45 @@ components:
                 description:
                     type: string
                     description: Human-readable description of the finding.
+                enforcement_outcome:
+                    type: string
+                    description: Recorded enforcement outcome, independent of policy configuration.
+                    enum:
+                        - logged
+                        - denied
+                        - withheld
+                        - warned_pending
+                        - warned_acknowledged
+                        - warned_abandoned
+                        - quarantined
+                execution_id:
+                    type: string
+                    description: Identity of the concrete mediated execution.
                 id:
                     type: string
                     description: The result ID.
                     format: uuid
+                identity_stamped:
+                    type: boolean
+                    description: Whether MCP identity stamped validated principal provenance.
                 match_redacted:
                     type: string
                     description: Opaque fingerprint of the original match in the form `<redacted len=N sha=XXXXXXXX>` where N is the byte length of the original match and XXXXXXXX is the first 8 hex characters of sha256(match). For shadow_mcp findings the original match value (a non-sensitive server URL or command identifier) is passed through verbatim.
+                mcp_method:
+                    type: string
+                    description: MCP method or equivalent mediated operation.
+                mcp_server_id:
+                    type: string
+                    description: Concrete MCP server that executed the operation.
+                mediation_surface:
+                    type: string
+                    description: Concrete mediation surface where the execution was observed.
+                meta_mcp_server_id:
+                    type: string
+                    description: Outer gateway that routed the execution, when present.
+                phase:
+                    type: string
+                    description: Execution phase inspected by risk.
                 policy_id:
                     type: string
                     description: The risk policy ID.
@@ -94639,6 +95520,9 @@ components:
                 position_known:
                     type: boolean
                     description: Whether the original finding carried byte-position information within the source message. Exact positions are intentionally not exposed to avoid reconstruction attacks.
+                principal_kind:
+                    type: string
+                    description: Credential provenance class resolved by MCP identity.
                 rule_id:
                     type: string
                     description: The matched rule identifier.
@@ -94655,6 +95539,12 @@ components:
                     items:
                         type: string
                     description: Tags from the detection rule.
+                tool_name:
+                    type: string
+                    description: Name of the concrete tool, when applicable.
+                toolset_id:
+                    type: string
+                    description: Toolset serving the execution, when present.
                 user_id:
                     type: string
                     description: The user who owns the chat session.
@@ -95081,6 +95971,8 @@ components:
                         - skill:blocked_read
                         - skill:write
                         - skill:blocked_write
+                        - plugin:write
+                        - plugin:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - risk_policy:block
@@ -95295,6 +96187,7 @@ components:
                         - environment:blocked_write
                         - skill:blocked_read
                         - skill:blocked_write
+                        - plugin:blocked_write
                         - risk_policy:bypass
                 resource_type:
                     type: string
@@ -95334,6 +96227,8 @@ components:
                         - skill:blocked_read
                         - skill:write
                         - skill:blocked_write
+                        - plugin:write
+                        - plugin:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                         - risk_policy:block
@@ -104236,6 +105131,23 @@ components:
                 - client_id_metadata_uri
                 - created_at
                 - updated_at
+        UserSessionIssuerFieldMismatch:
+            type: object
+            properties:
+                field:
+                    type: string
+                    description: The differing field name.
+                source_value:
+                    type: string
+                    description: The source issuer's rendered value. Empty when unset.
+                target_value:
+                    type: string
+                    description: The target issuer's rendered value. Empty when unset.
+            description: One user_session_issuer setting whose source and target values differ.
+            required:
+                - field
+                - source_value
+                - target_value
         UserSessionUpstream:
             type: object
             properties:

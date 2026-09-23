@@ -38,6 +38,8 @@ const (
 	ScopeSkillBlockedRead        Scope = "skill:blocked_read"
 	ScopeSkillWrite              Scope = "skill:write"
 	ScopeSkillBlockedWrite       Scope = "skill:blocked_write"
+	ScopePluginWrite             Scope = "plugin:write"
+	ScopePluginBlockedWrite      Scope = "plugin:blocked_write"
 	ScopeRiskPolicyEvaluate      Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass        Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
@@ -77,6 +79,7 @@ var adminScopes = []Scope{
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
 	ScopeSkillWrite,
+	ScopePluginWrite,
 	ScopeAgentRead,
 	ScopeAgentWrite,
 	ScopeAgentAuthorize,
@@ -119,6 +122,8 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeSkillBlockedRead:        scopeVisibilityInternal,
 	ScopeSkillWrite:              scopeVisibilityUserVisible,
 	ScopeSkillBlockedWrite:       scopeVisibilityInternal,
+	ScopePluginWrite:             scopeVisibilityUserVisible,
+	ScopePluginBlockedWrite:      scopeVisibilityInternal,
 	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
 	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
@@ -229,6 +234,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeSkillBlockedRead:        nil,
 	ScopeSkillWrite:              nil,
 	ScopeSkillBlockedWrite:       {ScopeSkillBlockedRead},
+	ScopePluginWrite:             nil,
+	ScopePluginBlockedWrite:      nil,
 	ScopeRiskPolicyEvaluate:      nil,
 	ScopeRiskPolicyBypass:        nil,
 	ScopeRiskPolicyBlock:         nil,
@@ -269,6 +276,8 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeSkillBlockedRead:        "",
 	ScopeSkillWrite:              ScopeSkillBlockedWrite,
 	ScopeSkillBlockedWrite:       "",
+	ScopePluginWrite:             ScopePluginBlockedWrite,
+	ScopePluginBlockedWrite:      "",
 	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
 	ScopeRiskPolicyBypass:        "",
 	ScopeRiskPolicyBlock:         "",

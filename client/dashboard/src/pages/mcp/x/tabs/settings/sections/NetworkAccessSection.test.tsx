@@ -3,10 +3,12 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { NetworkAccessSection } from "./NetworkAccessSection";
 
 const testState = vi.hoisted(() => ({
   entitled: true,
+  productTier: "enterprise" as "enterprise" | "payg" | "base",
   featureStatus: "success" as "pending" | "success" | "error",
   rolloutStatus: undefined as
     | "loading"
@@ -28,7 +30,18 @@ const testState = vi.hoisted(() => ({
     | { scope: string; resourceId?: string; level: string }
     | undefined,
   mutate: vi.fn(),
+  mutateGateway: vi.fn(),
+  invalidateGetGateway: vi.fn().mockResolvedValue(undefined),
+  invalidateListGateway: vi.fn().mockResolvedValue(undefined),
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
   mutationOptions: undefined as
+    | {
+        onError?: (error: Error) => void;
+        onSuccess?: () => Promise<void>;
+      }
+    | undefined,
+  gatewayMutationOptions: undefined as
     | {
         onError?: (error: Error) => void;
         onSuccess?: () => Promise<void>;
@@ -55,6 +68,10 @@ vi.mock("@/components/require-scope", () => ({
     testState.requireScopeProps = props;
     return <>{children}</>;
   },
+}));
+
+vi.mock("@/hooks/useProductTier", () => ({
+  useProductTier: () => testState.productTier,
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -147,6 +164,24 @@ vi.mock("@gram/client/react-query/listDomains.js", () => ({
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
   invalidateAllGetMcpServer: vi.fn(),
 }));
+vi.mock("@gram/client/react-query/getMetaMcpServer.js", () => ({
+  invalidateAllGetMetaMcpServer: testState.invalidateGetGateway,
+}));
+vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
+  invalidateAllMetaMcpServers: testState.invalidateListGateway,
+}));
+vi.mock("@gram/client/react-query/updateMetaMcpServer.js", () => ({
+  useUpdateMetaMcpServerMutation: (options: {
+    onError?: (error: Error) => void;
+    onSuccess?: () => Promise<void>;
+  }) => {
+    testState.gatewayMutationOptions = options;
+    return {
+      isPending: false,
+      mutate: testState.mutateGateway,
+    };
+  },
+}));
 
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   invalidateAllMcpServers: vi.fn(),
@@ -171,7 +206,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), success: vi.fn() },
+  toast: { error: testState.toastError, success: testState.toastSuccess },
 }));
 
 const baseServer: McpServer = {
@@ -187,7 +222,18 @@ const baseServer: McpServer = {
   updatedAt: new Date(0),
 };
 
-const endpoints: McpEndpoint[] = [
+const gateway: MetaMcpServer = {
+  id: "gateway-1",
+  name: "My Gateway",
+  organizationId: "org-1",
+  projectId: "project-1",
+  networkAccessMode: "public_only",
+  visibility: "private",
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
+};
+
+const endpoints: [McpEndpoint, McpEndpoint] = [
   {
     id: "endpoint-platform",
     projectId: "project-1",
@@ -211,6 +257,7 @@ const endpoints: McpEndpoint[] = [
 
 beforeEach(() => {
   testState.entitled = true;
+  testState.productTier = "enterprise";
   testState.featureStatus = "success";
   testState.rolloutStatus = undefined;
   testState.featureFetching = false;
@@ -225,19 +272,55 @@ beforeEach(() => {
   testState.ingressQuery.mockReset();
   testState.requireScopeProps = undefined;
   testState.mutate.mockReset();
+  testState.mutateGateway.mockReset();
+  testState.invalidateGetGateway.mockClear();
+  testState.invalidateListGateway.mockClear();
+  testState.toastSuccess.mockClear();
+  testState.toastError.mockClear();
   testState.mutationOptions = undefined;
+  testState.gatewayMutationOptions = undefined;
 });
 
 afterEach(cleanup);
 
 describe("NetworkAccessSection", () => {
-  it("renders nothing when the staff entitlement is disabled", () => {
+  it.each(["base", "payg"] as const)(
+    "blocks private choices for %s even with staff entitlement",
+    (tier) => {
+      testState.productTier = tier;
+      render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+      );
+      expect(screen.getByText(/available on the Enterprise plan/)).toBeTruthy();
+      expect(
+        screen
+          .getByRole("link", { name: "Talk to our team about upgrading" })
+          .getAttribute("href"),
+      ).toBe("https://www.speakeasy.com/book-demo");
+      fireEvent.click(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      );
+      expect(
+        screen
+          .getByRole("option", { name: /Public and private/ })
+          .getAttribute("data-disabled"),
+      ).toBe("");
+      expect(
+        screen
+          .getByRole("option", { name: /Private only/ })
+          .getAttribute("data-disabled"),
+      ).toBe("");
+    },
+  );
+
+  it("shows network access before staff enables Tailscale", () => {
     testState.entitled = false;
-    const { container } = render(
+    render(
       <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
     );
-
-    expect(container.textContent).toBe("");
+    expect(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    ).toBeTruthy();
   });
 
   it.each(["loading", "error"] as const)(
@@ -558,5 +641,146 @@ describe("NetworkAccessSection", () => {
         }),
       }),
     );
+  });
+
+  it("lets an eligible gateway use dual access and its private endpoint", async () => {
+    const gatewayEndpoints = [{ ...endpoints[0], metaMcpServerId: gateway.id }];
+    const { rerender } = render(
+      <NetworkAccessSection
+        metaMcpServer={gateway}
+        endpoints={gatewayEndpoints}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Public and private/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(testState.mutateGateway).toHaveBeenCalledWith({
+      request: {
+        updateMetaMcpServerForm: {
+          id: gateway.id,
+          name: gateway.name,
+          networkAccessMode: "dual",
+        },
+      },
+    });
+    expect(testState.mutate).not.toHaveBeenCalled();
+
+    await testState.gatewayMutationOptions?.onSuccess?.();
+    expect(testState.invalidateGetGateway).toHaveBeenCalledWith(
+      expect.anything(),
+      { refetchType: "all" },
+    );
+    expect(testState.invalidateListGateway).toHaveBeenCalledWith(
+      expect.anything(),
+      { refetchType: "all" },
+    );
+    expect(testState.toastSuccess).toHaveBeenCalledWith(
+      "Network access updated",
+    );
+
+    rerender(
+      <NetworkAccessSection
+        metaMcpServer={{ ...gateway, networkAccessMode: "dual" }}
+        endpoints={gatewayEndpoints}
+      />,
+    );
+    expect(
+      screen.getByText("https://private.example.ts.net/mcp/hosted-mcp"),
+    ).toBeTruthy();
+
+    testState.gatewayMutationOptions?.onError?.(
+      new Error("Gateway update failed"),
+    );
+    expect(testState.toastError).toHaveBeenCalledWith("Gateway update failed");
+  });
+
+  it("confirms private-only gateway access and lists affected URLs", () => {
+    render(
+      <NetworkAccessSection
+        metaMcpServer={gateway}
+        endpoints={[{ ...endpoints[0], metaMcpServerId: gateway.id }]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Private only/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain(
+      "Public routes stop serving this gateway",
+    );
+    expect(dialog.textContent).toContain(
+      "https://platform.example.com/mcp/hosted-mcp",
+    );
+    expect(dialog.textContent).toContain(
+      "https://private.example.ts.net/mcp/hosted-mcp",
+    );
+    expect(testState.mutateGateway).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Make private only" }));
+    expect(testState.mutateGateway).toHaveBeenCalledWith({
+      request: {
+        updateMetaMcpServerForm: {
+          id: gateway.id,
+          name: gateway.name,
+          networkAccessMode: "private_only",
+        },
+      },
+    });
+  });
+
+  it("blocks gateway private access without an endpoint in the pinned namespace", () => {
+    render(
+      <NetworkAccessSection
+        metaMcpServer={gateway}
+        endpoints={[{ ...endpoints[1], metaMcpServerId: gateway.id }]}
+      />,
+    );
+    expect(
+      screen.getByText(
+        /Add an MCP endpoint in the private ingress's pinned namespace/,
+      ),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    expect(
+      screen
+        .getByRole("option", { name: /Private only/ })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
+  });
+
+  it("allows an existing private gateway to return to public-only access", () => {
+    testState.entitled = false;
+    render(
+      <NetworkAccessSection
+        metaMcpServer={{ ...gateway, networkAccessMode: "private_only" }}
+        endpoints={[{ ...endpoints[0], metaMcpServerId: gateway.id }]}
+      />,
+    );
+    expect(
+      screen.getByText(/You can still switch to public only/),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Public only/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(testState.mutateGateway).toHaveBeenCalledWith({
+      request: {
+        updateMetaMcpServerForm: {
+          id: gateway.id,
+          name: gateway.name,
+          networkAccessMode: "public_only",
+        },
+      },
+    });
   });
 });

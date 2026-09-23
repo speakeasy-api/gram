@@ -149,14 +149,6 @@ fi
 echo "${branch}: idle ${idle}m — pausing"
 rm -f "$stamp"
 
-# `mise run pause` stops every local daemon -- including the pitchfork cron
-# daemon this task is running under when the schedule fired it. Run it in its
-# own session so pausing cannot kill the pause halfway through, before the
-# containers are stopped. Output goes to the worktree's git dir, since the
-# daemon's own log dies with it.
-if command -v setsid > /dev/null 2>&1; then
-    setsid mise run pause > "$gitdir/gram-stack-idle-pause.log" 2>&1 &
-else
-    nohup mise run pause > "$gitdir/gram-stack-idle-pause.log" 2>&1 &
-fi
-disown 2> /dev/null || true
+# The pause operation has its own supervised process group: it can stop this
+# cron without terminating itself halfway through the transition.
+pitchfork start pause-stack

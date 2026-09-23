@@ -444,14 +444,18 @@ const (
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
 	// upstream authorization server during the remote-session dance.
-	OAuthResourceKey             = attribute.Key("gram.oauth.resource")
-	OAuthProviderKey             = attribute.Key("gram.oauth.provider")
-	OAuthRedirectURICountKey     = attribute.Key("gram.oauth.redirect_uri.count")
-	OAuthRedirectURIFullKey      = attribute.Key("gram.oauth.redirect_uri.full")
-	OAuthRegisteredAuthMethodKey = attribute.Key("gram.oauth.registered_auth_method")
-	OAuthRegistrationEndpointKey = attribute.Key("gram.oauth.registration_endpoint")
-	OAuthRequiredKey             = attribute.Key("gram.oauth.required")
-	OAuthScopeKey                = attribute.Key("gram.oauth.scope")
+	OAuthResourceKey              = attribute.Key("gram.oauth.resource")
+	OAuthProviderKey              = attribute.Key("gram.oauth.provider")
+	OAuthRedirectURICountKey      = attribute.Key("gram.oauth.redirect_uri.count")
+	OAuthRedirectURIFullKey       = attribute.Key("gram.oauth.redirect_uri.full")
+	OAuthRegisteredAuthMethodKey  = attribute.Key("gram.oauth.registered_auth_method")
+	OAuthRegistrationEndpointKey  = attribute.Key("gram.oauth.registration_endpoint")
+	OAuthRegistrationMethodKey    = attribute.Key("gram.oauth.registration_method")
+	OAuthRegistrationOutcomeKey   = attribute.Key("gram.oauth.registration_outcome")
+	OAuthRegistrationReasonKey    = attribute.Key("gram.oauth.registration_reason")
+	OAuthRegistrationRetryableKey = attribute.Key("gram.oauth.registration_retryable")
+	OAuthRequiredKey              = attribute.Key("gram.oauth.required")
+	OAuthScopeKey                 = attribute.Key("gram.oauth.scope")
 	// OAuthScopeAddedKey lists the scopes the dance appended on top of a
 	// client's configured scope because the issuer advertises them.
 	OAuthScopeAddedKey                = attribute.Key("gram.oauth.scope_added")
@@ -534,6 +538,17 @@ const (
 	UserSessionIssuerIDKey            = attribute.Key("gram.user_session_issuer.id")
 	UserSessionClientIDKey            = attribute.Key("gram.user_session_client.id")
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
+	UserSessionIDKey                  = attribute.Key("gram.user_session.id")
+
+	// WorkloadIssuerIDKey is the workload_issuers row that vouches for a
+	// workload, never its issuer URL.
+	WorkloadIssuerIDKey = attribute.Key("gram.workload_issuer.id")
+	// WorkloadAssertionIssuerKey is the iss claim a workload assertion
+	// presented, recorded as presented whether or not it resolved.
+	WorkloadAssertionIssuerKey = attribute.Key("gram.workload.assertion_issuer")
+	// WorkloadSubjectKey is the sub claim a workload assertion presented: the
+	// external identity an operator admits.
+	WorkloadSubjectKey = attribute.Key("gram.workload.subject")
 
 	RemoteSessionIssuerIDKey            = attribute.Key("gram.remote_session_issuer.id")
 	RemoteSessionIDKey                  = attribute.Key("gram.remote_session.id")
@@ -579,6 +594,8 @@ const (
 	RiskScanModeKey                = attribute.Key("gram.risk.scan_mode")
 	RiskLLMTokenKindKey            = attribute.Key("gram.risk.llm.token_kind")
 	RiskLLMModelKey                = attribute.Key("gram.risk.llm.model")
+	RiskLLMFindingCountKey         = attribute.Key("gram.risk.llm.finding_count")
+	RiskLLMPublishFailedCountKey   = attribute.Key("gram.risk.llm.publish_failed_count")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -1896,6 +1913,34 @@ func SlogOAuthRegistrationEndpoint(v string) slog.Attr {
 	return slog.String(string(OAuthRegistrationEndpointKey), v)
 }
 
+func OAuthRegistrationMethod[V ~string](v V) attribute.KeyValue {
+	return OAuthRegistrationMethodKey.String(string(v))
+}
+func SlogOAuthRegistrationMethod[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthRegistrationMethodKey), string(v))
+}
+
+func OAuthRegistrationOutcome[V ~string](v V) attribute.KeyValue {
+	return OAuthRegistrationOutcomeKey.String(string(v))
+}
+func SlogOAuthRegistrationOutcome[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthRegistrationOutcomeKey), string(v))
+}
+
+func OAuthRegistrationReason[V ~string](v V) attribute.KeyValue {
+	return OAuthRegistrationReasonKey.String(string(v))
+}
+func SlogOAuthRegistrationReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthRegistrationReasonKey), string(v))
+}
+
+func OAuthRegistrationRetryable(v bool) attribute.KeyValue {
+	return OAuthRegistrationRetryableKey.Bool(v)
+}
+func SlogOAuthRegistrationRetryable(v bool) slog.Attr {
+	return slog.Bool(string(OAuthRegistrationRetryableKey), v)
+}
+
 func OAuthRequired(v bool) attribute.KeyValue { return OAuthRequiredKey.Bool(v) }
 func SlogOAuthRequired(v bool) slog.Attr      { return slog.Bool(string(OAuthRequiredKey), v) }
 
@@ -2213,6 +2258,22 @@ func SlogAuditSubject(v string) slog.Attr      { return slog.String(string(Audit
 func AuditSubjectID(v string) attribute.KeyValue { return AuditSubjectIDKey.String(v) }
 func SlogAuditSubjectID(v string) slog.Attr      { return slog.String(string(AuditSubjectIDKey), v) }
 
+func UserSessionID(v string) attribute.KeyValue { return UserSessionIDKey.String(v) }
+func SlogUserSessionID(v string) slog.Attr      { return slog.String(string(UserSessionIDKey), v) }
+
+func WorkloadIssuerID(v string) attribute.KeyValue { return WorkloadIssuerIDKey.String(v) }
+func SlogWorkloadIssuerID(v string) slog.Attr      { return slog.String(string(WorkloadIssuerIDKey), v) }
+
+func WorkloadAssertionIssuer(v string) attribute.KeyValue {
+	return WorkloadAssertionIssuerKey.String(v)
+}
+func SlogWorkloadAssertionIssuer(v string) slog.Attr {
+	return slog.String(string(WorkloadAssertionIssuerKey), v)
+}
+
+func WorkloadSubject(v string) attribute.KeyValue { return WorkloadSubjectKey.String(v) }
+func SlogWorkloadSubject(v string) slog.Attr      { return slog.String(string(WorkloadSubjectKey), v) }
+
 func UserSessionIssuerID(v string) attribute.KeyValue { return UserSessionIssuerIDKey.String(v) }
 func SlogUserSessionIssuerID(v string) slog.Attr {
 	return slog.String(string(UserSessionIssuerIDKey), v)
@@ -2457,6 +2518,17 @@ func SlogRiskLLMTokenKind(v string) slog.Attr      { return slog.String(string(R
 // RiskLLMModel is the served model name the risk analyzer called.
 func RiskLLMModel(v string) attribute.KeyValue { return RiskLLMModelKey.String(v) }
 func SlogRiskLLMModel(v string) slog.Attr      { return slog.String(string(RiskLLMModelKey), v) }
+
+// RiskLLMFindingCount is the number of findings one risk analyzer verdict
+// produced for the requesting policy's sources.
+func RiskLLMFindingCount(v int) attribute.KeyValue { return RiskLLMFindingCountKey.Int(v) }
+func SlogRiskLLMFindingCount(v int) slog.Attr      { return slog.Int(string(RiskLLMFindingCountKey), v) }
+
+// SlogRiskLLMPublishFailedCount is the number of a batch's LLM analysis
+// requests the topic did not acknowledge.
+func SlogRiskLLMPublishFailedCount(v int) slog.Attr {
+	return slog.Int(string(RiskLLMPublishFailedCountKey), v)
+}
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }

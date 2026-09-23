@@ -64,7 +64,7 @@ func handleResourcesRead(
 	billingRepository billing.Repository,
 	telemLogger *tm.Logger,
 	platformExtras []platformtools.ExternalTool,
-	scan mcpriskscan.Evaluator,
+	scan *mcpriskscan.Evaluator,
 ) (json.RawMessage, error) {
 	var params resourceReadParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -208,18 +208,19 @@ func handleResourcesRead(
 	if payload.mcpServerID != nil {
 		serverID = payload.mcpServerID.String()
 	}
-	scan.Scan(ctx, nil, mcpriskscan.Event{
+	scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:        mcpriskscan.SurfaceHostedMCP,
 		Method:         mcpriskscan.MethodResourcesRead,
 		OrganizationID: descriptor.OrganizationID,
 		ProjectID:      descriptor.ProjectID,
 		ServerID:       serverID,
+		MetaServerID:   payload.metaMcpServerID,
 		ToolsetID:      toolset.ID,
 		ToolName:       "",
 		ResourceURI:    descriptor.URI,
 		PromptName:     "",
-		Phase:          mcpriskscan.PhaseBeforeRead,
-	})
+		ChatID:         payload.chatID,
+	}, mcpriskscan.BorrowPayload(nil)))
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,

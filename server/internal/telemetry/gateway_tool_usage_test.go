@@ -60,10 +60,9 @@ func TestGetMetaMcpServerUsage_ExcludesRemovedMembers(t *testing.T) {
 
 	// Traffic reached both members while the removed one was still attached;
 	// a member that never existed on the gateway must not surface either.
-	seedGatewayTraffic(ctx, ti, ti.projectID, gateway.ID.String(), kept.mcpServerID.String(), removed.mcpServerID.String(), now)
-	logGatewayEvent(ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gateway.ID.String(), memberID: uuid.NewString(), tool: "ping", status: 200, at: now})
+	seedGatewayTraffic(t, ctx, ti, ti.projectID, gateway.ID.String(), kept.mcpServerID.String(), removed.mcpServerID.String(), now)
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gateway.ID.String(), memberID: uuid.NewString(), tool: "ping", status: 200, at: now})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	result, err := ti.service.GetMetaMcpServerUsage(ctx, &gen.GetMetaMcpServerUsagePayload{
 		MetaMcpServerID: gateway.ID.String(),
 		From:            now.Add(-time.Hour).Format(time.RFC3339),
@@ -133,7 +132,7 @@ func seedHookObservedGateway(t *testing.T, ctx context.Context, ti *testInstance
 		conversationID: "conv-gateway",
 	})
 	// The dispatch the gateway made for that call, attributed to the member.
-	logGatewayEvent(ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gateway.ID.String(), memberID: member.mcpServerID.String(), sourceID: member.sourceID.String(), tool: "query", status: 200, at: now.Add(-4 * time.Minute)})
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gateway.ID.String(), memberID: member.mcpServerID.String(), sourceID: member.sourceID.String(), tool: "query", status: 200, at: now.Add(-4 * time.Minute)})
 	// Unrelated shadow traffic that no gateway filter may include.
 	insertHookEvent(t, ctx, hookEventParams{
 		projectID:      ti.projectID,

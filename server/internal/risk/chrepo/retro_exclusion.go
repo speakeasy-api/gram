@@ -67,13 +67,15 @@ func FormatCHTime(t time.Time) string {
 }
 
 // latestRiskFindingsSubquery is the shared winning-copy-per-id dedup base
-// (latestCopyOrderSQL semantics), bounded to one tenant + partition day.
-// Callers append `rn = 1` plus their predicate. Args: organization_id,
-// project_id, day start, day end.
+// (latestCopyOrderSQL semantics), bounded to one tenant + partition day and
+// to enforcing rows: shadow engine-comparison rows are never flagged,
+// reversed or listed as regex candidates, so the counts the reconcile reports
+// only ever describe findings users can see. Callers append `rn = 1` plus
+// their predicate. Args: organization_id, project_id, day start, day end.
 const latestRiskFindingsSubquery = `(
 	SELECT *, ROW_NUMBER() OVER (PARTITION BY id ORDER BY ` + latestCopyOrderSQL + `) AS rn
 	FROM risk_findings
-	WHERE organization_id = ? AND project_id = ?
+	WHERE organization_id = ? AND project_id = ? AND ` + notShadowCond + `
 	  AND created_at >= ? AND created_at < ?
 ) AS latest`
 

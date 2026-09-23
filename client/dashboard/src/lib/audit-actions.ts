@@ -258,6 +258,7 @@ export const AUDIT_ACTIONS = [
   "user-session-issuer-cimd-client:remove",
   "user-session-issuer:create",
   "user-session-issuer:delete",
+  "user-session-issuer:migrate",
   "user-session-issuer:update",
   "user-session:revoke",
   "variation:delete_global",
@@ -835,6 +836,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated user session issuer";
     case "user-session-issuer:delete":
       return "deleted user session issuer";
+    case "user-session-issuer:migrate":
+      return "migrated user session issuer";
     case "user-session-issuer-cimd-client:add":
       return "added a CIMD client to";
     case "user-session-issuer-cimd-client:remove":

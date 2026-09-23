@@ -32,6 +32,11 @@ const (
 	// policy's sources, as opposed to the shadow stream that runs alongside
 	// an inline scan.
 	llmAnalyzerStreamExecutionPath = "llm_analyzer_stream"
+	// llmShadowStreamExecutionPath marks analysis requests the fine-tuned LLM
+	// analyzer evaluates in the shadow engine mode: the legacy engines scan
+	// the same batch inline and enforce, and the model's verdict is recorded
+	// for comparison only.
+	llmShadowStreamExecutionPath = "llm_shadow_stream"
 )
 
 // batchOperationID identifies metering for one policy execution and scanned
@@ -167,32 +172,42 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	promptInjectionFindings := make([][]scanners.Finding, n)
 	customFindings := make([][]scanners.Finding, n)
 
-	// Organizations on the LLM analyzer flag route every covered source
+	// The risk engine mode selects the engine behind every covered source
 	// (gitleaks, presidio, prompt_injection, destructive_tool,
-	// cli_destructive) to the fine-tuned model's async lane instead of the
-	// legacy engines: no inline scan, no legacy analysis request, and no
-	// Postgres rows for those sources, whose findings are ClickHouse-only.
-	// Custom rules, shadow_mcp and account_identity keep their engines.
+	// cli_destructive). In the llm mode the fine-tuned model's async lane
+	// replaces the legacy engines: no inline scan, no legacy analysis
+	// request, and no Postgres rows for those sources, whose findings are
+	// ClickHouse-only. In the shadow mode the legacy engines run exactly as
+	// in the off mode and the same messages are also published to the
+	// model's lane, marked shadow, so both engines' verdicts can be compared
+	// on identical traffic without the model ever enforcing. Custom rules,
+	// shadow_mcp and account_identity keep their engines in every mode.
 	//
-	// The flag only diverts when this worker knows an analyzer is configured:
-	// with GRAM_RISK_LLM_URL empty the streams consumer acks every request
-	// without findings, so honoring the flag would leave the organization with
-	// no async coverage at all. The legacy engines run instead.
+	// Both model modes only publish when this worker knows an analyzer is
+	// configured: with GRAM_RISK_LLM_URL empty the streams consumer acks
+	// every request without findings. The llm mode then falls back to the
+	// legacy engines rather than leave the organization without async
+	// coverage; the shadow mode just skips the comparison lane.
 	llmMode := false
+	llmShadow := false
 	llmOrgSlug := ""
 	if llmanalyzer.CoversAnySource(args.Sources) {
-		flagOn, orgSlug := policyflags.ProjectFlagState(ctx, a.logger, repo.New(a.db), a.flags, args.OrganizationID, args.ProjectID, feature.FlagRiskLLMAnalyzer)
+		mode, orgSlug := policyflags.ProjectFlagMode(ctx, a.logger, repo.New(a.db), a.flags, args.OrganizationID, args.ProjectID, feature.FlagRiskLLMAnalyzer)
 		switch {
-		case flagOn && a.llmAnalyzerEnabled:
+		case mode == feature.VariantRiskLLMLLM && a.llmAnalyzerEnabled:
 			llmMode, llmOrgSlug = true, orgSlug
-		case flagOn:
+		case mode == feature.VariantRiskLLMLLM:
 			a.llmFallbackOnce.Do(func() {
-				a.logger.WarnContext(ctx, "LLM analyzer flag on but GRAM_RISK_LLM_URL empty; batch scans fall back to legacy engines",
+				a.logger.WarnContext(ctx, "LLM analyzer mode llm but GRAM_RISK_LLM_URL empty; batch scans fall back to legacy engines",
 					attr.SlogOrganizationID(args.OrganizationID),
 					attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
 				)
 			})
 			a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), llmPolicyEvaluationFallbackLegacy, 1)
+		case mode == feature.VariantRiskLLMShadow && a.llmAnalyzerEnabled:
+			llmShadow, llmOrgSlug = true, orgSlug
+		case mode == feature.VariantRiskLLMShadow:
+			a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), llmPolicyEvaluationShadowSkipped, 1)
 		}
 	}
 
@@ -201,13 +216,14 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	var presidioPublishErr error
 	var presidioErr error
 	var llmPublishErr error
+	var llmPublishFailed int
 
 	var promptInjectionErr error
 	var customErr error
 
-	if llmMode {
+	if llmMode || llmShadow {
 		wg.Go(func() {
-			llmPublishErr = a.publishLLMScanRequests(ctx, args, messages, llmOrgSlug, llmCoveredSources(sources), masks)
+			llmPublishFailed, llmPublishErr = a.publishLLMScanRequests(ctx, args, messages, llmOrgSlug, llmCoveredSources(sources), masks, llmShadow)
 		})
 	}
 
@@ -277,6 +293,22 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	if presidioPublishErr != nil {
 		scanSpan.SetStatus(codes.Error, presidioPublishErr.Error())
 		return nil, fmt.Errorf("presidio scan dispatch: %w", presidioPublishErr)
+	}
+	if llmPublishErr != nil && llmShadow {
+		// The shadow lane only compares: a dropped shadow request costs the
+		// comparison one message, while failing the activity would retry the
+		// legacy engines' inline scan and hold their findings back behind an
+		// LLM transport outage. Count the messages that did not reach the
+		// topic (the acknowledged ones were counted as shadow_published) and
+		// keep the legacy results.
+		a.logger.WarnContext(ctx, "shadow LLM analyzer scan dispatch failed for some messages; keeping legacy engine results",
+			attr.SlogError(llmPublishErr),
+			attr.SlogOrganizationID(args.OrganizationID),
+			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+			attr.SlogRiskLLMPublishFailedCount(llmPublishFailed),
+		)
+		a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), llmPolicyEvaluationShadowPublishError, llmPublishFailed)
+		llmPublishErr = nil
 	}
 	if llmPublishErr != nil {
 		scanSpan.SetStatus(codes.Error, llmPublishErr.Error())

@@ -179,6 +179,19 @@ type GetClientResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// GetClientDelegationStatusResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body.
+type GetClientDelegationStatusResponseBody struct {
+	// unknown means no current observations; observed means matching observations
+	// exist; configuration_failure means the current delegation configuration is
+	// known to be invalid, not a per-human observation.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Inclusive observation window start.
+	WindowStart  *string                              `form:"window_start,omitempty" json:"window_start,omitempty" xml:"window_start,omitempty"`
+	Observations []*DelegationStatusCountResponseBody `form:"observations,omitempty" json:"observations,omitempty" xml:"observations,omitempty"`
+}
+
 // GetClientDeletePreflightResponseBody is the type of the
 // "organizationRemoteSessionClients" service "getClientDeletePreflight"
 // endpoint HTTP response body.
@@ -868,6 +881,196 @@ type GetClientUnexpectedResponseBody struct {
 // "organizationRemoteSessionClients" service "getClient" endpoint HTTP
 // response body for the "gateway_error" error.
 type GetClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "unauthorized" error.
+type GetClientDelegationStatusUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusForbiddenResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "forbidden" error.
+type GetClientDelegationStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusBadRequestResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "bad_request" error.
+type GetClientDelegationStatusBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusNotFoundResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "not_found" error.
+type GetClientDelegationStatusNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusConflictResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "conflict" error.
+type GetClientDelegationStatusConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "unsupported_media" error.
+type GetClientDelegationStatusUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusInvalidResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "invalid" error.
+type GetClientDelegationStatusInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "invariant_violation" error.
+type GetClientDelegationStatusInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "unexpected" error.
+type GetClientDelegationStatusUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetClientDelegationStatusGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "gateway_error" error.
+type GetClientDelegationStatusGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2882,6 +3085,25 @@ type RemoteSessionClientResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// DelegationStatusCountResponseBody is used to define fields on response body
+// types.
+type DelegationStatusCountResponseBody struct {
+	// Observed per-human delegation outcome, present only when the top-level
+	// status is observed. A configuration_failure count records past per-human
+	// failures for the current configuration; it is distinct from top-level
+	// configuration_failure, which reports a currently invalid configuration and
+	// returns no observations.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Number of humans with this latest outcome.
+	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
+	// Most recent matching observation.
+	LastObservedAt *string `form:"last_observed_at,omitempty" json:"last_observed_at,omitempty" xml:"last_observed_at,omitempty"`
+	// Most recent credential acquisition, distinct from renewal.
+	LastCredentialObtainedAt *string `form:"last_credential_obtained_at,omitempty" json:"last_credential_obtained_at,omitempty" xml:"last_credential_obtained_at,omitempty"`
+	// Most recent successful assertion renewal.
+	LastRefreshSucceededAt *string `form:"last_refresh_succeeded_at,omitempty" json:"last_refresh_succeeded_at,omitempty" xml:"last_refresh_succeeded_at,omitempty"`
+}
+
 // TrustedClientUserSessionIssuerReferenceResponseBody is used to define fields
 // on response body types.
 type TrustedClientUserSessionIssuerReferenceResponseBody struct {
@@ -3344,6 +3566,186 @@ func NewGetClientUnexpected(body *GetClientUnexpectedResponseBody) *goa.ServiceE
 // NewGetClientGatewayError builds a organizationRemoteSessionClients service
 // getClient endpoint gateway_error error.
 func NewGetClientGatewayError(body *GetClientGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusOrganizationClientDelegationStatusOK builds a
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint result from a HTTP "OK" response.
+func NewGetClientDelegationStatusOrganizationClientDelegationStatusOK(body *GetClientDelegationStatusResponseBody) *organizationremotesessionclients.OrganizationClientDelegationStatus {
+	v := &organizationremotesessionclients.OrganizationClientDelegationStatus{
+		Status:      *body.Status,
+		WindowStart: *body.WindowStart,
+	}
+	v.Observations = make([]*organizationremotesessionclients.DelegationStatusCount, len(body.Observations))
+	for i, val := range body.Observations {
+		if val == nil {
+			v.Observations[i] = nil
+			continue
+		}
+		v.Observations[i] = unmarshalDelegationStatusCountResponseBodyToOrganizationremotesessionclientsDelegationStatusCount(val)
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusUnauthorized builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// unauthorized error.
+func NewGetClientDelegationStatusUnauthorized(body *GetClientDelegationStatusUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusForbidden builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// forbidden error.
+func NewGetClientDelegationStatusForbidden(body *GetClientDelegationStatusForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusBadRequest builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// bad_request error.
+func NewGetClientDelegationStatusBadRequest(body *GetClientDelegationStatusBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusNotFound builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// not_found error.
+func NewGetClientDelegationStatusNotFound(body *GetClientDelegationStatusNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusConflict builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// conflict error.
+func NewGetClientDelegationStatusConflict(body *GetClientDelegationStatusConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusUnsupportedMedia builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// unsupported_media error.
+func NewGetClientDelegationStatusUnsupportedMedia(body *GetClientDelegationStatusUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusInvalid builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// invalid error.
+func NewGetClientDelegationStatusInvalid(body *GetClientDelegationStatusInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusInvariantViolation builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// invariant_violation error.
+func NewGetClientDelegationStatusInvariantViolation(body *GetClientDelegationStatusInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusUnexpected builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// unexpected error.
+func NewGetClientDelegationStatusUnexpected(body *GetClientDelegationStatusUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetClientDelegationStatusGatewayError builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// gateway_error error.
+func NewGetClientDelegationStatusGatewayError(body *GetClientDelegationStatusGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5252,6 +5654,36 @@ func ValidateGetClientResponseBody(body *GetClientResponseBody) (err error) {
 	return
 }
 
+// ValidateGetClientDelegationStatusResponseBody runs the validations defined
+// on GetClientDelegationStatusResponseBody
+func ValidateGetClientDelegationStatusResponseBody(body *GetClientDelegationStatusResponseBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.WindowStart == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_start", "body"))
+	}
+	if body.Observations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observations", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "unknown" || *body.Status == "observed" || *body.Status == "configuration_failure") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"unknown", "observed", "configuration_failure"}))
+		}
+	}
+	if body.WindowStart != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.window_start", *body.WindowStart, goa.FormatDateTime))
+	}
+	for _, e := range body.Observations {
+		if e != nil {
+			if err2 := ValidateDelegationStatusCountResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateGetClientDeletePreflightResponseBody runs the validations defined on
 // GetClientDeletePreflightResponseBody
 func ValidateGetClientDeletePreflightResponseBody(body *GetClientDeletePreflightResponseBody) (err error) {
@@ -6159,6 +6591,248 @@ func ValidateGetClientUnexpectedResponseBody(body *GetClientUnexpectedResponseBo
 // ValidateGetClientGatewayErrorResponseBody runs the validations defined on
 // getClient_gateway_error_response_body
 func ValidateGetClientGatewayErrorResponseBody(body *GetClientGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusUnauthorizedResponseBody runs the
+// validations defined on getClientDelegationStatus_unauthorized_response_body
+func ValidateGetClientDelegationStatusUnauthorizedResponseBody(body *GetClientDelegationStatusUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusForbiddenResponseBody runs the validations
+// defined on getClientDelegationStatus_forbidden_response_body
+func ValidateGetClientDelegationStatusForbiddenResponseBody(body *GetClientDelegationStatusForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusBadRequestResponseBody runs the validations
+// defined on getClientDelegationStatus_bad_request_response_body
+func ValidateGetClientDelegationStatusBadRequestResponseBody(body *GetClientDelegationStatusBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusNotFoundResponseBody runs the validations
+// defined on getClientDelegationStatus_not_found_response_body
+func ValidateGetClientDelegationStatusNotFoundResponseBody(body *GetClientDelegationStatusNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusConflictResponseBody runs the validations
+// defined on getClientDelegationStatus_conflict_response_body
+func ValidateGetClientDelegationStatusConflictResponseBody(body *GetClientDelegationStatusConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusUnsupportedMediaResponseBody runs the
+// validations defined on
+// getClientDelegationStatus_unsupported_media_response_body
+func ValidateGetClientDelegationStatusUnsupportedMediaResponseBody(body *GetClientDelegationStatusUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusInvalidResponseBody runs the validations
+// defined on getClientDelegationStatus_invalid_response_body
+func ValidateGetClientDelegationStatusInvalidResponseBody(body *GetClientDelegationStatusInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusInvariantViolationResponseBody runs the
+// validations defined on
+// getClientDelegationStatus_invariant_violation_response_body
+func ValidateGetClientDelegationStatusInvariantViolationResponseBody(body *GetClientDelegationStatusInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusUnexpectedResponseBody runs the validations
+// defined on getClientDelegationStatus_unexpected_response_body
+func ValidateGetClientDelegationStatusUnexpectedResponseBody(body *GetClientDelegationStatusUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetClientDelegationStatusGatewayErrorResponseBody runs the
+// validations defined on getClientDelegationStatus_gateway_error_response_body
+func ValidateGetClientDelegationStatusGatewayErrorResponseBody(body *GetClientDelegationStatusGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8715,6 +9389,37 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateDelegationStatusCountResponseBody runs the validations defined on
+// DelegationStatusCountResponseBody
+func ValidateDelegationStatusCountResponseBody(body *DelegationStatusCountResponseBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Count == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "durable_credential_present" || *body.Status == "assertion_only" || *body.Status == "offline_unsupported" || *body.Status == "offline_not_requested" || *body.Status == "refused" || *body.Status == "reauthentication_required" || *body.Status == "temporary_failure" || *body.Status == "configuration_failure") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"durable_credential_present", "assertion_only", "offline_unsupported", "offline_not_requested", "refused", "reauthentication_required", "temporary_failure", "configuration_failure"}))
+		}
+	}
+	if body.Count != nil {
+		if *body.Count < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.count", *body.Count, 0, true))
+		}
+	}
+	if body.LastObservedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_observed_at", *body.LastObservedAt, goa.FormatDateTime))
+	}
+	if body.LastCredentialObtainedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_credential_obtained_at", *body.LastCredentialObtainedAt, goa.FormatDateTime))
+	}
+	if body.LastRefreshSucceededAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_refresh_succeeded_at", *body.LastRefreshSucceededAt, goa.FormatDateTime))
 	}
 	return
 }

@@ -23,7 +23,7 @@ func TestVerifyGcpIamPlatformCredential_Resolves(t *testing.T) {
 		return gcpauth.Principal{Email: "gram@gram-platform.iam.gserviceaccount.com", Source: gcpauth.SourceMetadataServer}, nil
 	})
 
-	result, err := ti.service.VerifyGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.VerifyGcpIamPlatformCredentialPayload{
+	result, err := ti.service.VerifyGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.VerifyGcpIamPlatformCredentialPayload{
 		ID:           cred.ID,
 		SessionToken: nil,
 	})
@@ -49,7 +49,7 @@ func TestVerifyGcpIamPlatformCredential_ResolvesWithoutEmail(t *testing.T) {
 		return gcpauth.Principal{Email: "", Source: gcpauth.SourceADC}, nil
 	})
 
-	result, err := ti.service.VerifyGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.VerifyGcpIamPlatformCredentialPayload{
+	result, err := ti.service.VerifyGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.VerifyGcpIamPlatformCredentialPayload{
 		ID:           cred.ID,
 		SessionToken: nil,
 	})
@@ -71,7 +71,7 @@ func TestVerifyGcpIamPlatformCredential_UnsupportedMode(t *testing.T) {
 		return gcpauth.Principal{}, gcpauth.ErrUnsupportedMode
 	})
 
-	result, err := ti.service.VerifyGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.VerifyGcpIamPlatformCredentialPayload{
+	result, err := ti.service.VerifyGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.VerifyGcpIamPlatformCredentialPayload{
 		ID:           cred.ID,
 		SessionToken: nil,
 	})
@@ -93,7 +93,7 @@ func TestVerifyGcpIamPlatformCredential_ResolveFailure(t *testing.T) {
 		return gcpauth.Principal{}, errors.New("metadata server unreachable")
 	})
 
-	result, err := ti.service.VerifyGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.VerifyGcpIamPlatformCredentialPayload{
+	result, err := ti.service.VerifyGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.VerifyGcpIamPlatformCredentialPayload{
 		ID:           cred.ID,
 		SessionToken: nil,
 	})
@@ -106,7 +106,7 @@ func TestVerifyGcpIamPlatformCredential_NotFound(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	_, err := ti.service.VerifyGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.VerifyGcpIamPlatformCredentialPayload{
+	_, err := ti.service.VerifyGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.VerifyGcpIamPlatformCredentialPayload{
 		ID:           uuid.NewString(),
 		SessionToken: nil,
 	})

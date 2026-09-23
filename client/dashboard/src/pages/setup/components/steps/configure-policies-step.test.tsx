@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
+import type { FeatureFlagVariantResult } from "@/hooks/useFeatureFlagVariant";
 import { buildPolicyPayload } from "./configure-policies-payload";
 import { ConfigurePoliciesStep } from "./configure-policies-step";
 
@@ -12,9 +12,20 @@ const mocks = vi.hoisted(() => ({
   policies: [] as unknown[],
 }));
 
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => mocks.flagResult() as FeatureFlagResult,
+vi.mock("@/hooks/useFeatureFlagVariant", () => ({
+  useFeatureFlagVariant: () => mocks.flagResult() as FeatureFlagVariantResult,
 }));
+
+const LLM_VARIANT: FeatureFlagVariantResult = {
+  status: "resolved",
+  variant: "llm",
+  enabled: true,
+};
+const OFF_VARIANT: FeatureFlagVariantResult = {
+  status: "resolved",
+  variant: "off",
+  enabled: true,
+};
 
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: "default" }),
@@ -75,7 +86,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.policies = [];
-  mocks.flagResult.mockReturnValue({ status: "disabled" });
+  mocks.flagResult.mockReturnValue(OFF_VARIANT);
 });
 
 function renderStep() {
@@ -108,7 +119,7 @@ describe("ConfigurePoliciesStep detector mode", () => {
   });
 
   it("collapses them into a single PII row under the LLM analyzer", () => {
-    mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.flagResult.mockReturnValue(LLM_VARIANT);
     renderStep();
 
     expect(screen.getByText("PII")).toBeTruthy();
@@ -119,7 +130,7 @@ describe("ConfigurePoliciesStep detector mode", () => {
   });
 
   it("creates an entity-less presidio policy for PII under the LLM analyzer", () => {
-    mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.flagResult.mockReturnValue(LLM_VARIANT);
     renderStep();
 
     fireEvent.click(screen.getByRole("button", { name: /^PII/ }));
@@ -148,7 +159,7 @@ describe("ConfigurePoliciesStep detector mode", () => {
       screen.getByRole("switch", { name: "Enable detection" }),
     ).toBeTruthy();
 
-    mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.flagResult.mockReturnValue(LLM_VARIANT);
     view.rerender();
 
     expect(
@@ -157,7 +168,7 @@ describe("ConfigurePoliciesStep detector mode", () => {
   });
 
   it("shows an entity-scoped presidio policy as the PII row under the analyzer", () => {
-    mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.flagResult.mockReturnValue(LLM_VARIANT);
     mocks.policies = [
       {
         id: "policy-1",

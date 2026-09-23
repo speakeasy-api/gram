@@ -249,3 +249,51 @@ func TestHandleRemoteLoginCallback_ConcurrentIssuerDeleteSweepsTheStoredGrant(t 
 
 	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens())
 }
+
+// Issuer migration holds the issuer FOR UPDATE and then key-shares the client
+// row through the links it inserts, so the callback locks the issuer before
+// the client row to stay in the same order. Once the migration commits, the
+// re-read finds the issuer retired and the login is rejected rather than
+// stored against the tombstone.
+func TestHandleRemoteLoginCallback_WaitsForIssuerMigrationThenRejectsRetiredIssuer(t *testing.T) {
+	t.Parallel()
+
+	spy := &revocationSpy{}
+	ctx, fx := seedRemoteLoginInFlight(t, "cb-migrate", spy)
+
+	tx := testenv.BeginTx(t, ctx, fx.ti.conn)
+	txIssuers := usersessionsrepo.New(tx)
+	// The migration's issuer row lock, taken while the user is at the provider.
+	_, err := txIssuers.GetOrganizationManagedUserSessionIssuerByIDForUpdate(ctx, usersessionsrepo.GetOrganizationManagedUserSessionIssuerByIDForUpdateParams{
+		ID:             fx.userIssuer,
+		OrganizationID: fx.organizationID,
+	})
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- fx.mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callbackRequest(ctx, fx, "migrate-code"))
+	}()
+	testenv.WaitForBlockedBackend(t, ctx, fx.ti.conn)
+	require.Never(t, func() bool { return len(done) > 0 }, 250*time.Millisecond, 10*time.Millisecond, "the callback waits behind the migration's issuer lock instead of writing under it")
+
+	// The migration retires the source and commits.
+	_, err = txIssuers.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
+		ID:        fx.userIssuer,
+		ProjectID: fx.projectID,
+	})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+
+	require.Eventually(t, func() bool { return len(done) > 0 }, 5*time.Second, 10*time.Millisecond)
+	require.ErrorContains(t, <-done, "no longer exists", "the callback re-reads the issuer as retired and is rejected")
+	require.Equal(t, int64(1), fx.exchanges.Load(), "rejection happens at persist time, after the code exchange")
+
+	_, err = repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            fx.subject,
+		RemoteSessionClientID: fx.clientID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "no remote_sessions row lands on the retired issuer")
+
+	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens(), "the pair Gram refused to store is handed back to the provider")
+}

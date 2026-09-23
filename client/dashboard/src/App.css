@@ -117,6 +117,12 @@
      Reserving the gutter permanently keeps the layout still. */
   html {
     scrollbar-gutter: stable;
+    /* Anchor jumps and scrollIntoView clear the sticky page header
+       (--page-sticky-top is published by PageHeader). */
+    scroll-padding-top: var(--page-sticky-top, 0px);
+    /* No rubber-band bounce: overscrolling the document drags the sticky
+       header and mode switcher with it, so the top bar appears to shrink. */
+    overscroll-behavior-y: none;
   }
   body[data-scroll-locked] {
     margin-right: 0 !important;

@@ -8,7 +8,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * Mirrors the server-side ResourceKindForScope in authz/selector.go.
  */
 export function resourceKindForScope(scope: string): string {
-  if (scope.startsWith("project:")) return "project";
+  if (scope.startsWith("project:") || scope.startsWith("plugin:"))
+    return "project";
   if (scope.startsWith("remote-mcp:") || scope.startsWith("mcp:")) return "mcp";
   if (scope.startsWith("org:")) return "org";
   if (scope.startsWith("environment:")) return "environment";
@@ -71,6 +72,7 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
     "environment:blocked_write",
     "environment:blocked_read",
   ],
+  "plugin:write": ["plugin:blocked_write"],
   "skill:read": ["skill:blocked_read"],
   "skill:write": ["skill:blocked_write", "skill:blocked_read"],
   "risk_policy:evaluate": ["risk_policy:bypass"],
@@ -97,23 +99,33 @@ function grantSelectorsMatch(
   return grant.selectors.some((selector) => matches(selector, check));
 }
 
-/** Pure equivalent of hasScope for loaded effective grants. */
+/**
+ * Pure equivalent of hasScope for loaded effective grants. Multiple resource IDs
+ * accept any allow, but an exclusion on ANY alternative wins (RequireAnyUnblocked).
+ */
 export function hasScopeInGrants(
   grants: EffectiveGrant[],
   scope: Scope,
-  resourceId?: string,
+  resourceId?: string | readonly string[],
   projectId?: string,
 ): boolean {
-  const allowCheck: Record<string, string> = {
-    resourceKind: resourceKindForScope(scope),
-  };
-  if (resourceId) allowCheck.resourceId = resourceId;
-  if (projectId) allowCheck.projectId = projectId;
+  const resourceIds =
+    typeof resourceId === "string" || resourceId === undefined
+      ? [resourceId]
+      : resourceId;
+  const allowChecks = resourceIds.map((id) => {
+    const allowCheck: Record<string, string> = {
+      resourceKind: resourceKindForScope(scope),
+    };
+    if (id) allowCheck.resourceId = id;
+    if (projectId) allowCheck.projectId = projectId;
+    return allowCheck;
+  });
   // Unscoped allows are existential, but strict exclusions must distinguish
   // unrestricted wildcards from exclusions for one concrete resource.
-  const exclusionCheck = resourceId
-    ? allowCheck
-    : { ...allowCheck, resourceId: "*" };
+  const exclusionChecks = allowChecks.map((check) =>
+    check.resourceId ? check : { ...check, resourceId: "*" },
+  );
 
   const exclusionScopes = exclusionScopesForScope(scope);
   let hasAllow = false;
@@ -128,7 +140,7 @@ export function hasScopeInGrants(
       exclusionScopes.includes(grant.scope);
     if (
       (isLegacyDeny || isExclusion) &&
-      grantSelectorsMatch(grant, exclusionCheck, true)
+      exclusionChecks.some((check) => grantSelectorsMatch(grant, check, true))
     ) {
       return false;
     }
@@ -138,13 +150,29 @@ export function hasScopeInGrants(
     if (
       effect === "allow" &&
       scopeMatches &&
-      grantSelectorsMatch(grant, allowCheck, false)
+      allowChecks.some((check) => grantSelectorsMatch(grant, check, false))
     ) {
       hasAllow = true;
     }
   }
 
   return hasAllow;
+}
+
+/** Any allow is sufficient, but an exclusion on any alternative wins. */
+export function hasAnyUnblockedScopeInGrants(
+  grants: EffectiveGrant[],
+  checks: readonly { scope: Scope; resourceId: string; projectId?: string }[],
+): boolean {
+  return (
+    checks.every(({ scope, resourceId, projectId }) =>
+      // A synthetic allow probes only exclusions; real allows are checked below.
+      hasScopeInGrants([...grants, { scope }], scope, resourceId, projectId),
+    ) &&
+    checks.some(({ scope, resourceId, projectId }) =>
+      hasScopeInGrants(grants, scope, resourceId, projectId),
+    )
+  );
 }
 
 export function hasScopeInProject(

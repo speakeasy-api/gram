@@ -146,11 +146,12 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
     // to any header controls that happen to be underneath at very narrow sizes;
     // only the pill itself (pointer-events-auto) intercepts interaction.
     // Hidden below sm (640 px) where the pill would overlap the workspace
-    // switcher and command controls with no room to breathe.
+    // switcher and command controls with no room to breathe. Fixed, not
+    // absolute: the document scrolls, and the pill rides the sticky header.
     <nav
       aria-label="Interface mode"
       className={cn(
-        "pointer-events-none absolute inset-x-0 z-30 hidden sm:flex h-(--header-height) items-center justify-center",
+        "pointer-events-none fixed inset-x-0 z-30 hidden sm:flex h-(--header-height) items-center justify-center",
         mode === "canvas" ? "top-(--header-offset)" : "top-0",
       )}
     >

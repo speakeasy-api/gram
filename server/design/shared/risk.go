@@ -250,6 +250,24 @@ var RiskExclusion = Type("RiskExclusion", func() {
 	Required("id", "project_id", "match_type", "match_value", "rule_id_filter", "source_filter", "enabled", "created_at", "updated_at")
 })
 
+// riskExecutionAttributes describes mediated execution metadata without
+// implying that a finding has a durable chat anchor or revealable payload.
+func riskExecutionAttributes() {
+	Attribute("execution_id", String, "Identity of the concrete mediated execution.")
+	Attribute("mcp_server_id", String, "Concrete MCP server that executed the operation.")
+	Attribute("meta_mcp_server_id", String, "Outer gateway that routed the execution, when present.")
+	Attribute("toolset_id", String, "Toolset serving the execution, when present.")
+	Attribute("tool_name", String, "Name of the concrete tool, when applicable.")
+	Attribute("phase", String, "Execution phase inspected by risk.")
+	Attribute("mediation_surface", String, "Concrete mediation surface where the execution was observed.")
+	Attribute("mcp_method", String, "MCP method or equivalent mediated operation.")
+	Attribute("principal_kind", String, "Credential provenance class resolved by MCP identity.")
+	Attribute("identity_stamped", Boolean, "Whether MCP identity stamped validated principal provenance.")
+	Attribute("enforcement_outcome", String, "Recorded enforcement outcome, independent of policy configuration.", func() {
+		Enum("logged", "denied", "withheld", "warned_pending", "warned_acknowledged", "warned_abandoned", "quarantined")
+	})
+}
+
 var RiskResult = Type("RiskResult", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -260,6 +278,7 @@ var RiskResult = Type("RiskResult", func() {
 		Format(FormatUUID)
 	})
 	Attribute("policy_version", Int64, "Policy version when this result was produced.")
+	riskExecutionAttributes()
 	Attribute("block_id", String, "ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.", func() {
 		Format(FormatUUID)
 	})
@@ -350,6 +369,7 @@ var RiskResultRedacted = Type("RiskResultRedacted", func() {
 		Format(FormatUUID)
 	})
 	Attribute("policy_version", Int64, "Policy version when this result was produced.")
+	riskExecutionAttributes()
 	Attribute("chat_message_id", String, "The chat message that was scanned, when the finding is anchored to a message.", func() {
 		Format(FormatUUID)
 	})

@@ -20,6 +20,12 @@ const (
 	// AsyncScanOutcomeDisabled marks a message acked untouched because the
 	// handler's engine is not configured in this deployment.
 	AsyncScanOutcomeDisabled = "disabled"
+	// AsyncScanOutcomeShadowPublished marks a shadow-mode message the handler
+	// evaluated, metered and published like an enforcing one, with the shadow
+	// marker on every finding so the findings store records them for engine
+	// comparison and hides them from users. Kept distinct from ok so shadow
+	// traffic stays separable on the counter.
+	AsyncScanOutcomeShadowPublished = "shadow_published"
 
 	meterAsyncScanHandlerMessages = "risk.async_scan.handler_messages"
 )

@@ -1740,7 +1740,14 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     mcp_method LowCardinality(String) DEFAULT '' COMMENT 'MCP method or equivalent mediated operation, such as tools/call.',
     principal_kind LowCardinality(String) DEFAULT '' COMMENT 'Credential class established exclusively by mcpidentity. Empty when unstamped.',
     identity_stamped Bool DEFAULT false COMMENT 'Whether validated principal provenance was present, including validated anonymous sessions.',
-    enforcement_outcome Enum8('' = 0, 'logged' = 1, 'denied' = 2, 'withheld' = 3, 'warned_pending' = 4, 'warned_acknowledged' = 5, 'warned_abandoned' = 6, 'quarantined' = 7) DEFAULT '' COMMENT 'Enforcement action taken, independent of detection. Empty when unspecified or legacy.'
+    enforcement_outcome Enum8('' = 0, 'logged' = 1, 'denied' = 2, 'withheld' = 3, 'warned_pending' = 4, 'warned_acknowledged' = 5, 'warned_abandoned' = 6, 'quarantined' = 7) DEFAULT '' COMMENT 'Enforcement action taken, independent of detection. Empty when unspecified or legacy.',
+
+    -- Engine-comparison marker. Rows the LLM analyzer produced under the
+    -- shadow risk engine mode coexist with the legacy engines' rows for the
+    -- same message (deterministic finding ids include the source) and are
+    -- read only by the comparison query. Declared last for append-only
+    -- migration parity with the columns above.
+    shadow UInt8 DEFAULT 0 COMMENT 'Set to 1 on findings the LLM analyzer produced while the organization ran the shadow risk engine mode, recorded to compare the model with the legacy engines per message and never enforced. Every user-facing read path filters shadow = 0, so shadow rows are hidden from Risk Events, the overview, signals, the Watchdog and reveal by default. 0 on every enforcing finding and on rows written before this column existed.'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(created_at)
 ORDER BY (organization_id, project_id, created_at, id)

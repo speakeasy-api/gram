@@ -2,10 +2,13 @@
 // analyzer: its finding source, its rule ids and the mapping between policy
 // sources and the risks the model scores.
 //
-// For organizations with feature.FlagRiskLLMAnalyzer enabled the analyzer
-// replaces the gitleaks, Presidio, prompt-injection, destructive-tool and
-// CLI-destructive engines on both the realtime enforcement lane and the batch
-// flag lane. Policies keep their configured sources: each covered source maps
+// feature.FlagRiskLLMAnalyzer selects an organization's engine mode. In the
+// llm mode the analyzer replaces the gitleaks, Presidio, prompt-injection,
+// destructive-tool and CLI-destructive engines on both the realtime
+// enforcement lane and the batch flag lane; in the shadow mode those engines
+// keep enforcing and the analyzer runs on the same traffic so its verdicts
+// can be compared, never enforced. Policies keep their configured sources
+// in every mode: each covered source maps
 // to one of the model's risk keys, a single model call scores every key, and a
 // positive score becomes a finding carrying the rule id of the policy source
 // it was scored for. Two sources may share a risk key (destructive_tool and

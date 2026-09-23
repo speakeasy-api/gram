@@ -13,7 +13,7 @@ import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { Markdown } from "@/elements/components/Markdown";
-import { useRBAC } from "@/hooks/useRBAC";
+import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { useRoutes } from "@/routes";
@@ -110,16 +110,22 @@ export function SkillInsightsSection({
   versionLabels: Map<string, string>;
   versionsLoading: boolean;
   versionsError: Error | null;
-}): JSX.Element {
-  const { isLoading: isRBACLoading } = useRBAC();
+}): JSX.Element | null {
+  const project = useProject();
+  const { grants, isLoading: isRBACLoading } = useRBAC();
+  const canReadInsights =
+    !isRBACLoading &&
+    hasScopeInGrants(grants, "project:read", project.id, project.id) &&
+    hasScopeInGrants(grants, "skill:read", project.id, project.id);
   const query = useSkillEfficacyInsights(
     {
       skillIds: [data.skill.id],
       includeVersions: true,
     },
     undefined,
-    { throwOnError: false, enabled: !isRBACLoading },
+    { throwOnError: false, enabled: canReadInsights },
   );
+  if (!canReadInsights) return null;
   return (
     <SettingsSection>
       <SettingsSection.Header>
