@@ -54,6 +54,8 @@ func staffBrowserProof(t *testing.T, response *httptest.ResponseRecorder) *http.
 			require.True(t, cookie.HttpOnly)
 			require.Empty(t, cookie.Domain)
 			require.Equal(t, "/", cookie.Path)
+			require.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
+			require.Equal(t, int(staffCodeLifetime.Seconds()), cookie.MaxAge)
 			return cookie
 		}
 	}

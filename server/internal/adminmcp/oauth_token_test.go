@@ -182,4 +182,10 @@ func TestStaffOAuthTokenRejectsPublicAndBodyClientCredentials(t *testing.T) {
 	tokens.TokenHandler().ServeHTTP(response, request)
 	require.Equal(t, http.StatusUnauthorized, response.Code)
 	require.Zero(t, store.validate)
+
+	request = staffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "client_secret": {"test-client-secret"}})
+	response = httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Zero(t, store.validate)
 }
