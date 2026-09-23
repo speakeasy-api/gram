@@ -10,16 +10,17 @@ import (
 )
 
 type WorkloadIssuer struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	Name           string
-	Tags           []string
-	Issuer         string
-	JwksUri        string
-	Metadata       []byte
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.NullUUID
+	Name                 string
+	Tags                 []string
+	Issuer               string
+	JwksUri              string
+	AllowPrefixAdmission bool
+	Metadata             []byte
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
 }
