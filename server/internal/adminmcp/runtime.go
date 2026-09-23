@@ -65,6 +65,11 @@ type ConfigurationReader interface {
 	GetOrganizationChatAnalysisSettings(context.Context, *gen.GetOrganizationChatAnalysisSettingsPayload) (*gen.AdminChatAnalysisSettings, error)
 }
 
+// ActivityReader exposes the dashboard's paginated organization audit feed.
+type ActivityReader interface {
+	ListOrganizationActivity(context.Context, *gen.ListOrganizationActivityPayload) (*gen.AdminListOrganizationActivityResult, error)
+}
+
 func NewRuntime(authenticator Authenticator, resourceURL string, reads ...OrganizationReader) *Runtime {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "admin-mcp",
@@ -80,10 +85,12 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	}
 	projectReader, _ := reader.(ProjectReader)
 	configurationReader, _ := reader.(ConfigurationReader)
-	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil)
+	activityReader, _ := reader.(ActivityReader)
+	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil)
 	registerOrganizationTools(server, reader)
 	registerProjectTools(server, reader, projectReader)
 	registerConfigurationTools(server, reader, configurationReader)
+	registerActivityTools(server, reader, activityReader)
 	return &Runtime{authenticator: authenticator, server: server, resourceURL: resourceURL}
 }
 
