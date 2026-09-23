@@ -44,7 +44,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
-import { PlatformInstrumentationSheet } from "../setup/components/platform-instrumentation-sheet";
+import { PlatformInstrumentationSheet } from "@/components/agent-instrumentation/platform-instrumentation-sheet";
 import { PlatformMCPOnboardingContent } from "../org/PlatformMCP";
 import {
   MarketplaceCard,
