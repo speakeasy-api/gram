@@ -11,7 +11,8 @@ const state = vi.hoisted(() => ({
   query: vi.fn(),
 }));
 vi.mock("@/contexts/Auth", () => ({
-  useProject: () => ({ id: "project-a" }),
+  useSession: () => ({ session: "session-a" }),
+  useProject: () => ({ id: "project-a", slug: "project-a" }),
   useOrganization: () => ({ id: "org-a" }),
 }));
 vi.mock("@/hooks/useRBAC", async (importOriginal) => ({
@@ -58,6 +59,20 @@ beforeEach(() => {
   });
 });
 describe("plugin membership authorization", () => {
+  it("does not offer the project skill picker to resource-only readers", () => {
+    state.grants.push({
+      scope: "plugin:write",
+      selectors: [{ resourceId: "project-a" }],
+    });
+    render(
+      <PluginSkillsSection
+        pluginId="plugin-a"
+        skillId="skill-a"
+        onMutated={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Add Skill" })).toBeNull();
+  });
   it("invokes undistribute from the card remove control without card navigation", () => {
     state.grants.push({
       scope: "plugin:write",
@@ -155,7 +170,13 @@ describe("plugin membership authorization", () => {
       />,
     );
     expect(state.query).toHaveBeenCalledWith(
-      { pluginId: "plugin-a", skillId: "skill-a", limit: 50 },
+      {
+        gramProject: "project-a",
+        gramSession: "session-a",
+        pluginId: "plugin-a",
+        skillId: "skill-a",
+        limit: 50,
+      },
       undefined,
       { throwOnError: false, enabled: true },
     );
@@ -172,7 +193,13 @@ describe("plugin membership authorization", () => {
       />,
     );
     expect(state.query).toHaveBeenCalledWith(
-      { pluginId: "plugin-a", skillId: undefined, limit: 50 },
+      {
+        gramProject: "project-a",
+        gramSession: "session-a",
+        pluginId: "plugin-a",
+        skillId: undefined,
+        limit: 50,
+      },
       undefined,
       { throwOnError: false, enabled: true },
     );
@@ -191,7 +218,13 @@ describe("plugin membership authorization", () => {
       />,
     );
     expect(state.query).toHaveBeenCalledWith(
-      { pluginId: "plugin-a", skillId: undefined, limit: 50 },
+      {
+        gramProject: "project-a",
+        gramSession: "session-a",
+        pluginId: "plugin-a",
+        skillId: undefined,
+        limit: 50,
+      },
       undefined,
       { throwOnError: false, enabled: true },
     );
@@ -204,7 +237,13 @@ describe("plugin membership authorization", () => {
       />,
     );
     expect(state.query).toHaveBeenCalledWith(
-      { pluginId: "plugin-a", skillId: undefined, limit: 50 },
+      {
+        gramProject: "project-a",
+        gramSession: "session-a",
+        pluginId: "plugin-a",
+        skillId: undefined,
+        limit: 50,
+      },
       undefined,
       { throwOnError: false, enabled: false },
     );

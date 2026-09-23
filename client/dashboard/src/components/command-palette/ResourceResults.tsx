@@ -1,3 +1,5 @@
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { CommandGroup, CommandItem } from "@/components/ui/Command";
 import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -341,7 +343,8 @@ function AssistantsGroup({ onNavigate }: GroupProps) {
 
 function PluginsGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
-  const { data } = usePluginsSuspense();
+  const scope = usePluginQueryScope();
+  const { data } = usePluginsSuspense(scope);
   const plugins = data?.plugins ?? [];
   if (!plugins.length) return null;
   return (
@@ -542,6 +545,9 @@ export function ResourceResults({
   const { hasAnyScope, hasScope } = useRBAC();
   // Risk resources are org:admin-gated on their own pages; mirror that here so
   // non-admins never fire the (forbidden) list calls.
+  const canWritePlugins = usePluginWriteAccess();
+  const canReadPlugins =
+    canWritePlugins || hasAnyScope(["org:read", "org:admin"]);
   const isAdmin = hasAnyScope(["org:admin"]);
   // Approval requests are an org-admin surface, matching the queue page's
   // own gate.
@@ -580,9 +586,11 @@ export function ResourceResults({
       <LazyGroup>
         <AssistantsGroup onNavigate={onNavigate} />
       </LazyGroup>
-      <LazyGroup>
-        <PluginsGroup onNavigate={onNavigate} />
-      </LazyGroup>
+      {canReadPlugins && (
+        <LazyGroup>
+          <PluginsGroup onNavigate={onNavigate} />
+        </LazyGroup>
+      )}
       {isAdmin && (
         <>
           <LazyGroup>

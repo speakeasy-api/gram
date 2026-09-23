@@ -22,8 +22,8 @@ import {
 import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
 import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";
-import { useOrganization, useSession } from "@/contexts/Auth";
-import { useRBAC } from "@/hooks/useRBAC";
+import { useOrganization, useSession, useProject } from "@/contexts/Auth";
+import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import { emailsMatch, resolveChatOwner } from "@/lib/chat-owner";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
@@ -941,18 +941,26 @@ export function InsightsProvider({
     onSkillIdsSent: handleSkillIdsSent,
   });
 
+  const project = useProject();
+  const { grants, isLoading: permissionsLoading, hasScope } = useRBAC();
+  const canReadSkills =
+    !permissionsLoading &&
+    hasScopeInGrants(grants ?? [], "skill:read", project.id, project.id);
   const skillsQuery = useSkillsInfinite(
     { limit: 200, gramProject: mcpConfig.projectSlug },
     undefined,
     {
-      enabled: assistantReady,
+      enabled: assistantReady && canReadSkills,
       throwOnError: false,
     },
   );
-  useDrainInfiniteQuery(skillsQuery, assistantReady);
+  useDrainInfiniteQuery(skillsQuery, assistantReady && canReadSkills);
   const composerSkills = useMemo(
     () =>
-      (skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? [])
+      (canReadSkills
+        ? (skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? [])
+        : []
+      )
         .filter((skill) => skill.hasValidVersion)
         .map((skill) => ({
           id: skill.id,
@@ -960,7 +968,7 @@ export function InsightsProvider({
           displayName: skill.displayName,
           summary: skill.summary,
         })),
-    [skillsQuery.data?.pages],
+    [skillsQuery.data?.pages, canReadSkills],
   );
 
   // Derive "Continue chat" from the server: if the viewer's most recent
@@ -994,7 +1002,6 @@ export function InsightsProvider({
   // from inside Elements would hit (its request headers are scoped to the
   // chat API, not `access.listMembers`).
   const organization = useOrganization();
-  const { hasScope } = useRBAC();
   const canReadMembers = hasScope("org:read", organization.id);
   const { data: membersData } = useMembers(undefined, undefined, {
     enabled: canReadMembers,
@@ -1189,8 +1196,10 @@ export function InsightsProvider({
           skills: composerSkills,
           selectedSkillIds,
           onSelectedSkillIdsChange: setSelectedSkillIds,
-          loading: skillsQuery.isPending || skillsQuery.isFetchingNextPage,
-          error: !!skillsQuery.error,
+          loading:
+            canReadSkills &&
+            (skillsQuery.isPending || skillsQuery.isFetchingNextPage),
+          error: canReadSkills && !!skillsQuery.error,
           maxSelected: 10,
         },
       },
@@ -1218,6 +1227,7 @@ export function InsightsProvider({
       managedAssistantId,
       composerSkills,
       selectedSkillIds,
+      canReadSkills,
       skillsQuery.isPending,
       skillsQuery.isFetchingNextPage,
       skillsQuery.error,

@@ -6,6 +6,12 @@ import { InsightsProvider } from "./insights-dock";
 import { GramElementsProvider } from "@/elements";
 
 const mocks = vi.hoisted(() => ({
+  skills: vi.fn(() => ({
+    data: undefined,
+    isPending: false,
+    error: null as Error | null,
+  })),
+  skillContext: undefined as { loading?: boolean; error?: boolean } | undefined,
   activeRoute: "detail" as "detail" | "new" | "home",
   resolveCreator: undefined as
     | ((chat: { userId: string }) => unknown)
@@ -35,9 +41,13 @@ vi.mock("@/elements", async () => {
       config,
     }: {
       children: ReactNode;
-      config: { history?: { resolveCreator?: typeof mocks.resolveCreator } };
+      config: {
+        history?: { resolveCreator?: typeof mocks.resolveCreator };
+        composer?: { skillContext?: typeof mocks.skillContext };
+      };
     }) => {
       const hasRuntime = useContext(RuntimeContext);
+      if (config.composer) mocks.skillContext = config.composer.skillContext;
       if (config.history) {
         mocks.resolveCreator = config.history.resolveCreator;
         if (mocks.activeRoute === "home") return null;
@@ -83,17 +93,14 @@ vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: mocks.members,
 }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
-  useSkillsInfinite: () => ({
-    data: undefined,
-    isPending: false,
-    isFetchingNextPage: false,
-    error: undefined,
-  }),
+  useSkillsInfinite: mocks.skills,
 }));
-vi.mock("@/hooks/useRBAC", () => ({
+vi.mock("@/hooks/useRBAC", async (original) => ({
+  ...(await original<typeof import("@/hooks/useRBAC")>()),
   useRBAC: () => ({ hasScope: mocks.hasScope }),
 }));
 vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: "project-id", slug: "project" }),
   useOrganization: () => ({
     id: "organization",
     projects: [{ id: "project-a", slug: "project" }],
@@ -138,6 +145,12 @@ vi.mock("@/routes", () => ({
 
 afterEach(cleanup);
 beforeEach(() => {
+  mocks.skills.mockReturnValue({
+    data: undefined,
+    isPending: false,
+    error: null,
+  });
+  mocks.skillContext = undefined;
   mocks.activeRoute = "detail";
   mocks.resolveCreator = undefined;
   mocks.hasScope.mockReturnValue(false);
@@ -151,6 +164,31 @@ function AssistantEditor(): JSX.Element {
 }
 
 describe("InsightsProvider", () => {
+  it.each([null, new Error("cached failure")])(
+    "masks disabled uncached skills state (%s)",
+    (error) => {
+      mocks.activeRoute = "home";
+      mocks.skills.mockReturnValue({ data: undefined, isPending: true, error });
+      render(
+        <InsightsProvider
+          mcpConfig={{ projectSlug: "project" } as never}
+          title="Assistant"
+          subtitle=""
+        >
+          <div />
+        </InsightsProvider>,
+      );
+      expect(mocks.skills).toHaveBeenLastCalledWith(
+        expect.anything(),
+        undefined,
+        expect.objectContaining({ enabled: false }),
+      );
+      expect(mocks.skillContext).toMatchObject({
+        loading: false,
+        error: false,
+      });
+    },
+  );
   it("ignores cached members after directory permission is revoked", () => {
     mocks.activeRoute = "home";
     mocks.hasScope.mockImplementation((scope) => scope === "org:read");

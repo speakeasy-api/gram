@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  pluginList: vi.fn(() => ({ data: { plugins: [] } })),
   toolsets: [] as unknown[],
   mcpServers: [] as unknown[],
   catalogServers: [] as unknown[],
@@ -34,7 +35,7 @@ vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
   useRiskListPoliciesSuspense: () => ({ data: { policies: [] } }),
 }));
 vi.mock("@gram/client/react-query/plugins", () => ({
-  usePluginsSuspense: () => ({ data: { plugins: [] } }),
+  usePluginsSuspense: mocks.pluginList,
 }));
 vi.mock("@/pages/environments/useEnvironments", () => ({
   useEnvironments: () => [],
@@ -81,6 +82,15 @@ vi.mock("@/components/ui/Icon", () => ({
   Icon: ({ name }: { name: string }) => <span data-icon={name} />,
 }));
 
+vi.mock("@/hooks/usePluginWriteAccess", () => ({
+  usePluginWriteAccess: () => mocks.scopes.includes("plugin:write"),
+}));
+vi.mock("@/pages/plugins/usePluginQueryScope", () => ({
+  usePluginQueryScope: () => ({
+    gramProject: "project-a",
+    gramSession: "session-a",
+  }),
+}));
 import { ResourceResults } from "./ResourceResults";
 
 function toolset(name: string, slug: string) {
@@ -124,6 +134,7 @@ function catalogServer(title: string, registrySpecifier: string) {
 }
 
 function resetMocks() {
+  mocks.pluginList.mockClear();
   mocks.toolsets = [];
   mocks.mcpServers = [];
   mocks.catalogServers = [];
@@ -137,6 +148,16 @@ describe("ResourceResults MCP Servers group", () => {
   beforeEach(resetMocks);
   afterEach(cleanup);
 
+  it("does not query plugins for baseline project readers", () => {
+    mocks.scopes = ["project:read"];
+    renderResults();
+    expect(mocks.pluginList).not.toHaveBeenCalled();
+  });
+  it("queries plugins for project plugin writers without org read", () => {
+    mocks.scopes = ["plugin:write"];
+    renderResults();
+    expect(mocks.pluginList).toHaveBeenCalled();
+  });
   it("lists toolset-backed and mcp_servers-backed servers under one heading", () => {
     mocks.toolsets = [toolset("Hosted Server", "hosted-server")];
     mocks.mcpServers = [
