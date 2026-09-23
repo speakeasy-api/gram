@@ -1250,13 +1250,29 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	}
 
 	pageSize := resolvePageSize(payload.Limit)
+	mcpServerID := ""
+	if payload.McpServerID != nil && strings.TrimSpace(*payload.McpServerID) != "" {
+		id, err := uuid.Parse(*payload.McpServerID)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid MCP server ID")
+		}
+		mcpServerID = id.String()
+	}
+	chatID := ""
+	if payload.ChatID != nil && strings.TrimSpace(*payload.ChatID) != "" {
+		id, err := uuid.Parse(*payload.ChatID)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
+		}
+		chatID = id.String()
+	}
 
-	if payload.ChatID != nil && *payload.ChatID != "" {
+	if chatID != "" && mcpServerID == "" {
 		totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
 		if err != nil {
 			totalCount = 0
 		}
-		return s.listResultsByChat(ctx, *authCtx.ProjectID, *payload.ChatID, cursor, pageSize, totalCount)
+		return s.listResultsByChat(ctx, *authCtx.ProjectID, chatID, cursor, pageSize, totalCount)
 	}
 	// A policy filter is applied alongside the other filters rather than
 	// short-circuiting to a separate listing, so combinations like
@@ -1309,7 +1325,16 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		return nil, oops.E(oops.CodeInvalid, err, "invalid to").LogError(ctx, s.logger)
 	}
 
-	if s.listFromClickHouse(ctx, authCtx) {
+	useClickHouse := s.listFromClickHouse(ctx, authCtx)
+	if mcpServerID != "" {
+		// MCP-attributed findings have no Postgres mirror. Never silently
+		// ignore the filter by falling back to the chat-only store.
+		if s.findingsCH == nil {
+			return nil, oops.E(oops.CodeUnexpected, nil, "MCP server filtering requires ClickHouse")
+		}
+		useClickHouse = true
+	}
+	if useClickHouse {
 		var from, to *time.Time
 		if fromTime.Valid {
 			from = &fromTime.Time
@@ -1317,7 +1342,7 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		if toTime.Valid {
 			to = &toTime.Time
 		}
-		return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
+		return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
 	}
 
 	var totalCount int64
@@ -1366,6 +1391,7 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 		ProjectSlugInput: payload.ProjectSlugInput,
 		PolicyID:         payload.PolicyID,
 		ChatID:           payload.ChatID,
+		McpServerID:      payload.McpServerID,
 		Category:         payload.Category,
 		RuleID:           payload.RuleID,
 		// The agent surface lists its own project's findings; it has no
@@ -1491,23 +1517,34 @@ func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedact
 	}
 
 	return &types.RiskResultRedacted{
-		ID:                r.ID,
-		PolicyID:          r.PolicyID,
-		PolicyVersion:     r.PolicyVersion,
-		ChatMessageID:     r.ChatMessageID,
-		ChatContentPartID: r.ChatContentPartID,
-		ChatID:            r.ChatID,
-		ChatTitle:         r.ChatTitle,
-		UserID:            r.UserID,
-		Source:            r.Source,
-		RuleID:            r.RuleID,
-		Description:       r.Description,
-		MatchRedacted:     matchRedacted,
-		PositionKnown:     r.StartPos != nil && r.EndPos != nil,
-		Confidence:        r.Confidence,
-		Tags:              r.Tags,
-		SpansRedacted:     spansRedacted,
-		CreatedAt:         r.CreatedAt,
+		ID:                 r.ID,
+		PolicyID:           r.PolicyID,
+		PolicyVersion:      r.PolicyVersion,
+		ExecutionID:        r.ExecutionID,
+		McpServerID:        r.McpServerID,
+		MetaMcpServerID:    r.MetaMcpServerID,
+		ToolsetID:          r.ToolsetID,
+		ToolName:           r.ToolName,
+		Phase:              r.Phase,
+		MediationSurface:   r.MediationSurface,
+		McpMethod:          r.McpMethod,
+		PrincipalKind:      r.PrincipalKind,
+		IdentityStamped:    r.IdentityStamped,
+		EnforcementOutcome: r.EnforcementOutcome,
+		ChatMessageID:      r.ChatMessageID,
+		ChatContentPartID:  r.ChatContentPartID,
+		ChatID:             r.ChatID,
+		ChatTitle:          r.ChatTitle,
+		UserID:             r.UserID,
+		Source:             r.Source,
+		RuleID:             r.RuleID,
+		Description:        r.Description,
+		MatchRedacted:      matchRedacted,
+		PositionKnown:      r.StartPos != nil && r.EndPos != nil,
+		Confidence:         r.Confidence,
+		Tags:               r.Tags,
+		SpansRedacted:      spansRedacted,
+		CreatedAt:          r.CreatedAt,
 	}
 }
 
@@ -4021,24 +4058,35 @@ func foundRowToResult(
 	confidence pgtype.Float8, tags []string, spans []byte, createdAt pgtype.Timestamptz,
 ) *types.RiskResult {
 	return &types.RiskResult{
-		ID:                id.String(),
-		PolicyID:          policyID.String(),
-		PolicyVersion:     policyVersion,
-		BlockID:           blockIDPtr(blockID),
-		ChatMessageID:     nullUUIDStringPtr(chatMessageID),
-		ChatContentPartID: nullUUIDStringPtr(chatContentPartID),
-		ChatID:            chatID,
-		ChatTitle:         conv.FromPGText[string](chatTitle),
-		UserID:            conv.FromPGText[string](chatUserID),
-		Source:            source,
-		RuleID:            conv.FromPGText[string](ruleID),
-		Description:       conv.FromPGText[string](description),
-		Match:             conv.FromPGText[string](match),
-		StartPos:          conv.PtrInt32ToInt(conv.FromPGInt4(startPos)),
-		EndPos:            conv.PtrInt32ToInt(conv.FromPGInt4(endPos)),
-		Confidence:        conv.FromPGFloat8(confidence),
-		Tags:              tags,
-		Spans:             parseRiskSpans(spans),
+		ID:                 id.String(),
+		PolicyID:           policyID.String(),
+		PolicyVersion:      policyVersion,
+		ExecutionID:        nil,
+		McpServerID:        nil,
+		MetaMcpServerID:    nil,
+		ToolsetID:          nil,
+		ToolName:           nil,
+		Phase:              nil,
+		MediationSurface:   nil,
+		McpMethod:          nil,
+		PrincipalKind:      nil,
+		IdentityStamped:    nil,
+		EnforcementOutcome: nil,
+		BlockID:            blockIDPtr(blockID),
+		ChatMessageID:      nullUUIDStringPtr(chatMessageID),
+		ChatContentPartID:  nullUUIDStringPtr(chatContentPartID),
+		ChatID:             chatID,
+		ChatTitle:          conv.FromPGText[string](chatTitle),
+		UserID:             conv.FromPGText[string](chatUserID),
+		Source:             source,
+		RuleID:             conv.FromPGText[string](ruleID),
+		Description:        conv.FromPGText[string](description),
+		Match:              conv.FromPGText[string](match),
+		StartPos:           conv.PtrInt32ToInt(conv.FromPGInt4(startPos)),
+		EndPos:             conv.PtrInt32ToInt(conv.FromPGInt4(endPos)),
+		Confidence:         conv.FromPGFloat8(confidence),
+		Tags:               tags,
+		Spans:              parseRiskSpans(spans),
 		// MatchRedacted is populated later by redactResultMatchInPlace, only
 		// for callers ListRiskResults decides shouldn't see raw match/spans.
 		MatchRedacted: nil,

@@ -35,6 +35,8 @@ type ListRiskFindingsParams struct {
 	OrganizationID string
 	ProjectID      string
 	PolicyIDs      []string
+	MCPServerID    string
+	ChatID         string
 	From           *time.Time
 	To             *time.Time
 	Category       string
@@ -73,29 +75,51 @@ var riskFindingListColumns = []string{
 	"start_pos",
 	"end_pos",
 	"match_redacted",
+	"execution_id",
+	"mcp_server_id",
+	"meta_mcp_server_id",
+	"toolset_id",
+	"tool_name",
+	"phase",
+	"mediation_surface",
+	"mcp_method",
+	"principal_kind",
+	"identity_stamped",
+	"enforcement_outcome",
 }
 
 // RiskFindingListRow is one listing row served from ClickHouse. The match is
 // only ever the precomputed redacted display string — the raw value never
 // reaches this store.
 type RiskFindingListRow struct {
-	ID                uuid.UUID
-	MessageCreatedAt  time.Time
-	ChatMessageID     string
-	ContentPartID     string
-	ChatID            string
-	ExternalUserID    string
-	AssistantID       string
-	RiskPolicyID      string
-	RiskPolicyVersion int64
-	RuleID            string
-	Description       string
-	Source            string
-	Confidence        float64
-	Tags              []string
-	StartPos          int32
-	EndPos            int32
-	MatchRedacted     string
+	ID                 uuid.UUID
+	MessageCreatedAt   time.Time
+	ChatMessageID      string
+	ContentPartID      string
+	ChatID             string
+	ExternalUserID     string
+	AssistantID        string
+	RiskPolicyID       string
+	RiskPolicyVersion  int64
+	RuleID             string
+	Description        string
+	Source             string
+	Confidence         float64
+	Tags               []string
+	StartPos           int32
+	EndPos             int32
+	MatchRedacted      string
+	ExecutionID        string
+	MCPServerID        string
+	MetaMCPServerID    string
+	ToolsetID          string
+	ToolName           string
+	Phase              string
+	MediationSurface   string
+	MCPMethod          string
+	PrincipalKind      string
+	IdentityStamped    bool
+	EnforcementOutcome string
 }
 
 // scanTargets returns the row's fields in riskFindingListColumns order. It is
@@ -120,6 +144,17 @@ func (r *RiskFindingListRow) scanTargets() []any {
 		&r.StartPos,
 		&r.EndPos,
 		&r.MatchRedacted,
+		&r.ExecutionID,
+		&r.MCPServerID,
+		&r.MetaMCPServerID,
+		&r.ToolsetID,
+		&r.ToolName,
+		&r.Phase,
+		&r.MediationSurface,
+		&r.MCPMethod,
+		&r.PrincipalKind,
+		&r.IdentityStamped,
+		&r.EnforcementOutcome,
 	}
 }
 
@@ -142,6 +177,9 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 		Where("dead_letter_reason = ''").
 		Where(notShadowCond).
 		Where(squirrel.Eq{"risk_policy_id": p.PolicyIDs})
+	if p.ChatID != "" {
+		sb = sb.Where("chat_id = ?", p.ChatID)
+	}
 	return sb, nil
 }
 
@@ -159,6 +197,17 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 // safe to apply BEFORE the per-id dedup, next to the tenancy filters, where it
 // also prunes the scan.
 const notShadowCond = "shadow = 0"
+
+// withMCPServerCond narrows to one concrete server AFTER the latest-copy
+// dedup. A suppression copy mirrored from Postgres carries no execution
+// metadata, so filtering before dedup would drop it and let the live scanner
+// copy win, resurfacing a dismissed finding under the filter.
+func withMCPServerCond(sb squirrel.SelectBuilder, p ListRiskFindingsParams) squirrel.SelectBuilder {
+	if p.MCPServerID == "" {
+		return sb
+	}
+	return sb.Where("mcp_server_id = ?", p.MCPServerID)
+}
 
 // liveStateCond gates the latest copy of a finding to live rows only — not
 // suppressed, not marked a false positive. Applied after the per-id dedup.
@@ -242,9 +291,9 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 		sb = sb.Column("excluded_at").Column("false_positive_at").
 			Column("fingerprint_tenant_hs256").
 			Suffix("LIMIT 1 BY id")
-		grouped := sq.Select(riskFindingListColumns...).
+		grouped := withMCPServerCond(sq.Select(riskFindingListColumns...).
 			FromSelect(sb, "latest").
-			Where(liveStateCond).
+			Where(liveStateCond), p).
 			OrderBy("message_created_at DESC", "id DESC").
 			Suffix("LIMIT 1 BY (risk_policy_id, rule_id, " + uniqueMatchKey + ")")
 		outer := sq.Select(riskFindingListColumns...).FromSelect(grouped, "deduped")
@@ -267,9 +316,9 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 		// support, so it renders through the suffix.
 		sb = sb.Column("excluded_at").Column("false_positive_at").
 			Suffix("LIMIT 1 BY id")
-		sb = sq.Select(riskFindingListColumns...).
+		sb = withMCPServerCond(sq.Select(riskFindingListColumns...).
 			FromSelect(sb, "latest").
-			Where(liveStateCond).
+			Where(liveStateCond), p).
 			OrderBy("message_created_at DESC", "id DESC").
 			Limit(p.Limit)
 	}
@@ -307,14 +356,14 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 // table) and only then is the live-state gate applied, so a finding whose
 // newest copy carries an exclusion or false-positive flag is not counted.
 func (q *Queries) CountRiskFindings(ctx context.Context, p ListRiskFindingsParams) (uint64, error) {
-	inner, err := listRiskFindingsBase(p, "id", "excluded_at", "false_positive_at")
+	inner, err := listRiskFindingsBase(p, "id", "excluded_at", "false_positive_at", "mcp_server_id")
 	if err != nil {
 		return 0, err
 	}
 	inner = inner.OrderBy(latestCopyOrderSQL).Suffix("LIMIT 1 BY id")
-	sb := sq.Select("count() AS findings").
+	sb := withMCPServerCond(sq.Select("count() AS findings").
 		FromSelect(inner, "latest").
-		Where(liveStateCond)
+		Where(liveStateCond), p)
 
 	query, args, err := sb.ToSql()
 	if err != nil {

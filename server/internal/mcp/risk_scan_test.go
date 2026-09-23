@@ -77,11 +77,13 @@ func TestRiskScan_ProxiedMetaMember(t *testing.T) {
 	require.Equal(t, memberID.String(), remoteEvents[0][attr.McpServerIDKey])
 	require.Equal(t, "ping", remoteEvents[0][attr.ToolNameKey])
 	require.Equal(t, mcpriskscan.MethodToolsCall, remoteEvents[0]["gram.mcp.risk.scan.method"])
+	require.Equal(t, meta.ID.String(), remoteEvents[0]["gram.mcp.risk.scan.meta_mcp_server_id"])
 }
 
 func TestRiskScan_PromptRetrieval(t *testing.T) {
 	t.Parallel()
 	ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
+	scanner := consumeRiskScanPayloads(t, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	slug := "scan-prompt-" + uuid.NewString()[:8]
@@ -121,6 +123,8 @@ func TestRiskScan_PromptRetrieval(t *testing.T) {
 	require.Equal(t, "user", result.Messages[0].Role)
 	require.Equal(t, "text", result.Messages[0].Content.Type)
 	require.Equal(t, "Hello reader", result.Messages[0].Content.Text)
+	require.Len(t, scanner.payloads, 1)
+	require.JSONEq(t, `{"name":"reader"}`, string(scanner.payloads[0]))
 
 	events := scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP)
 	require.Len(t, events, 1)
@@ -128,33 +132,25 @@ func TestRiskScan_PromptRetrieval(t *testing.T) {
 	require.Empty(t, events[0][attr.ToolNameKey])
 	require.Equal(t, mcpriskscan.MethodPromptsGet, events[0]["gram.mcp.risk.scan.method"])
 	require.Equal(t, "scan-greeting", events[0]["gram.mcp.risk.scan.prompt_name"])
-	require.Equal(t, mcpriskscan.PhaseBeforeRender, events[0]["gram.mcp.risk.scan.phase"])
+	require.Equal(t, mcpriskscan.PhaseRequest, events[0]["gram.mcp.risk.scan.phase"])
 	require.Equal(t, "false", events[0]["gram.mcp.risk.scan.identity_stamped"])
 }
 
 type consumingRiskScan struct {
 	t        *testing.T
-	next     mcpriskscan.Evaluator
 	payloads [][]byte
 }
 
-func (s *consumingRiskScan) Scan(ctx context.Context, reader io.Reader, event mcpriskscan.Event) {
-	var payload []byte
-	if reader != nil {
-		var err error
-		payload, err = io.ReadAll(reader)
-		require.NoError(s.t, err)
-	}
+func (s *consumingRiskScan) Observe(_ context.Context, subject mcpriskscan.Subject) {
+	payload := bytes.Clone(subject.Payload.Bytes())
 	s.payloads = append(s.payloads, payload)
-	s.next.Scan(ctx, nil, event)
 }
 
 func consumeRiskScanPayloads(t *testing.T, ti *testInstance) *consumingRiskScan {
 	t.Helper()
-	scanner := &consumingRiskScan{
-		t: t, next: mcpriskscan.NewNoop(ti.tracerProvider, testenv.NewMeterProvider(t), ti.logger), payloads: nil,
-	}
-	ti.service.SetRiskScanEvaluator(scanner)
+	scanner := &consumingRiskScan{t: t, payloads: nil}
+	noop := mcpriskscan.NewNoop(ti.tracerProvider, testenv.NewMeterProvider(t), ti.logger)
+	ti.service.SetRiskScanEvaluator(mcpriskscan.PrependObserver(scanner, noop))
 	return scanner
 }
 
@@ -202,7 +198,7 @@ func TestRiskScan_HostedHTTPPreservesPayloadAndErrorResult(t *testing.T) {
 	require.Equal(t, toolset.ID.String(), events[0][attr.ToolsetIDKey])
 	require.Equal(t, "scan_http", events[0][attr.ToolNameKey])
 	require.Equal(t, mcpriskscan.MethodToolsCall, events[0]["gram.mcp.risk.scan.method"])
-	require.Equal(t, mcpriskscan.PhaseBeforeExecution, events[0]["gram.mcp.risk.scan.phase"])
+	require.Equal(t, mcpriskscan.PhaseRequest, events[0]["gram.mcp.risk.scan.phase"])
 }
 
 func TestRiskScan_PromptAsToolPreservesRendering(t *testing.T) {
@@ -245,7 +241,7 @@ func TestRiskScan_PromptAsToolPreservesRendering(t *testing.T) {
 	require.Equal(t, "scan-template", events[0][attr.ToolNameKey])
 	require.Empty(t, events[0]["gram.mcp.risk.scan.prompt_name"])
 	require.Equal(t, mcpriskscan.MethodToolsCall, events[0]["gram.mcp.risk.scan.method"])
-	require.Equal(t, mcpriskscan.PhaseBeforeExecution, events[0]["gram.mcp.risk.scan.phase"])
+	require.Equal(t, mcpriskscan.PhaseRequest, events[0]["gram.mcp.risk.scan.phase"])
 }
 
 type riskScanResourceCaller struct {
@@ -361,5 +357,5 @@ func TestRiskScan_ResourceReadKeepsIdentityAndSyntheticBody(t *testing.T) {
 	require.Empty(t, events[0][attr.ToolNameKey])
 	require.Empty(t, events[0]["gram.mcp.risk.scan.prompt_name"])
 	require.Equal(t, mcpriskscan.MethodResourcesRead, events[0]["gram.mcp.risk.scan.method"])
-	require.Equal(t, mcpriskscan.PhaseBeforeRead, events[0]["gram.mcp.risk.scan.phase"])
+	require.Equal(t, mcpriskscan.PhaseRequest, events[0]["gram.mcp.risk.scan.phase"])
 }

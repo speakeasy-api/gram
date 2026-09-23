@@ -110,7 +110,7 @@ type Service struct {
 	networkIngressTelemetry   *networkingress.Telemetry
 	identityCoverage          *mcptoolexecution.IdentityCoverageCheckpoint
 	hostedToolsCallCheckpoint *mcptoolexecution.HostedCheckpoint
-	scanEvaluator             mcpriskscan.Evaluator
+	scanEvaluator             *mcpriskscan.Evaluator
 	guardianPolicy            *guardian.Policy
 	db                        *pgxpool.Pool
 	authRepo                  *auth_repo.Queries

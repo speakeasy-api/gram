@@ -13,8 +13,8 @@ import (
 )
 
 type prompGetParams struct {
-	Name      string         `json:"name"`
-	Arguments map[string]any `json:"arguments"`
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
 }
 
 type promptMessage struct {
@@ -27,7 +27,7 @@ type promptGetResult struct {
 	Messages    []promptMessage `json:"messages"`
 }
 
-func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, scan mcpriskscan.Evaluator) (json.RawMessage, error) {
+func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, scan *mcpriskscan.Evaluator) (json.RawMessage, error) {
 	var params prompGetParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse get prompt request").LogError(ctx, logger)
@@ -35,6 +35,12 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 
 	if params.Name == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "promp name is required").LogError(ctx, logger)
+	}
+	var arguments map[string]any
+	if len(params.Arguments) > 0 && string(params.Arguments) != "null" {
+		if err := json.Unmarshal(params.Arguments, &arguments); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse prompt arguments").LogError(ctx, logger)
+		}
 	}
 
 	tr := templatesRepo.New(db)
@@ -50,22 +56,21 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	if payload.mcpServerID != nil {
 		serverID = payload.mcpServerID.String()
 	}
-	// Prompt arguments are decoded, not retained as standalone bytes. Leave the
-	// scan payload absent rather than encoding them solely for no-op observation.
-	scan.Scan(ctx, nil, mcpriskscan.Event{
+	scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:        mcpriskscan.SurfaceHostedMCP,
 		Method:         mcpriskscan.MethodPromptsGet,
 		OrganizationID: payload.organizationID,
 		ProjectID:      payload.projectID.String(),
 		ServerID:       serverID,
+		MetaServerID:   payload.metaMcpServerID,
 		ToolsetID:      "",
 		ToolName:       "",
 		ResourceURI:    "",
 		PromptName:     params.Name,
-		Phase:          mcpriskscan.PhaseBeforeRender,
-	})
+		ChatID:         payload.chatID,
+	}, mcpriskscan.BorrowPayload(params.Arguments)))
 
-	promptData, err := templates.RenderTemplate(ctx, logger, prompt.Prompt, prompt.Kind.String, prompt.Engine.String, params.Arguments)
+	promptData, err := templates.RenderTemplate(ctx, logger, prompt.Prompt, prompt.Kind.String, prompt.Engine.String, arguments)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to execute prompt").LogError(ctx, logger)
 	}

@@ -25,11 +25,15 @@ const (
 	skillSuggestionActivityTimeout   = 10 * time.Minute
 	skillSuggestionWorkflowTimeout   = 40 * time.Minute
 	skillSuggestionSweepInterval     = 24 * time.Hour
-	skillSuggestionSweepTimeout      = 2 * time.Hour
-	skillSuggestionProjectPageSize   = 100
-	skillSuggestionSkillPageSize     = 100
-	skillSuggestionMaxProjectPages   = 10
-	skillSuggestionMaxSkillPages     = 10
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	skillSuggestionSweepCatchupWindow = skillSuggestionSweepInterval - time.Second
+
+	skillSuggestionSweepTimeout    = 2 * time.Hour
+	skillSuggestionProjectPageSize = 100
+	skillSuggestionSkillPageSize   = 100
+	skillSuggestionMaxProjectPages = 10
+	skillSuggestionMaxSkillPages   = 10
 
 	skillSuggestionSweepScheduleID = "v1:skill-suggestion-sweep-schedule"
 	skillSuggestionSweepWorkflowID = skillSuggestionSweepScheduleID + "/scheduled"
@@ -193,12 +197,14 @@ func AddSkillSuggestionSweepSchedule(ctx context.Context, temporalEnv *tenv.Envi
 		TaskQueue:          string(temporalEnv.Queue()),
 		WorkflowRunTimeout: skillSuggestionSweepTimeout,
 	}
-	_, err := scheduleClient.Create(ctx, client.ScheduleOptions{ID: skillSuggestionSweepScheduleID, Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP, Spec: spec, Action: action})
+	_, err := scheduleClient.Create(ctx, client.ScheduleOptions{
+		CatchupWindow: skillSuggestionSweepCatchupWindow, ID: skillSuggestionSweepScheduleID, Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP, Spec: spec, Action: action})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
 		if err := scheduleClient.GetHandle(ctx, skillSuggestionSweepScheduleID).Update(ctx, client.ScheduleUpdateOptions{DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 			input.Description.Schedule.Spec = &spec
 			input.Description.Schedule.Action = action
+			setScheduleCatchup(&input.Description.Schedule, skillSuggestionSweepCatchupWindow)
 			return &client.ScheduleUpdate{Schedule: &input.Description.Schedule, TypedSearchAttributes: nil}, nil
 		}}); err != nil {
 			return fmt.Errorf("update skill suggestion sweep schedule: %w", err)
