@@ -106,7 +106,7 @@ func TestWorkers_RegisterSchedulesPreservesManualPauses(t *testing.T) {
 		var err error
 		ids, err = scheduleIDs(ctx, env.Client())
 		assert.NoError(c, err)
-		assert.Len(c, ids, 24, "all unconditional schedules should be registered")
+		assert.Len(c, ids, 25, "all unconditional schedules should be registered")
 	}, 30*time.Second, 250*time.Millisecond)
 	sc := env.Client().ScheduleClient()
 	windows := make(map[string]time.Duration, len(ids))
