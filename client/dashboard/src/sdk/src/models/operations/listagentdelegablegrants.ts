@@ -19,6 +19,10 @@ export type ListAgentDelegableGrantsRequest = {
    */
   toolsetId?: string | undefined;
   /**
+   * Optional MCP authorization resource identifiers, discovered in one request. Each narrows discovery like toolset_id; the result is the union of candidates across all of them.
+   */
+  toolsetIds?: Array<string> | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -58,6 +62,7 @@ export function listAgentDelegableGrantsSecurityToJSON(
 export type ListAgentDelegableGrantsRequest$Outbound = {
   agent_id: string;
   toolset_id?: string | undefined;
+  toolset_ids?: Array<string> | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -69,12 +74,14 @@ export const ListAgentDelegableGrantsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     agentId: z.string(),
     toolsetId: z.optional(z.string()),
+    toolsetIds: z.optional(z.array(z.string())),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       agentId: "agent_id",
       toolsetId: "toolset_id",
+      toolsetIds: "toolset_ids",
       gramSession: "Gram-Session",
     });
   }),

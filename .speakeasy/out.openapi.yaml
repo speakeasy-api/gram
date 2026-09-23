@@ -7339,6 +7339,17 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
+          description: Optional MCP authorization resource identifiers, discovered in one request. Each narrows discovery like toolset_id; the result is the union of candidates across all of them.
+          in: query
+          name: toolset_ids
+          schema:
+            description: Optional MCP authorization resource identifiers, discovered in one request. Each narrows discovery like toolset_id; the result is the union of candidates across all of them.
+            items:
+              format: uuid
+              type: string
+            maxItems: 100
+            type: array
+        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
