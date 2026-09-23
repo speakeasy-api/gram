@@ -200,6 +200,13 @@ func TestClaudeUnauthenticatedSessionStartRecordsNoMCPInventory(t *testing.T) {
 	_, err = ti.service.getCachedMCPList(ctx, sessionID)
 	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "OTEL attribution never writes the guard snapshot")
 
+	// The last scenario only means something if attribution bound the session
+	// id to the project; otherwise an unresolved session trivially writes
+	// nothing.
+	attributed, err := ti.service.getSessionMetadata(ctx, sessionID)
+	require.NoError(t, err, "OTEL attribution must cache this project's session metadata")
+	require.Equal(t, authCtx.ProjectID.String(), attributed.ProjectID)
+
 	// Now the session id resolves the project on its own.
 	_, err = ti.service.Claude(t.Context(), sessionStart)
 	require.NoError(t, err)

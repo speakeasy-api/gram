@@ -643,9 +643,9 @@ func TestFlushPendingHooks_DirectCall(t *testing.T) {
 	assert.Equal(t, int64(0), exists, "Buffered hooks should be flushed and deleted from Redis")
 }
 
-// Hooks an authenticated request buffered under its project flush only for
-// that project, and a flush that has not confirmed ownership of the session id
-// leaves the unauthenticated buffer alone.
+// Hooks from an authenticated request buffer under that request's project and
+// flush only for that project. A flush that has not confirmed ownership of the
+// session id leaves the unauthenticated buffer alone.
 func TestFlushPendingHooks_ProjectScopedBuffer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -674,15 +674,23 @@ func TestFlushPendingHooks_ProjectScopedBuffer(t *testing.T) {
 		}
 	}
 
+	listLen := func(key string) int64 {
+		n, err := ti.redisClient.LLen(ctx, key).Result()
+		require.NoError(t, err)
+		return n
+	}
+
 	other := metadataFor(uuid.NewString())
 	ti.service.flushPendingHooks(ctx, sessionID, &other, false)
-	require.Equal(t, int64(1), ti.redisClient.LLen(ctx, scopedKey).Val(), "another project never flushes this project's buffer")
-	require.Equal(t, int64(1), ti.redisClient.LLen(ctx, unscopedKey).Val(), "an unconfirmed owner leaves unauthenticated hooks alone")
+	require.Equal(t, int64(1), listLen(scopedKey), "another project never flushes this project's buffer")
+	require.Equal(t, int64(1), listLen(unscopedKey), "an unconfirmed owner leaves unauthenticated hooks alone")
 
 	own := metadataFor(projectID)
 	ti.service.flushPendingHooks(ctx, sessionID, &own, false)
-	require.Equal(t, int64(0), ti.redisClient.Exists(ctx, scopedKey).Val(), "the owning project flushes its buffer")
-	require.Equal(t, int64(1), ti.redisClient.LLen(ctx, unscopedKey).Val())
+	exists, err := ti.redisClient.Exists(ctx, scopedKey).Result()
+	require.NoError(t, err)
+	require.Equal(t, int64(0), exists, "the owning project flushes its buffer")
+	require.Equal(t, int64(1), listLen(unscopedKey))
 }
 
 // TestFlushPendingHooks_EmptyList tests flushing when there are no pending hooks
