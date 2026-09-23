@@ -116,6 +116,7 @@ func TestGetOrganizationFeatures_ReturnsTwentyFields(t *testing.T) {
 		"platform_mcp_enabled": {}, "customer_managed_encryption_keys_enabled": {},
 		"remote_session_auto_refresh_enabled": {}, "remote_session_auto_refresh_enforced_enabled": {},
 		"consent_tool_filtering_enabled": {}, "network_ingress_enabled": {}, "session_portability_enabled": {}, "device_agent": {},
+		"signals_intelligence_enabled": {},
 	}
 	gotKeys := make(map[string]struct{}, len(result))
 	for key := range result {

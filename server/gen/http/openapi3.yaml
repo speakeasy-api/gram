@@ -105347,6 +105347,9 @@ components:
                 session_portability_enabled:
                     type: boolean
                     description: 'Whether agent session portability is enabled for the organization: session sharing links, move reporting with lineage, and picker title enrichment via the device agent'
+                signals_intelligence_enabled:
+                    type: boolean
+                    description: Whether the organization can configure signals intelligence
                 skill_capture_metadata_only:
                     type: boolean
                     description: Whether skill capture stores activation metadata without requesting manifest content
@@ -105379,6 +105382,7 @@ components:
                 - consent_tool_filtering_enabled
                 - session_portability_enabled
                 - network_ingress_enabled
+                - signals_intelligence_enabled
                 - device_agent
         Project:
             type: object
@@ -111028,6 +111032,7 @@ components:
                         - consent_tool_filtering
                         - session_portability
                         - network_ingress
+                        - signals_intelligence
                     maxLength: 60
                 organization_id:
                     type: string
@@ -111132,6 +111137,7 @@ components:
                         - consent_tool_filtering
                         - session_portability
                         - network_ingress
+                        - signals_intelligence
                     maxLength: 60
                 organization_id:
                     type: string
