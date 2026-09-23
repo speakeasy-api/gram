@@ -60,7 +60,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.JudgeShadowAnalysis, _ g
 		return errors.New("invalid shadow baseline outcome")
 	}
 	started := time.Now()
-	result, err := h.judge.Evaluate(ctx, m.GetDetector(), m.GetStateJson())
+	result, err := h.judge.Evaluate(ctx, m.GetOrganizationId(), m.GetDetector(), m.GetStateJson())
 	elapsed := time.Since(started).Seconds()
 	outcome := "unavailable"
 	if err == nil {
@@ -98,12 +98,12 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.JudgeShadowAnalysis, _ g
 		"comparison_id": m.GetComparisonId(), "detector": m.GetDetector(),
 		"baseline_trace_id": m.GetBaselineTraceId(), "policy_hash": m.GetPolicyHash(),
 		"baseline_outcome": m.GetBaselineOutcome(), "shadow_outcome": outcome, "agreement": agreement,
-		"baseline_model": m.GetBaselineModel(), "shadow_model": typesafe.Model,
+		"baseline_model": m.GetBaselineModel(), "shadow_model": result.Model,
 		"question_version": jev.QuestionVersion, "threshold": jev.Threshold,
 		"baseline_batch_duration_seconds": m.GetBaselineDurationSeconds(), "shadow_duration_seconds": elapsed,
 		"probabilities": result.Probabilities, "input_tokens": result.InputTokens, "output_tokens": result.OutputTokens,
-		"input_cost_usd": float64(result.InputTokens) * 0.042 / 1_000_000,
-		"created_at":     m.GetCreatedAt(),
+		"cost_usd":   result.CostUSD,
+		"created_at": m.GetCreatedAt(),
 	}
 	logAttrs := []any{attr.SlogOrganizationID(m.GetOrganizationId()), attr.SlogProjectID(m.GetProjectId()), attr.SlogRiskJudgeShadow(record)}
 	if err != nil {

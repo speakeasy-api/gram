@@ -3,7 +3,6 @@ package judgeshadow
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -16,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestEnabledRequiresFlagsAndOrgID(t *testing.T) {
@@ -37,7 +37,7 @@ func TestWrapPolicyReturnsBaselineUnchanged(t *testing.T) {
 
 	flags := &feature.InMemory{}
 	pub := gcp.NewMockPublisher[*riskv1.JudgeShadowAnalysis]()
-	p := NewPublisher(slog.Default(), flags, pub, 0)
+	p := NewPublisher(testenv.NewLogger(t), flags, pub, 0)
 
 	baselineErr := errors.New("judge degraded")
 	baseline := func(_ context.Context, _ promptpolicy.Input) (*promptpolicy.Verdict, error) {
@@ -57,7 +57,7 @@ func TestWrapInjectionReturnsBaselineUnchanged(t *testing.T) {
 
 	flags := &feature.InMemory{}
 	pub := gcp.NewMockPublisher[*riskv1.JudgeShadowAnalysis]()
-	p := NewPublisher(slog.Default(), flags, pub, 0)
+	p := NewPublisher(testenv.NewLogger(t), flags, pub, 0)
 
 	want := []promptinjection.Result{{Label: promptinjection.LabelInjection, Completed: true}}
 	baseline := func(_ context.Context, _ promptinjection.Request) ([]promptinjection.Result, error) {
@@ -84,7 +84,7 @@ func TestWrapPolicyPublishesWhenSampledAndEnabled(t *testing.T) {
 	pub := gcp.NewMockPublisher[*riskv1.JudgeShadowAnalysis]()
 	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
 
-	p := NewPublisher(slog.Default(), flags, pub, 1)
+	p := NewPublisher(testenv.NewLogger(t), flags, pub, 1)
 
 	baseline := func(_ context.Context, _ promptpolicy.Input) (*promptpolicy.Verdict, error) {
 		return &promptpolicy.Verdict{Matched: true, Completed: true, Model: "baseline-model"}, nil
@@ -94,7 +94,8 @@ func TestWrapPolicyPublishesWhenSampledAndEnabled(t *testing.T) {
 
 	require.NoError(t, err)
 	pub.AssertNumberOfCalls(t, "Publish", 1)
-	event := pub.Calls[0].Arguments.Get(1).(*riskv1.JudgeShadowAnalysis)
+	event, ok := pub.Calls[0].Arguments.Get(1).(*riskv1.JudgeShadowAnalysis)
+	require.True(t, ok)
 	require.Equal(t, promptpolicy.Source, event.GetDetector())
 	require.Equal(t, "org-1", event.GetOrganizationId())
 	require.Equal(t, "match", event.GetBaselineOutcome())

@@ -288,7 +288,6 @@ type options struct {
 	repeats          int
 	samples          int
 	jev              bool
-	jevOpenRouter    bool
 	skipJudge        bool
 }
 
@@ -325,6 +324,8 @@ func parseFlags() options {
 		extraCorpus:      "",
 		repeats:          0,
 		samples:          0,
+		jev:              false,
+		skipJudge:        false,
 	}
 	flag.StringVar(&opts.corpusDir, "corpus-dir", defaultCorpusDir, "directory containing prompt-injection JSONL corpus files")
 	flag.StringVar(&opts.outFile, "out", defaultOutFile, "path to write metrics JSON")
@@ -336,9 +337,8 @@ func parseFlags() options {
 	flag.StringVar(&opts.extraCorpus, "extra-corpus", "", "absolute path to an additional local JSONL corpus; never loaded by default")
 	flag.IntVar(&opts.repeats, "repeats", 1, "number of complete repeated trials")
 	flag.IntVar(&opts.samples, "samples", piopenrouter.SamplesPerEvent, "physical judge calls per event; production defaults to one")
-	flag.BoolVar(&opts.jev, "jev", false, "also evaluate Jev (TypeSafe) as a shadow candidate for the L1 judge (needs TYPESAFE_API_KEY)")
-	flag.BoolVar(&opts.jevOpenRouter, "jev-openrouter", false, "route the -jev evaluation through OpenRouter's alpha Decisions API instead of TypeSafe's own endpoint (needs OPENROUTER_DEV_KEY, not TYPESAFE_API_KEY)")
-	flag.BoolVar(&opts.skipJudge, "skip-judge", false, "skip the OpenRouter L1 judge entirely (no OPENROUTER_DEV_KEY needed); pair with -jev to evaluate Jev standalone")
+	flag.BoolVar(&opts.jev, "jev", false, "also evaluate Jev (TypeSafe) as a shadow candidate for the L1 judge (needs OPENROUTER_DEV_KEY)")
+	flag.BoolVar(&opts.skipJudge, "skip-judge", false, "skip the OpenRouter L1 judge entirely; pair with -jev to evaluate Jev standalone")
 	flag.Parse()
 	return opts
 }
@@ -410,7 +410,12 @@ func run(ctx context.Context, opts options) error {
 	modes := make([]modeSummary, 0, opts.repeats*2)
 	allFindings := make([][][]scanners.Finding, 0, opts.repeats)
 	if opts.skipJudge {
-		modes = append(modes, modeSummary{Name: "judge", Skipped: true, SkipReason: "--skip-judge", Total: len(corpus)})
+		var skipped modeSummary
+		skipped.Name = "judge"
+		skipped.Skipped = true
+		skipped.SkipReason = "--skip-judge"
+		skipped.Total = len(corpus)
+		modes = append(modes, skipped)
 	}
 	for repeat := 1; !opts.skipJudge && repeat <= opts.repeats; repeat++ {
 		fmt.Fprintf(os.Stderr, "trial %d/%d\n", repeat, opts.repeats)

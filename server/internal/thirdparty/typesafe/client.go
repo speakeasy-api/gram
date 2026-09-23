@@ -12,9 +12,13 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
-const Model = "jev-1.13.0"
+// Model pins the OpenRouter Jev release; responses may include a build suffix.
+const Model = "typesafe/jev-1.13"
 
 var ErrUnavailable = errors.New("typesafe is not configured")
 
@@ -31,94 +35,66 @@ type Result struct {
 	Model         string
 	InputTokens   int
 	OutputTokens  int
+
+	// CostUSD is the cost reported by OpenRouter for this request.
+	CostUSD float64
 }
 
 type Evaluator interface {
-	Evaluate(context.Context, json.RawMessage, map[string]Question) (Result, error)
+	Evaluate(context.Context, string, json.RawMessage, map[string]Question) (Result, error)
 }
 
 type Unavailable struct{}
 
-func (Unavailable) Evaluate(context.Context, json.RawMessage, map[string]Question) (Result, error) {
-	return Result{Probabilities: nil, Model: Model, InputTokens: 0, OutputTokens: 0}, ErrUnavailable
+func (Unavailable) Evaluate(context.Context, string, json.RawMessage, map[string]Question) (Result, error) {
+	return Result{Probabilities: nil, Model: Model, InputTokens: 0, OutputTokens: 0, CostUSD: 0}, ErrUnavailable
 }
 
+// Client evaluates Jev through OpenRouter's Decisions API using an internal
+// organization key. The resolver also supports a fixed development key.
 type Client struct {
-	httpClient *http.Client
-	apiKey     string
+	httpClient *guardian.HTTPClient
+	resolveKey func(context.Context, string) (string, error)
 	endpoint   string
 }
 
-func New(httpClient *http.Client, apiKey string) *Client {
-	return &Client{httpClient: httpClient, apiKey: apiKey, endpoint: "https://api.typesafe.ai/v1/systemone"}
+func New(httpClient *guardian.HTTPClient, resolveKey func(context.Context, string) (string, error)) *Client {
+	return &Client{httpClient: httpClient, resolveKey: resolveKey, endpoint: "https://openrouter.ai/api/alpha/decisions"}
 }
 
-func (c *Client) Evaluate(ctx context.Context, state json.RawMessage, questions map[string]Question) (Result, error) {
-	return evaluate(ctx, c.httpClient, c.endpoint, c.apiKey, Model, func(m string) bool { return m == Model }, state, questions)
-}
-
-// OpenRouterModel is the model id OpenRouter's alpha Decisions API expects in
-// the request. The response model id carries a build suffix
-// (e.g. "typesafe/jev-1.13-20260917"), so responses are matched by prefix.
-const OpenRouterModel = "typesafe/jev-1.13"
-
-// OpenRouterClient evaluates Jev through OpenRouter's alpha Decisions API
-// (POST /api/alpha/decisions) instead of TypeSafe's own endpoint, billed to
-// and authenticated by an OpenRouter API key. Same request/response shape as
-// Client, so it satisfies the same Evaluator interface.
-//
-// Observed but unresolved as of 2026-09-23: benchmarked against the direct
-// Client with server/cmd/risk-pi-report -jev -jev-openrouter. During one
-// investigation window, ~9% of calls failed with a Cloudflare "Attention
-// Required" block on typesafe.ai itself, arriving when OpenRouter's backend
-// proxied the request there (not a rate limit or content filter on our
-// side); a later re-check under the same and higher concurrency saw 0/260
-// failures. Client (the direct path) had 0 errors throughout, in both
-// windows. So this isn't "TypeSafe is down" or "OpenRouter's integration is
-// broken" so much as an unexplained transient failure mode on infrastructure
-// between the two that we can't inspect or control. Kept for re-evaluation;
-// do not wire into judgeshadow until it's understood or the direct API shows
-// a reason to move off it.
-type OpenRouterClient struct {
-	httpClient *http.Client
-	apiKey     string
-	endpoint   string
-}
-
-func NewOpenRouterClient(httpClient *http.Client, apiKey string) *OpenRouterClient {
-	return &OpenRouterClient{httpClient: httpClient, apiKey: apiKey, endpoint: "https://openrouter.ai/api/alpha/decisions"}
-}
-
-func (c *OpenRouterClient) Evaluate(ctx context.Context, state json.RawMessage, questions map[string]Question) (Result, error) {
-	return evaluate(ctx, c.httpClient, c.endpoint, c.apiKey, OpenRouterModel, func(m string) bool { return strings.HasPrefix(m, OpenRouterModel) }, state, questions)
-}
-
-func evaluate(ctx context.Context, httpClient *http.Client, endpoint, apiKey, requestModel string, acceptModel func(string) bool, state json.RawMessage, questions map[string]Question) (Result, error) {
-	result := Result{Probabilities: nil, Model: Model, InputTokens: 0, OutputTokens: 0}
+func (c *Client) Evaluate(ctx context.Context, orgID string, state json.RawMessage, questions map[string]Question) (Result, error) {
+	result := Result{Probabilities: nil, Model: Model, InputTokens: 0, OutputTokens: 0, CostUSD: 0}
 	if !json.Valid(state) || len(questions) == 0 {
 		return result, errors.New("invalid typesafe evaluation input")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	apiKey, err := c.resolveKey(ctx, orgID)
+	if err != nil {
+		return result, fmt.Errorf("resolve Jev OpenRouter key: %w", err)
+	}
+	if apiKey == "" || apiKey == "unset" {
+		return result, ErrUnavailable
 	}
 	body, err := json.Marshal(struct {
 		Model     string              `json:"model"`
 		State     json.RawMessage     `json:"state"`
 		Questions map[string]Question `json:"questions"`
-	}{Model: requestModel, State: state, Questions: questions})
+	}{Model: Model, State: state, Questions: questions})
 	if err != nil {
 		return result, fmt.Errorf("encode typesafe request: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return result, fmt.Errorf("create typesafe request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
-	res, err := httpClient.Do(req)
+	res, err := c.httpClient.Do(req)
 	if err != nil {
 		return result, fmt.Errorf("request typesafe evaluation: %w", err)
 	}
-	defer res.Body.Close()
+	defer o11y.NoLogDefer(func() error { return res.Body.Close() })
 	if res.StatusCode != http.StatusOK {
 		// Provider error bodies may echo sensitive state or credentials.
 		return result, fmt.Errorf("typesafe HTTP status %d", res.StatusCode)
@@ -137,14 +113,15 @@ func evaluate(ctx context.Context, httpClient *http.Client, endpoint, apiKey, re
 			Noul *float64 `json:"noul"`
 		} `json:"answers"`
 		Usage *struct {
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
+			InputTokens  int      `json:"input_tokens"`
+			OutputTokens int      `json:"output_tokens"`
+			Cost         *float64 `json:"cost"`
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return result, errors.New("invalid typesafe response JSON")
 	}
-	if !acceptModel(response.Model) || response.Usage == nil || response.Usage.InputTokens < 0 || response.Usage.OutputTokens < 0 || len(response.Answers) != len(questions) {
+	if (response.Model != Model && !strings.HasPrefix(response.Model, Model+"-")) || response.Usage == nil || response.Usage.Cost == nil || math.IsNaN(*response.Usage.Cost) || math.IsInf(*response.Usage.Cost, 0) || *response.Usage.Cost < 0 || response.Usage.InputTokens < 0 || response.Usage.OutputTokens < 0 || len(response.Answers) != len(questions) {
 		return result, errors.New("invalid typesafe response metadata")
 	}
 	probabilities := make(map[string]float64, len(questions))
@@ -155,5 +132,5 @@ func evaluate(ctx context.Context, httpClient *http.Client, endpoint, apiKey, re
 		}
 		probabilities[id] = *answer.Noul
 	}
-	return Result{Probabilities: probabilities, Model: response.Model, InputTokens: response.Usage.InputTokens, OutputTokens: response.Usage.OutputTokens}, nil
+	return Result{Probabilities: probabilities, Model: response.Model, InputTokens: response.Usage.InputTokens, OutputTokens: response.Usage.OutputTokens, CostUSD: *response.Usage.Cost}, nil
 }

@@ -17,11 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/typesafe"
 )
 
-// jevInputCostPerToken mirrors typesafe.Model's published per-input-token
-// price; output is free. Kept local since the report only needs it for the
-// cost column, not for any runtime decision.
-const jevInputCostPerToken = 0.042 / 1_000_000
-
 // scanJevMode evaluates Jev (TypeSafe) over the corpus as a shadow candidate
 // for the L1 prompt-injection judge. It builds the exact same prepared
 // evidence the production judgeshadow.Publisher sends (PrepareJudgePayload),
@@ -29,22 +24,12 @@ const jevInputCostPerToken = 0.042 / 1_000_000
 // shadow slice.
 func scanJevMode(ctx context.Context, opts options, corpus []labeledCase) (modeSummary, [][]scanners.Finding, error) {
 	policy := guardian.NewDefaultPolicy(tracenoop.NewTracerProvider())
-	var evaluator typesafe.Evaluator
-	if opts.jevOpenRouter {
-		apiKey := os.Getenv("OPENROUTER_DEV_KEY")
-		if apiKey == "" || apiKey == "unset" {
-			return modeSummary{}, nil, fmt.Errorf("OPENROUTER_DEV_KEY not set")
-		}
-		evaluator = typesafe.NewOpenRouterClient(policy.PooledClient(), apiKey)
-	} else {
-		apiKey := os.Getenv("TYPESAFE_API_KEY")
-		if apiKey == "" || apiKey == "unset" {
-			return modeSummary{}, nil, fmt.Errorf("TYPESAFE_API_KEY not set")
-		}
-		evaluator = typesafe.New(policy.PooledClient(), apiKey)
+	apiKey := os.Getenv("OPENROUTER_DEV_KEY")
+	if apiKey == "" || apiKey == "unset" {
+		return modeSummary{}, nil, fmt.Errorf("OPENROUTER_DEV_KEY not set")
 	}
-
-	fmt.Fprintf(os.Stderr, "judging %d cases with jev (concurrency=%d, via_openrouter=%v)\n", len(corpus), opts.judgeConcurrency, opts.jevOpenRouter)
+	evaluator := typesafe.New(policy.PooledClient(), func(context.Context, string) (string, error) { return apiKey, nil })
+	fmt.Fprintf(os.Stderr, "judging %d cases with jev via OpenRouter (concurrency=%d)\n", len(corpus), opts.judgeConcurrency)
 	judge := jev.New(evaluator)
 	findings, eval, err := scanJev(ctx, opts, judge, corpus)
 	if err != nil {
@@ -86,7 +71,7 @@ func scanJev(ctx context.Context, opts options, judge *jev.Judge, corpus []label
 
 			decisionCtx, cancel := context.WithTimeout(ctx, piopenrouter.JudgeTimeout)
 			start := time.Now()
-			result, err := judge.Evaluate(decisionCtx, promptinjection.Source, state)
+			result, err := judge.Evaluate(decisionCtx, "", promptinjection.Source, state)
 			cancel()
 			latency := time.Since(start)
 
@@ -94,7 +79,7 @@ func scanJev(ctx context.Context, opts options, judge *jev.Judge, corpus []label
 			if err == nil {
 				call.PromptTokens = result.InputTokens
 				call.CompletionTokens = result.OutputTokens
-				call.CostUSD = float64(result.InputTokens) * jevInputCostPerToken
+				call.CostUSD = result.CostUSD
 			}
 
 			mu.Lock()

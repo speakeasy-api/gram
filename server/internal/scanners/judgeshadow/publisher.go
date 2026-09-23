@@ -59,6 +59,7 @@ func Enabled(ctx context.Context, flags feature.Provider, detector, orgID string
 }
 
 func (p *Publisher) selected(ctx context.Context, detector, orgID string) bool {
+	// #nosec G404 -- Statistical traffic sampling does not require cryptographic randomness.
 	return p.sampleRate > 0 && rand.Float64() < p.sampleRate && Enabled(ctx, p.flags, detector, orgID)
 }
 

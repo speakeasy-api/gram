@@ -6,7 +6,6 @@ import (
 	"log/slog"
 
 	"cloud.google.com/go/pubsub/v2"
-	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/metric"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -15,12 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/scanners/jev"
 	"github.com/speakeasy-api/gram/server/internal/scanners/judgeshadow"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/typesafe"
 )
-
-func jevFlags() []cli.Flag {
-	return []cli.Flag{&cli.StringFlag{Name: "typesafe-api-key", EnvVars: []string{"TYPESAFE_API_KEY"}, Usage: "TypeSafe API key for Jev shadow evaluation"}}
-}
 
 func newJudgeShadowTopic(ctx context.Context, broker pubSubBroker) (gcp.Publisher[*riskv1.JudgeShadowAnalysis], error) {
 	settings := pubsub.DefaultPublishSettings
@@ -34,10 +30,17 @@ func newJudgeShadowTopic(ctx context.Context, broker pubSubBroker) (gcp.Publishe
 	return pub, nil
 }
 
-func newJudgeShadowHandler(c *cli.Context, logger *slog.Logger, flags feature.Provider, policy *guardian.Policy, meter metric.MeterProvider) (*judgeshadow.Handler, error) {
-	var evaluator typesafe.Evaluator = typesafe.Unavailable{}
-	if key := c.String("typesafe-api-key"); key != "" {
-		evaluator = typesafe.New(policy.PooledClient(), key)
+func newJudgeShadowHandler(logger *slog.Logger, flags feature.Provider, policy *guardian.Policy, meter metric.MeterProvider, provisioner openrouter.Provisioner) (*judgeshadow.Handler, error) {
+	evaluator := typesafe.New(policy.PooledClient(), func(ctx context.Context, orgID string) (string, error) {
+		key, err := provisioner.ProvisionAPIKey(ctx, orgID, openrouter.KeyTypeInternal)
+		if err != nil {
+			return "", fmt.Errorf("provision Jev internal key: %w", err)
+		}
+		return key, nil
+	})
+	handler, err := judgeshadow.NewHandler(logger, flags, jev.New(evaluator), meter)
+	if err != nil {
+		return nil, fmt.Errorf("create Jev shadow handler: %w", err)
 	}
-	return judgeshadow.NewHandler(logger, flags, jev.New(evaluator), meter)
+	return handler, nil
 }

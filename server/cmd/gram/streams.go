@@ -257,7 +257,6 @@ func newStreamsCommand() *cli.Command {
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskIngestFlags()...)
 	flags = append(flags, riskLLMFlags()...)
-	flags = append(flags, jevFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 
 	return &cli.Command{
@@ -464,7 +463,7 @@ func newStreamsCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shadowPub.Stop)
 			judgeShadow := judgeshadow.NewPublisher(logger, featureFlags, shadowPub, judgeshadow.DefaultSampleRate)
-			shadowHandler, err := newJudgeShadowHandler(c, logger, featureFlags, guardianPolicy, meterProvider)
+			shadowHandler, err := newJudgeShadowHandler(logger, featureFlags, guardianPolicy, meterProvider, openRouter)
 			if err != nil {
 				return err
 			}

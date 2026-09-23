@@ -3,17 +3,16 @@ package judgeshadow
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/metric/noop"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/scanners/jev"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/typesafe"
 )
 
@@ -21,10 +20,12 @@ type stubEvaluator struct {
 	result typesafe.Result
 	err    error
 	called bool
+	orgID  string
 }
 
-func (s *stubEvaluator) Evaluate(context.Context, json.RawMessage, map[string]typesafe.Question) (typesafe.Result, error) {
+func (s *stubEvaluator) Evaluate(_ context.Context, orgID string, _ json.RawMessage, _ map[string]typesafe.Question) (typesafe.Result, error) {
 	s.called = true
+	s.orgID = orgID
 	return s.result, s.err
 }
 
@@ -32,7 +33,7 @@ func newHandler(t *testing.T, flags feature.Provider, evaluator typesafe.Evaluat
 	t.Helper()
 	stub, ok := evaluator.(*stubEvaluator)
 	require.True(t, ok)
-	h, err := NewHandler(slog.Default(), flags, jev.New(evaluator), noop.NewMeterProvider())
+	h, err := NewHandler(testenv.NewLogger(t), flags, jev.New(evaluator), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	return h, stub
 }
@@ -102,13 +103,14 @@ func TestHandleComputesMatchOutcome(t *testing.T) {
 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagJevPromptPolicyShadow, "org-1", true)
-	stub := &stubEvaluator{result: typesafe.Result{Probabilities: map[string]float64{"policy_match": 0.9}}}
+	stub := &stubEvaluator{result: typesafe.Result{Probabilities: map[string]float64{"policy_match": 0.9}, Model: typesafe.Model, InputTokens: 0, OutputTokens: 0, CostUSD: 0}}
 	h, _ := newHandler(t, flags, stub)
 
 	err := h.Handle(t.Context(), baseEvent(), gcp.MessageMetadata{})
 
 	require.NoError(t, err)
 	require.True(t, stub.called)
+	require.Equal(t, "org-1", stub.orgID)
 }
 
 func TestHandleSwallowsJudgeError(t *testing.T) {
@@ -123,4 +125,5 @@ func TestHandleSwallowsJudgeError(t *testing.T) {
 
 	require.NoError(t, err, "a provider failure must not fail (and retry) the shadow message")
 	require.True(t, stub.called)
+	require.Equal(t, "org-1", stub.orgID)
 }

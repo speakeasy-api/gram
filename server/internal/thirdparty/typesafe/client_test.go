@@ -1,9 +1,11 @@
 package typesafe
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,7 +15,7 @@ func testClient(t *testing.T, handler http.HandlerFunc) *Client {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	return &Client{httpClient: server.Client(), apiKey: "test-key", endpoint: server.URL}
+	return &Client{httpClient: server.Client(), resolveKey: func(context.Context, string) (string, error) { return "test-key", nil }, endpoint: server.URL}
 }
 
 func testQuestions() map[string]Question {
@@ -25,43 +27,58 @@ func testQuestions() map[string]Question {
 func TestEvaluateSuccess(t *testing.T) {
 	t.Parallel()
 
+	requests := make(chan *http.Request, 1)
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodPost, r.Method)
-		require.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
+		requests <- r.Clone(r.Context())
 		var req struct {
 			Model     string              `json:"model"`
 			State     json.RawMessage     `json:"state"`
 			Questions map[string]Question `json:"questions"`
 		}
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
-		require.Equal(t, Model, req.Model)
-		require.Contains(t, req.Questions, "match")
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Error(err)
+			return
+		}
+		if req.Model != Model {
+			t.Errorf("unexpected model: %s", req.Model)
+		}
+		if _, ok := req.Questions["match"]; !ok {
+			t.Error("missing question")
+		}
 
-		_, err := w.Write([]byte(`{"model":"jev-1.13.0","answers":{"match":{"type":"noul","noul":0.75}},"usage":{"input_tokens":10,"output_tokens":2}}`))
-		require.NoError(t, err)
+		_, err := w.Write([]byte(`{"model":"typesafe/jev-1.13","answers":{"match":{"type":"noul","noul":0.75}},"usage":{"input_tokens":10,"output_tokens":2,"cost":0.00042}}`))
+		if err != nil {
+			t.Error(err)
+		}
 	})
 
-	result, err := client.Evaluate(t.Context(), json.RawMessage(`{"foo":"bar"}`), testQuestions())
+	result, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{"foo":"bar"}`), testQuestions())
 
 	require.NoError(t, err)
-	require.Equal(t, 0.75, result.Probabilities["match"])
+	require.InDelta(t, 0.75, result.Probabilities["match"], 1e-9)
 	require.Equal(t, Model, result.Model)
+	request := <-requests
+	require.Equal(t, http.MethodPost, request.Method)
+	require.Equal(t, "Bearer test-key", request.Header.Get("Authorization"))
+	require.InDelta(t, 0.00042, result.CostUSD, 1e-12)
 	require.Equal(t, 10, result.InputTokens)
 	require.Equal(t, 2, result.OutputTokens)
 }
 
 func TestEvaluateInvalidInput(t *testing.T) {
 	t.Parallel()
+	var called atomic.Bool
 
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("must not call typesafe with invalid input")
+		called.Store(true)
 	})
 
-	_, err := client.Evaluate(t.Context(), json.RawMessage(`not json`), testQuestions())
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`not json`), testQuestions())
 	require.Error(t, err)
 
-	_, err = client.Evaluate(t.Context(), json.RawMessage(`{}`), nil)
+	_, err = client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), nil)
 	require.Error(t, err)
+	require.False(t, called.Load())
 }
 
 func TestEvaluateNonOKStatus(t *testing.T) {
@@ -72,7 +89,7 @@ func TestEvaluateNonOKStatus(t *testing.T) {
 		_, _ = w.Write([]byte("secret-bearing error body"))
 	})
 
-	_, err := client.Evaluate(t.Context(), json.RawMessage(`{}`), testQuestions())
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
 
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "secret-bearing")
@@ -82,10 +99,10 @@ func TestEvaluateModelMismatch(t *testing.T) {
 	t.Parallel()
 
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"model":"some-other-model","answers":{"match":{"type":"noul","noul":0.5}},"usage":{"input_tokens":1,"output_tokens":1}}`))
+		_, _ = w.Write([]byte(`{"model":"some-other-model","answers":{"match":{"type":"noul","noul":0.5}},"usage":{"input_tokens":1,"output_tokens":1,"cost":0.00021}}`))
 	})
 
-	_, err := client.Evaluate(t.Context(), json.RawMessage(`{}`), testQuestions())
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
 
 	require.ErrorContains(t, err, "invalid typesafe response metadata")
 }
@@ -94,10 +111,10 @@ func TestEvaluateMissingAnswer(t *testing.T) {
 	t.Parallel()
 
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"model":"jev-1.13.0","answers":{},"usage":{"input_tokens":1,"output_tokens":1}}`))
+		_, _ = w.Write([]byte(`{"model":"typesafe/jev-1.13","answers":{},"usage":{"input_tokens":1,"output_tokens":1,"cost":0.00021}}`))
 	})
 
-	_, err := client.Evaluate(t.Context(), json.RawMessage(`{}`), testQuestions())
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
 
 	require.ErrorContains(t, err, "invalid typesafe response metadata")
 }
@@ -106,10 +123,10 @@ func TestEvaluateOutOfRangeProbability(t *testing.T) {
 	t.Parallel()
 
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"model":"jev-1.13.0","answers":{"match":{"type":"noul","noul":1.5}},"usage":{"input_tokens":1,"output_tokens":1}}`))
+		_, _ = w.Write([]byte(`{"model":"typesafe/jev-1.13","answers":{"match":{"type":"noul","noul":1.5}},"usage":{"input_tokens":1,"output_tokens":1,"cost":0.00021}}`))
 	})
 
-	_, err := client.Evaluate(t.Context(), json.RawMessage(`{}`), testQuestions())
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
 
 	require.ErrorContains(t, err, "invalid typesafe probability")
 }
@@ -117,46 +134,92 @@ func TestEvaluateOutOfRangeProbability(t *testing.T) {
 func TestUnavailableEvaluatorReturnsErrUnavailable(t *testing.T) {
 	t.Parallel()
 
-	_, err := (Unavailable{}).Evaluate(t.Context(), json.RawMessage(`{}`), testQuestions())
+	_, err := (Unavailable{}).Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
 
 	require.ErrorIs(t, err, ErrUnavailable)
-}
-
-func testOpenRouterClient(t *testing.T, handler http.HandlerFunc) *OpenRouterClient {
-	t.Helper()
-	server := httptest.NewServer(handler)
-	t.Cleanup(server.Close)
-	return &OpenRouterClient{httpClient: server.Client(), apiKey: "test-key", endpoint: server.URL}
 }
 
 func TestOpenRouterEvaluateAcceptsBuildSuffixedModel(t *testing.T) {
 	t.Parallel()
 
-	client := testOpenRouterClient(t, func(w http.ResponseWriter, r *http.Request) {
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Model string `json:"model"`
 		}
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
-		require.Equal(t, OpenRouterModel, req.Model)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Error(err)
+			return
+		}
+		if req.Model != Model {
+			t.Errorf("unexpected model: %s", req.Model)
+		}
 
-		_, err := w.Write([]byte(`{"model":"typesafe/jev-1.13-20260917","answers":{"match":{"type":"noul","noul":0.4}},"usage":{"input_tokens":5,"output_tokens":1}}`))
-		require.NoError(t, err)
+		_, err := w.Write([]byte(`{"model":"typesafe/jev-1.13-20260917","answers":{"match":{"type":"noul","noul":0.4}},"usage":{"input_tokens":5,"output_tokens":1,"cost":0.00021}}`))
+		if err != nil {
+			t.Error(err)
+		}
 	})
 
-	result, err := client.Evaluate(t.Context(), json.RawMessage(`{}`), testQuestions())
+	result, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
 
 	require.NoError(t, err)
-	require.Equal(t, 0.4, result.Probabilities["match"])
+	require.InDelta(t, 0.4, result.Probabilities["match"], 1e-9)
 }
 
 func TestOpenRouterEvaluateRejectsUnrelatedModel(t *testing.T) {
 	t.Parallel()
 
-	client := testOpenRouterClient(t, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"model":"some-other-model","answers":{"match":{"type":"noul","noul":0.4}},"usage":{"input_tokens":5,"output_tokens":1}}`))
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"model":"some-other-model","answers":{"match":{"type":"noul","noul":0.4}},"usage":{"input_tokens":5,"output_tokens":1,"cost":0.00021}}`))
 	})
 
-	_, err := client.Evaluate(t.Context(), json.RawMessage(`{}`), testQuestions())
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
 
+	require.ErrorContains(t, err, "invalid typesafe response metadata")
+}
+
+func TestEvaluateRejectsAdjacentModel(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"model":"typesafe/jev-1.130","answers":{"match":{"type":"noul","noul":0.4}},"usage":{"input_tokens":5,"output_tokens":1,"cost":0.1}}`))
+	})
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
+	require.ErrorContains(t, err, "invalid typesafe response metadata")
+}
+
+func TestEvaluateResolvesOrganizationKey(t *testing.T) {
+	t.Parallel()
+	var called atomic.Bool
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) { called.Store(true) })
+	client.resolveKey = func(ctx context.Context, orgID string) (string, error) {
+		require.Equal(t, "org-1", orgID)
+		return "unset", nil
+	}
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
+	require.ErrorIs(t, err, ErrUnavailable)
+	require.False(t, called.Load())
+}
+
+func TestNewUsesOpenRouter(t *testing.T) {
+	t.Parallel()
+	client := New(http.DefaultClient, nil)
+	require.Equal(t, "https://openrouter.ai/api/alpha/decisions", client.endpoint)
+}
+
+func TestEvaluateRejectsMissingCost(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"model":"typesafe/jev-1.13","answers":{"match":{"type":"noul","noul":0.4}},"usage":{"input_tokens":5,"output_tokens":1}}`))
+	})
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
+	require.ErrorContains(t, err, "invalid typesafe response metadata")
+}
+
+func TestEvaluateRejectsNegativeCost(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"model":"typesafe/jev-1.13","answers":{"match":{"type":"noul","noul":0.4}},"usage":{"input_tokens":5,"output_tokens":1,"cost":-1}}`))
+	})
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
 	require.ErrorContains(t, err, "invalid typesafe response metadata")
 }

@@ -172,9 +172,6 @@ TUNNEL_GATEWAY_PUBLIC_ADDR = ":{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}"
 TUNNEL_GATEWAY_FORWARD_PORT = "8091"
 TUNNEL_GATEWAY_FORWARD_ADDR = ":{{env.TUNNEL_GATEWAY_FORWARD_PORT}}"
 OPENROUTER_DEV_KEY = "unset"
-## Local-only value for Jev (TypeSafe) shadow evaluation; real deployments
-## inject this via secrets. Set in mise.local.toml, not here.
-TYPESAFE_API_KEY = "unset"
 ## The dev-idp is a top-level project (dev-idp/) backed by SQLite.
 ## GRAM_DEVIDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.
 GRAM_DEVIDP_HOST = "localhost"

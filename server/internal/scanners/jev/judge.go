@@ -25,12 +25,16 @@ type Judge struct{ client typesafe.Evaluator }
 func New(client typesafe.Evaluator) *Judge { return &Judge{client: client} }
 
 // Evaluate is independent of transport, feature flags, and enforcement selection.
-func (j *Judge) Evaluate(ctx context.Context, detector string, state json.RawMessage) (typesafe.Result, error) {
+func (j *Judge) Evaluate(ctx context.Context, orgID, detector string, state json.RawMessage) (typesafe.Result, error) {
 	questions, err := Questions(detector)
 	if err != nil {
-		return typesafe.Result{Probabilities: nil, Model: typesafe.Model, InputTokens: 0, OutputTokens: 0}, err
+		return typesafe.Result{Probabilities: nil, Model: typesafe.Model, InputTokens: 0, OutputTokens: 0, CostUSD: 0}, err
 	}
-	return j.client.Evaluate(ctx, state, questions)
+	result, err := j.client.Evaluate(ctx, orgID, state, questions)
+	if err != nil {
+		return result, fmt.Errorf("evaluate Jev: %w", err)
+	}
+	return result, nil
 }
 
 func Questions(detector string) (map[string]typesafe.Question, error) {
