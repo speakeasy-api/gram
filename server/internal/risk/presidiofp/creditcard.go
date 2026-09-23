@@ -239,10 +239,10 @@ func consecutiveGroups(digits string) bool {
 		for _, c := range digits[i : i+group] {
 			n = n*10 + int(c-'0')
 		}
-		switch {
-		case i == 0:
+		switch i {
+		case 0:
 			prev = n
-		case i == group:
+		case group:
 			step = n - prev
 			if step != 1 && step != -1 {
 				return false

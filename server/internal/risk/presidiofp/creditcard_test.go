@@ -279,13 +279,13 @@ func TestPlaceholderCardShapes(t *testing.T) {
 		assert.NotEmptyf(t, placeholderCardShapeReason(digits), "%s should read as a pattern", digits)
 	}
 
-	real := []string{
+	accounts := []string{
 		syntheticVisa,
 		"5534129876004319",
 		"378282246310005",
 		"4009401040114013", // last group breaks the run
 	}
-	for _, digits := range real {
+	for _, digits := range accounts {
 		assert.Emptyf(t, placeholderCardShapeReason(digits), "%s should not read as a pattern", digits)
 	}
 }
