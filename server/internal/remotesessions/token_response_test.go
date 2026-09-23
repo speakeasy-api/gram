@@ -13,14 +13,14 @@ import (
 func TestTokenResponseExpiresIn(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
-	for _, value := range []string{`3600`, `"3600"`, `0`, `"0"`, `null`} {
+	for _, value := range []string{`3600`, `"3600"`, `"03600"`, `0`, `"0"`, `"000"`, `null`} {
 		t.Run(value, func(t *testing.T) {
 			t.Parallel()
 			var response tokenResponse
 			require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","scope":"read","expires_in":`+value+`}`), &response))
 			require.Equal(t, "a", response.AccessToken)
 			require.True(t, response.ScopeReported())
-			if value == `3600` || value == `"3600"` {
+			if value == `3600` || value == `"3600"` || value == `"03600"` {
 				require.Equal(t, 3600, response.ExpiresIn)
 				require.Equal(t, now.Add(time.Hour), *response.AccessExpiresAt(now))
 			} else {
@@ -32,7 +32,7 @@ func TestTokenResponseExpiresIn(t *testing.T) {
 	var omitted tokenResponse
 	require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a"}`), &omitted))
 	require.Zero(t, omitted.ExpiresIn)
-	for _, value := range []string{`""`, `"never"`, `1.5`, `"1.5"`, `true`, `{}`, `[]`, `"999999999999999999999999"`} {
+	for _, value := range []string{`-1`, `"-1"`, `9223372037`, `"9223372037"`, `""`, `"never"`, `1.5`, `"1.5"`, `true`, `{}`, `[]`, `"999999999999999999999999"`} {
 		t.Run("invalid_"+value, func(t *testing.T) {
 			t.Parallel()
 			var response tokenResponse
@@ -43,8 +43,8 @@ func TestTokenResponseExpiresIn(t *testing.T) {
 
 func TestTokenResponseWireExpiresIn(t *testing.T) {
 	t.Parallel()
-	maxInt := int(^uint(0) >> 1)
-	for _, want := range []int{0, 60, 7200, -1, maxInt, -maxInt - 1} {
+	maxSeconds := int(min(int64(^uint(0)>>1), int64((1<<63-1)/time.Second)))
+	for _, want := range []int{0, 60, 7200, maxSeconds} {
 		number := strconv.Itoa(want)
 		for _, raw := range []string{number, strconv.Quote(number)} {
 			t.Run(raw, func(t *testing.T) {
@@ -61,7 +61,7 @@ func TestTokenResponseWireExpiresIn(t *testing.T) {
 			})
 		}
 	}
-	for _, raw := range []string{`1e3`, `"1e3"`, `999999999999999999999999`, `"999999999999999999999999"`} {
+	for _, raw := range []string{`-1`, `"-1"`, `9223372037`, `"9223372037"`, `1e3`, `"1e3"`, `999999999999999999999999`, `"999999999999999999999999"`} {
 		t.Run("invalid_"+raw, func(t *testing.T) {
 			t.Parallel()
 			wire := tokenResponseWire{ExpiresIn: 42}

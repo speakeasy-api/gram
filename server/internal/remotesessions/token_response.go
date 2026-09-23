@@ -45,16 +45,24 @@ func (w *tokenResponseWire) UnmarshalJSON(data []byte) error {
 	var decoded plain
 	response := struct {
 		*plain
-		ExpiresIn json.Number `json:"expires_in"`
-	}{plain: &decoded, ExpiresIn: ""}
+		ExpiresIn json.RawMessage `json:"expires_in"`
+	}{plain: &decoded}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return fmt.Errorf("decode token response fields: %w", err)
 	}
-	// Some providers encode expires_in as a string. Both forms must be integers
-	// within int range; missing and null values retain the zero default.
-	if response.ExpiresIn != "" {
-		seconds, err := strconv.Atoi(string(response.ExpiresIn))
-		if err != nil {
+	// Some providers encode expires_in as a string, including zero-padded values.
+	// Both forms must be non-negative integers that fit int and time.Duration
+	// when converted to seconds; missing and null retain the zero default.
+	raw := bytes.TrimSpace(response.ExpiresIn)
+	if len(raw) > 0 && string(raw) != "null" {
+		value := string(raw)
+		if raw[0] == '"' {
+			if err := json.Unmarshal(raw, &value); err != nil {
+				return fmt.Errorf("decode token response expires_in: %w", err)
+			}
+		}
+		seconds, err := strconv.Atoi(value)
+		if err != nil || seconds < 0 || int64(seconds) > int64((1<<63-1)/time.Second) {
 			return errors.New("token response expires_in must be an integer within range")
 		}
 		decoded.ExpiresIn = seconds
