@@ -1877,17 +1877,6 @@ type OrganizationRoleAssignment struct {
 	DeletedAt          pgtype.Timestamptz
 }
 
-type OrganizationSetupTask struct {
-	OrganizationID string
-	TaskKey        string
-	Status         string
-	AssigneeUserID pgtype.Text
-	AssigneeEmail  pgtype.Text
-	HiddenAt       pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-}
-
 type OrganizationUserRelationship struct {
 	ID                 int64
 	OrganizationID     string
