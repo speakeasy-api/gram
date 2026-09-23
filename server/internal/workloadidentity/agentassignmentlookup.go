@@ -35,9 +35,9 @@ type AssignmentParams struct {
 // agent's own lifecycle and policy are evaluated by the caller, since an agent
 // that is suspended, revoked or deleted still has a row here.
 //
-// Several rules can cover one subject — a prefix over an issuer's whole fleet
+// Several rules can cover one subject — a wildcard over an issuer's whole fleet
 // and an exact assignment naming one principal — so the most specific wins:
-// exact before prefix, and a longer prefix before a shorter one. That is what
+// exact before wildcard, and a longer stem before a shorter one. That is what
 // lets a fleet share one agent while individual principals are pinned elsewhere,
 // and it is why one agent per workload is resolved here rather than guaranteed by
 // a unique index.

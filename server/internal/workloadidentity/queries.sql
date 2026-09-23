@@ -46,19 +46,24 @@ ORDER BY created_at ASC, id ASC;
 --
 -- Two ways to match, chosen per row by match_kind. The exact arm compares the
 -- subject as the platform minted it, with no expression around the column, so it
--- still rides workload_identity_admissions_lookup_idx. The prefix arm asks
--- whether a stored value is a leading run of the presented subject, which is the
--- opposite of what a btree on subject answers, so it scans instead — bounded by
--- the (organization, issuer) columns above and by how few admissions an issuer
--- has.
+-- still rides workload_identity_admissions_lookup_idx. The wildcard arm strips
+-- the stored value's trailing `*` and asks whether the remaining stem leads the
+-- presented subject, which is the opposite of what a btree on subject answers, so
+-- it scans instead — bounded by the (organization, issuer) columns above and by
+-- how few admissions an issuer has.
 --
--- The prefix arm additionally requires the issuer to permit prefix matching, and
--- that is checked HERE rather than trusted from write time. A write-side gate
+-- The `*` is always the last character of a wildcard row, enforced on write, so
+-- left(subject, length(subject) - 1) is the stem. Storing the `*` rather than
+-- stripping it before the insert is deliberate: a row then states its own breadth
+-- to anyone reading the table, which a bare stem does not.
+--
+-- The wildcard arm additionally requires the issuer to permit wildcard matching,
+-- and that is checked HERE rather than trusted from write time. A write-side gate
 -- alone would be advisory: any future writer, a seed or a hand-run statement
--- could leave a prefix row behind, and turning the issuer's permission off would
--- not revoke rows already written. Enforced on read, clearing
--- allow_prefix_admission is an immediate and complete kill switch for every
--- prefix rule under that issuer.
+-- could leave a wildcard row behind, and turning the issuer's permission off
+-- would not revoke rows already written. Enforced on read, clearing
+-- allow_wildcard_admission is an immediate and complete kill switch for every
+-- wildcard rule under that issuer.
 --
 -- The join also pins the issuer live. Resolution upstream already excludes a
 -- soft-deleted issuer, so this changes no outcome today; it means a caller that
@@ -77,7 +82,11 @@ SELECT EXISTS (
     AND i.deleted IS FALSE
     AND (
       (a.match_kind = 'exact' AND a.subject = @subject)
-      OR (a.match_kind = 'prefix' AND i.allow_prefix_admission AND starts_with(@subject, a.subject))
+      OR (
+        a.match_kind = 'wildcard'
+        AND i.allow_wildcard_admission
+        AND starts_with(@subject, left(a.subject, length(a.subject) - 1))
+      )
     )
 );
 
@@ -91,22 +100,23 @@ SELECT EXISTS (
 -- also why no project arm appears here, unlike WorkloadIdentityIsAdmitted.
 --
 -- More than one row can match, so "one agent per workload" is RESOLVED here
--- rather than enforced by uniqueness. A prefix assignment covering an issuer's
+-- rather than enforced by uniqueness. A wildcard assignment covering an issuer's
 -- whole fleet and an exact assignment naming one principal can both cover the
 -- same subject, which is the point: a default for everything, with individual
 -- principals pinned elsewhere. The ORDER BY picks the most specific — exact
--- before prefix, and a longer prefix before a shorter one — and LIMIT 1 makes
+-- before wildcard, and a longer stem before a shorter one — and LIMIT 1 makes
 -- the answer deterministic. workload_agent_assignments_workload_key still stops
 -- the same rule being written twice.
 --
 -- Unassigning is a soft delete, so deleted rows are excluded or the workload
 -- would keep the authority an administrator believes they removed.
 --
--- The prefix arm requires the issuer to permit prefix matching, checked here for
--- the same reason as in WorkloadIdentityIsAdmitted: clearing
--- allow_prefix_admission must revoke prefix rules already written, not just stop
--- new ones. Admission and assignment have to agree on this, or a subject admitted
--- by prefix would resolve to no agent and be refused for the wrong reason.
+-- The wildcard arm requires the issuer to permit wildcard matching, checked here
+-- for the same reason as in WorkloadIdentityIsAdmitted: clearing
+-- allow_wildcard_admission must revoke wildcard rules already written, not just
+-- stop new ones. Admission and assignment have to agree on this, or a subject
+-- admitted by wildcard would resolve to no agent and be refused for the wrong
+-- reason.
 --
 -- The issuer must be live too. Deleting an issuer soft-deletes only its own
 -- row, so without the join a session minted before the delete would keep the
@@ -122,7 +132,11 @@ WHERE a.organization_id = @organization_id
   AND i.deleted IS FALSE
   AND (
     (a.match_kind = 'exact' AND a.subject = @subject)
-    OR (a.match_kind = 'prefix' AND i.allow_prefix_admission AND starts_with(@subject, a.subject))
+    OR (
+      a.match_kind = 'wildcard'
+      AND i.allow_wildcard_admission
+      AND starts_with(@subject, left(a.subject, length(a.subject) - 1))
+    )
   )
 ORDER BY (a.match_kind = 'exact') DESC, length(a.subject) DESC
 LIMIT 1;
