@@ -107,6 +107,8 @@ import (
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
+	"github.com/speakeasy-api/gram/server/internal/onboarding"
+	onboardingchrepo "github.com/speakeasy-api/gram/server/internal/onboarding/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
@@ -1479,6 +1481,10 @@ func newStartCommand() *cli.Command {
 			))
 			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, trialEmailNotifier, productfeatures.SeedEnterpriseTrialBundleTx, posthogClient, growthEmitter, serverURL.String(), siteURL.String(), auditLogger, svixClient)
 			organizations.Attach(mux, organizationsService)
+			if err := onboarding.SyncCatalog(ctx, logger, db, onboarding.Default); err != nil {
+				return fmt.Errorf("sync onboarding catalog: %w", err)
+			}
+			onboarding.Attach(mux, onboarding.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, onboardingchrepo.New(chDB)))
 			pluginsGitHub, err := plugins.NewGitHubConfig(plugins.GitHubConfigInput{
 				Client:         ghClient,
 				Org:            c.String("plugins-github-org"),

@@ -41,6 +41,26 @@ var sourceAliases = map[string][]string{
 // casing into ClickHouse and the summary MVs match the lowercase value only:
 // the filter would show one surface while the usage rows silently undercounted.
 
+// KnownSources returns every canonical product-surface slug and every raw
+// alias the pipelines write, sorted and de-duplicated. Exported so reference
+// data that names a surface can be checked against what actually lands in
+// hook_source.
+func KnownSources() []string {
+	seen := make(map[string]struct{}, len(sourceAliases))
+	for canonical, raws := range sourceAliases {
+		seen[canonical] = struct{}{}
+		for _, raw := range raws {
+			seen[raw] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for s := range seen {
+		out = append(out, s)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // rawToCanonicalSource is the reverse of sourceAliases: each known raw value
 // mapped to its canonical form, built once at init.
 var rawToCanonicalSource = func() map[string]string {

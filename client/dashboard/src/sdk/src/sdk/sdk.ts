@@ -51,6 +51,7 @@ import { MetaMcp } from "./metamcp.js";
 import { ModelKeys } from "./modelkeys.js";
 import { NetworkIngress } from "./networkingress.js";
 import { OktaResourceConnections } from "./oktaresourceconnections.js";
+import { Onboarding } from "./onboarding.js";
 import { OrganizationAssets } from "./organizationassets.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
@@ -338,6 +339,11 @@ export class Gram extends ClientSDK {
     return (this._oktaResourceConnections ??= new OktaResourceConnections(
       this._options,
     ));
+  }
+
+  private _onboarding?: Onboarding;
+  get onboarding(): Onboarding {
+    return (this._onboarding ??= new Onboarding(this._options));
   }
 
   private _organizationAssets?: OrganizationAssets;

@@ -135,6 +135,8 @@ export const AUDIT_ACTIONS = [
   "organization:enterprise_trial_started",
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
+  "organization:onboarding_answers_updated",
+  "organization:onboarding_step_verified",
   "organization:payg_activated",
   "organization:payg_deactivated",
   "organization:product_feature_disabled",
@@ -582,6 +584,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disabled a product feature for";
     case "organization:setup_task_updated":
       return "updated setup task for";
+    case "organization:onboarding_answers_updated":
+      return "updated onboarding answers for";
+    case "organization:onboarding_step_verified":
+      return "verified an onboarding step for";
 
     case "organization_invitation:create":
       return "invited";
