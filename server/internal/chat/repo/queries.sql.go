@@ -1321,7 +1321,7 @@ func (q *Queries) GetTopUsersByMessages(ctx context.Context, arg GetTopUsersByMe
 
 const inferencePolicyRevision = `-- name: InferencePolicyRevision :one
 WITH policies AS (
-  SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted FROM risk_policies
+  SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted FROM risk_policies
   WHERE project_id = $1 AND enabled IS TRUE AND deleted IS FALSE
     AND action IN ('block', 'warn', 'quarantine')
 )

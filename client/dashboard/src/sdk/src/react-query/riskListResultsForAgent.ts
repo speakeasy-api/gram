@@ -119,6 +119,7 @@ export function setRiskListResultsForAgentData(
     parameters: {
       policyId?: string | undefined;
       chatId?: string | undefined;
+      mcpServerId?: string | undefined;
       category?: string | undefined;
       ruleId?: string | undefined;
       userId?: string | undefined;
@@ -147,6 +148,7 @@ export function invalidateRiskListResultsForAgent(
     [parameters: {
       policyId?: string | undefined;
       chatId?: string | undefined;
+      mcpServerId?: string | undefined;
       category?: string | undefined;
       ruleId?: string | undefined;
       userId?: string | undefined;

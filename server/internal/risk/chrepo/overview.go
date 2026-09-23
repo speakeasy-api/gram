@@ -63,9 +63,10 @@ type RiskOverviewFindingCounts struct {
 }
 
 // GetRiskOverviewFindingCounts returns the deduplicated finding count and the
-// number of distinct chats with at least one finding. Rows with an empty
-// chat_id (attribution unresolved at ingest) count as findings but not as
-// flagged sessions.
+// number of distinct attributed chats with at least one finding. Rows with an
+// empty chat_id count as findings but not as flagged sessions: a gateway
+// execution is not a synthetic session, while carried chat attribution remains
+// authoritative and participates normally.
 func (q *Queries) GetRiskOverviewFindingCounts(ctx context.Context, p RiskOverviewWindowParams) (RiskOverviewFindingCounts, error) {
 	var counts RiskOverviewFindingCounts
 

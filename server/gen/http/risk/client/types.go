@@ -10889,6 +10889,28 @@ type RiskResultResponseBody struct {
 	PolicyID *string `form:"policy_id,omitempty" json:"policy_id,omitempty" xml:"policy_id,omitempty"`
 	// Policy version when this result was produced.
 	PolicyVersion *int64 `form:"policy_version,omitempty" json:"policy_version,omitempty" xml:"policy_version,omitempty"`
+	// Identity of the concrete mediated execution.
+	ExecutionID *string `form:"execution_id,omitempty" json:"execution_id,omitempty" xml:"execution_id,omitempty"`
+	// Concrete MCP server that executed the operation.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Outer gateway that routed the execution, when present.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// Toolset serving the execution, when present.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Name of the concrete tool, when applicable.
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Execution phase inspected by risk.
+	Phase *string `form:"phase,omitempty" json:"phase,omitempty" xml:"phase,omitempty"`
+	// Concrete mediation surface where the execution was observed.
+	MediationSurface *string `form:"mediation_surface,omitempty" json:"mediation_surface,omitempty" xml:"mediation_surface,omitempty"`
+	// MCP method or equivalent mediated operation.
+	McpMethod *string `form:"mcp_method,omitempty" json:"mcp_method,omitempty" xml:"mcp_method,omitempty"`
+	// Credential provenance class resolved by MCP identity.
+	PrincipalKind *string `form:"principal_kind,omitempty" json:"principal_kind,omitempty" xml:"principal_kind,omitempty"`
+	// Whether MCP identity stamped validated principal provenance.
+	IdentityStamped *bool `form:"identity_stamped,omitempty" json:"identity_stamped,omitempty" xml:"identity_stamped,omitempty"`
+	// Recorded enforcement outcome, independent of policy configuration.
+	EnforcementOutcome *string `form:"enforcement_outcome,omitempty" json:"enforcement_outcome,omitempty" xml:"enforcement_outcome,omitempty"`
 	// ID of the durable tool call block recorded for this finding's message, when
 	// one exists. Links to the block page at /blocks/:id.
 	BlockID *string `form:"block_id,omitempty" json:"block_id,omitempty" xml:"block_id,omitempty"`
@@ -10977,6 +10999,28 @@ type RiskResultRedactedResponseBody struct {
 	PolicyID *string `form:"policy_id,omitempty" json:"policy_id,omitempty" xml:"policy_id,omitempty"`
 	// Policy version when this result was produced.
 	PolicyVersion *int64 `form:"policy_version,omitempty" json:"policy_version,omitempty" xml:"policy_version,omitempty"`
+	// Identity of the concrete mediated execution.
+	ExecutionID *string `form:"execution_id,omitempty" json:"execution_id,omitempty" xml:"execution_id,omitempty"`
+	// Concrete MCP server that executed the operation.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Outer gateway that routed the execution, when present.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// Toolset serving the execution, when present.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Name of the concrete tool, when applicable.
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Execution phase inspected by risk.
+	Phase *string `form:"phase,omitempty" json:"phase,omitempty" xml:"phase,omitempty"`
+	// Concrete mediation surface where the execution was observed.
+	MediationSurface *string `form:"mediation_surface,omitempty" json:"mediation_surface,omitempty" xml:"mediation_surface,omitempty"`
+	// MCP method or equivalent mediated operation.
+	McpMethod *string `form:"mcp_method,omitempty" json:"mcp_method,omitempty" xml:"mcp_method,omitempty"`
+	// Credential provenance class resolved by MCP identity.
+	PrincipalKind *string `form:"principal_kind,omitempty" json:"principal_kind,omitempty" xml:"principal_kind,omitempty"`
+	// Whether MCP identity stamped validated principal provenance.
+	IdentityStamped *bool `form:"identity_stamped,omitempty" json:"identity_stamped,omitempty" xml:"identity_stamped,omitempty"`
+	// Recorded enforcement outcome, independent of policy configuration.
+	EnforcementOutcome *string `form:"enforcement_outcome,omitempty" json:"enforcement_outcome,omitempty" xml:"enforcement_outcome,omitempty"`
 	// The chat message that was scanned, when the finding is anchored to a message.
 	ChatMessageID *string `form:"chat_message_id,omitempty" json:"chat_message_id,omitempty" xml:"chat_message_id,omitempty"`
 	// The chat content part that was scanned, when the finding is anchored to a
@@ -34211,6 +34255,11 @@ func ValidateRiskResultResponseBody(body *RiskResultResponseBody) (err error) {
 	if body.PolicyID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", *body.PolicyID, goa.FormatUUID))
 	}
+	if body.EnforcementOutcome != nil {
+		if !(*body.EnforcementOutcome == "logged" || *body.EnforcementOutcome == "denied" || *body.EnforcementOutcome == "withheld" || *body.EnforcementOutcome == "warned_pending" || *body.EnforcementOutcome == "warned_acknowledged" || *body.EnforcementOutcome == "warned_abandoned" || *body.EnforcementOutcome == "quarantined") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.enforcement_outcome", *body.EnforcementOutcome, []any{"logged", "denied", "withheld", "warned_pending", "warned_acknowledged", "warned_abandoned", "quarantined"}))
+		}
+	}
 	if body.BlockID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.block_id", *body.BlockID, goa.FormatUUID))
 	}
@@ -34288,6 +34337,11 @@ func ValidateRiskResultRedactedResponseBody(body *RiskResultRedactedResponseBody
 	}
 	if body.PolicyID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", *body.PolicyID, goa.FormatUUID))
+	}
+	if body.EnforcementOutcome != nil {
+		if !(*body.EnforcementOutcome == "logged" || *body.EnforcementOutcome == "denied" || *body.EnforcementOutcome == "withheld" || *body.EnforcementOutcome == "warned_pending" || *body.EnforcementOutcome == "warned_acknowledged" || *body.EnforcementOutcome == "warned_abandoned" || *body.EnforcementOutcome == "quarantined") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.enforcement_outcome", *body.EnforcementOutcome, []any{"logged", "denied", "withheld", "warned_pending", "warned_acknowledged", "warned_abandoned", "quarantined"}))
+		}
 	}
 	if body.ChatMessageID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_message_id", *body.ChatMessageID, goa.FormatUUID))

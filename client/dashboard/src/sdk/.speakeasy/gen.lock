@@ -6596,7 +6596,7 @@ examples:
           id: "7cdc760e-cbf3-4228-b23e-1c83c68d91e5"
       responses:
         "200":
-          application/json: {"observations": [{"count": 86367, "status": "refused"}], "status": "observed", "window_start": "2026-08-15T05:25:09.572Z"}
+          application/json: {"observations": [{"count": 86367, "status": "refused"}], "status": "configuration_failure", "window_start": "2026-08-15T05:25:09.572Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

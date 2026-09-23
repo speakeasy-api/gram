@@ -14,7 +14,12 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
-const tenantDimensionsSyncInterval = 15 * time.Minute
+const (
+	tenantDimensionsSyncInterval = 15 * time.Minute
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	tenantDimensionsSyncCatchupWindow = tenantDimensionsSyncInterval - time.Second
+)
 
 // SyncTenantDimensionsWorkflow refreshes the ClickHouse organization and
 // project reporting dimensions from one consistent Postgres snapshot.
@@ -57,10 +62,11 @@ func AddTenantDimensionsSyncSchedule(ctx context.Context, temporalEnv *tenv.Envi
 	}
 
 	_, err := scheduleClient.Create(ctx, client.ScheduleOptions{
-		ID:      scheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		Spec:    spec,
-		Action:  action,
+		CatchupWindow: tenantDimensionsSyncCatchupWindow,
+		ID:            scheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		Spec:          spec,
+		Action:        action,
 	})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
@@ -68,6 +74,7 @@ func AddTenantDimensionsSyncSchedule(ctx context.Context, temporalEnv *tenv.Envi
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, tenantDimensionsSyncCatchupWindow)
 				return &client.ScheduleUpdate{
 					Schedule:              &input.Description.Schedule,
 					TypedSearchAttributes: nil,
