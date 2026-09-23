@@ -37,6 +37,8 @@ import {
   isDisplayableBucket,
 } from "@/pages/access/challengeHelpers";
 import { OrgWelcomeBanner } from "@/pages/org/OrgWelcomeBanner";
+import { OnboardingBanner } from "@/pages/org-onboarding/onboarding-banner";
+import { useOnboardingEntry } from "@/pages/org-onboarding/useOnboardingEntry";
 import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
@@ -118,6 +120,13 @@ function OrgHomeInner() {
   const { hasScope } = useRBAC();
   const canAdmin = hasScope("org:admin");
   const orgRoutes = useOrgRoutes();
+  // A brand-new organization on the new onboarding flag goes straight to the
+  // wizard; one with traffic or saved answers gets the banner below instead.
+  const onboardingEntry = useOnboardingEntry();
+  useEffect(() => {
+    if (onboardingEntry.mode !== "redirect") return;
+    void navigate(orgRoutes.onboarding.href(), { replace: true });
+  }, [onboardingEntry.mode, navigate, orgRoutes]);
 
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -291,6 +300,9 @@ function OrgHomeInner() {
 
   return (
     <>
+      {onboardingEntry.mode === "banner" ? (
+        <OnboardingBanner state={onboardingEntry.state} />
+      ) : null}
       <OrgWelcomeBanner />
 
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-8 pb-24">

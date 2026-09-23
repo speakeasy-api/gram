@@ -80,6 +80,9 @@ vi.mock(
     useRecordPlatformMCPDashboardCtaEventMutation: () => ({ mutate: vi.fn() }),
   }),
 );
+vi.mock("@/pages/org-onboarding/useOnboardingEntry", () => ({
+  useOnboardingEntry: () => ({ mode: "none", state: undefined }),
+}));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     access: {

@@ -159,6 +159,12 @@ import {
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
 
+const OrgOnboardingWizard = React.lazy(
+  () => import("./pages/org-onboarding/OrgOnboardingWizard"),
+);
+const OrgOnboardingSettings = React.lazy(
+  () => import("./pages/org-onboarding/OrgOnboardingSettings"),
+);
 const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
 const SetupTaskPage = React.lazy(() => import("./pages/setup/SetupTaskPage"));
 const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
@@ -1533,6 +1539,23 @@ const ORG_ROUTE_STRUCTURE = {
     url: "request-access",
     component: RequestAccess,
     outsideMainLayout: true,
+  },
+  // The question-driven onboarding wizard (behind the gram-new-onboarding
+  // flag). Full screen like setup; its answers are editable at the settings
+  // page below, which lives inside the org layout. Static, so it wins over
+  // any later dynamic segment.
+  onboarding: {
+    title: "Onboarding",
+    url: "onboarding",
+    icon: "compass",
+    component: OrgOnboardingWizard,
+    outsideMainLayout: true,
+  },
+  onboardingSettings: {
+    title: "Onboarding",
+    url: "onboarding/settings",
+    icon: "settings",
+    component: OrgOnboardingSettings,
   },
   setup: {
     title: "Setup",
