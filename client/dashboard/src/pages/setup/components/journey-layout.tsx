@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { cn } from "@/lib/utils";
+import { SETUP_CONTAINER } from "./setup-container";
 
 interface JourneyLayoutProps {
   /** The timeline down the left: a stepper or a status list. */
@@ -21,8 +23,10 @@ export function JourneyLayout({
   children,
 }: JourneyLayoutProps): JSX.Element {
   return (
-    <main className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto px-4 py-8 md:px-8 md:py-16">
-      <div className="flex w-full max-w-5xl gap-24">
+    <main className="min-h-0 flex-1 overflow-y-auto py-8 md:py-16">
+      {/* Same frame as the header, so the rail starts under the logo and the
+          content ends under the header actions. */}
+      <div className={cn(SETUP_CONTAINER, "flex gap-16 lg:gap-24")}>
         <div className="order-first hidden w-64 flex-shrink-0 md:block">
           {loading ? (
             <Skeleton>

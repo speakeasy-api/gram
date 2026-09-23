@@ -80,6 +80,36 @@ func (q *Queries) AcceptPendingInvitationForMember(ctx context.Context, arg Acce
 	return i, err
 }
 
+const addVerifiedDomainByWorkosID = `-- name: AddVerifiedDomainByWorkosID :exec
+UPDATE organization_metadata
+SET verified_domains = CASE
+        WHEN EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(organization_metadata.verified_domains, '{}'::text[])) AS existing (domain)
+            WHERE lower(existing.domain) = lower($1::text)
+        ) THEN COALESCE(organization_metadata.verified_domains, '{}'::text[])
+        ELSE array_append(COALESCE(organization_metadata.verified_domains, '{}'::text[]), $1::text)
+    END,
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE workos_id = $3
+`
+
+type AddVerifiedDomainByWorkosIDParams struct {
+	Domain            string
+	WorkosLastEventID pgtype.Text
+	WorkosID          pgtype.Text
+}
+
+// Add one domain to an organization's verified domains after a WorkOS
+// organization_domain.verified event. The match ignores case, so a domain
+// already in the list is not added twice. The event cursor is recorded even
+// when the list does not change.
+func (q *Queries) AddVerifiedDomainByWorkosID(ctx context.Context, arg AddVerifiedDomainByWorkosIDParams) error {
+	_, err := q.db.Exec(ctx, addVerifiedDomainByWorkosID, arg.Domain, arg.WorkosLastEventID, arg.WorkosID)
+	return err
+}
+
 const attachWorkOSUserToOrg = `-- name: AttachWorkOSUserToOrg :exec
 INSERT INTO organization_user_relationships (
     organization_id,
@@ -201,14 +231,16 @@ INSERT INTO organization_metadata (
     slug,
     workos_id,
     workos_updated_at,
-    workos_last_event_id
+    workos_last_event_id,
+    verified_domains
 ) VALUES (
     $1,
     $2,
     $3,
     $4,
     $5,
-    $6
+    $6,
+    $7::text[]
 )
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 `
@@ -220,6 +252,7 @@ type CreateOrganizationMetadataFromWorkOSParams struct {
 	WorkosID          pgtype.Text
 	WorkosUpdatedAt   pgtype.Timestamptz
 	WorkosLastEventID pgtype.Text
+	VerifiedDomains   []string
 }
 
 // Create a Gram organization row from a WorkOS organization event. The caller
@@ -233,6 +266,7 @@ func (q *Queries) CreateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		arg.WorkosID,
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
+		arg.VerifiedDomains,
 	)
 	var i OrganizationMetadatum
 	err := row.Scan(
@@ -691,6 +725,7 @@ WITH default_project AS (
 SELECT
     COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_configured,
     COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
+    (COALESCE(cardinality(organization_metadata.verified_domains), 0) > 0)::boolean AS domain_verified,
     EXISTS (
         SELECT 1
         FROM plugin_github_connections
@@ -710,6 +745,7 @@ WHERE organization_metadata.id = $1
 type GetSetupTaskCompletionFactsRow struct {
 	SsoConfigured        bool
 	DsyncConfigured      bool
+	DomainVerified       bool
 	MarketplacePublished bool
 	LoggingEnabled       bool
 }
@@ -720,6 +756,7 @@ func (q *Queries) GetSetupTaskCompletionFacts(ctx context.Context, organizationI
 	err := row.Scan(
 		&i.SsoConfigured,
 		&i.DsyncConfigured,
+		&i.DomainVerified,
 		&i.MarketplacePublished,
 		&i.LoggingEnabled,
 	)
@@ -1493,6 +1530,34 @@ func (q *Queries) ReassignOrganizationUserWorkOSID(ctx context.Context, arg Reas
 	return err
 }
 
+const removeVerifiedDomainByWorkosID = `-- name: RemoveVerifiedDomainByWorkosID :exec
+UPDATE organization_metadata
+SET verified_domains = ARRAY(
+        SELECT existing.domain
+        FROM unnest(COALESCE(organization_metadata.verified_domains, '{}'::text[])) WITH ORDINALITY AS existing (domain, position)
+        WHERE lower(existing.domain) <> lower($1::text)
+        ORDER BY existing.position
+    ),
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE workos_id = $3
+`
+
+type RemoveVerifiedDomainByWorkosIDParams struct {
+	Domain            string
+	WorkosLastEventID pgtype.Text
+	WorkosID          pgtype.Text
+}
+
+// Remove one domain from an organization's verified domains after a WorkOS
+// organization_domain.deleted event. The match ignores case and keeps the
+// order of the remaining domains. The event cursor is recorded even when the
+// domain was not in the list.
+func (q *Queries) RemoveVerifiedDomainByWorkosID(ctx context.Context, arg RemoveVerifiedDomainByWorkosIDParams) error {
+	_, err := q.db.Exec(ctx, removeVerifiedDomainByWorkosID, arg.Domain, arg.WorkosLastEventID, arg.WorkosID)
+	return err
+}
+
 const retireCollidingOrganizationRoleAssignments = `-- name: RetireCollidingOrganizationRoleAssignments :exec
 UPDATE organization_role_assignments AS old
 SET deleted_at = COALESCE(old.deleted_at, clock_timestamp()),
@@ -1897,6 +1962,25 @@ func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkO
 	return items, nil
 }
 
+const setVerifiedDomains = `-- name: SetVerifiedDomains :exec
+UPDATE organization_metadata
+SET verified_domains = $1::text[],
+    updated_at = clock_timestamp()
+WHERE id = $2
+`
+
+type SetVerifiedDomainsParams struct {
+	VerifiedDomains []string
+	ID              string
+}
+
+// Replace the verified domains on an organization with the result of a live
+// WorkOS check.
+func (q *Queries) SetVerifiedDomains(ctx context.Context, arg SetVerifiedDomainsParams) error {
+	_, err := q.db.Exec(ctx, setVerifiedDomains, arg.VerifiedDomains, arg.ID)
+	return err
+}
+
 const setWebhooksEnabled = `-- name: SetWebhooksEnabled :one
 UPDATE organization_metadata
 SET webhooks_enabled = $1,
@@ -2049,8 +2133,9 @@ SET name = $1,
     workos_id = $2,
     workos_updated_at = $3,
     workos_last_event_id = $4,
+    verified_domains = $5::text[],
     updated_at = clock_timestamp()
-WHERE id = $5
+WHERE id = $6
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 `
 
@@ -2059,6 +2144,7 @@ type UpdateOrganizationMetadataFromWorkOSParams struct {
 	WorkosID          pgtype.Text
 	WorkosUpdatedAt   pgtype.Timestamptz
 	WorkosLastEventID pgtype.Text
+	VerifiedDomains   []string
 	ID                string
 }
 
@@ -2072,6 +2158,7 @@ func (q *Queries) UpdateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		arg.WorkosID,
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
+		arg.VerifiedDomains,
 		arg.ID,
 	)
 	var i OrganizationMetadatum

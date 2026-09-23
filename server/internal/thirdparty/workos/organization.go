@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
@@ -33,8 +35,30 @@ type OrganizationDomain struct {
 	State  OrganizationDomainState
 }
 
+// IsVerified reports whether WorkOS treats the domain as verified. WorkOS
+// requires a verified domain before an SSO connection can be set up.
+func (s OrganizationDomainState) IsVerified() bool {
+	return s == OrganizationDomainStateVerified || s == OrganizationDomainStateLegacyVerified
+}
+
 type OrganizationDomainPolicy struct {
 	Domains []OrganizationDomain
+}
+
+// VerifiedDomains returns the lowercased domain names WorkOS treats as
+// verified, matching how the event sync stores them.
+func (p *OrganizationDomainPolicy) VerifiedDomains() []string {
+	verified := make([]string, 0, len(p.Domains))
+	for _, d := range p.Domains {
+		if !d.State.IsVerified() {
+			continue
+		}
+		domain := strings.ToLower(strings.TrimSpace(d.Domain))
+		if domain != "" && !slices.Contains(verified, domain) {
+			verified = append(verified, domain)
+		}
+	}
+	return verified
 }
 
 // GetOrganization fetches a WorkOS organization by id.

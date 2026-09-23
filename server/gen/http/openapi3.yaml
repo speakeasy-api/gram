@@ -42217,7 +42217,7 @@ paths:
                 name: Organization
     /rpc/organizations.getOnboardingStatus:
         get:
-            description: Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
+            description: Get the onboarding status for the active organization by checking WorkOS domain verification, SSO connections, and directory sync state.
             operationId: getOnboardingStatus
             parameters:
                 - allowEmptyValue: true
@@ -90880,15 +90880,25 @@ components:
         OnboardingStatusResult:
             type: object
             properties:
+                domain_verified:
+                    type: boolean
+                    description: Whether the organization has at least one verified domain in WorkOS. Single sign-on cannot be set up until one is verified.
                 dsync_configured:
                     type: boolean
                     description: Whether the organization has at least one linked directory sync in WorkOS.
                 sso_configured:
                     type: boolean
                     description: Whether the organization has at least one active SSO connection in WorkOS.
+                verified_domains:
+                    type: array
+                    items:
+                        type: string
+                    description: Domains WorkOS has verified for the organization. Single sign-on only works for users on these domains.
             required:
                 - sso_configured
                 - dsync_configured
+                - domain_verified
+                - verified_domains
         OpenAPIv3DeploymentAsset:
             type: object
             properties:

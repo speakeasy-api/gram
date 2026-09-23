@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import type { ReactNode } from "react";
 import OrgIdentity from "./OrgIdentity";
@@ -9,7 +9,9 @@ const mocks = vi.hoisted(() => ({
   admin: true,
   enabled: true,
   ema: vi.fn(),
-  features: vi.fn(() => ({ data: {} })),
+  features: vi.fn(() => ({ data: {} as Record<string, boolean> })),
+  onboarding: { domainVerified: false, verifiedDomains: [] as string[] },
+  ssoActive: false,
 }));
 vi.mock("nuqs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("nuqs")>()),
@@ -26,18 +28,34 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: mocks.enabled ? "enabled" : "disabled" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => mocks.admin }),
+  useRBAC: () => ({
+    hasScope: () => mocks.admin,
+    hasAnyScope: () => mocks.admin,
+    hasAllScopes: () => mocks.admin,
+    isLoading: false,
+  }),
 }));
 vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ id: "test-org" }),
+  useOrganization: () => ({ id: "test-org", ssoEnabled: mocks.ssoActive }),
   useSessionData: () => ({ session: null }),
 }));
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ capture: vi.fn() }),
 }));
-vi.mock("@/routes", () => ({ useOrgRoutes: () => ({}) }));
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({
+    setupTask: {
+      Link: ({ children }: { children: ReactNode }) => (
+        <a href="/example/setup/idp">{children}</a>
+      ),
+    },
+  }),
+}));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => mocks.features(),
+}));
+vi.mock("@gram/client/react-query/onboardingStatus", () => ({
+  useOnboardingStatus: () => ({ data: mocks.onboarding }),
 }));
 vi.mock("@gram/client/react-query/generateWorkOSAdminPortalLink.js", () => ({
   useGenerateWorkOSAdminPortalLinkMutation: () => ({}),
@@ -78,6 +96,9 @@ afterEach(() => {
   vi.clearAllMocks();
   mocks.admin = true;
   mocks.enabled = true;
+  mocks.onboarding = { domainVerified: false, verifiedDomains: [] };
+  mocks.ssoActive = false;
+  mocks.features.mockImplementation(() => ({ data: {} }));
 });
 
 function show(search = "") {
@@ -133,5 +154,66 @@ describe("identity top-level tabs", () => {
         .getByRole("link", { name: "Single sign-on" })
         .getAttribute("aria-current"),
     ).toBe("page");
+  });
+});
+
+describe("domain verification gate", () => {
+  function ssoSection() {
+    const heading = screen.getByRole("heading", { name: "Single Sign-On" });
+    return within(heading.closest("section") as HTMLElement);
+  }
+
+  it("renders the domain card and blocks SSO setup until verified", () => {
+    mocks.features.mockImplementation(() => ({ data: { ssoEnabled: true } }));
+    show();
+    expect(
+      screen.getByRole("heading", { name: "Domain verification" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Verify domain" })).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "Verified domains" })).toBeNull();
+
+    const sso = ssoSection();
+    expect(sso.getByText("Verify a domain first.")).toBeTruthy();
+    expect(
+      sso.getByRole("button", { name: "Configure" }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      sso.getByRole("button", { name: "Configure" }).closest("a"),
+    ).toBeNull();
+  });
+
+  it("enables SSO setup once the domain is verified", () => {
+    mocks.features.mockImplementation(() => ({ data: { ssoEnabled: true } }));
+    mocks.onboarding = {
+      domainVerified: true,
+      verifiedDomains: ["example.com", "example.org"],
+    };
+    show();
+    expect(screen.getByText("Verified")).toBeTruthy();
+    const domains = within(
+      screen.getByRole("list", { name: "Verified domains" }),
+    );
+    expect(domains.getByText("example.com")).toBeTruthy();
+    expect(domains.getByText("example.org")).toBeTruthy();
+    expect(
+      screen.getByText("SSO applies to users on these domains."),
+    ).toBeTruthy();
+
+    const sso = ssoSection();
+    expect(sso.queryByText("Verify a domain first.")).toBeNull();
+    expect(
+      sso.getByRole("button", { name: "Configure" }).hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  it("keeps SSO manageable when SSO is already active", () => {
+    mocks.features.mockImplementation(() => ({ data: { ssoEnabled: true } }));
+    mocks.ssoActive = true;
+    show();
+    expect(
+      ssoSection()
+        .getByRole("button", { name: "Configure" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
   });
 });

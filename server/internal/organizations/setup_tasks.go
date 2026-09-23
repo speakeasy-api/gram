@@ -48,7 +48,8 @@ type setupTaskDefinition struct {
 }
 
 var setupTaskCatalog = []setupTaskDefinition{
-	{Key: "identity-provider", Title: "Set up identity provider", Description: "Connect single sign-on and sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "domain-verification", Title: "Verify your domain", Description: "Prove the organization owns its email domain. Single sign-on cannot be set up until a domain is verified.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "identity-provider", Title: "Set up identity provider", Description: "Connect single sign-on and sync people and groups from the identity provider.", Prerequisites: []string{"domain-verification"}, HiddenByDefault: false},
 	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Turn on Anthropic inference hooks in Claude.ai so Claude conversations reach Speakeasy, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
 	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Connect Cursor, Codex, and other coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
@@ -338,7 +339,15 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 		// The identity provider card covers both single sign-on and directory
 		// sync, so it only completes by fact once both are configured; an admin
 		// who skips directory sync marks the card done by hand.
-		completedByFact := definition.Key == "identity-provider" && facts.SsoConfigured && facts.DsyncConfigured
+		var completedByFact bool
+		switch definition.Key {
+		case "domain-verification":
+			// An active SSO connection proves a domain was verified, even for
+			// orgs set up before verified_domains was tracked.
+			completedByFact = facts.DomainVerified || facts.SsoConfigured
+		case "identity-provider":
+			completedByFact = facts.SsoConfigured && facts.DsyncConfigured
+		}
 		if completedByFact {
 			status = setupTaskStatusDone
 		}

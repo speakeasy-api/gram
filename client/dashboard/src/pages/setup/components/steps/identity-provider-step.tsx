@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn, getServerURL } from "@/lib/utils";
+import { useOrgRoutes } from "@/routes";
+import { setupTaskSlug } from "../../task-slugs";
 import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
 import { IDP_PROVIDERS } from "../../providers";
@@ -57,6 +59,7 @@ export function IdentityProviderStep({
         <SingleSignOnSection
           index={1}
           configured={!!onboardingStatus?.ssoConfigured}
+          domainVerified={!!onboardingStatus?.domainVerified}
           isLoading={isLoading}
         />
         <DirectorySyncSection
@@ -148,8 +151,12 @@ interface SectionProps {
 function SingleSignOnSection({
   index,
   configured,
+  domainVerified,
   isLoading,
-}: SectionProps): JSX.Element {
+}: SectionProps & { domainVerified: boolean }): JSX.Element {
+  const orgRoutes = useOrgRoutes();
+  // WorkOS rejects a new SSO connection until the org has a verified domain.
+  const needsDomain = !domainVerified && !configured;
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
@@ -324,6 +331,18 @@ function SingleSignOnSection({
           </PortalNote>
         )}
 
+        {needsDomain && (
+          <p className="text-muted-foreground text-sm">
+            Verify a domain first.{" "}
+            <orgRoutes.setupTask.Link
+              params={[setupTaskSlug("domain-verification")]}
+              className="text-foreground underline underline-offset-2"
+            >
+              Go to domain verification
+            </orgRoutes.setupTask.Link>
+          </p>
+        )}
+
         <div className="flex justify-end">
           {portalOpened ? (
             <Button
@@ -339,7 +358,7 @@ function SingleSignOnSection({
               variant="primary"
               size="sm"
               onClick={handleConnect}
-              disabled={!provider || isPending}
+              disabled={!provider || isPending || needsDomain}
             >
               {isPending ? "Opening..." : "Connect"}
             </Button>

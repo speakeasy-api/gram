@@ -216,7 +216,7 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("getOnboardingStatus", func() {
-		Description("Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.")
+		Description("Get the onboarding status for the active organization by checking WorkOS domain verification, SSO connections, and directory sync state.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -468,8 +468,10 @@ var GenerateWorkOSAdminPortalLinkResult = Type("GenerateWorkOSAdminPortalLinkRes
 var OnboardingStatusResult = Type("OnboardingStatusResult", func() {
 	Attribute("sso_configured", Boolean, "Whether the organization has at least one active SSO connection in WorkOS.")
 	Attribute("dsync_configured", Boolean, "Whether the organization has at least one linked directory sync in WorkOS.")
+	Attribute("domain_verified", Boolean, "Whether the organization has at least one verified domain in WorkOS. Single sign-on cannot be set up until one is verified.")
+	Attribute("verified_domains", ArrayOf(String), "Domains WorkOS has verified for the organization. Single sign-on only works for users on these domains.")
 
-	Required("sso_configured", "dsync_configured")
+	Required("sso_configured", "dsync_configured", "domain_verified", "verified_domains")
 })
 
 var OnboardingHookEvent = Type("OnboardingHookEvent", func() {
