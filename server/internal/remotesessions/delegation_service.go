@@ -50,17 +50,14 @@ func delegationDependencies(binding, provider func(context.Context, string, uuid
 			return nil, &delegation.RefreshError{Kind: delegation.RefreshConfiguration}
 		}
 		result, err := refresh(ctx, p.p, token, subject, nonce)
-		if err != nil {
-			return nil, delegationRefreshError(err)
-		}
 		if result == nil {
-			return nil, nil
+			return nil, delegationRefreshError(err)
 		}
 		var identity delegation.Identity
 		if result.Identity != nil {
 			identity = delegationIdentity{result.Identity}
 		}
-		return &delegation.RefreshResult{Identity: identity, Credentials: result.Credentials}, nil
+		return &delegation.RefreshResult{Identity: identity, Credentials: result.Credentials}, delegationRefreshError(err)
 	}}
 }
 func delegationConfigurationError(err error) error {
@@ -70,6 +67,9 @@ func delegationConfigurationError(err error) error {
 	return err
 }
 func delegationRefreshError(err error) error {
+	if err == nil {
+		return nil
+	}
 	var failure *FederatedRefreshError
 	if !errors.As(err, &failure) {
 		return &delegation.RefreshError{Kind: delegation.RefreshAmbiguous}

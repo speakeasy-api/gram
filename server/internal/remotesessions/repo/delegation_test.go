@@ -127,12 +127,14 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.NoError(t, err)
 	_, err = conn.Exec(ctx, `UPDATE user_session_issuers SET deleted_at=clock_timestamp() WHERE organization_id=$1`, org)
 	require.NoError(t, err)
-	release := repo.ReleaseTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, SubjectUrn: subject, ExpectedGeneration: claimed.CredentialGeneration.Int64, RefreshClaimID: claimID}
-	for _, wrong := range []string{"organization", "client", "subject", "generation", "claim"} {
+	release := repo.ReleaseTrustedDelegationRefreshParams{OrganizationID: org, IssuerID: issuer, ClientID: client, SubjectUrn: subject, ExpectedGeneration: claimed.CredentialGeneration.Int64, RefreshClaimID: claimID}
+	for _, wrong := range []string{"organization", "issuer", "client", "subject", "generation", "claim"} {
 		bad := release
 		switch wrong {
 		case "organization":
 			bad.OrganizationID = "org_other"
+		case "issuer":
+			bad.IssuerID = uuid.New()
 		case "client":
 			bad.ClientID = uuid.New()
 		case "subject":

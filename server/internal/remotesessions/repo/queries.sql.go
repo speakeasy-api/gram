@@ -8292,9 +8292,24 @@ WHERE s.organization_id = $1::text
   AND s.subject_urn = $3::text AND s.project_id IS NULL AND s.deleted IS FALSE
   AND COALESCE(s.credential_generation, 1) = $4::bigint
   AND s.refresh_claim_id = $5::uuid
-  AND EXISTS (SELECT 1 FROM remote_session_clients AS c
-    WHERE c.id = s.remote_session_client_id AND c.organization_id = s.organization_id
-      AND c.project_id IS NULL AND c.remote_session_issuer_id = $6::uuid)
+  AND EXISTS (
+    SELECT 1 FROM organization_metadata AS o
+    JOIN remote_session_clients AS c ON c.organization_id = o.id
+    JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+    WHERE o.id = $1::text AND o.disabled_at IS NULL
+      AND c.id = $2::uuid AND c.remote_session_issuer_id = $6::uuid
+      AND c.project_id IS NULL AND c.deleted IS FALSE
+      AND i.project_id IS NULL AND (i.organization_id = o.id OR i.organization_id IS NULL)
+      AND i.deleted IS FALSE
+      AND EXISTS (SELECT 1 FROM user_session_issuers AS usi
+        WHERE usi.organization_id = o.id AND usi.project_id IS NULL AND usi.deleted IS FALSE
+          AND usi.trusted_remote_session_client_id = c.id
+          AND usi.trusted_remote_session_issuer_id = i.id)
+      AND EXISTS (SELECT 1 FROM users AS u
+        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+        WHERE 'user:' || u.id = $3::text AND u.deleted_at IS NULL
+          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
+  )
 `
 
 type MarkTrustedDelegationRefreshAttemptParams struct {
@@ -8505,6 +8520,9 @@ WHERE s.organization_id = $1::text
   AND s.subject_urn = $3::text AND s.project_id IS NULL
   AND COALESCE(s.credential_generation, 1) = $4::bigint
   AND s.refresh_claim_id = $5::uuid
+  AND EXISTS (SELECT 1 FROM remote_session_clients AS c
+    WHERE c.id = s.remote_session_client_id AND c.organization_id = s.organization_id
+      AND c.project_id IS NULL AND c.remote_session_issuer_id = $6::uuid)
 `
 
 type ReleaseTrustedDelegationRefreshParams struct {
@@ -8513,6 +8531,7 @@ type ReleaseTrustedDelegationRefreshParams struct {
 	SubjectUrn         string
 	ExpectedGeneration int64
 	RefreshClaimID     uuid.UUID
+	IssuerID           uuid.UUID
 }
 
 // No provider request started. Release only this claim, even after trust or
@@ -8524,6 +8543,7 @@ func (q *Queries) ReleaseTrustedDelegationRefresh(ctx context.Context, arg Relea
 		arg.SubjectUrn,
 		arg.ExpectedGeneration,
 		arg.RefreshClaimID,
+		arg.IssuerID,
 	)
 	if err != nil {
 		return 0, err
