@@ -107,6 +107,10 @@ import {
   RemoteIdentityProvidersPage,
   RemoteIdentityProvidersRoot,
 } from "./pages/remote-identity-providers/RemoteIdentityProviders";
+import {
+  WorkloadIdentitiesPage,
+  WorkloadIdentitiesRoot,
+} from "./pages/workload-identities/WorkloadIdentities";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
@@ -693,6 +697,15 @@ const ROUTE_STRUCTURE = {
         },
       },
     },
+  },
+
+  workloadIdentities: {
+    title: "Workload Identities",
+    url: "workload-identities",
+    icon: "cpu",
+    stage: "preview",
+    component: WorkloadIdentitiesRoot,
+    indexComponent: WorkloadIdentitiesPage,
   },
 
   agents: {
