@@ -13,8 +13,8 @@ interface JourneyLayoutProps {
   children: ReactNode;
 }
 
-// The linear onboarding frame: a rail on the left (2/12 of the width) for where
-// you are in the journey and the current step's content on the right (10/12).
+// The linear onboarding frame: a rail on the left (1/4 of the width) for where
+// you are in the journey and the current step's content on the right (3/4).
 // Shared by the wizard and by each setup task's page so the two never drift
 // apart.
 export function JourneyLayout({
@@ -27,8 +27,8 @@ export function JourneyLayout({
     <main className="min-h-0 flex-1 overflow-y-auto py-8 md:py-16">
       {/* Same frame as the header, so the rail starts under the logo and the
           content ends under the header actions. */}
-      <div className={cn(SETUP_CONTAINER, "md:grid md:grid-cols-12 md:gap-14")}>
-        <div className="hidden md:col-span-2 md:block">
+      <div className={cn(SETUP_CONTAINER, "md:grid md:grid-cols-4 md:gap-14")}>
+        <div className="hidden md:col-span-1 md:block">
           {loading ? (
             <Skeleton>
               {Array.from({ length: skeletonRows }, (_, index) => (
@@ -40,7 +40,7 @@ export function JourneyLayout({
           )}
         </div>
 
-        <div className="min-w-0 md:col-span-10">
+        <div className="min-w-0 md:col-span-3">
           {loading ? (
             <Skeleton>
               <div className="h-12 w-2/3" />

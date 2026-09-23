@@ -1967,6 +1967,7 @@ UPDATE organization_metadata
 SET verified_domains = $1::text[],
     updated_at = clock_timestamp()
 WHERE id = $2
+  AND cardinality(COALESCE(verified_domains, '{}'::text[])) = 0
 `
 
 type SetVerifiedDomainsParams struct {
@@ -1974,8 +1975,9 @@ type SetVerifiedDomainsParams struct {
 	ID              string
 }
 
-// Replace the verified domains on an organization with the result of a live
-// WorkOS check.
+// Fill an empty verified domains list with the result of a live WorkOS check.
+// A non-empty list is owned by the event sync and may be newer than the live
+// check, so it is never overwritten here.
 func (q *Queries) SetVerifiedDomains(ctx context.Context, arg SetVerifiedDomainsParams) error {
 	_, err := q.db.Exec(ctx, setVerifiedDomains, arg.VerifiedDomains, arg.ID)
 	return err

@@ -76,6 +76,21 @@ func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTask
 		return nil, err
 	}
 
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization for setup tasks").LogError(ctx, s.logger)
+	}
+	// Orgs verified in WorkOS before the event sync tracked domains have an
+	// empty stored list. Filling it here keeps the identity provider card
+	// from showing blocked until someone opens the onboarding status. Active
+	// SSO already completes the domain task, so it needs no check.
+	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
+	if workosOrgID != "" && len(org.VerifiedDomains) == 0 && !org.SsoEnabled.Bool {
+		if _, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains); err != nil {
+			s.logger.WarnContext(ctx, "setup tasks: check domain verification", attr.SlogError(err), attr.SlogWorkOSOrganizationID(workosOrgID))
+		}
+	}
+
 	tasks, err := s.projectSetupTasks(ctx, orgrepo.New(s.db), ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, err

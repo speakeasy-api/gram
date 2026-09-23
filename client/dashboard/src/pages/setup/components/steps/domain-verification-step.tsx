@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, ExternalLink, Globe } from "lucide-react";
+import { Check, ExternalLink } from "lucide-react";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
@@ -27,7 +27,10 @@ export function DomainVerificationStep({
     isLoading,
     refetch,
   } = useOnboardingStatus(undefined, undefined, { throwOnError: false });
-  const verified = !!onboardingStatus?.domainVerified;
+  // Active SSO proves a domain was verified, even for orgs set up before
+  // verified domains were tracked. The server completes the task the same way.
+  const verified =
+    !!onboardingStatus?.domainVerified || !!onboardingStatus?.ssoConfigured;
   const verifiedDomains = onboardingStatus?.verifiedDomains ?? [];
   const [portalOpened, setPortalOpened] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -161,11 +164,6 @@ export function DomainVerificationStep({
 
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <Globe className="text-foreground h-6 w-6" />
-        </div>
-      }
       title="Verify your domain"
       description="Prove your organization owns its email domain. Single sign-on needs a verified domain before you can connect an identity provider."
       onContinue={onComplete}

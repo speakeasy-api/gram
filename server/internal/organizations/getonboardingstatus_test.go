@@ -82,3 +82,21 @@ func TestService_GetOnboardingStatusReportsUnverifiedDomain(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, org.VerifiedDomains)
 }
+
+// A live WorkOS check can be older than an event the sync has already
+// applied, so SetVerifiedDomains only fills an empty list.
+func TestSetVerifiedDomainsKeepsNonEmptyList(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	repo := orgrepo.New(ti.conn)
+
+	require.NoError(t, repo.SetVerifiedDomains(ctx, orgrepo.SetVerifiedDomainsParams{ID: authCtx.ActiveOrganizationID, VerifiedDomains: []string{"new.example.com"}}))
+	require.NoError(t, repo.SetVerifiedDomains(ctx, orgrepo.SetVerifiedDomainsParams{ID: authCtx.ActiveOrganizationID, VerifiedDomains: []string{"stale.example.com"}}))
+
+	org, err := repo.GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"new.example.com"}, org.VerifiedDomains)
+}

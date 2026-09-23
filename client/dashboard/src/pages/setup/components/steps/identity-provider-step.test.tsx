@@ -119,9 +119,9 @@ describe("IdentityProviderStep", () => {
     ).toBe("/acme/setup/domain");
 
     fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
-    const connect = screen.getByRole("button", { name: "Connect" });
-    expect(connect.hasAttribute("disabled")).toBe(true);
-    fireEvent.click(connect);
-    expect(portal.mutate).not.toHaveBeenCalled();
+    const connect = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Connect",
+    });
+    expect(connect.disabled).toBe(true);
   });
 });

@@ -1008,9 +1008,11 @@ func (s *Service) GetOnboardingStatus(ctx context.Context, payload *gen.GetOnboa
 }
 
 // refreshVerifiedDomains returns the organization's verified domains. An empty
-// stored list is re-checked against WorkOS and saved when it has changed, so
-// it is correct right after the Admin Portal and for orgs verified before the
-// event sync tracked domains. A non-empty list is kept current by the sync.
+// stored list is re-checked against WorkOS, so it is correct right after the
+// Admin Portal and for orgs verified before the event sync tracked domains.
+// The live result only fills a list that is still empty: a non-empty list is
+// kept current by the event sync, which may have written a newer list since
+// stored was read, so the save never overwrites it.
 func (s *Service) refreshVerifiedDomains(ctx context.Context, organizationID, workosOrgID string, stored []string) ([]string, error) {
 	if len(stored) > 0 {
 		return stored, nil

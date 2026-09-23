@@ -3,7 +3,6 @@ import {
   Check,
   ChevronDown,
   ExternalLink,
-  KeyRound,
   Loader2,
   Search,
 } from "lucide-react";
@@ -46,11 +45,6 @@ export function IdentityProviderStep({
 
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <KeyRound className="text-foreground h-6 w-6" />
-        </div>
-      }
       title="Set up identity provider"
       description="Connect your SSO provider so your team signs in with existing credentials, then sync its directory so users, groups, and roles stay in step with your identity provider. Both can be finished later from organization settings."
       onContinue={onComplete}
