@@ -215,7 +215,7 @@ it.each([
   "https://example.com/oauth/v2/authorize",
   "https://slack.com/other",
 ])("rejects an unexpected authorization destination %s", (authorizationUrl) => {
-  mocks.begin.mockImplementation((_request, options) =>
+  mocks.begin.mockImplementationOnce((_request, options) =>
     options.onSuccess({ authorizationUrl }),
   );
   show();
