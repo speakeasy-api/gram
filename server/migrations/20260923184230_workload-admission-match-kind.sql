@@ -1,7 +1,7 @@
 -- atlas:txmode none
 
 -- Modify "workload_issuers" table
-ALTER TABLE "workload_issuers" ADD COLUMN "allow_prefix_admission" boolean NOT NULL DEFAULT false;
+ALTER TABLE "workload_issuers" ADD COLUMN "allow_wildcard_admission" boolean NOT NULL DEFAULT false;
 -- Modify "workload_identity_admissions" table
 ALTER TABLE "workload_identity_admissions" ADD COLUMN "match_kind" text NOT NULL DEFAULT 'exact';
 -- Modify "workload_agent_assignments" table

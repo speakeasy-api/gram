@@ -3078,24 +3078,25 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   jwks_uri TEXT NOT NULL,
 
   -- Whether this issuer's admissions and agent assignments may match a subject
-  -- by prefix rather than in full. Off unless an operator turns it on when the
-  -- issuer is created.
+  -- by a trailing wildcard rather than in full. Off unless an operator turns it
+  -- on when the issuer is created.
   --
-  -- The gate lives here, not on the admission, because whether a prefix can ever
-  -- be safe is a property of the platform rather than of one row. Prefix
-  -- matching is sound only where the varying part of sub is minted by the issuer
-  -- and cannot be forged by the caller: Claude Tag's agent id, or a SPIFFE path
-  -- assigned by a registration entry. It is unsound where the caller controls
-  -- that part (GitHub Actions puts the git ref in sub, so a prefix admits every
+  -- The gate lives here, not on the admission, because whether a wildcard can
+  -- ever be safe is a property of the platform rather than of one row. It is
+  -- sound only where the varying part of sub is minted by the issuer and cannot
+  -- be forged by the caller: Claude Tag's agent id, or a SPIFFE path assigned by
+  -- a registration entry. It is unsound where the caller controls that part
+  -- (GitHub Actions puts the git ref in sub, so `repo:org/repo:*` admits every
   -- branch and so everyone who can open a pull request) and meaningless where
   -- sub is an opaque identifier (Entra's GUID, Google's numeric id), because a
-  -- prefix of those is a truncation that collides with unrelated principals.
+  -- leading portion of those is a truncation that collides with unrelated
+  -- principals.
   --
   -- A per-admission confirmation cannot make that judgement: it asks whoever is
   -- admitting a subject to re-derive their platform's sub semantics every time.
   -- Recorded once here, an issuer whose subjects are opaque or caller-influenced
-  -- simply cannot carry a prefix rule, whatever a later operator ticks.
-  allow_prefix_admission boolean NOT NULL DEFAULT false,
+  -- simply cannot carry a wildcard rule, whatever a later operator ticks.
+  allow_wildcard_admission boolean NOT NULL DEFAULT false,
 
   -- The last discovery document captured for this issuer, verbatim. The typed
   -- columns above model only what Gram acts on; the rest of a document is kept
@@ -3183,27 +3184,40 @@ CREATE TABLE IF NOT EXISTS workload_identity_admissions (
   -- discovery refresh must not silently repoint an existing admission.
   workload_issuer_id uuid NOT NULL,
 
-  -- What the issuer's sub claim is matched against: the whole value when
-  -- match_kind is exact, the leading portion of it when prefix.
+  -- What the issuer's sub claim is matched against. The whole value when
+  -- match_kind is exact. When wildcard, the value ends in a single `*` and
+  -- everything before it must be a leading portion of the presented subject;
+  -- the `*` is stored rather than stripped, so a row states its own breadth to
+  -- anyone reading this table.
   subject TEXT NOT NULL CHECK (subject <> ''),
 
   -- How subject is compared. 'exact' is the default and the safe choice, and
   -- the only one an admission gets without the operator asking for the other.
   --
-  -- 'prefix' exists because a platform that mints an identity per resource does
-  -- not let the operator know the subject in advance: Claude Tag's agent ID is
-  -- created with a Slack channel, is never shown in Anthropic's console, and
-  -- changes when a channel is recreated. Without prefix matching the only way to
-  -- admit one is to let an exchange fail and read the subject out of a log line,
-  -- which is not an onboarding flow.
+  -- 'wildcard' exists because a platform that mints an identity per resource
+  -- does not let the operator know the subject in advance: Claude Tag's agent ID
+  -- is created with a Slack channel, is never shown in Anthropic's console, and
+  -- changes when a channel is recreated. Without it the only way to admit one is
+  -- to let an exchange fail and read the subject out of a log line, which is not
+  -- an onboarding flow.
   --
-  -- The risk this column reintroduces, and why it is opt-in rather than a
-  -- nullable prefix field every issuer can set by accident: where sub encodes
-  -- something the caller controls, a prefix admits far more than it appears to.
-  -- GitHub Actions puts `repo:org/repo:ref:refs/heads/main` in sub, so a prefix
-  -- ending at `repo:org/repo:` admits any branch, which is anyone who can open a
-  -- pull request. Prefix admission is only sound where the varying segment is
-  -- minted by the issuer and unforgeable by the caller.
+  -- The `*` is required, and required to be last. A bare leading portion would
+  -- match the same subjects while hiding that it does: `system:serviceaccount:ns`
+  -- reads as one service account and also matches `ns-two`, where
+  -- `system:serviceaccount:ns:*` states what it covers. Requiring the terminator
+  -- also avoids inventing a delimiter rule, since subjects are `/`-separated on
+  -- some platforms, `:`-separated on others, and unstructured on the rest. Only a
+  -- trailing `*` is accepted: an interior one would allow matching a suffix while
+  -- leaving the middle open, which is strictly more dangerous and buys nothing.
+  --
+  -- The risk this column reintroduces, and why it is opt-in per issuer rather
+  -- than a field every issuer can set by accident: where sub encodes something
+  -- the caller controls, a wildcard admits far more than its author intends.
+  -- GitHub Actions puts `repo:org/repo:ref:refs/heads/main` in sub, so
+  -- `repo:org/repo:*` admits any branch, which is anyone who can open a pull
+  -- request. Wildcard admission is only sound where the varying segment is minted
+  -- by the issuer and unforgeable by the caller. See
+  -- workload_issuers.allow_wildcard_admission, which is what actually permits it.
   --
   -- Deliberately unconstrained in the schema: allowed values are validated in
   -- application code so a new kind does not need a migration.
@@ -3236,8 +3250,8 @@ CREATE TABLE IF NOT EXISTS workload_identity_admissions (
 );
 
 -- Serves the exact arm of the admission lookup, which compares subject with no
--- expression around the column so this index stays usable. The prefix arm
--- cannot use it — it asks whether a stored value is a prefix of the parameter,
+-- expression around the column so this index stays usable. The wildcard arm
+-- cannot use it — it asks whether a stored stem leads the parameter,
 -- which is the opposite of what a btree on subject answers — so it scans the
 -- issuer's rows instead. That is bounded by the (organization, issuer) prefix of
 -- this index and by how few admissions an issuer has.
@@ -3252,9 +3266,9 @@ WHERE deleted IS FALSE;
 -- silently creating a second row, while two projects admitting the same subject
 -- stay independent of each other and of the organization tier.
 --
--- match_kind is part of the key because the pair is what was admitted: a prefix
--- and an exact subject that read the same are different admissions, and the
--- narrower one exists precisely to sit alongside the broader.
+-- match_kind is part of the key because the pair is what was admitted: a
+-- wildcard and an exact subject are different admissions even where one covers
+-- the other, and the narrower one exists precisely to sit alongside the broader.
 CREATE UNIQUE INDEX IF NOT EXISTS workload_identity_admissions_project_key
 ON workload_identity_admissions (project_id, workload_issuer_id, match_kind, subject)
 WHERE deleted IS FALSE;
@@ -5073,11 +5087,11 @@ CREATE TABLE IF NOT EXISTS workload_agent_assignments (
   -- Matched the same way as an admission's, and for the same reason: a platform
   -- that mints an identity per resource cannot have every one of them assigned
   -- ahead of time. Admission and assignment must widen together, because a
-  -- subject admitted by prefix with no assignment reaching it is refused at the
-  -- token endpoint for having no agent.
+  -- subject admitted by wildcard with no assignment reaching it is refused at
+  -- the token endpoint for having no agent.
   --
-  -- See workload_identity_admissions.match_kind for what prefix matching costs
-  -- and where it is unsound.
+  -- See workload_identity_admissions.match_kind for the `*` rules, what wildcard
+  -- matching costs, and where it is unsound.
   match_kind TEXT NOT NULL DEFAULT 'exact',
 
   agent_id uuid NOT NULL,
@@ -5094,15 +5108,15 @@ CREATE TABLE IF NOT EXISTS workload_agent_assignments (
   CONSTRAINT workload_agent_assignments_agent_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE
 );
 
--- One live assignment per (principal or prefix, kind). Also serves looking up a
+-- One live assignment per (principal or wildcard, kind). Also serves looking up a
 -- workload's agent.
 --
--- This no longer makes at most one row match a given subject: a prefix
+-- This no longer makes at most one row match a given subject: a wildcard
 -- assignment and an exact one can both cover it, which is the point — a
 -- fleet-wide default with individual principals pinned elsewhere. "One agent per
 -- workload" is now resolved rather than stored, by taking the most specific
--- match (exact before prefix, longer prefix before shorter). Uniqueness here
--- only stops the same rule being written twice.
+-- match (exact before wildcard, longer wildcard stem before shorter).
+-- Uniqueness here only stops the same rule being written twice.
 CREATE UNIQUE INDEX IF NOT EXISTS workload_agent_assignments_workload_key
 ON workload_agent_assignments (organization_id, workload_issuer_id, match_kind, subject)
 WHERE deleted IS FALSE;
