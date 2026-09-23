@@ -1,3 +1,4 @@
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -53,8 +54,9 @@ import { useLocation, useParams } from "react-router";
 export function PluginDetailSidebarNav(): React.JSX.Element | null {
   const { hasScope, isLoading } = useRBAC();
   const organization = useOrganization();
+  const canWritePlugin = usePluginWriteAccess();
   if (isLoading) return null;
-  return hasScope("org:read", organization.id) ? (
+  return canWritePlugin || hasScope("org:read", organization.id) ? (
     <OrganizationPluginSidebarNav />
   ) : (
     <DistributionPluginSidebarNav />
@@ -90,26 +92,58 @@ function DistributionPluginSidebarNav(): React.JSX.Element | null {
 function OrganizationPluginSidebarNav(): React.JSX.Element | null {
   const { hasScope } = useRBAC();
   const organization = useOrganization();
+  return hasScope("org:admin", organization.id) ? (
+    <PluginSidebarWithAssignments />
+  ) : (
+    <PluginSidebarContent />
+  );
+}
+
+function PluginSidebarWithAssignments(): React.JSX.Element | null {
+  const scope = usePluginQueryScope();
+  const { data: membersData } = useMembers(scope, undefined, {
+    queryKeyHashFn: (key) => JSON.stringify([scope, key]),
+  });
+  const { data: rolesData } = useRoles(scope, undefined, {
+    queryKeyHashFn: (key) => JSON.stringify([scope, key]),
+  });
+  const { data: audiencesData } = useAudiences(scope);
+  return (
+    <PluginSidebarContent
+      membersData={membersData}
+      rolesData={rolesData}
+      audiencesData={audiencesData}
+    />
+  );
+}
+
+function PluginSidebarContent({
+  membersData,
+  rolesData,
+  audiencesData,
+}: {
+  membersData?: ReturnType<typeof useMembers>["data"];
+  rolesData?: ReturnType<typeof useRoles>["data"];
+  audiencesData?: ReturnType<typeof useAudiences>["data"];
+} = {}): React.JSX.Element | null {
+  const { hasScope } = useRBAC();
+  const organization = useOrganization();
   const canWritePlugin = usePluginWriteAccess();
   const canAdmin = hasScope("org:admin", organization.id);
   const routes = useRoutes();
   const location = useLocation();
   const { pluginId } = useParams<{ pluginId: string }>();
 
-  const { data: plugin } = usePlugin({ id: pluginId ?? "" }, undefined, {
-    throwOnError: false,
-    enabled: !!pluginId,
-  });
-  const { data: publishStatus } = usePublishStatus();
-  const { data: membersData } = useMembers(undefined, undefined, {
-    enabled: canAdmin,
-  });
-  const { data: rolesData } = useRoles(undefined, undefined, {
-    enabled: canAdmin,
-  });
-  const { data: audiencesData } = useAudiences(undefined, undefined, {
-    enabled: canAdmin,
-  });
+  const scope = usePluginQueryScope();
+  const { data: plugin } = usePlugin(
+    { ...scope, id: pluginId ?? "" },
+    undefined,
+    {
+      throwOnError: false,
+      enabled: !!pluginId,
+    },
+  );
+  const { data: publishStatus } = usePublishStatus(scope);
   const assignmentsVisible = usePluginAssignmentsVisible();
   const showAssignments = canAdmin && assignmentsVisible;
 
