@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -14,9 +15,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
@@ -69,7 +70,7 @@ func TestPersonAccountsOtherPersonRequiresOrganizationAdmin(t *testing.T) {
 	require.Empty(t, empty.Accounts)
 }
 
-func TestPersonAccountsRequiresSessionAndOrganizationRollout(t *testing.T) {
+func TestPersonAccountsRequiresSessionAndOrganizationProductFeature(t *testing.T) {
 	t.Parallel()
 	ctx, f := newService(t)
 	request := personAccountsRequest(f.auth.UserID)
@@ -85,11 +86,12 @@ func TestPersonAccountsRequiresSessionAndOrganizationRollout(t *testing.T) {
 		require.Error(t, err)
 		require.Nil(t, result)
 	}
-	f.flags.SetFlag(feature.FlagClaudeTagSupport, f.auth.ActiveOrganizationID, false)
+	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, f.auth.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, false))
 	_, err := f.service.ListPersonAccounts(ctx, request)
 	requireMappingCode(t, err, oops.CodeNotFound)
-	unavailable := f.build(&feature.InMemory{}, f.provider)
-	_, err = unavailable.ListPersonAccounts(ctx, request)
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err = f.service.ListPersonAccounts(cancelled, request)
 	requireMappingCode(t, err, oops.CodeUnavailable)
 }
 
@@ -123,7 +125,7 @@ func TestPersonAccountsDemoVisitorReadsActiveDemoPerson(t *testing.T) {
 	visitor.OrganizationSlug = "acme-demo"
 	f.auth = &visitor
 	ctx = authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &visitor), authz.DemoScopeGrants()...)
-	f.flags.SetFlag(feature.FlagClaudeTagSupport, constants.DemoOrganizationID, true)
+	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, constants.DemoOrganizationID, productfeatures.FeatureClaudeTagSupport, true))
 	emptyTime := pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite}
 	require.NoError(t, testrepo.New(f.db).CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
 		ID: constants.DemoOrganizationID, Name: "Acme Demo Workspace", Slug: "acme-demo", GramAccountType: "demo",
@@ -135,10 +137,25 @@ func TestPersonAccountsDemoVisitorReadsActiveDemoPerson(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, active, "Explore Demo keeps the visitor outside the demo membership directory")
 	person := addPerson(t, ctx, f)
-	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
-	require.NoError(t, syncer(f, snapshot("UEXAMPLE01")).Run(ctx, syncRequest(f, c), nil))
-	m := readMapping(t, ctx, f, members(t, ctx, f)[0].ID.String())
-	_, err = f.service.SetMapping(ctx, mappingRequest(m, &person))
+	queries := repo.New(f.db)
+	connection, err := queries.CreateSlackDirectoryConnection(ctx, repo.CreateSlackDirectoryConnectionParams{
+		OrganizationID: constants.DemoOrganizationID, SlackTeamID: "TEXAMPLE01", SlackTeamName: conv.ToPGText("Example workspace"),
+		CredentialsEncrypted: conv.ToPGTextEmpty(""), GrantedScopes: []string{}, Generation: uuid.New(),
+	})
+	require.NoError(t, err)
+	published := conv.ToPGTimestamptz(time.Now())
+	_, err = queries.PublishSlackDirectorySync(ctx, repo.PublishSlackDirectorySyncParams{
+		OrganizationID: constants.DemoOrganizationID, ID: connection.ID, Generation: connection.Generation, PublishedAt: published,
+	})
+	require.NoError(t, err)
+	require.NoError(t, queries.UpsertSlackDirectoryMembershipBatch(ctx, repo.UpsertSlackDirectoryMembershipBatchParams{
+		OrganizationID: constants.DemoOrganizationID, SlackTeamID: "TEXAMPLE01", LastSeenAt: published,
+		UserIds: []string{"UEXAMPLE01"}, DisplayNames: []string{"Example person"}, Emails: []string{"person@demo.getgram.ai"},
+		Statuses: []string{"active"}, MemberTypes: []string{"person"}, ProviderUpdatedAts: []pgtype.Timestamptz{emptyTime},
+	}))
+	_, err = queries.CreateSlackMappingForTest(ctx, repo.CreateSlackMappingForTestParams{
+		OrganizationID: constants.DemoOrganizationID, SlackTeamID: "TEXAMPLE01", SlackUserID: "UEXAMPLE01", UserID: person,
+	})
 	require.NoError(t, err)
 	result, err := f.service.ListPersonAccounts(ctx, personAccountsRequest(person))
 	require.NoError(t, err)
@@ -180,7 +197,7 @@ func TestPersonAccountsNeverAuthorizesByEmailOrForeignPerson(t *testing.T) {
 	requireMappingCode(t, err, oops.CodeNotFound)
 	caller = *f.auth
 	caller.ActiveOrganizationID = "org_synthetic_other"
-	f.flags.SetFlag(feature.FlagClaudeTagSupport, caller.ActiveOrganizationID, true)
+	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, caller.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, true))
 	crossOrg := authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &caller), authz.NewGrant(authz.ScopeOrgAdmin, caller.ActiveOrganizationID))
 	_, err = f.service.ListPersonAccounts(crossOrg, personAccountsRequest(f.auth.UserID))
 	requireMappingCode(t, err, oops.CodeNotFound)

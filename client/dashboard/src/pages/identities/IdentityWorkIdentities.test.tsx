@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   options: vi.fn(),
   admin: false,
   loadingAccess: false,
-  rollout: "enabled",
+  featureState: "enabled",
   pending: false,
   error: false,
   refetch: vi.fn(),
@@ -30,8 +30,15 @@ vi.mock("@/hooks/useRBAC", () => ({
     isLoading: mocks.loadingAccess,
   }),
 }));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: mocks.rollout }),
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  useProductFeatures: () => ({
+    data:
+      mocks.featureState === "missing"
+        ? undefined
+        : { claudeTagSupportEnabled: mocks.featureState !== "disabled" },
+    isPending: mocks.featureState === "loading",
+    isError: mocks.featureState === "error",
+  }),
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ identity: { href: () => "/example/identity" } }),
@@ -111,7 +118,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.admin = false;
   mocks.loadingAccess = false;
-  mocks.rollout = "enabled";
+  mocks.featureState = "enabled";
   mocks.pending = false;
   mocks.error = false;
   mocks.accounts = [account];
@@ -164,9 +171,9 @@ it("rejects a canonical identity that does not match the stable ID", () => {
   expect(mocks.query).not.toHaveBeenCalled();
 });
 it.each(["disabled", "missing", "loading", "error"])(
-  "does not request mappings with rollout %s",
+  "does not request mappings with product feature %s",
   (status) => {
-    mocks.rollout = status;
+    mocks.featureState = status;
     show();
     expect(mocks.query).not.toHaveBeenCalled();
   },

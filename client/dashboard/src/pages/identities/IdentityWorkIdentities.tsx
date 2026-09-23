@@ -2,9 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { useOrganization, useSession } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes } from "@/routes";
 import { Badge } from "@/components/ui/Badge";
@@ -12,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import type { SlackPersonAccount } from "@gram/client/models/components/slackpersonaccount.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { buildSlackPersonAccountsQuery } from "@gram/client/react-query/slackPersonAccounts.js";
 import { SESSION_SECURITY } from "../org/identity-provider/identityProviderQueries";
@@ -31,13 +30,19 @@ export function IdentityWorkIdentities({
   const { user } = useSession();
   const organization = useOrganization();
   const { hasScope, isLoading } = useRBAC();
-  const rollout = useFeatureFlag(FEATURE_FLAGS.claudeTagSupport);
+  const features = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false, retry: false },
+  );
   const userId =
     identity.userIds.length === 1 ? identity.userIds[0] : undefined;
   const canReview = !isLoading && hasScope("org:admin", organization.id);
   // The resolver must identify one person. Email and telemetry identifiers never authorize this read.
   if (
-    rollout.status !== "enabled" ||
+    features.isPending ||
+    features.isError ||
+    !features.data?.claudeTagSupportEnabled ||
     identity.kind !== "user" ||
     !userId ||
     identity.canonicalUrn !== `user:${userId}` ||

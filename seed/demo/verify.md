@@ -463,8 +463,10 @@ The mutation check runs only in the local organization. Support sessions cannot 
 
 ## Work identities
 
-Enable `claude-tag-support` for the organization. For the shared demo check, enter through `/explore-demo` with an ordinary browser session. Support impersonation is refused by these endpoints. The visitor must not need a membership in the demo organization.
+The seed enables the `claude_tag_support` product feature for its target organization. For the shared demo check, enter through `/explore-demo` with an ordinary browser session. Support impersonation is refused by these endpoints. The visitor must not need a membership in the demo organization.
 
 Open Amara Okafor's identity and select Accounts & devices. Work identities should show three memberships across Acme Engineering and Acme Operations, including two accounts in Engineering. The guest account shows Deactivated, Needs review and the source finding; directory freshness stays visible separately. Each Review link opens that exact membership in Organization Identity. Cancel closes it without changing the mapping or dropping the workspace filter.
 
-Repeat in the seeded local organization. An employee can read their own mapped accounts and sees contact-admin guidance, without Review controls. Another employee's profile must not request these accounts. Verify the empty state for a person without mappings and retry after a failed read. With rollout disabled, the panel is hidden. Opening or closing Review must not create a mapping or change its revision. Seed data demonstrates navigation and retained mappings; live OAuth requires the configured Slack app.
+Repeat in the seeded local organization. An employee can read their own mapped accounts and sees contact-admin guidance, without Review controls. Another employee's profile must not request these accounts. Verify the empty state for a person without mappings and retry after a failed read. With the product feature disabled, the panel is hidden. Opening or closing Review must not create a mapping or change its revision. Seed data demonstrates navigation and retained mappings; live OAuth requires the configured Slack app.
+
+In shared Explore Demo, verify the mapping dialog shows its read-only notice and disables Personnel selection and Confirm. Verify Sync members is disabled. In the retargeted local organization, personnel changes remain available.
