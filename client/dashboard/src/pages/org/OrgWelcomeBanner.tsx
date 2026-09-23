@@ -143,13 +143,11 @@ export function OrgWelcomeBanner(): JSX.Element | null {
         return {
           id,
           index,
-          title: setupStarted
-            ? "Continue enterprise rollout"
-            : "Start enterprise rollout",
-          body: "SSO, directory sync, logging, agent platforms, and policies — the board tracks the whole sequence.",
-          cta: setupStarted ? "Resume rollout" : "Begin rollout",
-          meta: "Assignable · resumable",
-          to: orgRoutes.setup.href(),
+          title: setupStarted ? "Continue onboarding" : "Start onboarding",
+          body: "Pick your products, plans and use case; the wizard names the one thing to do next and verifies it against real traffic.",
+          cta: setupStarted ? "Resume onboarding" : "Begin onboarding",
+          meta: "Three questions · resumable",
+          to: orgRoutes.onboarding.href(),
           recommended,
           onClick: markSetupStarted,
         };

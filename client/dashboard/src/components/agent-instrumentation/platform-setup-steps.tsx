@@ -3,7 +3,7 @@ import { AlertCircle, Check, Copy, Loader2 } from "lucide-react";
 import { codeToHtml, type BundledLanguage } from "shiki";
 import { Button } from "@/components/ui/Button";
 import { Link } from "@/components/ui/Link";
-import type { PlatformSetupStep } from "../types";
+import type { PlatformSetupStep } from "./types";
 import { usePlatformPlaceholders } from "./platform-setup-values";
 
 function HighlightedCode({

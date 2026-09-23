@@ -165,9 +165,6 @@ const OrgOnboardingWizard = React.lazy(
 const OrgOnboardingSettings = React.lazy(
   () => import("./pages/org-onboarding/OrgOnboardingSettings"),
 );
-const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
-const SetupTaskPage = React.lazy(() => import("./pages/setup/SetupTaskPage"));
-const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
 
 type AppRouteBasic = {
   title: string;
@@ -1540,10 +1537,9 @@ const ORG_ROUTE_STRUCTURE = {
     component: RequestAccess,
     outsideMainLayout: true,
   },
-  // The question-driven onboarding wizard (behind the gram-new-onboarding
-  // flag). Full screen like setup; its answers are editable at the settings
-  // page below, which lives inside the org layout. Static, so it wins over
-  // any later dynamic segment.
+  // The question-driven onboarding wizard. Full screen, outside the org
+  // layout; its answers are editable at the settings page below, which lives
+  // inside it.
   onboarding: {
     title: "Onboarding",
     url: "onboarding",
@@ -1556,32 +1552,6 @@ const ORG_ROUTE_STRUCTURE = {
     url: "onboarding/settings",
     icon: "settings",
     component: OrgOnboardingSettings,
-  },
-  setup: {
-    title: "Setup",
-    url: "setup",
-    icon: "settings",
-    component: SetupBoard,
-    outsideMainLayout: true,
-  },
-  // The linear wizard walks every board card in order, one owner in one
-  // sitting; the board at /setup stays the default. The header's view button
-  // swaps between the two. Static, so it wins over setup/:taskSlug below.
-  setupWizard: {
-    title: "Setup wizard",
-    url: "setup/wizard",
-    icon: "list-checks",
-    component: SetupWizard,
-    outsideMainLayout: true,
-  },
-  // Each board card opens as its own page at a short slug (setup/idp,
-  // setup/anthropic-observability, ...), with a rail of that card's own steps.
-  setupTask: {
-    title: "Setup task",
-    url: "setup/:taskSlug",
-    icon: "list-checks",
-    component: SetupTaskPage,
-    outsideMainLayout: true,
   },
   // Headless mode renders its own chrome (mode tabs only, no sidebar or
   // workspace header), so it sits outside OrgLayout.

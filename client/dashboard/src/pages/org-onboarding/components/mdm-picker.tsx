@@ -1,6 +1,6 @@
 import type { OnboardingOption } from "@gram/client/models/components/onboardingoption.js";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
-import { MDM_TARGETS } from "@/pages/setup/components/mdm-targets";
+import { MDM_TARGETS } from "@/components/onboarding/mdm-targets";
 
 const NOTES: Record<string, string> = {
   jamf: "Managed settings and the device agent can be pushed to every Mac.",

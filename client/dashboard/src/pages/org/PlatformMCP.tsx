@@ -19,7 +19,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 import { useRBAC } from "@/hooks/useRBAC";
 
-import { AgentPlatformPickerItem } from "@/pages/setup/components/agent-platform-picker-item";
+import { AgentPlatformPickerItem } from "@/components/agent-providers/agent-platform-picker-item";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import type { ClientFamily } from "@gram/client/models/components/recordinstallintentrequestbody.js";

@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AGENT_PLATFORMS } from "../setup-data";
+import { AGENT_PLATFORMS } from "./setup-data";
 import { PlatformSetupStepBody } from "./platform-setup-steps";
 
 const mocks = vi.hoisted(() => ({

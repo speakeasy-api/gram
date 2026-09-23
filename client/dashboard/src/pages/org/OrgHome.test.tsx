@@ -80,6 +80,9 @@ vi.mock(
     useRecordPlatformMCPDashboardCtaEventMutation: () => ({ mutate: vi.fn() }),
   }),
 );
+vi.mock("@/pages/org-onboarding/useOnboardingEntry", () => ({
+  useOnboardingEntry: () => ({ mode: "none", state: undefined }),
+}));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     access: {
@@ -94,8 +97,7 @@ vi.mock("@/routes", () => ({
     team: { goTo: vi.fn() },
     // Used by the welcome banner's route cards.
     home: { href: () => "/acme" },
-    setup: { href: () => "/acme/setup" },
-    setupWizard: { href: () => "/acme/setup/wizard" },
+    onboarding: { href: () => "/acme/onboarding" },
     headless: { href: () => "/acme/headless" },
   }),
   useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({

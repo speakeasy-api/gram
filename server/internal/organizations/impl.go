@@ -1160,7 +1160,7 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 		nextStepSlug = "anthropic-observability"
 	}
 
-	redirectURL := fmt.Sprintf("%s/%s/setup", s.siteURL, orgSlug)
+	redirectURL := fmt.Sprintf("%s/%s/onboarding", s.siteURL, orgSlug)
 	if nextStepSlug != "" {
 		redirectURL += fmt.Sprintf("?step=%s", nextStepSlug)
 	}
@@ -1187,7 +1187,7 @@ func (s *Service) SendEnterpriseAdminOnboardingEmail(ctx context.Context, payloa
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").LogError(ctx, s.logger)
 	}
 
-	setupLink := fmt.Sprintf("%s/%s/setup", strings.TrimRight(s.siteURL, "/"), org.Slug)
+	setupLink := fmt.Sprintf("%s/%s/onboarding", strings.TrimRight(s.siteURL, "/"), org.Slug)
 
 	tmpl := email.EnterpriseAdminOnboarding{SetupLink: setupLink}
 

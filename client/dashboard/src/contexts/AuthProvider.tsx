@@ -207,7 +207,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     if (
       location.pathname === "/" ||
       UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p)) ||
-      location.pathname.endsWith("/setup")
+      location.pathname.endsWith("/onboarding")
     ) {
       return <AuthPendingScreen />;
     }

@@ -37,7 +37,6 @@ const (
 	TemplateKeyTrialEndingSoon           TemplateKey = "trial_ending_soon"
 	TemplateKeyAccessPaused              TemplateKey = "access_paused"
 	TemplateKeyPaygActivated             TemplateKey = "payg_activated"
-	TemplateKeySetupTaskAssignment       TemplateKey = "setup_task_assignment"
 )
 
 var (
@@ -123,5 +122,4 @@ var RegisteredTemplates = []Template{
 	TrialEndingSoon{OrganizationName: "", TrialEndDate: "", ActionURL: ""},
 	AccessPaused{OrganizationName: "", ActionURL: ""},
 	PaygActivated{OrganizationName: "", TumPricePerMillionUsd: "", ActionURL: ""},
-	SetupTaskAssignment{AssignerName: "", OrganizationName: "", TaskTitle: "", TaskDescription: "", SetupLink: ""},
 }

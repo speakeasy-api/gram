@@ -10,8 +10,8 @@ import {
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
-import { AGENT_PLATFORMS } from "../setup-data";
-import type { AgentPlatform } from "../types";
+import { AGENT_PLATFORMS } from "./setup-data";
+import type { AgentPlatform } from "./types";
 import { PlatformSetupStepBody } from "./platform-setup-steps";
 import { usePlatformApiKeys } from "./platform-setup-values";
 

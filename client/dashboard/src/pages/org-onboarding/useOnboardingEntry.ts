@@ -2,7 +2,6 @@ import type { OnboardingState } from "@gram/client/models/components/onboardings
 import { useOnboarding } from "@gram/client/react-query/onboarding.js";
 import { useOnboardingUseCaseStatus } from "@gram/client/react-query/onboardingUseCaseStatus.js";
 import { useSlugs } from "@/contexts/Sdk";
-import { useNewOnboardingEnabled } from "@/hooks/useNewOnboarding";
 import { useRBAC } from "@/hooks/useRBAC";
 import { bannerDismissedStore, wizardSkippedStore } from "./onboarding-stores";
 
@@ -18,11 +17,9 @@ export function useOnboardingEntry(): {
   mode: OnboardingEntryMode;
   state: OnboardingState | undefined;
 } {
-  const enabled = useNewOnboardingEnabled();
   const { hasScope } = useRBAC();
   const { orgSlug } = useSlugs();
-  const isAdmin = hasScope("org:admin");
-  const active = enabled && isAdmin;
+  const active = hasScope("org:admin");
 
   const onboarding = useOnboarding(undefined, undefined, { enabled: active });
   const hasAnswers = Boolean(onboarding.data?.answers);

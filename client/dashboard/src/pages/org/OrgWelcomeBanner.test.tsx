@@ -82,7 +82,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     home: { href: () => "/acme" },
-    setup: { href: () => "/acme/setup" },
+    onboarding: { href: () => "/acme/onboarding" },
     headless: { href: () => "/acme/headless" },
   }),
   useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({
@@ -182,7 +182,7 @@ describe("OrgWelcomeBanner", () => {
 
     expect(hrefFor("Enter demo org")).toBe("/explore-demo");
     expect(hrefFor("Open the guide")).toBe("/guide");
-    expect(hrefFor("Begin rollout")).toBe("/acme/setup");
+    expect(hrefFor("Begin onboarding")).toBe("/acme/onboarding");
     expect(screen.queryByText("Announcement")).toBeNull();
     expect(
       screen.getByRole("heading", { name: /Choose your\s+first move/ }),
@@ -198,7 +198,7 @@ describe("OrgWelcomeBanner", () => {
 
     expect(hrefFor("Enter demo org")).toBe("/explore-demo");
     expect(hrefFor("Open the guide")).toBe("/guide");
-    expect(screen.queryByText("Begin rollout")).toBeNull();
+    expect(screen.queryByText("Begin onboarding")).toBeNull();
     expect(screen.queryByText("Announcement")).toBeNull();
   });
 
@@ -207,7 +207,7 @@ describe("OrgWelcomeBanner", () => {
 
     expect(screen.queryByText("Enter demo org")).toBeNull();
     expect(hrefFor("Open the guide")).toBe("/guide");
-    expect(hrefFor("Begin rollout")).toBe("/acme/setup");
+    expect(hrefFor("Begin onboarding")).toBe("/acme/onboarding");
     expect(screen.queryByText("Announcement")).toBeNull();
   });
 
@@ -218,7 +218,7 @@ describe("OrgWelcomeBanner", () => {
     expect(hrefFor("Set up Platform MCP")).toBe(
       "/acme/headless?entrySource=organization_home",
     );
-    expect(hrefFor("Begin rollout")).toBe("/acme/setup");
+    expect(hrefFor("Begin onboarding")).toBe("/acme/onboarding");
     expect(screen.queryByText("Announcement")).toBeNull();
     expect(
       screen.getByRole("heading", { name: /Pick up where\s+you left off/ }),
@@ -240,7 +240,7 @@ describe("OrgWelcomeBanner", () => {
     render(<OrgWelcomeBanner />);
 
     expect(hrefFor("Open the guide")).toBe("/guide");
-    expect(screen.queryByText("Begin rollout")).toBeNull();
+    expect(screen.queryByText("Begin onboarding")).toBeNull();
     expect(screen.queryByText("Announcement")).toBeNull();
     expect(
       screen.getByRole("heading", { name: "Let’s get started" }),
@@ -281,7 +281,7 @@ describe("OrgWelcomeBanner", () => {
     render(<OrgWelcomeBanner />);
 
     expect(hrefFor("Open the guide")).toBe("/guide");
-    expect(hrefFor("Begin rollout")).toBe("/acme/setup");
+    expect(hrefFor("Begin onboarding")).toBe("/acme/onboarding");
     expect(screen.getByText("Announcement")).toBeTruthy();
   });
 
@@ -314,8 +314,8 @@ describe("OrgWelcomeBanner", () => {
     trial.current = activeTrial();
     render(<OrgWelcomeBanner />);
 
-    expect(screen.getByText("Assignable · resumable")).toBeTruthy();
-    fireEvent.click(screen.getByText("Begin rollout"));
+    expect(screen.getByText("Three questions · resumable")).toBeTruthy();
+    fireEvent.click(screen.getByText("Begin onboarding"));
 
     expect(localStorage.getItem("gram-org-welcome-rollout-started:acme")).toBe(
       "true",
@@ -327,8 +327,8 @@ describe("OrgWelcomeBanner", () => {
     localStorage.setItem("gram-org-welcome-rollout-started:acme", "true");
     render(<OrgWelcomeBanner />);
 
-    expect(screen.getByText("Continue enterprise rollout")).toBeTruthy();
-    expect(hrefFor("Resume rollout")).toBe("/acme/setup");
+    expect(screen.getByText("Continue onboarding")).toBeTruthy();
+    expect(hrefFor("Resume onboarding")).toBe("/acme/onboarding");
   });
 
   it("drops the setup card when the org cannot run the wizard", () => {
@@ -336,7 +336,7 @@ describe("OrgWelcomeBanner", () => {
     setupEligible.current = false;
     render(<OrgWelcomeBanner />);
 
-    expect(screen.queryByText("Begin rollout")).toBeNull();
+    expect(screen.queryByText("Begin onboarding")).toBeNull();
     expect(screen.getByText("Enter demo org")).toBeTruthy();
   });
 
@@ -347,12 +347,12 @@ describe("OrgWelcomeBanner", () => {
     expect(hrefFor("Open the guide")).toBe("/guide");
     expect(
       (
-        screen.queryByText("Begin rollout") ??
-        screen.getByText("Resume rollout")
+        screen.queryByText("Begin onboarding") ??
+        screen.getByText("Resume onboarding")
       )
         .closest("a")
         ?.getAttribute("href"),
-    ).toBe("/acme/setup");
+    ).toBe("/acme/onboarding");
     expect(screen.queryByText("Open project")).toBeNull();
   });
 

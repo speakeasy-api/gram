@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PlatformSetupStep } from "../types";
+import type { PlatformSetupStep } from "./types";
 
 const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
@@ -26,7 +26,7 @@ vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ deviceAgent: { href: () => "/acme/device-agent" } }),
 }));
 
-import { AGENT_PLATFORMS } from "../setup-data";
+import { AGENT_PLATFORMS } from "./setup-data";
 import {
   usePlatformApiKeys,
   usePlatformPlaceholders,
