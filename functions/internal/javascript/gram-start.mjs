@@ -70,6 +70,15 @@ class FunctionsError extends Error {
     this.code = code;
   }
 
+  /**
+   * Serializes the error into the response body a tool call fails with. The
+   * stack trace is deliberately left out: user code is deployed as a single
+   * minified bundle, so every frame names a generated symbol at a byte offset
+   * into a file the tool's caller has never seen, and an MCP client carries
+   * those bytes in its context for the rest of the conversation. The trace
+   * goes to stderr instead, which the runner captures as the function's own
+   * log output, for the author who can act on it.
+   */
   toJSON() {
     /** @type {unknown} */
     let cause = undefined;
@@ -77,7 +86,6 @@ class FunctionsError extends Error {
       cause = {
         name: this.cause.name,
         message: this.cause.message,
-        stack: this.cause.stack,
       };
     } else if (this.cause != null) {
       cause = {
@@ -307,6 +315,10 @@ async function callResource(func, uri, input) {
  * @param {FunctionsError} error
  */
 async function writeFunctionsError(pipeFile, error) {
+  // The response body carries no stack trace, so this is the only place the
+  // function's author gets to see one.
+  console.error(error.cause instanceof Error ? error.cause.stack : error.stack);
+
   const text = JSON.stringify(error.toJSON());
 
   return writeHTTPResponse(

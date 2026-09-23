@@ -1,6 +1,6 @@
 ---
 "@gram-ai/functions": patch
-"server": patch
+"function-runners": patch
 ---
 
-Report a failed Gram Function tool call tersely. A JavaScript stack trace through the deployed bundle is now stripped from the tool output an MCP client receives, and a failure caused by input validation names each offending input on one line instead of repeating Zod's issue list as a pretty-printed JSON dump. The untrimmed body is still recorded in tool call logs, where a function's author debugs from.
+Report a failed Gram Function tool call tersely. A JavaScript stack trace is no longer serialized into the failure response — it names minified frames inside the deployed bundle, which the tool's caller cannot act on — and is written to stderr instead, where it reaches the function's own logs. A failure caused by input validation now names each offending input on one line rather than repeating Zod's issue list as a pretty-printed JSON dump.
