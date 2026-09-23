@@ -1,4 +1,4 @@
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHideInsightsDock } from "./insights-context";
@@ -7,11 +7,30 @@ import { GramElementsProvider } from "@/elements";
 
 const mocks = vi.hoisted(() => ({
   skills: vi.fn(() => ({
-    data: undefined,
+    data: undefined as
+      | {
+          pages: {
+            result: {
+              skills: { id: string; name: string; hasValidVersion: boolean }[];
+            };
+          }[];
+        }
+      | undefined,
     isPending: false,
     error: null as Error | null,
   })),
-  skillContext: undefined as { loading?: boolean; error?: boolean } | undefined,
+  skillContext: undefined as
+    | {
+        loading?: boolean;
+        error?: boolean;
+        skills: { id: string }[];
+        selectedSkillIds: string[];
+        onSelectedSkillIdsChange: (ids: string[]) => void;
+      }
+    | undefined,
+  grants: [] as { scope: "skill:read"; selectors: Record<string, string>[] }[],
+  permissionsLoading: false,
+  getSkillIds: undefined as (() => string[]) | undefined,
   activeRoute: "detail" as "detail" | "new" | "home",
   resolveCreator: undefined as
     | ((chat: { userId: string }) => unknown)
@@ -75,13 +94,20 @@ vi.mock("@/hooks/useObservabilityMcpConfig", () => ({
   useNoToolsetsConfigured: () => false,
 }));
 vi.mock("@/hooks/useServerAssistantTransport", () => ({
-  useServerAssistantTransport: () => ({
-    transport: undefined,
-    assistantId: "managed-assistant",
-    ready: true,
-    error: undefined,
-    needsAdmin: false,
-  }),
+  useServerAssistantTransport: (
+    _projectSlug: string,
+    _enabled: boolean,
+    options: { getSkillIds: () => string[] },
+  ) => {
+    mocks.getSkillIds = options.getSkillIds;
+    return {
+      transport: undefined,
+      assistantId: "managed-assistant",
+      ready: true,
+      error: undefined,
+      needsAdmin: false,
+    };
+  },
 }));
 vi.mock("@/hooks/useDrainInfiniteQuery", () => ({
   useDrainInfiniteQuery: vi.fn(),
@@ -97,13 +123,20 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
 }));
 vi.mock("@/hooks/useRBAC", async (original) => ({
   ...(await original<typeof import("@/hooks/useRBAC")>()),
-  useRBAC: () => ({ hasScope: mocks.hasScope }),
+  useRBAC: () => ({
+    hasScope: mocks.hasScope,
+    grants: mocks.grants,
+    isLoading: mocks.permissionsLoading,
+  }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-id", slug: "project" }),
   useOrganization: () => ({
     id: "organization",
-    projects: [{ id: "project-a", slug: "project" }],
+    projects: [
+      { id: "project-id", slug: "project" },
+      { id: "target-id", slug: "target" },
+    ],
   }),
   useSession: () => ({ user: { id: "user", email: "user@example.com" } }),
 }));
@@ -150,6 +183,9 @@ beforeEach(() => {
     isPending: false,
     error: null,
   });
+  mocks.grants = [];
+  mocks.permissionsLoading = false;
+  mocks.getSkillIds = undefined;
   mocks.skillContext = undefined;
   mocks.activeRoute = "detail";
   mocks.resolveCreator = undefined;
@@ -164,6 +200,112 @@ function AssistantEditor(): JSX.Element {
 }
 
 describe("InsightsProvider", () => {
+  it.each([
+    ["target-id", true],
+    ["project-id", false],
+  ] as const)(
+    "gates configured project skills with grant on %s",
+    (projectId, enabled) => {
+      mocks.activeRoute = "home";
+      mocks.grants = [
+        {
+          scope: "skill:read",
+          selectors: [{ resourceKind: "skill", resourceId: "*", projectId }],
+        },
+      ];
+      mocks.skills.mockReturnValue({
+        data: {
+          pages: [
+            {
+              result: {
+                skills: [
+                  {
+                    id: "target-skill",
+                    name: "Target skill",
+                    hasValidVersion: true,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        isPending: false,
+        error: null,
+      });
+      render(
+        <InsightsProvider
+          mcpConfig={{ projectSlug: "target" } as never}
+          title="Assistant"
+          subtitle=""
+        >
+          <div />
+        </InsightsProvider>,
+      );
+      expect(mocks.skills).toHaveBeenLastCalledWith(
+        { limit: 200, gramProject: "target" },
+        undefined,
+        expect.objectContaining({ enabled }),
+      );
+      expect(mocks.skillContext?.skills.map((skill) => skill.id)).toEqual(
+        enabled ? ["target-skill"] : [],
+      );
+    },
+  );
+
+  it.each(["revoked", "loading"])(
+    "removes selected skills from the transport when permission is %s",
+    (permission) => {
+      mocks.activeRoute = "home";
+      mocks.grants = [
+        {
+          scope: "skill:read",
+          selectors: [
+            { resourceKind: "skill", resourceId: "*", projectId: "target-id" },
+          ],
+        },
+      ];
+      mocks.skills.mockReturnValue({
+        data: {
+          pages: [
+            {
+              result: {
+                skills: [
+                  {
+                    id: "target-skill",
+                    name: "Target skill",
+                    hasValidVersion: true,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        isPending: false,
+        error: null,
+      });
+      const provider = () => (
+        <InsightsProvider
+          mcpConfig={{ projectSlug: "target" } as never}
+          title="Assistant"
+          subtitle=""
+        >
+          <div />
+        </InsightsProvider>
+      );
+      const { rerender } = render(provider());
+      act(() => mocks.skillContext?.onSelectedSkillIdsChange(["target-skill"]));
+      // Keep the callback already handed to the long-lived transport, not a new one.
+      const getSkillIds = mocks.getSkillIds!;
+      expect(getSkillIds()).toEqual(["target-skill"]);
+      if (permission === "revoked") mocks.grants = [];
+      else mocks.permissionsLoading = true;
+      rerender(provider());
+      expect(mocks.skillContext?.skills).toEqual([]);
+      expect(getSkillIds()).toEqual([]);
+      expect(mocks.skillContext?.selectedSkillIds).toEqual([]);
+    },
+  );
+
   it.each([null, new Error("cached failure")])(
     "masks disabled uncached skills state (%s)",
     (error) => {

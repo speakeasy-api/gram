@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { TooltipProvider } from "@/components/ui/Tooltip";
+import { ConfigProvider } from "@/components/ui/context/ConfigContext";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
+import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import type { ReactNode } from "react";
 const state = vi.hoisted(() => ({
   writer: true,
@@ -31,6 +34,7 @@ vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-a", slug: "project-a" }),
   useOrganization: () => ({ id: "org-a" }),
 }));
+vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
 vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: vi.fn() }),
 }));
@@ -41,6 +45,7 @@ vi.mock("@/routes", () => ({
 }));
 vi.mock("@gram/client/react-query/plugins", () => ({
   usePluginsSuspense: state.list,
+  usePlugins: state.list,
   invalidateAllPlugins: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/publishStatus", () => ({
@@ -48,14 +53,18 @@ vi.mock("@gram/client/react-query/publishStatus", () => ({
     data: {
       configured: true,
       connected: true,
+      hasCollaborators: true,
+      repoOwner: "example",
+      repoName: "plugins",
       repoUrl: "https://example.com/repo",
       marketplaceUrl: "https://example.com/private-token",
-    },
+    } satisfies PublishStatusResult,
   }),
   invalidateAllPublishStatus: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/marketplaceSettings", () => ({
   useMarketplaceSettingsSuspense: state.settingsRead,
+  useMarketplaceSettings: () => ({ data: { effectiveName: "example" } }),
   invalidateAllMarketplaceSettings: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/createPlugin", () => ({
@@ -74,23 +83,7 @@ vi.mock("@/components/page-templates", () => ({
 }));
 vi.mock("@/components/filters", async (original) => ({
   ...(await original<typeof import("@/components/filters")>()),
-  useFilterState: () => ({ values: {} }),
-}));
-vi.mock("./PluginCard", () => ({ PluginCard: () => <div>Plugin card</div> }));
-vi.mock("./MarketplaceCard", () => ({
-  MarketplaceCard: ({
-    onSync,
-    onRename,
-  }: {
-    onSync?: () => void;
-    onRename?: () => void;
-  }) => (
-    <>
-      <button onClick={onSync}>Sync marketplace</button>
-      {onRename && <button onClick={onRename}>Rename marketplace</button>}
-    </>
-  ),
-  UninitializedMarketplaceCard: () => null,
+  useFilterState: () => ({ values: { servers: [] } }),
 }));
 vi.mock("./PublishDialog", () => ({ PublishDialog: () => null }));
 vi.mock("../setup/components/platform-instrumentation-sheet", () => ({
@@ -102,13 +95,15 @@ vi.mock("../org/PlatformMCP", () => ({
 import Plugins from "./Plugins";
 function page() {
   return (
-    <TooltipProvider>
-      <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter>
-          <Plugins />
-        </MemoryRouter>
-      </QueryClientProvider>
-    </TooltipProvider>
+    <ConfigProvider theme="light" setTheme={() => undefined}>
+      <TooltipProvider>
+        <QueryClientProvider client={new QueryClient()}>
+          <MemoryRouter>
+            <Plugins />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </TooltipProvider>
+    </ConfigProvider>
   );
 }
 afterEach(cleanup);
@@ -121,25 +116,75 @@ beforeEach(() => {
   state.settingsRead.mockReturnValue({
     data: { defaultName: "Example", observabilityEnabled: false },
   });
-  state.list.mockReturnValue({ data: { plugins: [] } });
+  state.list.mockReturnValue({
+    data: {
+      plugins: [
+        {
+          id: "plugin-a",
+          name: "Example plugin",
+          slug: "example-plugin",
+          description: "A populated plugin card",
+          createdAt: new Date("2026-01-01"),
+          updatedAt: new Date("2026-01-01"),
+          serverCount: 1,
+          skillCount: 0,
+          agentPluginsV1Compatible: true,
+        } satisfies Plugin,
+      ],
+    },
+  });
 });
 describe("Plugins index authorization", () => {
-  it("unmounts cached marketplace settings after an admin becomes a writer", () => {
+  it("removes a rendered private install URL and marketplace settings after admin downgrade", async () => {
     state.admin = true;
     const view = render(page());
     expect(state.settingsRead).toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Rename marketplace" }),
+    ).toBeTruthy();
+    fireEvent.pointerDown(
+      screen.getAllByRole("button", { name: "Install" })[0]!,
+      { button: 0, ctrlKey: false },
+    );
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "GitHub installation (preferred)" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Claude Code" }));
+    expect(document.body.innerHTML).toContain(
+      "https://example.com/private-token",
+    );
     state.admin = false;
     state.settingsRead.mockClear();
     view.rerender(page());
     expect(state.settingsRead).not.toHaveBeenCalled();
-    expect(screen.queryByText("Rename marketplace")).toBeNull();
-    expect(screen.queryByText("Sync marketplace")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Rename marketplace" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Sync marketplace" }),
+    ).toBeNull();
     expect(screen.queryByText("Observability")).toBeNull();
-    expect(view.container.innerHTML).not.toContain("private-token");
+    // The install sheet is portalled outside the page container.
+    expect(document.body.innerHTML).not.toContain("private-token");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("A populated plugin card")).toBeTruthy();
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Install" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(
+      screen
+        .getByRole("menuitem", {
+          name: "GitHub installation (preferred) Requires marketplace setup",
+        })
+        .getAttribute("data-disabled"),
+    ).not.toBeNull();
+    expect(document.body.innerHTML).not.toContain("private-token");
   });
   it("loads and offers creation and publishing for a writer without org read", () => {
     render(page());
     expect(state.list).toHaveBeenCalled();
+    expect(screen.getByText("A populated plugin card")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Sync plugins" }));
     expect(state.publish).toHaveBeenCalled();
     fireEvent.click(screen.getByText("New Plugin"));
@@ -155,7 +200,9 @@ describe("Plugins index authorization", () => {
         },
       }),
     );
-    expect(screen.queryByText("Rename marketplace")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Rename marketplace" }),
+    ).toBeNull();
     expect(state.settings).not.toHaveBeenCalled();
     expect(state.settingsRead).not.toHaveBeenCalled();
   });

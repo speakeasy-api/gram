@@ -1,3 +1,5 @@
+import { Gram } from "@gram/client";
+import { HTTPClient } from "@gram/client/lib/http.js";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -23,6 +25,45 @@ afterEach(() => {
 });
 
 describe("downloadPluginPackage", () => {
+  it.each(["claude", "cursor", "codex", "agent-plugin"] as const)(
+    "sends selected project and session on real SDK %s ZIP requests",
+    async (platform) => {
+      const requests: Request[] = [];
+      const client = new Gram({
+        serverURL: "https://gram.example",
+        httpClient: new HTTPClient({
+          fetcher: async (request) => {
+            requests.push(request as Request);
+            return new Response(new Uint8Array([0x50, 0x4b, 3, 4]), {
+              headers: { "Content-Type": "application/zip" },
+            });
+          },
+        }),
+      });
+      vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:scoped");
+      vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+      const click = vi
+        .spyOn(HTMLAnchorElement.prototype, "click")
+        .mockImplementation(() => {});
+      const { result } = renderHook(() =>
+        usePluginPackageDownload(client, "plugin-id", vi.fn(), {
+          gramProject: "selected-project",
+          gramSession: "selected-session",
+        }),
+      );
+      await act(async () => result.current.download(platform));
+      expect(requests).toHaveLength(1);
+      const request = requests[0]!;
+      expect(request.headers.get("Gram-Project")).toBe("selected-project");
+      expect(request.headers.get("Gram-Session")).toBe("selected-session");
+      const url = new URL(request.url);
+      expect(url.pathname).toBe("/rpc/plugins.downloadPluginPackage");
+      expect(url.searchParams.get("plugin_id")).toBe("plugin-id");
+      expect(url.searchParams.get("platform")).toBe(platform);
+      expect(click).toHaveBeenCalledOnce();
+      expect(toast.error).not.toHaveBeenCalled();
+    },
+  );
   it("requests an Agent Plugin package and revokes its object URL", async () => {
     const download = vi.fn().mockResolvedValue({
       headers: {
@@ -42,6 +83,7 @@ describe("downloadPluginPackage", () => {
       { plugins: { downloadPluginPackage: download } } as never,
       "plugin-id",
       "agent-plugin",
+      {},
     );
 
     expect(download).toHaveBeenCalledWith({
@@ -64,7 +106,7 @@ describe("downloadPluginPackage", () => {
     const onMenuOpenChange = vi.fn<(open: boolean) => void>();
     const client = { plugins: { downloadPluginPackage: download } } as never;
     const { result } = renderHook(() =>
-      usePluginPackageDownload(client, "plugin-id", onMenuOpenChange),
+      usePluginPackageDownload(client, "plugin-id", onMenuOpenChange, {}),
     );
 
     let firstDownload!: Promise<void>;
@@ -106,7 +148,7 @@ describe("downloadPluginPackage", () => {
     const onMenuOpenChange = vi.fn<(open: boolean) => void>();
     const { result, rerender } = renderHook(
       ({ pluginId }) =>
-        usePluginPackageDownload(client, pluginId, onMenuOpenChange),
+        usePluginPackageDownload(client, pluginId, onMenuOpenChange, {}),
       { initialProps: { pluginId: "first-plugin" } },
     );
 

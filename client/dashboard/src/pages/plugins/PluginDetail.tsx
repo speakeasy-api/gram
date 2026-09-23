@@ -242,6 +242,7 @@ function PluginDetailContent({
     client,
     pluginId!,
     setIsDownloadMenuOpen,
+    scope,
   );
 
   const { canReadServers, toolsetsQuery, serversQuery, endpointsQuery } =

@@ -174,7 +174,10 @@ describe("organization plugin sidebar", () => {
           enabled: true,
         },
       );
-      expect(state.publishStatus).toHaveBeenCalled();
+      expect(state.publishStatus).toHaveBeenCalledWith({
+        gramProject: "project-a",
+        gramSession: "session-a",
+      });
       for (const query of [state.members, state.roles, state.audiences]) {
         if (canAdmin) expect(query).toHaveBeenCalled();
         else expect(query).not.toHaveBeenCalled();

@@ -1,3 +1,4 @@
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { CommandGroup, CommandItem } from "@/components/ui/Command";
@@ -529,8 +530,9 @@ function PeopleGroup({ onNavigate }: GroupProps) {
  * too — where the project-scoped resource groups have no project to read.
  */
 export function PeopleResults({ onNavigate }: GroupProps): JSX.Element | null {
+  const organization = useOrganization();
   const { hasAnyScope } = useRBAC();
-  if (!hasAnyScope(["org:read", "org:admin"])) return null;
+  if (!hasAnyScope(["org:read", "org:admin"], organization.id)) return null;
   return (
     <LazyGroup>
       <PeopleGroup onNavigate={onNavigate} />
@@ -542,20 +544,22 @@ export function ResourceResults({
   onNavigate,
   query,
 }: GroupProps & { query: string }): JSX.Element {
+  const organization = useOrganization();
+  const project = useProject();
   const { hasAnyScope, hasScope } = useRBAC();
   // Risk resources are org:admin-gated on their own pages; mirror that here so
   // non-admins never fire the (forbidden) list calls.
   const canWritePlugins = usePluginWriteAccess();
   const canReadPlugins =
-    canWritePlugins || hasAnyScope(["org:read", "org:admin"]);
-  const isAdmin = hasAnyScope(["org:admin"]);
+    canWritePlugins || hasAnyScope(["org:read", "org:admin"], organization.id);
+  const isAdmin = hasAnyScope(["org:admin"], organization.id);
   // Approval requests are an org-admin surface, matching the queue page's
   // own gate.
-  const canReadApprovals = hasScope("org:admin");
+  const canReadApprovals = hasScope("org:admin", organization.id);
   // What listCatalog itself requires, rather than the looser any-of gate the
   // catalog page renders behind: an mcp:write-only reader would pass that one
   // and then have the request refused.
-  const canBrowseCatalog = hasScope("project:read");
+  const canBrowseCatalog = hasScope("project:read", project.id);
   // Detection rules and the catalog are high-cardinality (dozens of built-ins;
   // hundreds of registry entries), so they'd flood the default view and fetch
   // on open. Make them search-only: render (and fetch) the group only once the
