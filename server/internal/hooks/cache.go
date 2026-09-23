@@ -18,9 +18,15 @@ func sessionNativeHooksCacheKey(projectID, sessionID string) string {
 	return fmt.Sprintf("session:native-prompt:v1:%s:%s", projectID, sessionID)
 }
 
-// hookPendingCacheKey returns the Redis key for buffered hooks for a session
-func hookPendingCacheKey(sessionID string) string {
-	return fmt.Sprintf("hook:pending:%s", sessionID)
+// hookPendingCacheKey returns the Redis key for hooks buffered for a session
+// until OTEL attributes it. Hooks that authenticated to a project buffer under
+// that project, so only its own OTEL export flushes them. Unauthenticated
+// hooks (projectID "") have only the session id to go on and buffer unscoped.
+func hookPendingCacheKey(projectID, sessionID string) string {
+	if projectID == "" {
+		return fmt.Sprintf("hook:pending:%s", sessionID)
+	}
+	return fmt.Sprintf("hook:pending:v2:%s:%s", projectID, sessionID)
 }
 
 // sessionMCPListCacheKey returns the Redis key for the parsed `claude mcp list`
@@ -95,6 +101,10 @@ const (
 	// separates cowork from CCD.
 	surfaceClaudeCodeDesktop = "claude-code-desktop"
 )
+
+// sessionMetadataTTL is how long a session's cached identity and attribution
+// survive without being rewritten.
+const sessionMetadataTTL = 24 * time.Hour
 
 // sessionMCPListTTL is how long the parsed MCP list survives without any
 // hook activity for its session id. Each hook received refreshes it.

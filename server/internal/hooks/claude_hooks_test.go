@@ -177,7 +177,7 @@ func TestNormalizeClaudeHookEvent_ResolvesAuthContextActorFromCachedEmail(t *tes
 		UserID:        "",
 		ExternalOrgID: "claude_org",
 		GramOrgID:     authCtx.ActiveOrganizationID,
-		ProjectID:     uuid.NewString(),
+		ProjectID:     authCtx.ProjectID.String(),
 	}, 0))
 
 	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
@@ -706,7 +706,9 @@ func TestMergeClaudeAuthContextMetadata_DoesNotSelectUserID(t *testing.T) {
 	assert.Equal(t, "claude_org", metadata.ExternalOrgID)
 }
 
-func TestClaude_RecordHook_PersistsAuthContextProjectOverCachedMetadata(t *testing.T) {
+// Another project's cached metadata for the same session id is ignored: the
+// hook persists into its authenticated project on its own reported identity.
+func TestClaude_RecordHook_PersistsAuthContextProjectIgnoringOtherProjectMetadata(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -719,11 +721,12 @@ func TestClaude_RecordHook_PersistsAuthContextProjectOverCachedMetadata(t *testi
 	chatID := sessionIDToUUID(sessionID)
 	prompt := "hello from auth context project"
 	cachedProjectID := uuid.NewString()
+	userEmail := localFallbackEmail
 
 	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:     sessionID,
 		ServiceName:   "claude-code",
-		UserEmail:     localFallbackEmail,
+		UserEmail:     "other-project@example.com",
 		UserID:        "",
 		ExternalOrgID: authCtx.ActiveOrganizationID,
 		GramOrgID:     authCtx.ActiveOrganizationID,
@@ -733,6 +736,7 @@ func TestClaude_RecordHook_PersistsAuthContextProjectOverCachedMetadata(t *testi
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "UserPromptSubmit",
 		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
 		Prompt:        &prompt,
 	})
 	require.NoError(t, err)
@@ -769,7 +773,7 @@ func TestClaude_RecordHook_BuffersAuthContextCacheMissWithoutPayloadEmail(t *tes
 	require.NotNil(t, result)
 
 	var buffered []gen.ClaudePayload
-	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(testProjectID(t, ctx), sessionID), 0, -1, &buffered))
 	require.Len(t, buffered, 1)
 	assert.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
 }
@@ -962,7 +966,7 @@ func TestClaude_ContinuesWhenPluginAuthFails(t *testing.T) {
 	// the session metadata. Asserting on the buffer (not just NoError)
 	// is what catches a regression to the early-return shape.
 	var buffered []gen.ClaudePayload
-	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey("", sessionID), 0, -1, &buffered))
 	require.Len(t, buffered, 1, "hook should be buffered when plugin auth fails")
 	require.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
 }

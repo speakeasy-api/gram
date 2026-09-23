@@ -354,8 +354,10 @@ func claudePluginPrompt(sessionID string) *gen.ClaudePayload {
 func requireNothingRecorded(t *testing.T, ctx context.Context, ti *testInstance, sessionID string, projectID uuid.UUID) {
 	t.Helper()
 	var buffered []gen.ClaudePayload
-	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey("", sessionID), 0, -1, &buffered))
 	require.Empty(t, buffered, "a denied agent event is never buffered for OTEL attribution")
+	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(projectID.String(), sessionID), 0, -1, &buffered))
+	require.Empty(t, buffered, "a denied agent event is never buffered under its project either")
 	_, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: sessionIDToUUID(sessionID), ProjectID: projectID})
 	require.Error(t, err, "a denied agent event is never persisted")
 }
@@ -409,7 +411,7 @@ func TestClaude_InvalidCredentialsStillFallBack(t *testing.T) {
 	require.NoError(t, err, "bad or missing credentials keep the unauthenticated fallback")
 
 	var buffered []gen.ClaudePayload
-	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey("", sessionID), 0, -1, &buffered))
 	require.Len(t, buffered, 1)
 }
 

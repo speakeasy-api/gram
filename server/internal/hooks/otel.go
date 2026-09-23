@@ -121,8 +121,9 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 		// with provider=openai entries whose shape — AccountType set, no
 		// account UUID — would otherwise satisfy the company-credential arm
 		// below and stamp Claude rows with Codex attribution.
-		var cached SessionMetadata
-		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil && !agent &&
+		// Another project's entry for this session id is never merged here.
+		cached, cachedErr := s.getSessionMetadata(ctx, session.SessionID)
+		if cachedErr == nil && !agent &&
 			cached.Provider == providerAnthropic && cached.GramOrgID == orgID && cached.ProjectID == projectID &&
 			(cached.UserAccountID != "" || (cached.AccountType != "" && cached.ExternalAccountUUID == "")) &&
 			!sessionEnrichesAttribution(session, cached) {
@@ -192,6 +193,10 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 		)
 
 		_, metadataErr := s.getSessionMetadata(ctx, completeMetadata.SessionID)
+		// Another project already attributed this session id. This batch's own
+		// rows are still stamped, but it must not take over the session's
+		// cached identity or the unauthenticated hooks bound to it.
+		foreign := errors.Is(metadataErr, errSessionMetadataOtherProject)
 
 		// Attribute the account: classify team vs personal, link it to the
 		// owning employee (directly for team accounts, via the device bridge for
@@ -240,19 +245,27 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 		// session independently so a single cache failure does not abort
 		// flushing the remaining sessions in the batch.
 		// Agent sessions never seed the human-keyed session cache.
-		if !linkFailed && !agent {
-			if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
+		if !linkFailed && !agent && !foreign {
+			switch err := s.cacheSessionMetadata(ctx, completeMetadata); {
+			case errors.Is(err, errSessionMetadataOtherProject):
+				foreign = true
+			case err != nil:
 				sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
 					attr.SlogEvent("claude_logs_cache_set_failed"),
 					attr.SlogError(err),
 				)
 			}
 		}
+		if foreign {
+			sessionLogger.WarnContext(ctx, "session id already attributed to another project; not adopting it",
+				attr.SlogEvent("claude_logs_session_owned_by_other_project"),
+			)
+		}
 		// A SessionStart that beat this attribution had no project to cache its
 		// inventory under, so it was held aside. Record it as inventory evidence
 		// now; it never becomes the guard's snapshot, which only a scoped
 		// writer can set.
-		if metadataErr != nil && !agent {
+		if metadataErr != nil && !agent && !foreign {
 			var entries []MCPServerEntry
 			unscopedKey := sessionUnscopedMCPListCacheKey(completeMetadata.SessionID)
 			switch err := s.cache.Get(ctx, unscopedKey, &entries); {
@@ -269,10 +282,11 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 			}
 		}
 
-		// Buffered hooks came from unauthenticated requests; an agent batch must
-		// never adopt them.
+		// Buffered hooks carry no agent identity; an agent batch must never
+		// adopt them. Unauthenticated ones belong to whichever project owns the
+		// session id, so a batch that does not own it leaves them alone.
 		if !agent {
-			s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
+			s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata, !foreign)
 		}
 
 		sessionLogger.InfoContext(ctx, "Stored session metadata",

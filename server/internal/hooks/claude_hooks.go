@@ -923,13 +923,47 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, m
 	}
 }
 
+// errSessionMetadataOtherProject reports cached session metadata that another
+// organization or project seeded under the same client-reported session id.
+var errSessionMetadataOtherProject = errors.New("session metadata belongs to another project")
+
+// getSessionMetadata returns the cached metadata for a session. An
+// authenticated caller only sees metadata its own org and project seeded, so a
+// colliding or spoofed session id never lends it another tenant's identity or
+// attribution. An unauthenticated Claude hook has nothing else to go on: its
+// session id is what binds it to the OTEL export that attributes it.
 func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (SessionMetadata, error) {
 	var metadata SessionMetadata
 	err := s.cache.Get(ctx, sessionCacheKey(sessionID), &metadata)
 	if err != nil {
 		return SessionMetadata{}, fmt.Errorf("get session metadata: %w", err)
 	}
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil &&
+		(metadata.GramOrgID != authCtx.ActiveOrganizationID || metadata.ProjectID != authCtx.ProjectID.String()) {
+		return SessionMetadata{}, fmt.Errorf("get session metadata: %w", errSessionMetadataOtherProject)
+	}
 	return metadata, nil
+}
+
+// cacheSessionMetadata stores metadata as its session's cached identity unless
+// another org or project already holds that session id. Unauthenticated Claude
+// hooks resolve their project from this entry, so letting a later writer
+// replace it would let any tenant who learns a session id redirect that
+// session's hooks into its own project.
+func (s *Service) cacheSessionMetadata(ctx context.Context, metadata SessionMetadata) error {
+	key := sessionCacheKey(metadata.SessionID)
+	var existing SessionMetadata
+	switch err := s.cache.Get(ctx, key, &existing); {
+	case err == nil && existing.ProjectID != "" &&
+		(existing.GramOrgID != metadata.GramOrgID || existing.ProjectID != metadata.ProjectID):
+		return fmt.Errorf("cache session metadata: %w", errSessionMetadataOtherProject)
+	case err != nil && !errors.Is(err, redisCache.ErrCacheMiss):
+		return fmt.Errorf("read existing session metadata: %w", err)
+	}
+	if err := s.cache.Set(ctx, key, metadata, sessionMetadataTTL); err != nil {
+		return fmt.Errorf("cache session metadata: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToolUse) (*gen.ClaudeHookResult, error) {

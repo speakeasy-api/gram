@@ -635,7 +635,7 @@ func TestFlushPendingHooks_DirectCall(t *testing.T) {
 	}
 
 	// Call flushPendingHooks directly
-	ti.service.flushPendingHooks(ctx, sessionID, &metadata)
+	ti.service.flushPendingHooks(ctx, sessionID, &metadata, true)
 
 	// Verify hooks were flushed (Redis list should be deleted)
 	exists, err := ti.redisClient.Exists(ctx, redisKey).Result()
@@ -662,7 +662,7 @@ func TestFlushPendingHooks_EmptyList(t *testing.T) {
 	}
 
 	// Call flushPendingHooks with no buffered hooks (should not error)
-	ti.service.flushPendingHooks(ctx, sessionID, &metadata)
+	ti.service.flushPendingHooks(ctx, sessionID, &metadata, true)
 
 	// Verify no Redis key was created
 	redisKey := "hook:pending:" + sessionID
