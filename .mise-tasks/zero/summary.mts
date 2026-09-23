@@ -179,12 +179,12 @@ async function pokeHTTPService(
   }
 }
 
-const temporalWebPort = process.env["TEMPORAL_WEB_PORT"] ?? "8233";
+const temporalWebPort = process.env["TEMPORAL_WEB_PORT"] ?? "18233";
 await pokeDockerService(
   "gram-temporal",
   "Temporal",
   `http://localhost:${temporalWebPort}`,
-  true,
+  false,
 );
 
 const grafanaPort = process.env["GRAFANA_PORT"] ?? "13000";

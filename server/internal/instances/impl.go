@@ -70,7 +70,7 @@ type Service struct {
 	environmentsRepo  *environments_repo.Queries
 	env               *environments.EnvironmentEntries
 	toolProxy         *gateway.ToolProxy
-	scanEvaluator     mcpriskscan.Evaluator
+	scanEvaluator     *mcpriskscan.Evaluator
 	tracking          billing.Tracker
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 	featuresClient    *productfeatures.Client
@@ -380,18 +380,19 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	if plan.Kind == gateway.ToolKindExternalMCP {
 		scanToolName = descriptor.URN.Name
 	}
-	s.scanEvaluator.Scan(ctx, bytes.NewReader(requestBodyBytes), mcpriskscan.Event{
+	s.scanEvaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:        mcpriskscan.SurfaceInstances,
 		Method:         mcpriskscan.MethodToolsCall,
 		OrganizationID: descriptor.OrganizationID,
 		ProjectID:      descriptor.ProjectID,
 		ServerID:       "",
+		MetaServerID:   "",
 		ToolsetID:      scanToolsetID,
 		ToolName:       scanToolName,
 		ResourceURI:    "",
 		PromptName:     "",
-		Phase:          mcpriskscan.PhaseBeforeExecution,
-	})
+		ChatID:         chatID,
+	}, mcpriskscan.BorrowPayload(requestBodyBytes)))
 	err = s.toolProxy.Do(ctx, interceptor, bytes.NewReader(requestBodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,

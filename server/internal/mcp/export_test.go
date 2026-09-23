@@ -88,6 +88,6 @@ func (s *Service) SetRemoteSessionRecheckPacing(rate ratelimit.Rate, batch int32
 }
 
 // SetRiskScanEvaluator replaces observation only in the test binary.
-func (s *Service) SetRiskScanEvaluator(evaluator mcpriskscan.Evaluator) {
+func (s *Service) SetRiskScanEvaluator(evaluator *mcpriskscan.Evaluator) {
 	s.scanEvaluator = evaluator
 }
