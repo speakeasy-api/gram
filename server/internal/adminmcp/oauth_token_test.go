@@ -1,0 +1,154 @@
+package adminmcp
+
+import (
+	"context"
+	"encoding/json"
+	"maps"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+)
+
+type recordingStaffGrantStore struct {
+	connection staffTokenConnection
+	issued     staffIssuedSession
+	validate   int
+	exchange   int
+	prepare    int
+	rotate     int
+	status     error
+}
+
+func (s *recordingStaffGrantStore) ValidateGrant(_ context.Context, _, _, _, _ string, _ time.Time) (staffTokenConnection, error) {
+	s.validate++
+	return s.connection, s.status
+}
+func (s *recordingStaffGrantStore) ExchangeGrant(_ context.Context, _, _, _, _ string, session staffIssuedSession, _ time.Time) error {
+	s.exchange++
+	s.issued = session
+	return s.status
+}
+func (s *recordingStaffGrantStore) PrepareRefresh(_ context.Context, _, _ string, _ time.Time) (staffTokenConnection, error) {
+	s.prepare++
+	return s.connection, s.status
+}
+func (s *recordingStaffGrantStore) RotateRefresh(_ context.Context, _, _ string, _ staffTokenConnection, session staffIssuedSession, _ time.Time) error {
+	s.rotate++
+	s.issued = session
+	return s.status
+}
+
+func staffTokensFixture(t *testing.T) (*StaffOAuthTokens, *recordingStaffGrantStore, *fakeAdminVerifier) {
+	t.Helper()
+	cipher, err := encryption.NewWithBytes(make([]byte, 32))
+	require.NoError(t, err)
+	enc, err := cipher.Encrypt([]byte("linked-browser-session"))
+	require.NoError(t, err)
+	client := &recordingStaffClientStore{client: staffOAuthClient{ID: staffClient, Name: "Test editor", SecretHash: "", RedirectURIs: []string{"http://localhost:5555/callback"}, SecretExpiresAt: nil}}
+	store := &recordingStaffGrantStore{connection: staffTokenConnection{ID: uuid.New(), ClientRowID: uuid.New(), Subject: "user:" + staffSubject, SessionEnc: enc, ResourceURI: staffAudience, Scopes: []string{"admin:read"}, Generation: uuid.New(), AuthorizedTil: time.Now().Add(time.Hour)}}
+	verifier := &fakeAdminVerifier{result: &contextvalues.AdminAuthContext{SessionID: "linked-browser-session", OIDCSubject: staffSubject, Email: "staff@example.test"}}
+	tokens := NewStaffOAuthTokens(client, store, verifier, cipher, sessiontokens.NewSigner("staff-test-signing-key"), staffIssuer, staffAudience)
+	return tokens, store, verifier
+}
+
+func staffTokenRequest(grantType string, extras url.Values) *http.Request {
+	form := url.Values{"grant_type": {grantType}, "client_id": {staffClient}, "resource": {staffAudience}}
+	maps.Copy(form, extras)
+	request := httptest.NewRequest(http.MethodPost, Path+"/token", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return request
+}
+
+func TestStaffOAuthCodeExchangeRequiresLiveStaff(t *testing.T) {
+	t.Parallel()
+	tokens, store, verifier := staffTokensFixture(t)
+	request := staffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "redirect_uri": {"http://localhost:5555/callback"}, "code_verifier": {strings.Repeat("x", 43)}})
+	response := httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Equal(t, "Bearer", body["token_type"])
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	refresh, ok := body["refresh_token"].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, refresh)
+	require.Equal(t, staffTokenHash(refresh), store.issued.RefreshHash)
+	require.NotEqual(t, store.issued.RefreshHash, refresh)
+	require.Equal(t, "linked-browser-session", verifier.key)
+	require.Equal(t, 1, store.validate)
+	require.Equal(t, 1, store.exchange)
+	access, ok := body["access_token"].(string)
+	require.True(t, ok)
+	claims, err := tokens.signer.ValidateExactAudience(access, staffAudience)
+	require.NoError(t, err)
+	require.Equal(t, staffIssuer, claims.Issuer)
+	require.Equal(t, store.issued.JTI, claims.ID)
+	require.Equal(t, staffClient, claims.ClientID)
+}
+
+func TestStaffOAuthRefreshAndInvalidGrant(t *testing.T) {
+	t.Parallel()
+	tokens, store, verifier := staffTokensFixture(t)
+	response := httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, staffTokenRequest("refresh_token", url.Values{"refresh_token": {"old-refresh-token"}}))
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, 1, store.prepare)
+	require.Equal(t, 1, store.rotate)
+	require.Equal(t, "linked-browser-session", verifier.key)
+
+	store.status = errStaffRefreshReuse
+	response = httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, staffTokenRequest("refresh_token", url.Values{"refresh_token": {"used-token"}}))
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Contains(t, response.Body.String(), `"error":"invalid_grant"`)
+	require.NotContains(t, response.Body.String(), "used-token")
+}
+
+func TestStaffOAuthTokenRetainsGrantOnVerifierOutage(t *testing.T) {
+	t.Parallel()
+	tokens, store, verifier := staffTokensFixture(t)
+	verifier.err = oops.C(oops.CodeUnexpected)
+	request := staffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "redirect_uri": {"http://localhost:5555/callback"}, "code_verifier": {strings.Repeat("x", 43)}})
+	response := httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	require.Contains(t, response.Body.String(), `"error":"temporarily_unavailable"`)
+	require.Zero(t, store.exchange)
+	verifier.err = oops.C(oops.CodeUnauthorized)
+	response = httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Contains(t, response.Body.String(), `"error":"invalid_grant"`)
+	require.Zero(t, store.exchange)
+}
+
+func TestStaffOAuthTokenRejectsCookiesAndForeignResource(t *testing.T) {
+	t.Parallel()
+	tokens, store, verifier := staffTokensFixture(t)
+	request := staffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "redirect_uri": {"http://localhost:5555/callback"}, "code_verifier": {strings.Repeat("x", 43)}})
+	request.AddCookie(&http.Cookie{Name: "gram_admin", Value: "linked-browser-session"})
+	verifier.result.SessionID = "not-the-linked-session"
+	response := httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Equal(t, 0, store.exchange)
+
+	request = staffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "redirect_uri": {"http://localhost:5555/callback"}, "code_verifier": {strings.Repeat("x", 43)}, "resource": {staffAudience, "https://other.example.test/admin-mcp"}})
+	response = httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Equal(t, 1, store.validate)
+	require.Contains(t, response.Body.String(), `"error":"invalid_target"`)
+}
