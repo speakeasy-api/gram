@@ -25492,7 +25492,7 @@ func slackDirectoryConnectionsSetMappingUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack-directory-connections set-mapping --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mapping_revision\": 1,\n      \"observation_token\": \"abc123\",\n      \"user_id\": \"aa\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack-directory-connections set-mapping --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mapping_revision\": 1,\n      \"observation_token\": \"aa\",\n      \"user_id\": \"aa\"\n   }' --session-token \"abc123\"")
 }
 
 func slackDirectoryConnectionsBeginUsage() {

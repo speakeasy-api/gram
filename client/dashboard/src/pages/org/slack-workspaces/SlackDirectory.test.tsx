@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
   pending: false,
   canEdit: true,
+  scope: vi.fn(),
   error: null as Error | null,
   rows: [] as unknown[],
 }));
@@ -31,7 +32,12 @@ vi.mock("./SlackMappingDialog", () => ({
   ),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => mocks.canEdit }),
+  useRBAC: () => ({
+    hasScope: (scope: string) => {
+      mocks.scope(scope);
+      return mocks.canEdit;
+    },
+  }),
 }));
 vi.mock("@gram/client/react-query/slackDirectoryMembers.js", () => ({
   invalidateAllSlackDirectoryMembers: vi.fn(),
@@ -304,6 +310,7 @@ it("disables mapping changes for employees", () => {
   mocks.canEdit = false;
   mocks.rows = [unmappedMember];
   show(<SlackDirectory connections={[connection]} />);
+  expect(mocks.scope).toHaveBeenCalledWith("org:admin");
   expect(
     screen
       .getByRole("button", { name: /Change mapping for Synthetic Account/ })

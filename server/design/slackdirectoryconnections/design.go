@@ -160,7 +160,7 @@ var _ = Service("slackDirectoryConnections", func() {
 			Meta("openapi:typename", "SetSlackIdentityMappingRequestBody")
 			Attribute("id", String, "Membership to change.", func() { Format(FormatUUID) })
 			Attribute("mapping_revision", Int64, "Mapping revision shown in the review dialog.", func() { Minimum(0) })
-			Attribute("observation_token", String, "Directory evidence shown in the review dialog.")
+			Attribute("observation_token", String, "Directory evidence shown in the review dialog.", func() { MinLength(1) })
 			Attribute("user_id", String, "Active same-organization person to confirm. Omit to unmap.", func() { MinLength(1) })
 			Required("id", "mapping_revision", "observation_token")
 		})

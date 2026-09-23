@@ -10,7 +10,7 @@ Credentials are encrypted together in a versioned bundle. Access tokens, refresh
 
 OAuth state lasts ten minutes and is bound to the organization, user, and session. Completion consumes it atomically. Connecting a listed workspace again, and disconnection, preserve the durable workspace row and replace its generation. Disconnect also deletes the workspace's synced members and resets its sync state, so connecting it again starts from a fresh sync. Each begin captures the visible generations so an authorization started before another administrator's disconnect cannot restore access. Concurrent first connections to the same workspace require the later completion to start again. Mutation and audit commit together.
 
-Connected means authorization succeeded and its stored credentials have not expired. It does not claim a directory was synced or that invocations are protected. Complete syncs update observed memberships. Administrators can explicitly associate each retained membership with an existing active person in the same organization. External Slack Connect users are outside this version's scope.
+Connected means authorization succeeded and its stored credentials have not expired. It does not claim a directory was synced or that invocations are protected. Complete syncs update observed memberships. Administrators can explicitly associate retained Slack members, excluding bots and apps, with an existing active person in the same organization. External Slack Connect users are outside this version's scope.
 
 ## Platform MCP assessment
 

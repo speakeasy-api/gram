@@ -25,6 +25,16 @@ import (
 func mappingRequest(m *gen.SlackDirectoryMember, person *string) *gen.SetMappingPayload {
 	return &gen.SetMappingPayload{SessionToken: nil, ID: m.ID, MappingRevision: m.MappingRevision, ObservationToken: m.ObservationToken, UserID: person}
 }
+func awaitMappingResult(t *testing.T, done <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for Slack mapping operation")
+		return nil
+	}
+}
 func readMapping(t *testing.T, ctx context.Context, f *fixture, id string) *gen.SlackDirectoryMember {
 	t.Helper()
 	m, err := f.service.GetMember(ctx, &gen.GetMemberPayload{SessionToken: nil, ID: id})
@@ -238,7 +248,7 @@ func TestMappingConfirmedDuringFetchIsReviewed(t *testing.T) {
 	confirmed, err := f.service.SetMapping(ctx, mappingRequest(m, &f.auth.UserID))
 	require.NoError(t, err)
 	close(release)
-	require.NoError(t, <-done)
+	require.NoError(t, awaitMappingResult(t, done))
 	after := readMapping(t, ctx, f, m.ID)
 	require.Equal(t, confirmed.Mapping.ID, after.Mapping.ID)
 	require.Equal(t, confirmed.MappingRevision, after.MappingRevision)
@@ -271,7 +281,7 @@ func TestMappingPublicationSeesCommittedConfirmation(t *testing.T) {
 	require.NoError(t, q.ConfirmSlackIdentityMapping(ctx, repo.ConfirmSlackIdentityMappingParams{OrganizationID: f.auth.ActiveOrganizationID, SlackTeamID: m.WorkspaceID, SlackUserID: m.SlackUserID, UserID: f.auth.UserID}))
 	require.NoError(t, q.AdvanceSlackMappingRevision(ctx, repo.AdvanceSlackMappingRevisionParams{OrganizationID: f.auth.ActiveOrganizationID, ID: uuid.MustParse(m.ID)}))
 	require.NoError(t, tx.Commit(ctx))
-	require.NoError(t, <-done)
+	require.NoError(t, awaitMappingResult(t, done))
 	after := readMapping(t, ctx, f, m.ID)
 	require.Equal(t, int64(1), after.MappingRevision)
 	require.Equal(t, f.auth.UserID, after.Mapping.UserID)
@@ -295,7 +305,7 @@ func TestMappingPublicationSeesCommittedUnmap(t *testing.T) {
 	require.NoError(t, q.RevokeSlackIdentityMapping(ctx, repo.RevokeSlackIdentityMappingParams{OrganizationID: f.auth.ActiveOrganizationID, SlackTeamID: m.WorkspaceID, SlackUserID: m.SlackUserID}))
 	require.NoError(t, q.AdvanceSlackMappingRevision(ctx, repo.AdvanceSlackMappingRevisionParams{OrganizationID: f.auth.ActiveOrganizationID, ID: uuid.MustParse(m.ID)}))
 	require.NoError(t, tx.Commit(ctx))
-	require.NoError(t, <-done)
+	require.NoError(t, awaitMappingResult(t, done))
 	after := readMapping(t, ctx, f, m.ID)
 	require.Nil(t, after.Mapping)
 	require.Nil(t, after.MappingConflictReason)
@@ -313,7 +323,7 @@ func TestMappingWaitsForTargetDeactivation(t *testing.T) {
 	go func() { _, err := f.service.SetMapping(ctx, mappingRequest(m, &person)); done <- err }()
 	testenv.WaitForBlockedBackend(t, ctx, f.db)
 	require.NoError(t, tx.Commit(ctx))
-	require.ErrorContains(t, <-done, "Choose an active person")
+	require.ErrorContains(t, awaitMappingResult(t, done), "Choose an active person")
 	require.Nil(t, readMapping(t, ctx, f, m.ID).Mapping)
 }
 

@@ -246,7 +246,13 @@ function MappingForm({
       </div>
       <ApiErrorAlert error={mutation.error} />
       {mutation.isError && (
-        <Button variant="secondary" onClick={onReload}>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            mutation.reset();
+            onReload();
+          }}
+        >
           <Button.Text>Reload member and review</Button.Text>
         </Button>
       )}

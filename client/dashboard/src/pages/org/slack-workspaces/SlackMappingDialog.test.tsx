@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
   close: vi.fn(),
   refetch: vi.fn(),
+  reset: vi.fn(),
   error: null as Error | null,
 }));
 vi.mock("@gram/client/react-query/slackDirectoryMember.js", () => ({
@@ -43,6 +44,7 @@ vi.mock("@gram/client/react-query/setSlackIdentityMapping.js", () => ({
     isPending: false,
     isError: Boolean(mocks.error),
     error: mocks.error,
+    reset: mocks.reset,
   }),
 }));
 vi.mock("@/components/ui/Combobox", () => ({
@@ -105,6 +107,9 @@ beforeEach(() => {
   ];
   mocks.mutate.mockResolvedValue(mocks.member);
   mocks.error = null;
+  mocks.reset.mockImplementation(() => {
+    mocks.error = null;
+  });
 });
 afterEach(() => {
   cleanup();
@@ -200,7 +205,7 @@ it("shows sticky finding alongside current recovered directory state", () => {
   expect(screen.getByText(/Directory state: Active/)).toBeTruthy();
   expect(screen.getByText("Slack account was deactivated")).toBeTruthy();
 });
-it("allows only removal for a mapped bot", () => {
+it("allows only removal for a mapped bot", async () => {
   mapped();
   mocks.member.memberType = "bot";
   show();
@@ -209,11 +214,21 @@ it("allows only removal for a mapped bot", () => {
   expect(
     screen.getByRole("button", { name: "Confirm" }).hasAttribute("disabled"),
   ).toBe(true);
+  fireEvent.change(screen.getByLabelText("Personnel"), {
+    target: { value: "__unmapped" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+  await waitFor(() => expect(mocks.mutate).toHaveBeenCalled());
+  expect(
+    mocks.mutate.mock.calls[0]?.[0].request.setSlackIdentityMappingRequestBody
+      .userId,
+  ).toBeUndefined();
 });
 it("requires reload and review after a rejected stale dialog", () => {
   mapped();
   mocks.error = new Error("This Slack member changed. Reload the member.");
   show();
+  expect(screen.getByText(/This Slack member changed/)).toBeTruthy();
   expect(
     screen.getByRole("button", { name: "Confirm" }).hasAttribute("disabled"),
   ).toBe(true);
@@ -221,6 +236,13 @@ it("requires reload and review after a rejected stale dialog", () => {
     screen.getByRole("button", { name: "Reload member and review" }),
   );
   expect(mocks.refetch).toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("Personnel"), {
+    target: { value: "user_synthetic_2" },
+  });
+  expect(screen.queryByText(/This Slack member changed/)).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "Confirm" }).hasAttribute("disabled"),
+  ).toBe(false);
 });
 
 it("identifies an inactive mapped person separately from Slack state", () => {

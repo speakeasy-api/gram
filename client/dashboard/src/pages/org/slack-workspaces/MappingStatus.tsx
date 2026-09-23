@@ -1,5 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
-import { getIdentityTint } from "@/components/gradient-colors";
+import { useIdentityTint } from "@/components/gradient-colors";
 import { Badge } from "@/components/ui/Badge";
 import { Text } from "@/components/ui/Text";
 import type { SlackDirectoryMember } from "@gram/client/models/components/slackdirectorymember.js";
@@ -51,6 +51,7 @@ export function PersonnelAvatar({
   photoUrl?: string;
 }): JSX.Element {
   const label = name || email;
+  const tint = useIdentityTint(label);
   const initials = label
     .trim()
     .split(/\s+/)
@@ -61,7 +62,7 @@ export function PersonnelAvatar({
   return (
     <Avatar className="size-6">
       {photoUrl && <AvatarImage src={photoUrl} alt="" />}
-      <AvatarFallback className="text-xs" style={getIdentityTint(label)}>
+      <AvatarFallback className="text-xs" style={tint}>
         {initials || "?"}
       </AvatarFallback>
     </Avatar>

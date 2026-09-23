@@ -3122,6 +3122,11 @@ func ValidateSetMappingRequestBody(body *SetMappingRequestBody) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.mapping_revision", *body.MappingRevision, 0, true))
 		}
 	}
+	if body.ObservationToken != nil {
+		if utf8.RuneCountInString(*body.ObservationToken) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.observation_token", *body.ObservationToken, utf8.RuneCountInString(*body.ObservationToken), 1, true))
+		}
+	}
 	if body.UserID != nil {
 		if utf8.RuneCountInString(*body.UserID) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_id", *body.UserID, utf8.RuneCountInString(*body.UserID), 1, true))

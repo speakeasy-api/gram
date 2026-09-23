@@ -101216,6 +101216,7 @@ components:
                 observation_token:
                     type: string
                     description: Directory evidence shown in the review dialog.
+                    minLength: 1
                 user_id:
                     type: string
                     description: Active same-organization person to confirm. Omit to unmap.

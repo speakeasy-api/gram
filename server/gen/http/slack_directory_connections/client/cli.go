@@ -181,11 +181,14 @@ func BuildSetMappingPayload(slackDirectoryConnectionsSetMappingBody string, slac
 	{
 		err = json.Unmarshal([]byte(slackDirectoryConnectionsSetMappingBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mapping_revision\": 1,\n      \"observation_token\": \"abc123\",\n      \"user_id\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mapping_revision\": 1,\n      \"observation_token\": \"aa\",\n      \"user_id\": \"aa\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.MappingRevision < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.mapping_revision", body.MappingRevision, 0, true))
+		}
+		if utf8.RuneCountInString(body.ObservationToken) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.observation_token", body.ObservationToken, utf8.RuneCountInString(body.ObservationToken), 1, true))
 		}
 		if body.UserID != nil {
 			if utf8.RuneCountInString(*body.UserID) < 1 {
