@@ -38,6 +38,7 @@ vi.mock("@/components/require-scope", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: vi.fn(),
+  useProjectSlugForRequests: () => "test-project",
 }));
 
 vi.mock("@/routes", () => ({
