@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
@@ -74,6 +75,7 @@ type mcpServiceDependencies struct {
 	PlatformToolsets       map[string]platformtools.Toolset
 	Identity               mcp.IdentityResolver
 	Challenges             *remotesessions.ChallengeManager
+	CallerAssertions       *mcpauthz.Issuer
 }
 
 func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, error) {
@@ -83,7 +85,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 		return nil, fmt.Errorf("initialize mcp tool-execution checkpoint: %w", err)
 	}
 	proxy := remotemcp.NewProxyManager(d.Logger, d.Tracer, d.Meter, d.DB, d.Guardian, d.Authz, d.Posthog, d.Telemetry, d.Billing, d.BillingTracker,
-		mcpservers.NewToolDispositionCache(d.Logger, d.DB, cacheImpl), platformmcp.NewSelectedUseRecorder(d.DB), toolfilter.NewSessionToolWitnessStore(d.Logger, cacheImpl), checkpoint, d.MCPRisk)
+		mcpservers.NewToolDispositionCache(d.Logger, d.DB, cacheImpl), platformmcp.NewSelectedUseRecorder(d.DB), toolfilter.NewSessionToolWitnessStore(d.Logger, cacheImpl), checkpoint, d.MCPRisk, d.CallerAssertions)
 	cidrs := c.StringSlice("tunnel-gateway-cidr-blocks")
 	for _, cidr := range cidrs {
 		if _, _, err := net.ParseCIDR(cidr); err != nil {

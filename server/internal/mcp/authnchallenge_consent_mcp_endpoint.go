@@ -65,6 +65,7 @@ const consentUpstreamTimeout = 20 * time.Second
 // families. Extend deliberately; every addition widens what a pre-mint
 // credential can reach.
 var consentAllowedMethods = map[string]bool{
+	"server/discover":           true,
 	"initialize":                true,
 	"notifications/initialized": true,
 	"ping":                      true,
@@ -360,6 +361,7 @@ func (s *Service) serveConsentProxiedMCP(
 			return oops.E(oops.CodeUnauthorized, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
 		}
 	}
+	ctx = s.stampConsentDiscovery(ctx, challengeState)
 	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, serverRow)
 	if err != nil {
 		return fmt.Errorf("authorize consent transport access: %w", err)

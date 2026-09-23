@@ -33,7 +33,7 @@ func TestNoop_DoesNotPromoteCredentialOwnerToPrincipal(t *testing.T) {
 		Method: mcpriskscan.MethodToolsCall,
 	}
 	evaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, event, mcpriskscan.BorrowPayload(nil)))
-	apiKeyCtx := mcpidentity.NewValidatorBoundary().StampAPIKey(ctx)
+	apiKeyCtx := mcpidentity.NewValidatorBoundary().StampAPIKey(ctx, "key_test")
 	evaluator.Scan(apiKeyCtx, mcpriskscan.NewRequest(apiKeyCtx, event, mcpriskscan.BorrowPayload(nil)))
 	assistantCtx := mcpidentity.NewValidatorBoundary().StampAssistant(ctx)
 	evaluator.Scan(assistantCtx, mcpriskscan.NewRequest(assistantCtx, event, mcpriskscan.BorrowPayload(nil)))
@@ -112,7 +112,7 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 				ServerID: "server-" + suffix, ToolsetID: "toolset-" + suffix,
 				ToolName: "tool-" + suffix, ResourceURI: "resource://" + suffix, PromptName: "prompt-" + suffix,
 			}, mcpriskscan.BorrowPayload([]byte(suffix))))
-			ctx = mcpidentity.NewValidatorBoundary().StampAPIKey(ctx)
+			ctx = mcpidentity.NewValidatorBoundary().StampAPIKey(ctx, "key_test")
 		}
 	}
 
@@ -183,7 +183,7 @@ func TestEvaluator_IgnoresNonOwnerSurface(t *testing.T) {
 
 func TestNewResponse_ReusesExecutionAndTrustedPrincipal(t *testing.T) {
 	t.Parallel()
-	ctx := mcpidentity.NewValidatorBoundary().StampAPIKey(t.Context())
+	ctx := mcpidentity.NewValidatorBoundary().StampAPIKey(t.Context(), "key_test")
 	request := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface: mcpriskscan.SurfaceRemoteMCP,
 		Method:  mcpriskscan.MethodToolsCall,

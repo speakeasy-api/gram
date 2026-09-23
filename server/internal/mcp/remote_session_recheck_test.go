@@ -5,6 +5,8 @@ package mcp_test
 import (
 	"context"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"net/http/httptest"
 	"sync"
 	"testing"
@@ -394,10 +396,14 @@ func createPrivateTunneledServer(t *testing.T, ctx context.Context, ti *testInst
 }
 
 // seedTunneledRecheckFixture: a private tunneled endpoint with a keepalive-shaped grant keyed by the tunnel's identifier.
-func seedTunneledRecheckFixture(t *testing.T, prefix, identifier string) (context.Context, validationFixture, uuid.UUID) {
+func seedTunneledRecheckFixture(t *testing.T, prefix, identifier string, callerIssuers ...*mcpauthz.Issuer) (context.Context, validationFixture, uuid.UUID) {
 	t.Helper()
 	reader, provider := newValidationMeterProvider()
-	ctx, ti := newTestMCPServiceWithMetaRuntime(t, provider, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationProbeTimeout, AutoVerifyWait: 0, RecheckInterval: recheckTestInterval})
+	var callerIssuer *mcpauthz.Issuer
+	if len(callerIssuers) > 0 {
+		callerIssuer = callerIssuers[0]
+	}
+	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), provider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{ValidationTimeout: validationProbeTimeout, RecheckInterval: recheckTestInterval}, testenv.NewTracerProvider(t), nil, callerIssuer)
 	projectID, orgID := consentTestTenant(t, ctx)
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	serverID, tunnelID := createPrivateTunneledServer(t, ctx, ti, projectID, shared, prefix+"-server", identifier)

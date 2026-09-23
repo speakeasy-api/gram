@@ -116,7 +116,7 @@ func (a *AuthenticatedUserPrincipalAdapter) DeriveCandidates(ctx context.Context
 			return killswitches.PrincipalCandidateResult{}, fmt.Errorf("build principal candidate: %w", err)
 		}
 		return result, nil
-	case mcpidentity.KindAnonymous, mcpidentity.KindAPIKey, mcpidentity.KindAssistant, mcpidentity.KindAgent, mcpidentity.KindChatSession, mcpidentity.KindWorkload:
+	case mcpidentity.KindConsentDiscovery, mcpidentity.KindAnonymous, mcpidentity.KindAPIKey, mcpidentity.KindAssistant, mcpidentity.KindAgent, mcpidentity.KindChatSession, mcpidentity.KindWorkload:
 		return killswitches.UnsupportedPrincipalCandidateResult(), nil
 	default:
 		return killswitches.PrincipalCandidateResult{}, fmt.Errorf("unknown identity provenance kind %q", identity.Kind())

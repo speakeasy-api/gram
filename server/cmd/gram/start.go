@@ -96,6 +96,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -441,6 +442,8 @@ func mcpRuntimeFlags() []cli.Flag {
 			Required: true,
 			EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
 		},
+		&cli.StringFlag{Name: "authz-private-key", Usage: "RSA private PEM for private-tunnel caller assertions", EnvVars: []string{"GRAM_AUTHZ_PRIVATE_KEY"}},
+		&cli.StringFlag{Name: "authz-public-keys", Usage: "Public RSA PEM bundle for caller assertion verification and rotation", EnvVars: []string{"GRAM_AUTHZ_PUBLIC_KEYS"}},
 		&cli.StringFlag{
 			Name:     usersessions.JWTSigningKeyFlag,
 			Usage:    "Key for JWT signing",
@@ -848,6 +851,11 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("invalid server url: %w", err)
 			}
 
+			callerAssertions, err := mcpauthz.New(c.String("authz-private-key"), c.String("authz-public-keys"), serverURL.String(), c.String("environment") == "local")
+			if err != nil {
+				return fmt.Errorf("configure caller assertions: %w", err)
+			}
+
 			mcpAuthenticationHost, err := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, c.String("environment"))
 			if err != nil {
 				return fmt.Errorf("invalid authentication host url: %w", err)
@@ -1159,7 +1167,8 @@ func newStartCommand() *cli.Command {
 				mcpriskscan.DefaultPolicyConfig,
 			)
 			mcpService, err := newMCPService(c, mcpServiceDependencies{
-				Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
+				CallerAssertions: callerAssertions,
+				Logger:           logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
 				Sessions: sessionManager, ChatSessions: chatSessionsManager, Environment: env,
 				Posthog: posthogClient, Features: featureFlags, ServerURL: serverURL, SiteURL: siteURL,
 				Encryption: encryptionClient, Guardian: guardianPolicy, Functions: functionsOrchestrator,
@@ -1311,6 +1320,7 @@ func newStartCommand() *cli.Command {
 			// Stamp the serving-policy contract and strip private-ingress authority
 			// at the outermost public-listener boundary, before short-circuit
 			// handlers, tracing, or logging.
+			mux.Use(callerAssertions.Middleware)
 			mux.Use(middleware.NetworkServingPolicyVersion)
 			mux.Use(middleware.StripPrivateIngressHeaders)
 			mux.Use(func(h http.Handler) http.Handler {
