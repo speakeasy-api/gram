@@ -1,3 +1,4 @@
+import { SurfaceOnboardingGuidance } from "@/components/onboarding/surface-onboarding-guidance";
 import { formatCost } from "@/lib/money";
 import { Page } from "@/components/page-layout";
 import { telemetryListAttributeKeys } from "@gram/client/funcs/telemetryListAttributeKeys";
@@ -1357,6 +1358,10 @@ export function CostsExplorer(): JSX.Element {
         subtitle={assistantSubtitle}
         contextInfo={assistantContext}
         suggestions={assistantSuggestions}
+      />
+      <SurfaceOnboardingGuidance
+        useCase="cost-tracking"
+        className="mx-8 mt-8 shrink-0"
       />
       <EntityProfile
         entity={currentEntity}

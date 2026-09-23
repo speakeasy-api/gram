@@ -1,3 +1,4 @@
+import { SurfaceOnboardingGuidance } from "@/components/onboarding/surface-onboarding-guidance";
 import {
   StatTile,
   StatTileGroup,
@@ -129,6 +130,7 @@ function NoPoliciesEmptyState() {
   const routes = useRoutes();
   return (
     <RiskOverviewShell>
+      <SurfaceOnboardingGuidance useCase="security" className="mb-6" />
       <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
         <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
           <Shield className="text-muted-foreground size-6" />
