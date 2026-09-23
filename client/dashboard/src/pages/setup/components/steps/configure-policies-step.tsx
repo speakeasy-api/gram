@@ -568,11 +568,6 @@ export function ConfigurePoliciesStep({
     : false;
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <ShieldCheck className="text-foreground h-6 w-6" />
-        </div>
-      }
       title="Configure policies"
       description="Pick what Speakeasy should flag or block in agent traffic. You can refine actions, message scopes, and individual rules any time in the Policy Center."
       onContinue={onComplete}

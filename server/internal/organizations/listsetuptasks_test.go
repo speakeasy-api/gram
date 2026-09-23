@@ -1,9 +1,11 @@
 package organizations_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/mock"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -12,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,22 +22,29 @@ func TestService_ListSetupTasksProjectsCatalog(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
+	stubUnverifiedDomainPolicy(ti)
 	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
 
 	// The default board is the guided journey only: the five tasks marked
 	// HiddenByDefault stay off it for every org.
-	require.Len(t, result.Tasks, 4)
-	require.Equal(t, "identity-provider", result.Tasks[0].Key)
-	require.Equal(t, "additional-agent-config", result.Tasks[3].Key)
+	require.Len(t, result.Tasks, 5)
+	require.Equal(t, "domain-verification", result.Tasks[0].Key)
+	require.Equal(t, "identity-provider", result.Tasks[1].Key)
+	require.Equal(t, "additional-agent-config", result.Tasks[4].Key)
 	for _, key := range []string{"anthropic-admin-controls", "litellm", "distribute-servers", "configure-policies", "platform-mcp"} {
 		require.Nil(t, setupTask(result.Tasks, key), key)
 	}
 	for _, task := range result.Tasks {
-		require.Empty(t, task.BlockedBy, task.Key)
+		if task.Key == "identity-provider" {
+			require.Equal(t, []string{"domain-verification"}, task.BlockedBy)
+		} else {
+			require.Empty(t, task.BlockedBy, task.Key)
+		}
 		require.Equal(t, "todo", task.Status, task.Key)
 		require.False(t, task.Hidden, task.Key)
 	}
+	require.False(t, setupTask(result.Tasks, "domain-verification").CompletedByFact)
 	require.False(t, setupTask(result.Tasks, "identity-provider").CompletedByFact)
 	require.False(t, setupTask(result.Tasks, "instrument-agents").CompletedByFact)
 }
@@ -45,6 +55,7 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
+	stubUnverifiedDomainPolicy(ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	platformAuth := *authCtx
@@ -54,8 +65,8 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 	includeHidden := true
 	result, err := ti.service.ListSetupTasks(platformCtx, &gen.ListSetupTasksPayload{IncludeHidden: &includeHidden})
 	require.NoError(t, err)
-	require.Len(t, result.Tasks, 9)
-	require.Equal(t, "platform-mcp", result.Tasks[8].Key)
+	require.Len(t, result.Tasks, 10)
+	require.Equal(t, "platform-mcp", result.Tasks[9].Key)
 	for _, key := range []string{"anthropic-admin-controls", "litellm", "distribute-servers", "configure-policies", "platform-mcp"} {
 		require.True(t, setupTask(result.Tasks, key).Hidden, key)
 	}
@@ -93,10 +104,55 @@ func TestService_ListSetupTasksAppliesCompletionFactsWithoutWriting(t *testing.T
 	require.Empty(t, rows, "completion projection must not persist catalog defaults or facts")
 }
 
+func TestService_ListSetupTasksUnblocksIdentityProviderOnceDomainVerified(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	stubUnverifiedDomainPolicy(ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.Equal(t, []string{"domain-verification"}, setupTask(result.Tasks, "identity-provider").BlockedBy)
+
+	require.Equal(t, "todo", setupTask(result.Tasks, "domain-verification").Status)
+
+	require.NoError(t, orgrepo.New(ti.conn).SetVerifiedDomains(ctx, orgrepo.SetVerifiedDomainsParams{ID: authCtx.ActiveOrganizationID, VerifiedDomains: []string{"example.com"}}))
+	result, err = ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	domainTask := setupTask(result.Tasks, "domain-verification")
+	require.Equal(t, "done", domainTask.Status)
+	require.True(t, domainTask.CompletedByFact)
+	require.Empty(t, setupTask(result.Tasks, "identity-provider").BlockedBy)
+}
+
+// Orgs that set up single sign-on before verified_domains was tracked still
+// count as verified, because WorkOS required a verified domain for SSO.
+func TestService_ListSetupTasksCompletesDomainVerificationWhenSSOEnabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	org, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Empty(t, org.VerifiedDomains)
+
+	require.NoError(t, orgrepo.New(ti.conn).SetSSOEnabled(ctx, orgrepo.SetSSOEnabledParams{WorkosID: org.WorkosID, Enabled: conv.PtrToPGBool(conv.PtrEmpty(true)), WorkosLastEventID: pgtype.Text{}}))
+	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	domainTask := setupTask(result.Tasks, "domain-verification")
+	require.Equal(t, "done", domainTask.Status)
+	require.True(t, domainTask.CompletedByFact)
+	require.Empty(t, setupTask(result.Tasks, "identity-provider").BlockedBy)
+}
+
 func TestService_ListSetupTasksResolvesEmailAssigneeAndScopesOrganization(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
+	stubUnverifiedDomainPolicy(ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.Email)
@@ -128,6 +184,7 @@ func TestService_ListSetupTasksHiddenTaskPlatformVisibility(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
+	stubUnverifiedDomainPolicy(ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	platformAuth := *authCtx
@@ -154,6 +211,7 @@ func TestService_ListSetupTasksRestoresADefaultHiddenTask(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
+	stubUnverifiedDomainPolicy(ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	platformAuth := *authCtx
@@ -194,6 +252,66 @@ func TestService_ListSetupTasksRequiresOrgRead(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+// An org verified in WorkOS before the event sync tracked domains has an empty
+// stored list. The board checks WorkOS live, saves the result, and unblocks
+// the identity provider card without the onboarding status being opened.
+func TestService_ListSetupTasksUnblocksIdentityProviderFromLiveVerifiedDomain(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	org, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Empty(t, org.VerifiedDomains)
+
+	ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, org.WorkosID.String).Return(&thirdpartyworkos.OrganizationDomainPolicy{
+		Domains: []thirdpartyworkos.OrganizationDomain{
+			{Domain: "Example.com", State: thirdpartyworkos.OrganizationDomainStateVerified},
+		},
+	}, nil).Once()
+
+	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	domainTask := setupTask(result.Tasks, "domain-verification")
+	require.Equal(t, "done", domainTask.Status)
+	require.True(t, domainTask.CompletedByFact)
+	require.Empty(t, setupTask(result.Tasks, "identity-provider").BlockedBy)
+
+	org, err = orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"example.com"}, org.VerifiedDomains)
+}
+
+// A WorkOS failure must not break the board: it falls back to the stored
+// facts, which leave the identity provider card blocked.
+func TestService_ListSetupTasksFallsBackToStoredFactsWhenWorkOSFails(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	org, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+
+	ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, org.WorkosID.String).Return(nil, errors.New("workos unavailable")).Once()
+
+	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "todo", setupTask(result.Tasks, "domain-verification").Status)
+	require.Equal(t, []string{"domain-verification"}, setupTask(result.Tasks, "identity-provider").BlockedBy)
+
+	org, err = orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Empty(t, org.VerifiedDomains)
+}
+
+// stubUnverifiedDomainPolicy answers the board's live domain check with no
+// verified domains, for tests that do not exercise it.
+func stubUnverifiedDomainPolicy(ti *testInstance) {
+	ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, mock.Anything).Return(&thirdpartyworkos.OrganizationDomainPolicy{Domains: nil}, nil).Maybe()
 }
 
 func setupTask(tasks []*gen.SetupTask, key string) *gen.SetupTask {

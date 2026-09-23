@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
+import { cn } from "@/lib/utils";
 import {
   useIsPlatformAdmin,
   useOrganization,
@@ -26,6 +27,7 @@ import { useOrganizationSetupTasks } from "@/hooks/useOrganizationSetupTasks";
 import { useRBAC } from "@/hooks/useRBAC";
 import { SetupBoardColumns } from "./components/setup-board-columns";
 import { SetupTaskAssignmentDialog } from "./components/setup-task-assignment-dialog";
+import { SETUP_CONTAINER } from "./components/setup-container";
 import { SetupShell } from "./components/setup-shell";
 import { setupTaskSlug } from "./task-slugs";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
@@ -36,7 +38,12 @@ function BoardPage({ children }: { children: React.ReactNode }): JSX.Element {
   return (
     <SetupShell view="board">
       <main className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="@container/main mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8 [&>div]:mb-0 [&>div]:min-h-0 [&>div]:flex-1">
+        <div
+          className={cn(
+            SETUP_CONTAINER,
+            "@container/main flex h-full min-h-0 flex-col gap-4 py-6 [&>div]:mb-0 [&>div]:min-h-0 [&>div]:flex-1",
+          )}
+        >
           <Page.Section>
             <Page.Section.Title area="">Organization setup</Page.Section.Title>
             <Page.Section.Description>

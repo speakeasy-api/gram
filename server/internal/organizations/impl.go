@@ -981,7 +981,12 @@ func (s *Service) GetOnboardingStatus(ctx context.Context, payload *gen.GetOnboa
 
 	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
 	if workosOrgID == "" {
-		return &gen.OnboardingStatusResult{SsoConfigured: false, DsyncConfigured: false}, nil
+		return &gen.OnboardingStatusResult{SsoConfigured: false, DsyncConfigured: false, DomainVerified: false, VerifiedDomains: []string{}}, nil
+	}
+
+	verifiedDomains, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to check domain verification").LogError(ctx, s.logger)
 	}
 
 	connections, err := s.orgs.ListConnections(ctx, workosOrgID)
@@ -997,7 +1002,35 @@ func (s *Service) GetOnboardingStatus(ctx context.Context, payload *gen.GetOnboa
 	return &gen.OnboardingStatusResult{
 		SsoConfigured:   workos.HasActiveConnection(connections),
 		DsyncConfigured: workos.HasActiveDirectory(directories),
+		DomainVerified:  len(verifiedDomains) > 0,
+		VerifiedDomains: verifiedDomains,
 	}, nil
+}
+
+// refreshVerifiedDomains returns the organization's verified domains. An empty
+// stored list is re-checked against WorkOS, so it is correct right after the
+// Admin Portal and for orgs verified before the event sync tracked domains.
+// The live result only fills a list that is still empty: a non-empty list is
+// kept current by the event sync, which may have written a newer list since
+// stored was read, so the save never overwrites it.
+func (s *Service) refreshVerifiedDomains(ctx context.Context, organizationID, workosOrgID string, stored []string) ([]string, error) {
+	if len(stored) > 0 {
+		return stored, nil
+	}
+
+	policy, err := s.orgs.GetOrganizationDomainPolicy(ctx, workosOrgID)
+	if err != nil {
+		return nil, fmt.Errorf("get workos organization domains: %w", err)
+	}
+	verified := policy.VerifiedDomains()
+	if len(verified) == 0 {
+		return []string{}, nil
+	}
+
+	if err := orgrepo.New(s.db).SetVerifiedDomains(ctx, orgrepo.SetVerifiedDomainsParams{ID: organizationID, VerifiedDomains: verified}); err != nil {
+		return nil, fmt.Errorf("save verified domains: %w", err)
+	}
+	return verified, nil
 }
 
 const verifyOnboardingHooksLimit = 50
@@ -1091,7 +1124,7 @@ func (s *Service) VerifyOnboardingHooksSetup(ctx context.Context, payload *gen.V
 // state with WorkOS, and 302-redirects to the appropriate wizard step.
 //
 // Query params:
-//   - intent: "sso" or "dsync"
+//   - intent: "domain_verification", "sso", or "dsync"
 func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	ctx, span := s.tracer.Start(r.Context(), "organizations.handleSetupCallback")
 	defer span.End()
@@ -1143,6 +1176,19 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	// Determine the next step based on what was just completed and what's verified.
 	var nextStepSlug string
 	switch intent {
+	case "domain_verification":
+		// Single sign-on unlocks once a domain is verified. WorkOS may still
+		// be checking DNS, so stay on this step until it reports verified.
+		nextStepSlug = "domain-verification"
+		if workosOrgID != "" {
+			verified, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains)
+			if err != nil {
+				s.logger.ErrorContext(ctx, "setup callback: check domain verification", attr.SlogError(err))
+			}
+			if len(verified) > 0 {
+				nextStepSlug = "identity-provider"
+			}
+		}
 	case "sso":
 		if workosOrgID != "" {
 			connections, err := s.orgs.ListConnections(ctx, workosOrgID)

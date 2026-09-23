@@ -10,6 +10,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type OnboardingStatusResult = {
   /**
+   * Whether the organization has at least one verified domain in WorkOS. Single sign-on cannot be set up until one is verified.
+   */
+  domainVerified: boolean;
+  /**
    * Whether the organization has at least one linked directory sync in WorkOS.
    */
   dsyncConfigured: boolean;
@@ -17,6 +21,10 @@ export type OnboardingStatusResult = {
    * Whether the organization has at least one active SSO connection in WorkOS.
    */
   ssoConfigured: boolean;
+  /**
+   * Domains WorkOS has verified for the organization. Single sign-on only works for users on these domains.
+   */
+  verifiedDomains: Array<string>;
 };
 
 /** @internal */
@@ -25,13 +33,17 @@ export const OnboardingStatusResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    domain_verified: z.boolean(),
     dsync_configured: z.boolean(),
     sso_configured: z.boolean(),
+    verified_domains: z.array(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "domain_verified": "domainVerified",
       "dsync_configured": "dsyncConfigured",
       "sso_configured": "ssoConfigured",
+      "verified_domains": "verifiedDomains",
     });
   }),
 );
