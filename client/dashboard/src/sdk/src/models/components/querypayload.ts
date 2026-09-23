@@ -118,7 +118,7 @@ export type QueryPayload$Outbound = {
   from: string;
   granularity_seconds?: number | undefined;
   group_by?: string | undefined;
-  include_dimension_values?: boolean | undefined;
+  include_dimension_values: boolean;
   sort_by: string;
   to: string;
   top_n: number;
@@ -134,7 +134,7 @@ export const QueryPayload$outboundSchema: z.ZodMiniType<
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     granularitySeconds: z.optional(z.int()),
     groupBy: z.optional(GroupBy$outboundSchema),
-    includeDimensionValues: z.optional(z.boolean()),
+    includeDimensionValues: z._default(z.boolean(), true),
     sortBy: z._default(QueryPayloadSortBy$outboundSchema, "total_cost"),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
     topN: z._default(z.int(), 10),

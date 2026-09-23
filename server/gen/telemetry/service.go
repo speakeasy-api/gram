@@ -1586,7 +1586,7 @@ type QueryPayload struct {
 	GranularitySeconds *int64
 	// Whether to include distinct values for other dimensions in each table row.
 	// When omitted, defaults to true.
-	IncludeDimensionValues *bool
+	IncludeDimensionValues bool
 	// When group_by is set, keep at most this many groups (ranked by sort_by); the
 	// remainder are rolled into an 'Other' group. Defaults to 10.
 	TopN int

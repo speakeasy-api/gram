@@ -284,7 +284,7 @@ type QueryRequestBody struct {
 	GranularitySeconds *int64 `form:"granularity_seconds,omitempty" json:"granularity_seconds,omitempty" xml:"granularity_seconds,omitempty"`
 	// Whether to include distinct values for other dimensions in each table row.
 	// When omitted, defaults to true.
-	IncludeDimensionValues *bool `form:"include_dimension_values,omitempty" json:"include_dimension_values,omitempty" xml:"include_dimension_values,omitempty"`
+	IncludeDimensionValues bool `form:"include_dimension_values" json:"include_dimension_values" xml:"include_dimension_values"`
 	// When group_by is set, keep at most this many groups (ranked by sort_by); the
 	// remainder are rolled into an 'Other' group. Defaults to 10.
 	TopN int `form:"top_n" json:"top_n" xml:"top_n"`
@@ -9281,6 +9281,12 @@ func NewQueryRequestBody(p *telemetry.QueryPayload) *QueryRequestBody {
 				continue
 			}
 			body.Filters[i] = marshalTelemetryQueryFilterToQueryFilterRequestBody(val)
+		}
+	}
+	{
+		var zero bool
+		if body.IncludeDimensionValues == zero {
+			body.IncludeDimensionValues = true
 		}
 	}
 	{

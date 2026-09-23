@@ -969,6 +969,12 @@ func BuildQueryPayload(telemetryQueryBody string, telemetryQuerySessionToken str
 		}
 	}
 	{
+		var zero bool
+		if v.IncludeDimensionValues == zero {
+			v.IncludeDimensionValues = true
+		}
+	}
+	{
 		var zero int
 		if v.TopN == zero {
 			v.TopN = 10

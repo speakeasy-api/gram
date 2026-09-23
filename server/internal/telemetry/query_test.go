@@ -477,11 +477,12 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	var deptResult *gen.QueryResult
 	require.Eventually(t, func() bool {
 		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:    from,
-			To:      to,
-			GroupBy: conv.PtrEmpty("department_name"),
-			TopN:    10,
-			SortBy:  "total_cost",
+			From:                   from,
+			To:                     to,
+			GroupBy:                conv.PtrEmpty("department_name"),
+			TopN:                   10,
+			SortBy:                 "total_cost",
+			IncludeDimensionValues: true,
 		})
 		if err != nil || res == nil {
 			return false
@@ -541,7 +542,7 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 		From:                   from,
 		To:                     to,
 		GroupBy:                conv.PtrEmpty("department_name"),
-		IncludeDimensionValues: new(false),
+		IncludeDimensionValues: false,
 		TopN:                   10,
 		SortBy:                 "total_cost",
 	})
@@ -683,7 +684,7 @@ func TestQuery_SkillVersionAttributesFullSessionsWithoutDuplicateMappings(t *tes
 		From:                   from,
 		To:                     to,
 		GroupBy:                conv.PtrEmpty("skill_version"),
-		IncludeDimensionValues: new(false),
+		IncludeDimensionValues: false,
 		TopN:                   10,
 		SortBy:                 "total_cost",
 	})
@@ -1234,11 +1235,12 @@ func TestQuery_AttributesClaudeAPIRequestByMCPAndSkill(t *testing.T) {
 	var byServer *gen.QueryResult
 	require.Eventually(t, func() bool {
 		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:    from,
-			To:      to,
-			GroupBy: conv.PtrEmpty("mcp_server_name"),
-			TopN:    10,
-			SortBy:  "cache_creation_input_tokens",
+			From:                   from,
+			To:                     to,
+			GroupBy:                conv.PtrEmpty("mcp_server_name"),
+			TopN:                   10,
+			SortBy:                 "cache_creation_input_tokens",
+			IncludeDimensionValues: true,
 		})
 		if err != nil || res == nil || len(res.Table) != 1 {
 			return false

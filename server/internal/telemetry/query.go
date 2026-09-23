@@ -184,7 +184,7 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 		Filters:                filters,
 		IntervalSeconds:        interval,
 		CanonicalIdentityOrg:   canonicalOrg,
-		IncludeDimensionValues: payload.IncludeDimensionValues == nil || *payload.IncludeDimensionValues,
+		IncludeDimensionValues: payload.IncludeDimensionValues,
 	}
 	useSkillVersions := groupBy == "skill_version"
 	for _, filter := range filters {

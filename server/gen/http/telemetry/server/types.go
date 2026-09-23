@@ -15387,11 +15387,13 @@ func NewGetUnproxiedMcpServerClientUsagePayload(body *GetUnproxiedMcpServerClien
 // NewQueryPayload builds a telemetry service query endpoint payload.
 func NewQueryPayload(body *QueryRequestBody, sessionToken *string) *telemetry.QueryPayload {
 	v := &telemetry.QueryPayload{
-		From:                   *body.From,
-		To:                     *body.To,
-		GroupBy:                body.GroupBy,
-		GranularitySeconds:     body.GranularitySeconds,
-		IncludeDimensionValues: body.IncludeDimensionValues,
+		From:               *body.From,
+		To:                 *body.To,
+		GroupBy:            body.GroupBy,
+		GranularitySeconds: body.GranularitySeconds,
+	}
+	if body.IncludeDimensionValues != nil {
+		v.IncludeDimensionValues = *body.IncludeDimensionValues
 	}
 	if body.TopN != nil {
 		v.TopN = *body.TopN
@@ -15408,6 +15410,9 @@ func NewQueryPayload(body *QueryRequestBody, sessionToken *string) *telemetry.Qu
 			}
 			v.Filters[i] = unmarshalQueryFilterRequestBodyToTelemetryQueryFilter(val)
 		}
+	}
+	if body.IncludeDimensionValues == nil {
+		v.IncludeDimensionValues = true
 	}
 	if body.TopN == nil {
 		v.TopN = 10

@@ -87141,6 +87141,10 @@ components:
             - role
             - group
             - project_id
+        include_dimension_values:
+          type: boolean
+          description: Whether to include distinct values for other dimensions in each table row. When omitted, defaults to true.
+          default: true
         sort_by:
           type: string
           description: Measure used to rank groups for top_n. Defaults to total_cost.
