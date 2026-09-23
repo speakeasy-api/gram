@@ -1,5 +1,16 @@
 # dashboard
 
+## 0.124.0
+
+### Minor Changes
+
+- 1c9ceab: Jump into a project from Cmd+K. The palette now carries a Projects group that matches on a project's name, slug, or id — offered from the moment the palette opens at the organization level, where picking a project is its main job, and once you start typing inside a project, where it doubles as the fastest way to switch.
+
+### Patch Changes
+
+- 85734c6: Load delegable API key permissions for all of an agent's MCP servers in one request instead of one per server, so the create API key dialog no longer fails with lock timeouts on agents with many servers.
+- fce61bb: Serialize project-bound agent creation with project deletion. Show the agent creation empty state when a project has no visible agents, and align settings headings with their visible controls.
+
 ## 0.123.0
 
 ### Minor Changes
