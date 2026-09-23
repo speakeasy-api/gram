@@ -26,14 +26,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.opentelemetry.io/otel/trace"
@@ -44,24 +45,24 @@ import (
 const stateTTL = 10 * time.Minute
 
 type Service struct {
-	db         *pgxpool.Pool
-	auth       *auth.Auth
-	authz      *authz.Engine
-	audit      *audit.Logger
-	features   feature.Provider
-	cache      cache.Cache
-	encryption *encryption.Client
-	provider   Provider
-	siteURL    *url.URL
-	tracer     trace.Tracer
-	logger     *slog.Logger
+	db              *pgxpool.Pool
+	auth            *auth.Auth
+	authz           *authz.Engine
+	audit           *audit.Logger
+	productFeatures *productfeatures.Client
+	cache           cache.Cache
+	encryption      *encryption.Client
+	provider        Provider
+	siteURL         *url.URL
+	tracer          trace.Tracer
+	logger          *slog.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tp trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, engine *authz.Engine, auditLogger *audit.Logger, features feature.Provider, stateCache cache.Cache, enc *encryption.Client, provider Provider, siteURL *url.URL) *Service {
-	return &Service{db: db, auth: auth.New(logger, db, sessions, engine), authz: engine, audit: auditLogger, features: features, cache: stateCache, encryption: enc, provider: provider, siteURL: siteURL, tracer: tp.Tracer("github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"), logger: logger}
+func NewService(logger *slog.Logger, tp trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, engine *authz.Engine, auditLogger *audit.Logger, productFeatures *productfeatures.Client, stateCache cache.Cache, enc *encryption.Client, provider Provider, siteURL *url.URL) *Service {
+	return &Service{db: db, auth: auth.New(logger, db, sessions, engine), authz: engine, audit: auditLogger, productFeatures: productFeatures, cache: stateCache, encryption: enc, provider: provider, siteURL: siteURL, tracer: tp.Tracer("github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"), logger: logger}
 }
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
@@ -85,12 +86,25 @@ func (s *Service) authorize(ctx context.Context) (*contextvalues.AuthContext, er
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagClaudeTagSupport, ac.ActiveOrganizationID, feature.OrgProjectGroups(ac.OrganizationSlug, ""))
-	if err != nil || evaluation == feature.EvaluationIndeterminate {
+	enabled, err := s.productFeatures.IsFeatureEnabledUncached(ctx, ac.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport)
+	if err != nil {
 		return nil, oops.E(oops.CodeUnavailable, nil, "Slack workspace connections are unavailable")
 	}
-	if evaluation != feature.EvaluationEnabled {
+	if !enabled {
 		return nil, oops.C(oops.CodeNotFound)
+	}
+	return ac, nil
+}
+
+// authorizeMutation keeps the shared demo readable without allowing live Slack
+// credentials or workspace changes to enter its public dataset.
+func (s *Service) authorizeMutation(ctx context.Context) (*contextvalues.AuthContext, error) {
+	ac, err := s.authorize(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if ac.ActiveOrganizationID == constants.DemoOrganizationID {
+		return nil, oops.E(oops.CodeForbidden, nil, "The shared demo is read-only")
 	}
 	return ac, nil
 }
@@ -145,7 +159,7 @@ func stateKey(state string) string {
 }
 
 func (s *Service) Begin(ctx context.Context, p *gen.BeginPayload) (*gen.BeginResult, error) {
-	ac, err := s.authorize(ctx)
+	ac, err := s.authorizeMutation(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +201,7 @@ func (s *Service) callbackResult(ac *contextvalues.AuthContext, status string) *
 }
 
 func (s *Service) Callback(ctx context.Context, p *CallbackPayload) (*CallbackResult, error) {
-	ac, err := s.authorize(ctx)
+	ac, err := s.authorizeMutation(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +288,7 @@ func (s *Service) saveAuthorization(ctx context.Context, ac *contextvalues.AuthC
 }
 
 func (s *Service) Disconnect(ctx context.Context, p *gen.DisconnectPayload) (*gen.SlackDirectoryConnection, error) {
-	ac, err := s.authorize(ctx)
+	ac, err := s.authorizeMutation(ctx)
 	if err != nil {
 		return nil, err
 	}

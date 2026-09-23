@@ -1,11 +1,9 @@
 package slackdirectoryconnections_test
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -19,7 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/stretchr/testify/mock"
@@ -160,7 +158,7 @@ func TestSessionAndTenantBinding(t *testing.T) {
 	first := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
 	other.ActiveOrganizationID = "org_other_synthetic"
 	other.SessionID = f.auth.SessionID
-	f.flags.SetFlag(feature.FlagClaudeTagSupport, other.ActiveOrganizationID, true)
+	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, other.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, true))
 	otherCtx := authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &other), authz.NewGrant(authz.ScopeOrgAdmin, other.ActiveOrganizationID))
 	rows, err := f.service.List(otherCtx, &gen.ListPayload{SessionToken: nil})
 	require.NoError(t, err)
@@ -174,7 +172,7 @@ func TestSessionAndTenantBinding(t *testing.T) {
 	require.Contains(t, result.Location, "invalid_state")
 }
 
-func TestFlagAndRBAC(t *testing.T) {
+func TestProductFeatureAndRBAC(t *testing.T) {
 	t.Parallel()
 	ctx, f := newService(t)
 	denied := authztest.WithExactGrants(t, ctx)
@@ -182,12 +180,12 @@ func TestFlagAndRBAC(t *testing.T) {
 	require.Error(t, err)
 	_, err = f.service.Begin(denied, &gen.BeginPayload{SessionToken: nil, ConnectionID: nil})
 	require.Error(t, err)
-	f.flags.SetFlag(feature.FlagClaudeTagSupport, f.auth.ActiveOrganizationID, false)
+	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, f.auth.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, false))
 	_, err = f.service.List(ctx, &gen.ListPayload{SessionToken: nil})
 	require.Error(t, err)
 	_, err = f.service.Begin(ctx, &gen.BeginPayload{SessionToken: nil, ConnectionID: nil})
 	require.Error(t, err)
-	f.flags.SetFlag(feature.FlagClaudeTagSupport, f.auth.ActiveOrganizationID, true)
+	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, f.auth.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, true))
 	missingSession := *f.auth
 	missingSession.SessionID = nil
 	_, err = f.service.List(contextvalues.SetAuthContext(ctx, &missingSession), &gen.ListPayload{SessionToken: nil})
@@ -227,23 +225,10 @@ func TestStaleDisconnect(t *testing.T) {
 	require.Equal(t, newer, rows.Connections[0])
 }
 
-type failingFlags struct{ *feature.InMemory }
-
-func (f failingFlags) EvaluateFlag(context.Context, feature.Flag, string, map[string]string) (feature.Evaluation, error) {
-	return feature.EvaluationEnabled, errors.New("provider unavailable")
-}
-
-func TestUnavailableFlagAndProvider(t *testing.T) {
+func TestUnavailableProvider(t *testing.T) {
 	t.Parallel()
 	ctx, f := newService(t)
-	for _, flags := range []feature.Provider{nil, &feature.InMemory{}, failingFlags{f.flags}} {
-		svc := f.build(flags, f.provider)
-		_, err := svc.List(ctx, &gen.ListPayload{SessionToken: nil})
-		require.Error(t, err)
-		_, err = svc.Begin(ctx, &gen.BeginPayload{SessionToken: nil, ConnectionID: nil})
-		require.Error(t, err)
-	}
-	svc := f.build(f.flags, nil)
+	svc := f.build(f.productFeatures, nil)
 	list, err := svc.List(ctx, &gen.ListPayload{SessionToken: nil})
 	require.NoError(t, err)
 	require.False(t, list.AuthorizationConfigured)

@@ -4,6 +4,8 @@ import { parseAsString, useQueryState } from "nuqs";
 import { Hash, Plus, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 
+import { useOrganization } from "@/contexts/Auth";
+import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
@@ -70,6 +72,8 @@ export function SlackWorkspaces(): JSX.Element {
   );
 }
 function SlackWorkspacesContent(): JSX.Element {
+  const organization = useOrganization();
+  const isDemo = organization.slug === DEMO_ORG_SLUG;
   const queryClient = useQueryClient();
   const query = useSlackDirectoryConnections(undefined, SESSION_SECURITY, {
     retry: false,
@@ -103,6 +107,7 @@ function SlackWorkspacesContent(): JSX.Element {
   const connections = query.data?.connections ?? [];
   const configured = query.data?.authorizationConfigured === true;
   const start = (connectionId?: string) => {
+    if (isDemo) return;
     setRedirectError(null);
     begin.mutate(
       {
@@ -148,7 +153,7 @@ function SlackWorkspacesContent(): JSX.Element {
         </div>
         <Button
           onClick={() => start()}
-          disabled={!configured || begin.isPending || query.isPending}
+          disabled={isDemo || !configured || begin.isPending || query.isPending}
         >
           <Button.LeftIcon>
             <Plus className="size-4" aria-hidden="true" />
@@ -180,7 +185,13 @@ function SlackWorkspacesContent(): JSX.Element {
           Try again
         </Button>
       )}
-      {query.data && !configured && (
+      {isDemo && (
+        <Alert variant="info" dismissible={false}>
+          Slack workspaces are read-only in the demo organization. Switch to
+          your organization to connect a workspace.
+        </Alert>
+      )}
+      {query.data && !configured && !isDemo && (
         <Alert variant="info" dismissible={false}>
           Ask your deployment administrator to configure the Slack directory app
           before connecting a workspace.
@@ -241,7 +252,7 @@ function SlackWorkspacesContent(): JSX.Element {
                 <Button
                   variant="secondary"
                   size="sm"
-                  disabled={!configured || begin.isPending}
+                  disabled={isDemo || !configured || begin.isPending}
                   onClick={() => start(connection.id)}
                 >
                   Reconnect
@@ -250,6 +261,7 @@ function SlackWorkspacesContent(): JSX.Element {
                   <Button
                     variant="tertiary"
                     size="sm"
+                    disabled={isDemo}
                     onClick={() => {
                       disconnect.reset();
                       setSelected(connection);
@@ -278,7 +290,7 @@ function SlackWorkspacesContent(): JSX.Element {
         isPending={disconnect.isPending}
         error={disconnect.error?.message}
         onConfirm={() => {
-          if (!selected) return;
+          if (isDemo || !selected) return;
           const current = connections.find(
             (connection) => connection.id === selected.id,
           );

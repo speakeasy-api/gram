@@ -10,10 +10,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router";
 import type { ReactNode } from "react";
 import { TooltipProvider } from "@/components/ui/Tooltip";
+import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { SlackWorkspaces } from "./SlackWorkspaces";
 
 const mocks = vi.hoisted(() => ({
   admin: true,
+  organizationSlug: "example",
   configured: true,
   generation: "generation-one",
   mutate: vi.fn(),
@@ -47,6 +49,9 @@ vi.mock("nuqs", async (original) => {
     },
   };
 });
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ slug: mocks.organizationSlug }),
+}));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) =>
     mocks.admin ? children : <div>Unauthorized</div>,
@@ -119,6 +124,7 @@ function show(search = "") {
 
 beforeEach(() => {
   mocks.admin = true;
+  mocks.organizationSlug = "example";
   mocks.configured = true;
   mocks.generation = "generation-one";
 });
@@ -242,3 +248,26 @@ it("requires confirmation again when the workspace changed", () => {
     }),
   );
 });
+
+it.each([true, false])(
+  "keeps shared-demo controls read-only when configured=%s",
+  (configured) => {
+    mocks.organizationSlug = DEMO_ORG_SLUG;
+    mocks.configured = configured;
+    show();
+    expect(screen.getByText("Example workspace")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Slack workspaces are read-only in the demo organization/,
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Ask your deployment administrator/)).toBeNull();
+    for (const name of ["Connect Slack", "Reconnect", "Disconnect"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(button);
+    }
+    expect(mocks.begin).not.toHaveBeenCalled();
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  },
+);

@@ -303,14 +303,25 @@ export default function OrgIdentity(): JSX.Element {
     "tab",
     parseAsStringLiteral(IDENTITY_TABS).withDefault("sso"),
   );
-  // The only read of the rollout flag: without it (or org:admin) the tab does not exist.
+  const organization = useOrganization();
+  const {
+    data: features,
+    isPending,
+    isError,
+  } = useProductFeatures({ organizationId: organization.id }, undefined, {
+    throwOnError: false,
+    retry: false,
+  });
   const providerFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
-  const slackFlag = useFeatureFlag(FEATURE_FLAGS.claudeTagSupport);
   const { hasScope } = useRBAC();
   const showEnterpriseManagedAuth =
     providerFlag.status === "enabled" && hasScope("org:admin");
 
-  const showSlack = slackFlag.status === "enabled" && hasScope("org:admin");
+  const showSlack =
+    !isPending &&
+    !isError &&
+    features?.claudeTagSupportEnabled === true &&
+    hasScope("org:admin");
   let activeTab: IdentityPageTab = requestedTab;
   if (requestedTab === "enterprise-managed-auth" && !showEnterpriseManagedAuth)
     activeTab = "sso";
@@ -348,24 +359,30 @@ export default function OrgIdentity(): JSX.Element {
       activeTab={activeTab}
       tabs={tabs}
     >
-      {activeTab === "sso" && <SingleSignOnTab />}
+      {activeTab === "sso" && (
+        <SingleSignOnTab
+          ssoFeatureEnabled={features?.ssoEnabled ?? false}
+          scimFeatureEnabled={features?.scimEnabled ?? false}
+        />
+      )}
       {activeTab === "enterprise-managed-auth" && <EnterpriseManagedAuth />}
       {activeTab === "slack-workspaces" && <SlackWorkspaces />}
     </TabbedPage>
   );
 }
 
-function SingleSignOnTab(): JSX.Element {
+function SingleSignOnTab({
+  ssoFeatureEnabled,
+  scimFeatureEnabled,
+}: {
+  ssoFeatureEnabled: boolean;
+  scimFeatureEnabled: boolean;
+}): JSX.Element {
   const organization = useOrganization();
-  const { data: features } = useProductFeatures({
-    organizationId: organization.id,
-  });
   const { data: onboardingStatus } = useOnboardingStatus(undefined, undefined, {
     throwOnError: false,
   });
 
-  const ssoFeatureEnabled = features?.ssoEnabled ?? false;
-  const scimFeatureEnabled = features?.scimEnabled ?? false;
   const ssoActive = organization.ssoEnabled === true;
   const scimActive = organization.scimEnabled === true;
   // Active SSO proves a domain was verified, even for orgs set up before

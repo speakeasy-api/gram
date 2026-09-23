@@ -26,6 +26,7 @@ export const FeatureName = {
   ConsentToolFiltering: "consent_tool_filtering",
   SessionPortability: "session_portability",
   NetworkIngress: "network_ingress",
+  ClaudeTagSupport: "claude_tag_support",
 } as const;
 export type FeatureName = ClosedEnum<typeof FeatureName>;
 

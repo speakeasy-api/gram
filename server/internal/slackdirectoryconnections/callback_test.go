@@ -2,7 +2,7 @@ package slackdirectoryconnections_test
 
 import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
@@ -30,7 +30,7 @@ func TestCallbackBrowserRedirects(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, out.Code)
 	require.Contains(t, out.Header().Get("Location"), "slack_result=invalid_state")
 	require.Equal(t, "no-store", out.Header().Get("Cache-Control"))
-	f.flags.SetFlag(feature.FlagClaudeTagSupport, f.auth.ActiveOrganizationID, false)
+	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, f.auth.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, false))
 	out = httptest.NewRecorder()
 	mux.ServeHTTP(out, req)
 	require.Equal(t, http.StatusSeeOther, out.Code)
