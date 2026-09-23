@@ -9,8 +9,11 @@ AICP issues the assertions. Pin these values in your verifier:
 - Issuer (`iss`): `https://tunnel.speakeasy.com`
 - Public JWKS: `https://tunnel.speakeasy.com/.well-known/jwks.json`
 
-The endpoints are independent of your server's OAuth provider and custom domain.
-You do not need to configure a per-server assertion issuer in Gram.
+The tunnel gateway serves the JWKS endpoint from its public-key bundle. The
+application serving tiers hold the private key and sign assertions.
+
+The issuer and JWKS URL are independent of your server's OAuth provider and
+custom domain. You do not need to configure a per-server assertion issuer in Gram.
 
 ## Wire contract
 
@@ -131,12 +134,12 @@ the token was valid may continue streaming after its expiry.
 ## Key rotation
 
 The infrastructure uses a 180-day rotation timer. Keys rotate on the next
-Terraform apply after that timer expires. The private key and public key are
-stored together and loaded when serving replicas restart.
+Terraform apply after that timer expires. The application loads its signing key
+and the gateway loads its public keys from environment variables at startup.
 
-During the rollout, replicas can serve different JWKS versions. A verifier can
-briefly reject a valid assertion even after refreshing on an unknown `kid`.
-Keep enforcing signature verification during this window. The five-minute JWKS
+During the rollout, signers and gateways can load different key versions. A
+verifier can briefly reject a valid assertion even after refreshing on an unknown
+`kid`. Keep enforcing signature verification during this window. The five-minute JWKS
 cache lifetime and 60-second assertion lifetime are unchanged.
 
 Uninterrupted rotation would require publishing the next public key on every

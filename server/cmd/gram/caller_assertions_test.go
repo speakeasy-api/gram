@@ -21,7 +21,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-func TestMCPJWKSBypassesTenantAndSessionMiddleware(t *testing.T) {
+func TestMCPStripsCallerAssertionBeforeEarlyRoutes(t *testing.T) {
 	t.Parallel()
 	flags := flag.NewFlagSet("test", flag.ContinueOnError)
 	flags.String("environment", "local", "")
@@ -32,19 +32,20 @@ func TestMCPJWKSBypassesTenantAndSessionMiddleware(t *testing.T) {
 	require.NoError(t, err)
 	host, err := mcp.NewAuthenticationHost("", serverURL, "local")
 	require.NoError(t, err)
-	mux, err := newMCPServerMux(c, testenv.NewLogger(t), nil, serverURL, host, nil, &background.Publishers{}, nil)
+	mux, err := newMCPServerMux(c, testenv.NewLogger(t), nil, serverURL, host, nil, &background.Publishers{})
 	require.NoError(t, err)
-	mux.Handle(http.MethodGet, "/registered", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	// No DB/session services exist here. Public key requests must terminate
-	// before custom-domain lookups or authentication on either ingress host.
+	mux.Handle(http.MethodGet, "/registered", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	// Early responses still remove spoofed assertions before authentication or tracing.
 	for _, authority := range []string{"gram.example", "tunnel.example", "custom.example"} {
-		request := httptest.NewRequest(http.MethodGet, "https://"+authority+mcpauthz.JWKSPath, nil)
-		request.Header.Set("Authorization", "invalid")
+		request := httptest.NewRequest(http.MethodGet, "https://"+authority+"/healthz", nil)
+		request.Header[mcpauthz.Header] = []string{"forged"}
+		request.Header["Speakeasy_authz"] = []string{"forged"}
+		request.Header["Speakeasy-Authz"] = []string{"forged"}
 		response := httptest.NewRecorder()
 		mux.ServeHTTP(response, request)
 		require.Equal(t, http.StatusOK, response.Code)
 		require.Equal(t, strconv.Itoa(networkaccess.ServingPolicyVersion), response.Header().Get(networkaccess.ServingPolicyVersionHeader))
-		require.JSONEq(t, `{"keys":[]}`, response.Body.String())
+		require.Empty(t, request.Header)
 	}
 }
 

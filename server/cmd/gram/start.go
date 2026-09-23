@@ -96,6 +96,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -1322,7 +1323,7 @@ func newStartCommand() *cli.Command {
 			// at the outermost public-listener boundary, before short-circuit
 			// handlers, tracing, or logging.
 			mux.Use(middleware.NetworkServingPolicyVersion)
-			mux.Use(callerAssertions.Middleware)
+			mux.Use(mcpauthz.StripMiddleware)
 			mux.Use(middleware.StripPrivateIngressHeaders)
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

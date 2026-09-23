@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
@@ -195,6 +196,7 @@ func servePrivateIngress(
 	telemetry := netingress.NewTelemetry(deps.Logger, deps.MeterProvider)
 	mux := goahttp.NewMuxer()
 	mux.Use(middleware.NetworkServingPolicyVersion)
+	mux.Use(mcpauthz.StripMiddleware)
 	mux.Use(netingress.RouteGuard)
 	mux.Use(middleware.DropInboundOTelBaggage)
 	mux.Use(func(h http.Handler) http.Handler {

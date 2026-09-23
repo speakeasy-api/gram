@@ -6,46 +6,35 @@ package mcpauthz
 import (
 	"bytes"
 	"context"
-	"crypto"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
-	"github.com/go-jose/go-jose/v4"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/jwks"
 )
 
 // Header is reserved for Gram's signed caller assertion, without a Bearer prefix.
 const Header = "SPEAKEASY_AUTHZ"
 
-// JWKSPath is the public, issuer-wide verification-key endpoint.
-const JWKSPath = "/.well-known/jwks.json"
-
 // Lifetime bounds the bearer assertion's replay window.
 const Lifetime = time.Minute
 
-// Issuer holds an immutable signing key and precomputed public JWKS. A nil or
-// zero issuer disables issuance and still serves an empty key set.
+// Issuer holds an immutable signing key. A nil or zero issuer disables issuance.
 type Issuer struct {
 	key    *rsa.PrivateKey
 	kid    string
 	issuer string
-	jwks   []byte
-	etag   string
 }
 
 // Target identifies the actual destination using server-owned metadata.
@@ -70,7 +59,7 @@ type Target struct {
 // and the issuer empty disables issuance. Partial configuration is an error.
 func New(privatePEM, publicPEM, issuerURL string, allowHTTP bool) (*Issuer, error) {
 	if strings.TrimSpace(privatePEM) == "" && strings.TrimSpace(publicPEM) == "" && strings.TrimSpace(issuerURL) == "" {
-		return &Issuer{key: nil, kid: "", issuer: "", jwks: nil, etag: ""}, nil
+		return &Issuer{key: nil, kid: "", issuer: ""}, nil
 	}
 	if strings.TrimSpace(privatePEM) == "" || strings.TrimSpace(publicPEM) == "" || strings.TrimSpace(issuerURL) == "" {
 		return nil, errors.New("GRAM_AUTHZ_PRIVATE_KEY, GRAM_AUTHZ_PUBLIC_KEYS and GRAM_AUTHZ_ISSUER_URL are required")
@@ -95,46 +84,18 @@ func New(privatePEM, publicPEM, issuerURL string, allowHTTP bool) (*Issuer, erro
 	if err := key.Validate(); err != nil {
 		return nil, errors.New("invalid caller assertion RSA private key")
 	}
-	active, err := publicJWK(&key.PublicKey)
+	active, err := jwks.PublicKey(&key.PublicKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("identify caller assertion key: %w", err)
 	}
-	keys := make([]jose.JSONWebKey, 0)
-	seen := make(map[string]bool)
-	for remaining := []byte(publicPEM); len(bytes.TrimSpace(remaining)) > 0; {
-		block, rest, err := decodePEM(remaining)
-		if err != nil {
-			return nil, errors.New("invalid GRAM_AUTHZ_PUBLIC_KEYS PEM bundle")
-		}
-		remaining = rest
-		if block.Type != "PUBLIC KEY" {
-			return nil, errors.New("GRAM_AUTHZ_PUBLIC_KEYS must contain only SubjectPublicKeyInfo PEM keys")
-		}
-		parsed, err := x509.ParsePKIXPublicKey(block.Bytes)
-		pub, ok := parsed.(*rsa.PublicKey)
-		if err != nil || !ok || pub.N.BitLen() < 2048 || pub.E < 3 || pub.E%2 == 0 {
-			return nil, errors.New("caller assertion public keys must be RSA with at least 2048 bits")
-		}
-		jwk, err := publicJWK(pub)
-		if err != nil {
-			return nil, err
-		}
-		if !seen[jwk.KeyID] {
-			keys = append(keys, jwk)
-			seen[jwk.KeyID] = true
-		}
+	publicKeys, err := jwks.Parse(publicPEM)
+	if err != nil {
+		return nil, fmt.Errorf("parse GRAM_AUTHZ_PUBLIC_KEYS: %w", err)
 	}
-	if !seen[active.KeyID] {
+	if !publicKeys.Contains(active.KeyID) {
 		return nil, errors.New("active caller assertion public key is missing from GRAM_AUTHZ_PUBLIC_KEYS")
 	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i].KeyID < keys[j].KeyID })
-	document, err := json.Marshal(jose.JSONWebKeySet{Keys: keys})
-	if err != nil {
-		return nil, fmt.Errorf("encode caller assertion JWKS: %w", err)
-	}
-	digest := sha256.Sum256(document)
-	return &Issuer{key: key, kid: active.KeyID, issuer: strings.TrimRight(issuerURL, "/"), jwks: document,
-		etag: `"` + base64.RawURLEncoding.EncodeToString(digest[:]) + `"`}, nil
+	return &Issuer{key: key, kid: active.KeyID, issuer: strings.TrimRight(issuerURL, "/")}, nil
 }
 
 func decodePEM(data []byte) (*pem.Block, []byte, error) {
@@ -147,17 +108,6 @@ func decodePEM(data []byte) (*pem.Block, []byte, error) {
 		return nil, nil, errors.New("invalid PEM block")
 	}
 	return block, rest, nil
-}
-
-func publicJWK(key *rsa.PublicKey) (jose.JSONWebKey, error) {
-	jwk := jose.JSONWebKey{Key: key, KeyID: "", Algorithm: string(jose.RS256), Use: "sig",
-		Certificates: nil, CertificatesURL: nil, CertificateThumbprintSHA1: nil, CertificateThumbprintSHA256: nil}
-	thumbprint, err := jwk.Thumbprint(crypto.SHA256)
-	if err != nil {
-		return jose.JSONWebKey{}, fmt.Errorf("compute caller assertion key ID: %w", err)
-	}
-	jwk.KeyID = base64.RawURLEncoding.EncodeToString(thumbprint)
-	return jwk, nil
 }
 
 // ReservedHeader matches both the wire spelling and the common dash alias.
@@ -174,36 +124,11 @@ func Strip(header http.Header) {
 	}
 }
 
-// Middleware serves public keys before session/custom-domain middleware and
-// removes reserved inbound headers before downstream instrumentation sees them.
-func (s *Issuer) Middleware(next http.Handler) http.Handler {
+// StripMiddleware removes reserved inbound headers before authentication and instrumentation.
+func StripMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		Strip(r.Header)
-		if r.URL.Path != JWKSPath {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			w.Header().Set("Allow", "GET, HEAD")
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		body := []byte(`{"keys":[]}`)
-		etag := `"disabled"`
-		if s != nil && len(s.jwks) != 0 {
-			body, etag = s.jwks, s.etag
-		}
-		w.Header().Set("Content-Type", "application/jwk-set+json")
-		w.Header().Set("Cache-Control", "public, max-age=300, must-revalidate")
-		w.Header().Set("ETag", etag)
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		if r.Header.Get("If-None-Match") == etag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-		if r.Method == http.MethodGet {
-			_, _ = w.Write(body)
-		}
+		next.ServeHTTP(w, r)
 	})
 }
 

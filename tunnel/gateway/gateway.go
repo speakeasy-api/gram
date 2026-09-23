@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/yamux"
 
+	"github.com/speakeasy-api/gram/tunnel/jwks"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
@@ -49,6 +51,9 @@ type Config struct {
 	MaxSessions  int
 	ForwardToken string
 
+	// AuthzPublicKeys contains only SPKI public PEM keys published for caller assertions.
+	AuthzPublicKeys string
+
 	routeRefreshInterval time.Duration
 }
 
@@ -59,6 +64,7 @@ type Gateway struct {
 	reg        *registry
 	reconciler *routeReconciler
 	logger     *slog.Logger
+	publicKeys *jwks.Set
 	drain      sync.Once
 }
 
@@ -76,6 +82,10 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 	if cfg.routeRefreshInterval <= 0 {
 		cfg.routeRefreshInterval = routeTTL / 2
 	}
+	publicKeys, err := jwks.Parse(cfg.AuthzPublicKeys)
+	if err != nil {
+		return nil, fmt.Errorf("parse GRAM_AUTHZ_PUBLIC_KEYS: %w", err)
+	}
 	reg := newRegistry()
 	return &Gateway{
 		cfg:        cfg,
@@ -83,6 +93,7 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 		reg:        reg,
 		reconciler: newRouteReconciler(reg, keys, routes, cfg.AdvertiseAddr, logger, cfg.routeRefreshInterval),
 		logger:     logger,
+		publicKeys: publicKeys,
 		drain:      sync.Once{},
 	}, nil
 }
@@ -90,6 +101,7 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 // PublicHandler excludes forwarding; only the internal listener can enter a tunnel.
 func (g *Gateway) PublicHandler() http.Handler {
 	mux := http.NewServeMux()
+	mux.Handle(jwks.Path, g.publicKeys)
 	mux.HandleFunc("/connect", g.handleConnect)
 	mux.HandleFunc("/healthz", g.healthz)
 	return mux
