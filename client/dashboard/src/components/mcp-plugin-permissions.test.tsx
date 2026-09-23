@@ -201,8 +201,10 @@ describe("MCP plugin permission boundaries", () => {
     expect(document.body.textContent).not.toContain("synthetic-admin-token");
     expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
     expect(state.settings).not.toHaveBeenCalled();
-    expect(state.plugins.mock.calls.every((args) => args.length > 0)).toBe(
-      true,
+    expect(state.plugins).toHaveBeenCalledWith(
+      scope,
+      undefined,
+      expect.objectContaining({ throwOnError: false }),
     );
     expect(screen.getByRole("button", { name: "Cached plugin" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Update" })).toBeTruthy();
@@ -312,9 +314,6 @@ describe("MCP plugin permission boundaries", () => {
       } else {
         expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
         expect(state.settings).not.toHaveBeenCalled();
-        expect(state.plugins.mock.calls.every((args) => args.length > 0)).toBe(
-          true,
-        );
       }
     },
   );

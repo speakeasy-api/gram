@@ -54,6 +54,7 @@ vi.mock("@gram/client/react-query/publishStatus", () => ({
       configured: true,
       connected: true,
       hasCollaborators: true,
+      upToDate: false,
       repoOwner: "example",
       repoName: "plugins",
       repoUrl: "https://example.com/repo",
@@ -139,6 +140,7 @@ describe("Plugins index authorization", () => {
     state.admin = true;
     const view = render(page());
     expect(state.settingsRead).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Sync changes" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Rename marketplace" }),
     ).toBeTruthy();
@@ -160,9 +162,7 @@ describe("Plugins index authorization", () => {
     expect(
       screen.queryByRole("button", { name: "Rename marketplace" }),
     ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Sync marketplace" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sync changes" })).toBeNull();
     expect(screen.queryByText("Observability")).toBeNull();
     // The install sheet is portalled outside the page container.
     expect(document.body.innerHTML).not.toContain("private-token");
