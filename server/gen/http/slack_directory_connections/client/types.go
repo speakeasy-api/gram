@@ -77,6 +77,16 @@ type ListMembersResponseBody struct {
 	SortAsOf *string `form:"sort_as_of,omitempty" json:"sort_as_of,omitempty" xml:"sort_as_of,omitempty"`
 }
 
+// ListPersonAccountsResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body.
+type ListPersonAccountsResponseBody struct {
+	// Up to 50 current mappings, one entry per workspace membership.
+	Accounts []*SlackPersonAccountResponseBody `form:"accounts,omitempty" json:"accounts,omitempty" xml:"accounts,omitempty"`
+	// Cursor for the next page, when present.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
 // GetMemberResponseBody is the type of the "slackDirectoryConnections" service
 // "getMember" endpoint HTTP response body.
 type GetMemberResponseBody struct {
@@ -797,6 +807,215 @@ type ListMembersGatewayErrorResponseBody struct {
 // "slackDirectoryConnections" service "listMembers" endpoint HTTP response
 // body for the "unavailable" error.
 type ListMembersUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPersonAccountsUnauthorizedResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListPersonAccountsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPersonAccountsForbiddenResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "forbidden" error.
+type ListPersonAccountsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPersonAccountsBadRequestResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "bad_request" error.
+type ListPersonAccountsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPersonAccountsNotFoundResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "not_found" error.
+type ListPersonAccountsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPersonAccountsConflictResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "conflict" error.
+type ListPersonAccountsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPersonAccountsUnsupportedMediaResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListPersonAccountsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPersonAccountsInvalidResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "invalid" error.
+type ListPersonAccountsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPersonAccountsInvariantViolationResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListPersonAccountsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPersonAccountsUnexpectedResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "unexpected" error.
+type ListPersonAccountsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPersonAccountsGatewayErrorResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListPersonAccountsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPersonAccountsUnavailableResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "unavailable" error.
+type ListPersonAccountsUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1731,6 +1950,16 @@ type SlackIdentityMappingResponseBody struct {
 	Active *bool `form:"active,omitempty" json:"active,omitempty" xml:"active,omitempty"`
 }
 
+// SlackPersonAccountResponseBody is used to define fields on response body
+// types.
+type SlackPersonAccountResponseBody struct {
+	Member *SlackDirectoryMemberResponseBody `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
+	// Freshness of the workspace snapshot, independent of mapping state.
+	DirectoryStatus *string `form:"directory_status,omitempty" json:"directory_status,omitempty" xml:"directory_status,omitempty"`
+	// Last complete directory publication, possibly from an earlier authorization.
+	LastFullSyncSucceededAt *string `form:"last_full_sync_succeeded_at,omitempty" json:"last_full_sync_succeeded_at,omitempty" xml:"last_full_sync_succeeded_at,omitempty"`
+}
+
 // NewSyncRequestBody builds the HTTP request body from the payload of the
 // "sync" endpoint of the "slackDirectoryConnections" service.
 func NewSyncRequestBody(p *slackdirectoryconnections.SyncPayload) *SyncRequestBody {
@@ -2302,6 +2531,189 @@ func NewListMembersGatewayError(body *ListMembersGatewayErrorResponseBody) *goa.
 // NewListMembersUnavailable builds a slackDirectoryConnections service
 // listMembers endpoint unavailable error.
 func NewListMembersUnavailable(body *ListMembersUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPersonAccountsResultOK builds a "slackDirectoryConnections" service
+// "listPersonAccounts" endpoint result from a HTTP "OK" response.
+func NewListPersonAccountsResultOK(body *ListPersonAccountsResponseBody) *slackdirectoryconnections.ListPersonAccountsResult {
+	v := &slackdirectoryconnections.ListPersonAccountsResult{
+		NextCursor: body.NextCursor,
+	}
+	v.Accounts = make([]*slackdirectoryconnections.SlackPersonAccount, len(body.Accounts))
+	for i, val := range body.Accounts {
+		if val == nil {
+			v.Accounts[i] = nil
+			continue
+		}
+		v.Accounts[i] = unmarshalSlackPersonAccountResponseBodyToSlackdirectoryconnectionsSlackPersonAccount(val)
+	}
+
+	return v
+}
+
+// NewListPersonAccountsUnauthorized builds a slackDirectoryConnections service
+// listPersonAccounts endpoint unauthorized error.
+func NewListPersonAccountsUnauthorized(body *ListPersonAccountsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPersonAccountsForbidden builds a slackDirectoryConnections service
+// listPersonAccounts endpoint forbidden error.
+func NewListPersonAccountsForbidden(body *ListPersonAccountsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPersonAccountsBadRequest builds a slackDirectoryConnections service
+// listPersonAccounts endpoint bad_request error.
+func NewListPersonAccountsBadRequest(body *ListPersonAccountsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPersonAccountsNotFound builds a slackDirectoryConnections service
+// listPersonAccounts endpoint not_found error.
+func NewListPersonAccountsNotFound(body *ListPersonAccountsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPersonAccountsConflict builds a slackDirectoryConnections service
+// listPersonAccounts endpoint conflict error.
+func NewListPersonAccountsConflict(body *ListPersonAccountsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPersonAccountsUnsupportedMedia builds a slackDirectoryConnections
+// service listPersonAccounts endpoint unsupported_media error.
+func NewListPersonAccountsUnsupportedMedia(body *ListPersonAccountsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPersonAccountsInvalid builds a slackDirectoryConnections service
+// listPersonAccounts endpoint invalid error.
+func NewListPersonAccountsInvalid(body *ListPersonAccountsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPersonAccountsInvariantViolation builds a slackDirectoryConnections
+// service listPersonAccounts endpoint invariant_violation error.
+func NewListPersonAccountsInvariantViolation(body *ListPersonAccountsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPersonAccountsUnexpected builds a slackDirectoryConnections service
+// listPersonAccounts endpoint unexpected error.
+func NewListPersonAccountsUnexpected(body *ListPersonAccountsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPersonAccountsGatewayError builds a slackDirectoryConnections service
+// listPersonAccounts endpoint gateway_error error.
+func NewListPersonAccountsGatewayError(body *ListPersonAccountsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPersonAccountsUnavailable builds a slackDirectoryConnections service
+// listPersonAccounts endpoint unavailable error.
+func NewListPersonAccountsUnavailable(body *ListPersonAccountsUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3117,6 +3529,22 @@ func ValidateListMembersResponseBody(body *ListMembersResponseBody) (err error) 
 	}
 	if body.SortAsOf != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.sort_as_of", *body.SortAsOf, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListPersonAccountsResponseBody runs the validations defined on
+// ListPersonAccountsResponseBody
+func ValidateListPersonAccountsResponseBody(body *ListPersonAccountsResponseBody) (err error) {
+	if body.Accounts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("accounts", "body"))
+	}
+	for _, e := range body.Accounts {
+		if e != nil {
+			if err2 := ValidateSlackPersonAccountResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -4120,6 +4548,270 @@ func ValidateListMembersGatewayErrorResponseBody(body *ListMembersGatewayErrorRe
 // ValidateListMembersUnavailableResponseBody runs the validations defined on
 // listMembers_unavailable_response_body
 func ValidateListMembersUnavailableResponseBody(body *ListMembersUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPersonAccountsUnauthorizedResponseBody runs the validations
+// defined on listPersonAccounts_unauthorized_response_body
+func ValidateListPersonAccountsUnauthorizedResponseBody(body *ListPersonAccountsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPersonAccountsForbiddenResponseBody runs the validations defined
+// on listPersonAccounts_forbidden_response_body
+func ValidateListPersonAccountsForbiddenResponseBody(body *ListPersonAccountsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPersonAccountsBadRequestResponseBody runs the validations
+// defined on listPersonAccounts_bad_request_response_body
+func ValidateListPersonAccountsBadRequestResponseBody(body *ListPersonAccountsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPersonAccountsNotFoundResponseBody runs the validations defined
+// on listPersonAccounts_not_found_response_body
+func ValidateListPersonAccountsNotFoundResponseBody(body *ListPersonAccountsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPersonAccountsConflictResponseBody runs the validations defined
+// on listPersonAccounts_conflict_response_body
+func ValidateListPersonAccountsConflictResponseBody(body *ListPersonAccountsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPersonAccountsUnsupportedMediaResponseBody runs the validations
+// defined on listPersonAccounts_unsupported_media_response_body
+func ValidateListPersonAccountsUnsupportedMediaResponseBody(body *ListPersonAccountsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPersonAccountsInvalidResponseBody runs the validations defined
+// on listPersonAccounts_invalid_response_body
+func ValidateListPersonAccountsInvalidResponseBody(body *ListPersonAccountsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPersonAccountsInvariantViolationResponseBody runs the
+// validations defined on listPersonAccounts_invariant_violation_response_body
+func ValidateListPersonAccountsInvariantViolationResponseBody(body *ListPersonAccountsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPersonAccountsUnexpectedResponseBody runs the validations
+// defined on listPersonAccounts_unexpected_response_body
+func ValidateListPersonAccountsUnexpectedResponseBody(body *ListPersonAccountsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPersonAccountsGatewayErrorResponseBody runs the validations
+// defined on listPersonAccounts_gateway_error_response_body
+func ValidateListPersonAccountsGatewayErrorResponseBody(body *ListPersonAccountsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPersonAccountsUnavailableResponseBody runs the validations
+// defined on listPersonAccounts_unavailable_response_body
+func ValidateListPersonAccountsUnavailableResponseBody(body *ListPersonAccountsUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5363,6 +6055,31 @@ func ValidateSlackIdentityMappingResponseBody(body *SlackIdentityMappingResponse
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSlackPersonAccountResponseBody runs the validations defined on
+// SlackPersonAccountResponseBody
+func ValidateSlackPersonAccountResponseBody(body *SlackPersonAccountResponseBody) (err error) {
+	if body.Member == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("member", "body"))
+	}
+	if body.DirectoryStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("directory_status", "body"))
+	}
+	if body.Member != nil {
+		if err2 := ValidateSlackDirectoryMemberResponseBody(body.Member); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.DirectoryStatus != nil {
+		if !(*body.DirectoryStatus == "never_synced" || *body.DirectoryStatus == "current" || *body.DirectoryStatus == "stale") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.directory_status", *body.DirectoryStatus, []any{"never_synced", "current", "stale"}))
+		}
+	}
+	if body.LastFullSyncSucceededAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_full_sync_succeeded_at", *body.LastFullSyncSucceededAt, goa.FormatDateTime))
 	}
 	return
 }

@@ -15,26 +15,28 @@ import (
 
 // Client is the "slackDirectoryConnections" service client.
 type Client struct {
-	ListEndpoint        goa.Endpoint
-	SyncEndpoint        goa.Endpoint
-	ListMembersEndpoint goa.Endpoint
-	GetMemberEndpoint   goa.Endpoint
-	SetMappingEndpoint  goa.Endpoint
-	BeginEndpoint       goa.Endpoint
-	DisconnectEndpoint  goa.Endpoint
+	ListEndpoint               goa.Endpoint
+	SyncEndpoint               goa.Endpoint
+	ListMembersEndpoint        goa.Endpoint
+	ListPersonAccountsEndpoint goa.Endpoint
+	GetMemberEndpoint          goa.Endpoint
+	SetMappingEndpoint         goa.Endpoint
+	BeginEndpoint              goa.Endpoint
+	DisconnectEndpoint         goa.Endpoint
 }
 
 // NewClient initializes a "slackDirectoryConnections" service client given the
 // endpoints.
-func NewClient(list, sync, listMembers, getMember, setMapping, begin, disconnect goa.Endpoint) *Client {
+func NewClient(list, sync, listMembers, listPersonAccounts, getMember, setMapping, begin, disconnect goa.Endpoint) *Client {
 	return &Client{
-		ListEndpoint:        list,
-		SyncEndpoint:        sync,
-		ListMembersEndpoint: listMembers,
-		GetMemberEndpoint:   getMember,
-		SetMappingEndpoint:  setMapping,
-		BeginEndpoint:       begin,
-		DisconnectEndpoint:  disconnect,
+		ListEndpoint:               list,
+		SyncEndpoint:               sync,
+		ListMembersEndpoint:        listMembers,
+		ListPersonAccountsEndpoint: listPersonAccounts,
+		GetMemberEndpoint:          getMember,
+		SetMappingEndpoint:         setMapping,
+		BeginEndpoint:              begin,
+		DisconnectEndpoint:         disconnect,
 	}
 }
 
@@ -106,6 +108,30 @@ func (c *Client) ListMembers(ctx context.Context, p *ListMembersPayload) (res *L
 		return
 	}
 	return ires.(*ListMembersResult), nil
+}
+
+// ListPersonAccounts calls the "listPersonAccounts" endpoint of the
+// "slackDirectoryConnections" service.
+// ListPersonAccounts may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): Slack connections are unavailable or authorization is not configured.
+//   - error: internal error
+func (c *Client) ListPersonAccounts(ctx context.Context, p *ListPersonAccountsPayload) (res *ListPersonAccountsResult, err error) {
+	var ires any
+	ires, err = c.ListPersonAccountsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListPersonAccountsResult), nil
 }
 
 // GetMember calls the "getMember" endpoint of the "slackDirectoryConnections"

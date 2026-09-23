@@ -79,6 +79,16 @@ type ListMembersResponseBody struct {
 	SortAsOf string `form:"sort_as_of" json:"sort_as_of" xml:"sort_as_of"`
 }
 
+// ListPersonAccountsResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body.
+type ListPersonAccountsResponseBody struct {
+	// Up to 50 current mappings, one entry per workspace membership.
+	Accounts []*SlackPersonAccountResponseBody `form:"accounts" json:"accounts" xml:"accounts"`
+	// Cursor for the next page, when present.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
 // GetMemberResponseBody is the type of the "slackDirectoryConnections" service
 // "getMember" endpoint HTTP response body.
 type GetMemberResponseBody struct {
@@ -799,6 +809,215 @@ type ListMembersGatewayErrorResponseBody struct {
 // "slackDirectoryConnections" service "listMembers" endpoint HTTP response
 // body for the "unavailable" error.
 type ListMembersUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPersonAccountsUnauthorizedResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListPersonAccountsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPersonAccountsForbiddenResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "forbidden" error.
+type ListPersonAccountsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPersonAccountsBadRequestResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "bad_request" error.
+type ListPersonAccountsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPersonAccountsNotFoundResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "not_found" error.
+type ListPersonAccountsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPersonAccountsConflictResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "conflict" error.
+type ListPersonAccountsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPersonAccountsUnsupportedMediaResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListPersonAccountsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPersonAccountsInvalidResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "invalid" error.
+type ListPersonAccountsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPersonAccountsInvariantViolationResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListPersonAccountsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPersonAccountsUnexpectedResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "unexpected" error.
+type ListPersonAccountsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPersonAccountsGatewayErrorResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListPersonAccountsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPersonAccountsUnavailableResponseBody is the type of the
+// "slackDirectoryConnections" service "listPersonAccounts" endpoint HTTP
+// response body for the "unavailable" error.
+type ListPersonAccountsUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1733,6 +1952,16 @@ type SlackIdentityMappingResponseBody struct {
 	Active bool `form:"active" json:"active" xml:"active"`
 }
 
+// SlackPersonAccountResponseBody is used to define fields on response body
+// types.
+type SlackPersonAccountResponseBody struct {
+	Member *SlackDirectoryMemberResponseBody `form:"member" json:"member" xml:"member"`
+	// Freshness of the workspace snapshot, independent of mapping state.
+	DirectoryStatus string `form:"directory_status" json:"directory_status" xml:"directory_status"`
+	// Last complete directory publication, possibly from an earlier authorization.
+	LastFullSyncSucceededAt *string `form:"last_full_sync_succeeded_at,omitempty" json:"last_full_sync_succeeded_at,omitempty" xml:"last_full_sync_succeeded_at,omitempty"`
+}
+
 // NewListResponseBody builds the HTTP response body from the result of the
 // "list" endpoint of the "slackDirectoryConnections" service.
 func NewListResponseBody(res *slackdirectoryconnections.ListResult) *ListResponseBody {
@@ -1781,6 +2010,28 @@ func NewListMembersResponseBody(res *slackdirectoryconnections.ListMembersResult
 		}
 	} else {
 		body.Members = []*SlackDirectoryMemberResponseBody{}
+	}
+	return body
+}
+
+// NewListPersonAccountsResponseBody builds the HTTP response body from the
+// result of the "listPersonAccounts" endpoint of the
+// "slackDirectoryConnections" service.
+func NewListPersonAccountsResponseBody(res *slackdirectoryconnections.ListPersonAccountsResult) *ListPersonAccountsResponseBody {
+	body := &ListPersonAccountsResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Accounts != nil {
+		body.Accounts = make([]*SlackPersonAccountResponseBody, len(res.Accounts))
+		for i, val := range res.Accounts {
+			if val == nil {
+				body.Accounts[i] = nil
+				continue
+			}
+			body.Accounts[i] = marshalSlackdirectoryconnectionsSlackPersonAccountToSlackPersonAccountResponseBody(val)
+		}
+	} else {
+		body.Accounts = []*SlackPersonAccountResponseBody{}
 	}
 	return body
 }
@@ -2344,6 +2595,171 @@ func NewListMembersGatewayErrorResponseBody(res *goa.ServiceError) *ListMembersG
 // service.
 func NewListMembersUnavailableResponseBody(res *goa.ServiceError) *ListMembersUnavailableResponseBody {
 	body := &ListMembersUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPersonAccountsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listPersonAccounts" endpoint of the
+// "slackDirectoryConnections" service.
+func NewListPersonAccountsUnauthorizedResponseBody(res *goa.ServiceError) *ListPersonAccountsUnauthorizedResponseBody {
+	body := &ListPersonAccountsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPersonAccountsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listPersonAccounts" endpoint of the
+// "slackDirectoryConnections" service.
+func NewListPersonAccountsForbiddenResponseBody(res *goa.ServiceError) *ListPersonAccountsForbiddenResponseBody {
+	body := &ListPersonAccountsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPersonAccountsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listPersonAccounts" endpoint of the
+// "slackDirectoryConnections" service.
+func NewListPersonAccountsBadRequestResponseBody(res *goa.ServiceError) *ListPersonAccountsBadRequestResponseBody {
+	body := &ListPersonAccountsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPersonAccountsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listPersonAccounts" endpoint of the
+// "slackDirectoryConnections" service.
+func NewListPersonAccountsNotFoundResponseBody(res *goa.ServiceError) *ListPersonAccountsNotFoundResponseBody {
+	body := &ListPersonAccountsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPersonAccountsConflictResponseBody builds the HTTP response body from
+// the result of the "listPersonAccounts" endpoint of the
+// "slackDirectoryConnections" service.
+func NewListPersonAccountsConflictResponseBody(res *goa.ServiceError) *ListPersonAccountsConflictResponseBody {
+	body := &ListPersonAccountsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPersonAccountsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listPersonAccounts" endpoint of the
+// "slackDirectoryConnections" service.
+func NewListPersonAccountsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListPersonAccountsUnsupportedMediaResponseBody {
+	body := &ListPersonAccountsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPersonAccountsInvalidResponseBody builds the HTTP response body from
+// the result of the "listPersonAccounts" endpoint of the
+// "slackDirectoryConnections" service.
+func NewListPersonAccountsInvalidResponseBody(res *goa.ServiceError) *ListPersonAccountsInvalidResponseBody {
+	body := &ListPersonAccountsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPersonAccountsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listPersonAccounts" endpoint of the
+// "slackDirectoryConnections" service.
+func NewListPersonAccountsInvariantViolationResponseBody(res *goa.ServiceError) *ListPersonAccountsInvariantViolationResponseBody {
+	body := &ListPersonAccountsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPersonAccountsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listPersonAccounts" endpoint of the
+// "slackDirectoryConnections" service.
+func NewListPersonAccountsUnexpectedResponseBody(res *goa.ServiceError) *ListPersonAccountsUnexpectedResponseBody {
+	body := &ListPersonAccountsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPersonAccountsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listPersonAccounts" endpoint of the
+// "slackDirectoryConnections" service.
+func NewListPersonAccountsGatewayErrorResponseBody(res *goa.ServiceError) *ListPersonAccountsGatewayErrorResponseBody {
+	body := &ListPersonAccountsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPersonAccountsUnavailableResponseBody builds the HTTP response body
+// from the result of the "listPersonAccounts" endpoint of the
+// "slackDirectoryConnections" service.
+func NewListPersonAccountsUnavailableResponseBody(res *goa.ServiceError) *ListPersonAccountsUnavailableResponseBody {
+	body := &ListPersonAccountsUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3038,6 +3454,17 @@ func NewListMembersPayload(connectionID *string, search *string, mappingStatus *
 	v.SortAsOf = sortAsOf
 	v.Page = page
 	v.Limit = limit
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListPersonAccountsPayload builds a slackDirectoryConnections service
+// listPersonAccounts endpoint payload.
+func NewListPersonAccountsPayload(userID string, cursor *string, sessionToken *string) *slackdirectoryconnections.ListPersonAccountsPayload {
+	v := &slackdirectoryconnections.ListPersonAccountsPayload{}
+	v.UserID = userID
+	v.Cursor = cursor
 	v.SessionToken = sessionToken
 
 	return v

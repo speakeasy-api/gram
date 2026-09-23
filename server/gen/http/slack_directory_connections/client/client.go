@@ -27,6 +27,10 @@ type Client struct {
 	// endpoint.
 	ListMembersDoer goahttp.Doer
 
+	// ListPersonAccounts Doer is the HTTP client used to make requests to the
+	// listPersonAccounts endpoint.
+	ListPersonAccountsDoer goahttp.Doer
+
 	// GetMember Doer is the HTTP client used to make requests to the getMember
 	// endpoint.
 	GetMemberDoer goahttp.Doer
@@ -63,18 +67,19 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListDoer:            doer,
-		SyncDoer:            doer,
-		ListMembersDoer:     doer,
-		GetMemberDoer:       doer,
-		SetMappingDoer:      doer,
-		BeginDoer:           doer,
-		DisconnectDoer:      doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ListDoer:               doer,
+		SyncDoer:               doer,
+		ListMembersDoer:        doer,
+		ListPersonAccountsDoer: doer,
+		GetMemberDoer:          doer,
+		SetMappingDoer:         doer,
+		BeginDoer:              doer,
+		DisconnectDoer:         doer,
+		RestoreResponseBody:    restoreBody,
+		scheme:                 scheme,
+		host:                   host,
+		decoder:                dec,
+		encoder:                enc,
 	}
 }
 
@@ -145,6 +150,30 @@ func (c *Client) ListMembers() goa.Endpoint {
 		resp, err := c.ListMembersDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("slackDirectoryConnections", "listMembers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPersonAccounts returns an endpoint that makes HTTP requests to the
+// slackDirectoryConnections service listPersonAccounts server.
+func (c *Client) ListPersonAccounts() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPersonAccountsRequest(c.encoder)
+		decodeResponse = DecodeListPersonAccountsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPersonAccountsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPersonAccountsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("slackDirectoryConnections", "listPersonAccounts", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -7,11 +7,13 @@ import { slackDirectoryConnectionsDisconnect } from "../funcs/slackDirectoryConn
 import { slackDirectoryConnectionsGetMember } from "../funcs/slackDirectoryConnectionsGetMember.js";
 import { slackDirectoryConnectionsList } from "../funcs/slackDirectoryConnectionsList.js";
 import { slackDirectoryConnectionsListMembers } from "../funcs/slackDirectoryConnectionsListMembers.js";
+import { slackDirectoryConnectionsListPersonAccounts } from "../funcs/slackDirectoryConnectionsListPersonAccounts.js";
 import { slackDirectoryConnectionsSetMapping } from "../funcs/slackDirectoryConnectionsSetMapping.js";
 import { slackDirectoryConnectionsSync } from "../funcs/slackDirectoryConnectionsSync.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { BeginResponseBody } from "../models/components/beginresponsebody.js";
 import { ListMembersResponseBody } from "../models/components/listmembersresponsebody.js";
+import { ListPersonAccountsResponseBody } from "../models/components/listpersonaccountsresponsebody.js";
 import { ListResponseBody } from "../models/components/listresponsebody.js";
 import { SlackDirectoryConnection } from "../models/components/slackdirectoryconnection.js";
 import { SlackDirectoryMember } from "../models/components/slackdirectorymember.js";
@@ -36,6 +38,10 @@ import {
   ListSlackDirectoryMembersRequest,
   ListSlackDirectoryMembersSecurity,
 } from "../models/operations/listslackdirectorymembers.js";
+import {
+  ListSlackPersonAccountsRequest,
+  ListSlackPersonAccountsSecurity,
+} from "../models/operations/listslackpersonaccounts.js";
 import {
   SetSlackIdentityMappingRequest,
   SetSlackIdentityMappingSecurity,
@@ -126,6 +132,25 @@ export class SlackDirectoryConnections extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListMembersResponseBody> {
     return unwrapAsync(slackDirectoryConnectionsListMembers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listPersonAccounts slackDirectoryConnections
+   *
+   * @remarks
+   * Read mapped Slack accounts for an active organization person by exact Gram user ID. Browser session only; caller must be that person or an organization administrator. Requires the organization rollout. Does not infer associations from email or grant permissions.
+   */
+  async listPersonAccounts(
+    request: ListSlackPersonAccountsRequest,
+    security?: ListSlackPersonAccountsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListPersonAccountsResponseBody> {
+    return unwrapAsync(slackDirectoryConnectionsListPersonAccounts(
       this,
       request,
       security,

@@ -196,6 +196,44 @@ func BuildListMembersPayload(slackDirectoryConnectionsListMembersConnectionID st
 	return v, nil
 }
 
+// BuildListPersonAccountsPayload builds the payload for the
+// slackDirectoryConnections listPersonAccounts endpoint from CLI flags.
+func BuildListPersonAccountsPayload(slackDirectoryConnectionsListPersonAccountsUserID string, slackDirectoryConnectionsListPersonAccountsCursor string, slackDirectoryConnectionsListPersonAccountsSessionToken string) (*slackdirectoryconnections.ListPersonAccountsPayload, error) {
+	var err error
+	var userID string
+	{
+		userID = slackDirectoryConnectionsListPersonAccountsUserID
+		if utf8.RuneCountInString(userID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_id", userID, utf8.RuneCountInString(userID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cursor *string
+	{
+		if slackDirectoryConnectionsListPersonAccountsCursor != "" {
+			cursor = &slackDirectoryConnectionsListPersonAccountsCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if slackDirectoryConnectionsListPersonAccountsSessionToken != "" {
+			sessionToken = &slackDirectoryConnectionsListPersonAccountsSessionToken
+		}
+	}
+	v := &slackdirectoryconnections.ListPersonAccountsPayload{}
+	v.UserID = userID
+	v.Cursor = cursor
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGetMemberPayload builds the payload for the slackDirectoryConnections
 // getMember endpoint from CLI flags.
 func BuildGetMemberPayload(slackDirectoryConnectionsGetMemberID string, slackDirectoryConnectionsGetMemberSessionToken string) (*slackdirectoryconnections.GetMemberPayload, error) {

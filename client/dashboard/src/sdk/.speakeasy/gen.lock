@@ -621,6 +621,7 @@ trackedFiles:
   src/funcs/slackDirectoryConnectionsGetMember.ts: {}
   src/funcs/slackDirectoryConnectionsList.ts: {}
   src/funcs/slackDirectoryConnectionsListMembers.ts: {}
+  src/funcs/slackDirectoryConnectionsListPersonAccounts.ts: {}
   src/funcs/slackDirectoryConnectionsSetMapping.ts: {}
   src/funcs/slackDirectoryConnectionsSync.ts: {}
   src/funcs/spendRulesActorAttributesList.ts: {}
@@ -1264,6 +1265,7 @@ trackedFiles:
   src/models/components/listorganizationremotesessionsresult.ts: {}
   src/models/components/listorganizationusersessionissuersresult.ts: {}
   src/models/components/listpackagesresult.ts: {}
+  src/models/components/listpersonaccountsresponsebody.ts: {}
   src/models/components/listpluginsresult.ts: {}
   src/models/components/listprescriptionsresponsebody.ts: {}
   src/models/components/listprojectsresult.ts: {}
@@ -1661,6 +1663,7 @@ trackedFiles:
   src/models/components/slackdirectoryconnection.ts: {}
   src/models/components/slackdirectorymember.ts: {}
   src/models/components/slackidentitymapping.ts: {}
+  src/models/components/slackpersonaccount.ts: {}
   src/models/components/sourceenvironmentlink.ts: {}
   src/models/components/spendbreakdownresponse.ts: {}
   src/models/components/spendbucket.ts: {}
@@ -2340,6 +2343,7 @@ trackedFiles:
   src/models/operations/listskillversions.ts: {}
   src/models/operations/listslackdirectoryconnections.ts: {}
   src/models/operations/listslackdirectorymembers.ts: {}
+  src/models/operations/listslackpersonaccounts.ts: {}
   src/models/operations/listspendruleactorattributes.ts: {}
   src/models/operations/listspendruleevents.ts: {}
   src/models/operations/listspendrules.ts: {}
@@ -3495,6 +3499,8 @@ trackedFiles:
   src/react-query/slackDirectoryMember.ts: {}
   src/react-query/slackDirectoryMembers.core.ts: {}
   src/react-query/slackDirectoryMembers.ts: {}
+  src/react-query/slackPersonAccounts.core.ts: {}
+  src/react-query/slackPersonAccounts.ts: {}
   src/react-query/spendRulesActorAttributes.core.ts: {}
   src/react-query/spendRulesActorAttributes.ts: {}
   src/react-query/spendRulesArchiveRule.ts: {}
@@ -9401,6 +9407,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listSlackPersonAccounts:
+    speakeasy-default-list-slack-person-accounts:
+      parameters:
+        query:
+          user_id: "<id>"
+      responses:
+        "200":
+          application/json: {"accounts": [{"directory_status": "current", "member": {"connection_id": "3e2d9040-13aa-4fe4-bd66-43d5ac5ce57d", "id": "744e34dc-6396-4b94-b3eb-0c5a4c34167b", "last_seen_at": "2025-11-05T04:23:01.477Z", "mapping_revision": 978856, "mapping_status": "needs_review", "member_type": "unknown", "observation_token": "<value>", "observed_in_last_sync": true, "slack_user_id": "<id>", "status": "deactivated", "workspace_id": "<id>", "workspace_name": "<value>"}}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listSpendRuleActorAttributes:
     speakeasy-default-list-spend-rule-actor-attributes:
       responses:

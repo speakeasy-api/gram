@@ -1,3 +1,4 @@
+import { IdentityWorkIdentities } from "./IdentityWorkIdentities";
 import { AccountRow } from "@/components/observe/account-display";
 import { cn } from "@/lib/utils";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
@@ -187,13 +188,13 @@ export default function IdentityDevices(): JSX.Element {
     <IdentitySection
       title="Accounts & devices"
       meta={sectionMeta([
-        { count: accounts.length, singular: "account" },
+        { count: accounts.length, singular: "AI account" },
         { count: devices.length, singular: "device" },
       ])}
     >
       <div className="flex flex-col gap-4">
-        {/* Enrollment leads, because it is the reading the identities list
-            shows as a single word and never defines. */}
+        <IdentityWorkIdentities identity={identity} />
+        {/* Explain the enrollment status shown in the identities list. */}
         <IdentityPanel
           title="Enrollment"
           loading={

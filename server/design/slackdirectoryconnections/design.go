@@ -62,6 +62,14 @@ var Member = Type("SlackDirectoryMember", func() {
 	Required("id", "connection_id", "workspace_id", "workspace_name", "slack_user_id", "status", "member_type", "last_seen_at", "observed_in_last_sync")
 })
 
+var PersonAccount = Type("SlackPersonAccount", func() {
+	Description("An existing admin-confirmed workspace membership for one active organization person. Read-only and grants no permissions. The shared member view includes revision and evidence fields; using them to change a mapping still requires organization administration.")
+	Attribute("member", Member)
+	Attribute("directory_status", String, "Freshness of the workspace snapshot, independent of mapping state.", func() { Enum("never_synced", "current", "stale") })
+	Attribute("last_full_sync_succeeded_at", String, "Last complete directory publication, possibly from an earlier authorization.", func() { Format(FormatDateTime) })
+	Required("member", "directory_status")
+})
+
 var _ = Service("slackDirectoryConnections", func() {
 	Description("Manage organization-wide Slack workspace authorizations, independently of project runtime installations.")
 	Security(security.Session)
@@ -142,6 +150,30 @@ var _ = Service("slackDirectoryConnections", func() {
 		Meta("openapi:operationId", "listSlackDirectoryMembers")
 		Meta("openapi:extension:x-speakeasy-name-override", "listMembers")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SlackDirectoryMembers"}`)
+	})
+	Method("listPersonAccounts", func() {
+		Description("Read mapped Slack accounts for an active organization person by exact Gram user ID. Browser session only; caller must be that person or an organization administrator. Requires the organization rollout. Does not infer associations from email or grant permissions.")
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("user_id", String, "Exact Gram user ID of the active organization person.", func() { MinLength(1) })
+			Attribute("cursor", String, "Continue after the last membership ID.", func() { Format(FormatUUID) })
+			Required("user_id")
+		})
+		Result(func() {
+			Attribute("accounts", ArrayOf(PersonAccount), "Up to 50 current mappings, one entry per workspace membership.")
+			Attribute("next_cursor", String, "Cursor for the next page, when present.")
+			Required("accounts")
+		})
+		HTTP(func() {
+			GET("/rpc/slackDirectoryConnections.listPersonAccounts")
+			security.SessionHeader()
+			Param("user_id")
+			Param("cursor")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "listSlackPersonAccounts")
+		Meta("openapi:extension:x-speakeasy-name-override", "listPersonAccounts")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SlackPersonAccounts"}`)
 	})
 	Method("getMember", func() {
 		Description("Read current Slack profile and mapping before an administrator confirms a selection.")

@@ -657,19 +657,21 @@ LEFT JOIN organization_user_relationships our ON our.organization_id = m.organiz
 WHERE m.organization_id = $1
   -- Lists hide disconnected workspaces; a lookup by membership ID still resolves retained history.
   AND (c.disconnected_at IS NULL OR $2::uuid IS NOT NULL)
- AND ($3::text = '' OR CASE WHEN im.id IS NULL THEN 'unmapped' WHEN m.mapping_conflict_reason IS NOT NULL OR u.deleted_at IS NOT NULL OR our.deleted_at IS NOT NULL THEN 'needs_review' ELSE 'mapped' END = $3)
-  AND ($4::uuid IS NULL OR c.id = $4)
-  AND ($5::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower($5)) > 0
-    OR strpos(lower(coalesce(m.email, '')), lower($5)) > 0 OR strpos(lower(m.slack_user_id), lower($5)) > 0)
+ AND ($3::text = '' OR (im.user_id = $3 AND u.deleted_at IS NULL AND our.deleted_at IS NULL AND our.user_id IS NOT NULL))
+ AND ($4::text = '' OR CASE WHEN im.id IS NULL THEN 'unmapped' WHEN m.mapping_conflict_reason IS NOT NULL OR u.deleted_at IS NOT NULL OR our.deleted_at IS NOT NULL THEN 'needs_review' ELSE 'mapped' END = $4)
+  AND ($5::uuid IS NULL OR c.id = $5)
+  AND ($6::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower($6)) > 0
+    OR strpos(lower(coalesce(m.email, '')), lower($6)) > 0 OR strpos(lower(m.slack_user_id), lower($6)) > 0)
   AND ($2::uuid IS NULL OR m.id = $2)
-  AND ($6::uuid IS NULL OR m.id > $6)
+  AND ($7::uuid IS NULL OR m.id > $7)
 ORDER BY m.id
-LIMIT $7
+LIMIT $8
 `
 
 type ListSlackDirectoryMembersParams struct {
 	OrganizationID string
 	MemberID       uuid.NullUUID
+	MappedUserID   string
 	MappingStatus  string
 	ConnectionID   uuid.NullUUID
 	Search         string
@@ -708,6 +710,7 @@ func (q *Queries) ListSlackDirectoryMembers(ctx context.Context, arg ListSlackDi
 	rows, err := q.db.Query(ctx, listSlackDirectoryMembers,
 		arg.OrganizationID,
 		arg.MemberID,
+		arg.MappedUserID,
 		arg.MappingStatus,
 		arg.ConnectionID,
 		arg.Search,

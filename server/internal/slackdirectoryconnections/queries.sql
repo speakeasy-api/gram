@@ -106,6 +106,7 @@ LEFT JOIN organization_user_relationships our ON our.organization_id = m.organiz
 WHERE m.organization_id = @organization_id
   -- Lists hide disconnected workspaces; a lookup by membership ID still resolves retained history.
   AND (c.disconnected_at IS NULL OR sqlc.narg(member_id)::uuid IS NOT NULL)
+ AND (@mapped_user_id::text = '' OR (im.user_id = @mapped_user_id AND u.deleted_at IS NULL AND our.deleted_at IS NULL AND our.user_id IS NOT NULL))
  AND (@mapping_status::text = '' OR CASE WHEN im.id IS NULL THEN 'unmapped' WHEN m.mapping_conflict_reason IS NOT NULL OR u.deleted_at IS NOT NULL OR our.deleted_at IS NOT NULL THEN 'needs_review' ELSE 'mapped' END = @mapping_status)
   AND (sqlc.narg(connection_id)::uuid IS NULL OR c.id = sqlc.narg(connection_id))
   AND (@search::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower(@search)) > 0

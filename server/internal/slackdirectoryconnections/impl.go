@@ -76,15 +76,22 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) authorize(ctx context.Context) (*contextvalues.AuthContext, error) {
+	return s.authorizePerson(ctx, "")
+}
+
+// An empty subject requires organization administration; self access requires an exact ID.
+func (s *Service) authorizePerson(ctx context.Context, userID string) (*contextvalues.AuthContext, error) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || ac == nil || ac.SessionID == nil || *ac.SessionID == "" {
+	if !ok || ac == nil || ac.SessionID == nil || *ac.SessionID == "" || ac.UserID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if _, byKey := contextvalues.APIKeyAuthorization(ctx); byKey || contextvalues.IsSupportSession(ctx) {
 		return nil, oops.C(oops.CodeForbidden)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+	if userID == "" || userID != ac.UserID {
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+			return nil, err
+		}
 	}
 	return ac, nil
 }
