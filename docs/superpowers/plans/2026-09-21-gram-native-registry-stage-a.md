@@ -10,7 +10,9 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-21-gram-native-mcp-registry.md` is the planning snapshot of [the canonical Linear design](https://linear.app/speakeasy/document/gram-native-mcp-registry-and-pulse-cutover-design-draft-670077e87781). Read both plan and spec. Parent [GRW-144](https://linear.app/speakeasy/issue/GRW-144); children GRW-151 (store/safety), GRW-129 (import), GRW-156 (API), GRW-154 (editor).
 
-**Status:** Detailed implementation plan with available source inputs. The approved discovery-preview and Goa/SDK amendments are reconciled to canonical Linear and the owning tickets. The design owns behavior; this plan owns execution steps; tickets own deliverables and acceptance evidence. The historical standalone checkpoint is not an execution prerequisite. Task 0 vendors and validates the existing checked-in catalog/schema pinned below; it is ordinary implementation work, not a request for a missing archive. No application implementation, generator execution, database tests or browser tests were performed during planning.
+**Historical planning status:** Detailed implementation plan with available source inputs. The approved discovery-preview and Goa/SDK amendments are reconciled to canonical Linear and the owning tickets. The design owns behavior; this plan owns execution steps; tickets own deliverables and acceptance evidence. The historical standalone checkpoint is not an execution prerequisite. Task 0 vendors and validates the existing checked-in catalog/schema pinned below; it is ordinary implementation work, not a request for a missing archive. No application implementation, generator execution, database tests or browser tests were performed during planning.
+
+**Foundation implementation snapshot:** Task 0 contract, shared conformance harnesses, and approved two-record baseline are now checked in; Task 1 schema artifacts are present. These artifacts do not establish completion of later application, database integration, browser flows, or Stage B work. See the contract README for reproducible validation commands.
 
 ## Global constraints
 
@@ -546,9 +548,9 @@ Build generates `routeTree.gen.ts` before type-check; do not hand-edit the route
 - [ ] Keep endpoint-structure freeze in place after Stage A fleet convergence. Record Stage B prerequisites: attachment upsert/clone paths in `deployments/crud.go`; Platform pre-receipt/registration/completion paths; classifiable pending work; revalidation under a shared entry lock; all-retained-reference old/new selection comparison; bounded fleet transition. These are not optional because Stage A tests pass.
 - [ ] Report evidence honestly and link it to GRW-144/children. Obtain review via `requesting-code-review`, run `verification-before-completion` before commits/PR completion claims, and use `pull-request` / `pr-demo-gif` when preparing a user-visible PR. Do not bypass required reviews or checks.
 
-## Self-review and acceptance map
+## Historical planning self-review and acceptance map
 
-Planning checks: all referenced `mise run` task names were found in this worktree's task inventory; code fences and task structure were checked; only this plan and its spec snapshot are new files. These checks do not execute the proposed code, generators, database tests or browser flows. Pinned source availability and basic inventory checks passed; schema conformance and application behavior remain to be tested during implementation.
+At the planning snapshot (not current implementation status), planning checks: all referenced `mise run` task names were found in this worktree's task inventory; code fences and task structure were checked; only this plan and its spec snapshot are new files. These checks do not execute the proposed code, generators, database tests or browser flows. Pinned source availability and basic inventory checks passed; schema conformance and application behavior remain to be tested during implementation.
 
 | Spec requirement                                                                 | Plan location                                                        |
 | -------------------------------------------------------------------------------- | -------------------------------------------------------------------- |

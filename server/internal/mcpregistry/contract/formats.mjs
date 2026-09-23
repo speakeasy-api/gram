@@ -52,7 +52,29 @@ export function compile(schema, Validator, formats) {
       !Object.hasOwn(supported, node.format)
     )
       throw new Error("Unsupported contract format");
-    for (const value of Object.values(node)) visit(value);
+    for (const keyword of [
+      "$defs",
+      "definitions",
+      "properties",
+      "patternProperties",
+      "dependentSchemas",
+    ])
+      for (const child of Object.values(node[keyword] ?? {})) visit(child);
+    for (const keyword of ["allOf", "anyOf", "oneOf", "prefixItems"])
+      for (const child of node[keyword] ?? []) visit(child);
+    for (const keyword of [
+      "items",
+      "contains",
+      "additionalProperties",
+      "propertyNames",
+      "not",
+      "if",
+      "then",
+      "else",
+      "unevaluatedItems",
+      "unevaluatedProperties",
+    ])
+      visit(node[keyword]);
   };
   visit(schema);
   Object.assign(formats, supported);
