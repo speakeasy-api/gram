@@ -62831,6 +62831,221 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: SlackDirectoryConnections
+    /rpc/slackDirectoryConnections.listMembers:
+        get:
+            description: Read observed Slack members across the organization or within one workspace. Does not create identity mappings.
+            operationId: listSlackDirectoryMembers
+            parameters:
+                - allowEmptyValue: true
+                  description: Filter to a workspace connection.
+                  in: query
+                  name: connection_id
+                  schema:
+                    description: Filter to a workspace connection.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Literal case-insensitive name, email or Slack ID search.
+                  in: query
+                  name: search
+                  schema:
+                    description: Literal case-insensitive name, email or Slack ID search.
+                    maxLength: 200
+                    type: string
+                - allowEmptyValue: true
+                  description: Continue after the last membership ID.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Continue after the last membership ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum returned rows.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Maximum returned rows.
+                    format: int64
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMembersResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+            security:
+                - session_header_Gram-Session: []
+            summary: listMembers slackDirectoryConnections
+            tags:
+                - slackDirectoryConnections
+            x-speakeasy-name-override: listMembers
+            x-speakeasy-react-hook:
+                name: SlackDirectoryMembers
+    /rpc/slackDirectoryConnections.sync:
+        post:
+            description: Request a complete Slack workspace directory sync. Concurrent requests join the running sync.
+            operationId: syncSlackDirectory
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SyncSlackDirectoryRequestBody'
+                required: true
+            responses:
+                "202":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SyncResponseBody'
+                    description: Accepted response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+            security:
+                - session_header_Gram-Session: []
+            summary: sync slackDirectoryConnections
+            tags:
+                - slackDirectoryConnections
+            x-speakeasy-name-override: sync
+            x-speakeasy-react-hook:
+                name: SyncSlackDirectory
     /rpc/spendrules.archiveRule:
         post:
             description: 'Archive a budget rule. There is no delete: archiving ends the rule''s lineage while retaining its slug, version history, and events. Any open circuits for the rule close on the next evaluation cycle.'
@@ -90611,6 +90826,23 @@ components:
             description: Result type for listing MCP servers
             required:
                 - mcp_servers
+        ListMembersResponseBody:
+            type: object
+            properties:
+                members:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SlackDirectoryMember'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page, when present.
+                total:
+                    type: integer
+                    description: Matching retained membership rows.
+                    format: int64
+            required:
+                - members
+                - total
         ListMembersResult:
             type: object
             properties:
@@ -102400,6 +102632,13 @@ components:
         SlackDirectoryConnection:
             type: object
             properties:
+                directory_status:
+                    type: string
+                    description: Whether a snapshot belongs to the usable current authorization.
+                    enum:
+                        - never_synced
+                        - current
+                        - stale
                 disconnected_at:
                     type: string
                     description: When credentials were removed.
@@ -102420,6 +102659,22 @@ components:
                 last_error_code:
                     type: string
                     description: Bounded authorization failure code, when known.
+                last_full_sync_succeeded_at:
+                    type: string
+                    description: Last complete directory publication, possibly from an earlier authorization.
+                    format: date-time
+                last_sync_failed_at:
+                    type: string
+                    description: Most recent failed attempt; may precede a successful sync.
+                    format: date-time
+                last_sync_started_at:
+                    type: string
+                    description: Start of the latest attempted sync.
+                    format: date-time
+                member_count:
+                    type: integer
+                    description: Members observed in the last complete snapshot, including guests and bots.
+                    format: int64
                 status:
                     type: string
                     description: Authorization status, independent of directory sync.
@@ -102427,6 +102682,27 @@ components:
                         - connected
                         - disconnected
                         - reconnect_required
+                sync_members:
+                    type: integer
+                    description: Verified members fetched in the current attempt.
+                    format: int64
+                sync_pages:
+                    type: integer
+                    description: Completed pages in the current attempt.
+                    format: int64
+                sync_phase:
+                    type: string
+                    description: Bounded progress phase while syncing.
+                sync_status:
+                    type: string
+                    description: Latest workflow state. Unknown means progress could not be checked.
+                    enum:
+                        - idle
+                        - queued
+                        - running
+                        - retrying
+                        - failed
+                        - unknown
                 updated_at:
                     type: string
                     description: Last connection change timestamp.
@@ -102446,6 +102722,69 @@ components:
                 - generation
                 - granted_scopes
                 - updated_at
+                - member_count
+                - directory_status
+                - sync_status
+        SlackDirectoryMember:
+            type: object
+            properties:
+                connection_id:
+                    type: string
+                    description: Connection that observed this workspace member.
+                    format: uuid
+                display_name:
+                    type: string
+                    description: Optional observed display name.
+                email:
+                    type: string
+                    description: Observed email; never evidence of a confirmed Gram identity.
+                id:
+                    type: string
+                    description: Durable membership ID.
+                    format: uuid
+                last_seen_at:
+                    type: string
+                    description: Latest published observation.
+                    format: date-time
+                member_type:
+                    type: string
+                    description: Observed account type.
+                    enum:
+                        - person
+                        - guest
+                        - single_channel_guest
+                        - bot
+                        - unknown
+                observed_in_last_sync:
+                    type: boolean
+                    description: Whether this row was present in its workspace's last complete snapshot.
+                slack_user_id:
+                    type: string
+                    description: Slack workspace user ID.
+                status:
+                    type: string
+                    description: Observed account state.
+                    enum:
+                        - active
+                        - deactivated
+                        - invited
+                        - unknown
+                workspace_id:
+                    type: string
+                    description: Verified member workspace.
+                workspace_name:
+                    type: string
+                    description: Workspace display name.
+            required:
+                - id
+                - connection_id
+                - workspace_id
+                - workspace_name
+                - slack_user_id
+                - status
+                - member_type
+                - last_seen_at
+                - observed_in_last_sync
         SourceEnvironmentLink:
             type: object
             properties:
@@ -103420,6 +103759,28 @@ components:
                     format: uuid
             required:
                 - id
+        SyncResponseBody:
+            type: object
+            properties:
+                accepted:
+                    type: boolean
+                    description: The durable sync was started or already running.
+            required:
+                - accepted
+        SyncSlackDirectoryRequestBody:
+            type: object
+            properties:
+                generation:
+                    type: string
+                    description: Generation last read by the administrator.
+                    format: uuid
+                id:
+                    type: string
+                    description: Connection to sync.
+                    format: uuid
+            required:
+                - id
+                - generation
         SyncedAgentUser:
             type: object
             properties:

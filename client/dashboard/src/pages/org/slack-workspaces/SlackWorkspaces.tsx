@@ -1,3 +1,7 @@
+import { syncInProgress } from "./syncView";
+import { Link, useSearchParams } from "react-router";
+import { SlackDirectory } from "./SlackDirectory";
+import { SlackSyncButton, SlackSyncStatus } from "./SlackSyncStatus";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { parseAsString, useQueryState } from "nuqs";
@@ -78,6 +82,8 @@ function SlackWorkspacesContent(): JSX.Element {
   const query = useSlackDirectoryConnections(undefined, SESSION_SECURITY, {
     retry: false,
     throwOnError: false,
+    refetchInterval: (query) =>
+      query.state.data?.connections.some(syncInProgress) ? 3000 : 60000,
   });
   const [result, setResult] = useQueryState("slack_result", parseAsString);
   const [outcome, setOutcome] = useState(result);
@@ -139,11 +145,19 @@ function SlackWorkspacesContent(): JSX.Element {
       disconnect.reset();
     }
   };
+  const [params] = useSearchParams();
+  if (params.get("slack_view") === "members")
+    return (
+      <>
+        <ApiErrorAlert error={query.error} />
+        <SlackDirectory connections={connections} />
+      </>
+    );
   const notice =
     outcome && Object.hasOwn(outcomes, outcome) ? outcomes[outcome] : undefined;
 
   return (
-    <section className="max-w-4xl space-y-6" aria-label="Slack workspaces">
+    <section className="space-y-6" aria-label="Slack workspaces">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-xl space-y-2">
           <Heading variant="h3">Slack workspaces</Heading>
@@ -216,6 +230,13 @@ function SlackWorkspacesContent(): JSX.Element {
         />
       )}
       {connections.length > 0 && (
+        <Button variant="tertiary" asChild>
+          <Link to="?tab=slack-workspaces&slack_view=members">
+            All workspace members
+          </Link>
+        </Button>
+      )}
+      {connections.length > 0 && (
         <ul
           className="border-border divide-border divide-y border"
           aria-label="Slack workspaces"
@@ -242,6 +263,7 @@ function SlackWorkspacesContent(): JSX.Element {
                   <p className="text-muted-foreground font-mono text-xs">
                     {connection.workspaceId}
                   </p>
+                  <SlackSyncStatus connection={connection} />
                   {connection.status === "reconnect_required" && (
                     <p className="text-muted-foreground text-sm">
                       {connectionError(connection.lastErrorCode)}
@@ -249,7 +271,15 @@ function SlackWorkspacesContent(): JSX.Element {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="tertiary" size="sm" asChild>
+                  <Link
+                    to={`?tab=slack-workspaces&slack_view=members&slack_workspace=${encodeURIComponent(connection.id)}`}
+                  >
+                    View members
+                  </Link>
+                </Button>
+                <SlackSyncButton connection={connection} />
                 {connection.status !== "disconnected" && (
                   <Button
                     variant="tertiary"

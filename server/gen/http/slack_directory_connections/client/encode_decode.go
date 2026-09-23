@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -259,6 +260,513 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("slackDirectoryConnections", "list", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSyncRequest instantiates a HTTP request object with method and path set
+// to call the "slackDirectoryConnections" service "sync" endpoint
+func (c *Client) BuildSyncRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SyncSlackDirectoryConnectionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("slackDirectoryConnections", "sync", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSyncRequest returns an encoder for requests sent to the
+// slackDirectoryConnections sync server.
+func EncodeSyncRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*slackdirectoryconnections.SyncPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("slackDirectoryConnections", "sync", "*slackdirectoryconnections.SyncPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSyncRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("slackDirectoryConnections", "sync", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSyncResponse returns a decoder for responses returned by the
+// slackDirectoryConnections sync endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSyncResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeSyncResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusAccepted:
+			var (
+				body SyncResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "sync", err)
+			}
+			err = ValidateSyncResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "sync", err)
+			}
+			res := NewSyncResultAccepted(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SyncUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "sync", err)
+			}
+			err = ValidateSyncUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "sync", err)
+			}
+			return nil, NewSyncUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SyncForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "sync", err)
+			}
+			err = ValidateSyncForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "sync", err)
+			}
+			return nil, NewSyncForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SyncBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "sync", err)
+			}
+			err = ValidateSyncBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "sync", err)
+			}
+			return nil, NewSyncBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SyncNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "sync", err)
+			}
+			err = ValidateSyncNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "sync", err)
+			}
+			return nil, NewSyncNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SyncConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "sync", err)
+			}
+			err = ValidateSyncConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "sync", err)
+			}
+			return nil, NewSyncConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SyncUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "sync", err)
+			}
+			err = ValidateSyncUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "sync", err)
+			}
+			return nil, NewSyncUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SyncInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "sync", err)
+			}
+			err = ValidateSyncInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "sync", err)
+			}
+			return nil, NewSyncInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SyncInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "sync", err)
+				}
+				err = ValidateSyncInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slackDirectoryConnections", "sync", err)
+				}
+				return nil, NewSyncInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SyncUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "sync", err)
+				}
+				err = ValidateSyncUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slackDirectoryConnections", "sync", err)
+				}
+				return nil, NewSyncUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("slackDirectoryConnections", "sync", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SyncGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "sync", err)
+			}
+			err = ValidateSyncGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "sync", err)
+			}
+			return nil, NewSyncGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body SyncUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "sync", err)
+			}
+			err = ValidateSyncUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "sync", err)
+			}
+			return nil, NewSyncUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("slackDirectoryConnections", "sync", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListMembersRequest instantiates a HTTP request object with method and
+// path set to call the "slackDirectoryConnections" service "listMembers"
+// endpoint
+func (c *Client) BuildListMembersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListMembersSlackDirectoryConnectionsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("slackDirectoryConnections", "listMembers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListMembersRequest returns an encoder for requests sent to the
+// slackDirectoryConnections listMembers server.
+func EncodeListMembersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*slackdirectoryconnections.ListMembersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("slackDirectoryConnections", "listMembers", "*slackdirectoryconnections.ListMembersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		if p.ConnectionID != nil {
+			values.Add("connection_id", *p.ConnectionID)
+		}
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListMembersResponse returns a decoder for responses returned by the
+// slackDirectoryConnections listMembers endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListMembersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeListMembersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListMembersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "listMembers", err)
+			}
+			err = ValidateListMembersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "listMembers", err)
+			}
+			res := NewListMembersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListMembersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "listMembers", err)
+			}
+			err = ValidateListMembersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "listMembers", err)
+			}
+			return nil, NewListMembersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListMembersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "listMembers", err)
+			}
+			err = ValidateListMembersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "listMembers", err)
+			}
+			return nil, NewListMembersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListMembersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "listMembers", err)
+			}
+			err = ValidateListMembersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "listMembers", err)
+			}
+			return nil, NewListMembersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListMembersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "listMembers", err)
+			}
+			err = ValidateListMembersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "listMembers", err)
+			}
+			return nil, NewListMembersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListMembersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "listMembers", err)
+			}
+			err = ValidateListMembersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "listMembers", err)
+			}
+			return nil, NewListMembersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListMembersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "listMembers", err)
+			}
+			err = ValidateListMembersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "listMembers", err)
+			}
+			return nil, NewListMembersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListMembersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "listMembers", err)
+			}
+			err = ValidateListMembersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "listMembers", err)
+			}
+			return nil, NewListMembersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListMembersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "listMembers", err)
+				}
+				err = ValidateListMembersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slackDirectoryConnections", "listMembers", err)
+				}
+				return nil, NewListMembersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListMembersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "listMembers", err)
+				}
+				err = ValidateListMembersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slackDirectoryConnections", "listMembers", err)
+				}
+				return nil, NewListMembersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("slackDirectoryConnections", "listMembers", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListMembersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "listMembers", err)
+			}
+			err = ValidateListMembersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "listMembers", err)
+			}
+			return nil, NewListMembersGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ListMembersUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "listMembers", err)
+			}
+			err = ValidateListMembersUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "listMembers", err)
+			}
+			return nil, NewListMembersUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("slackDirectoryConnections", "listMembers", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -767,18 +1275,48 @@ func DecodeDisconnectResponse(decoder func(*http.Response) goahttp.Decoder, rest
 // from a value of type *SlackDirectoryConnectionResponseBody.
 func unmarshalSlackDirectoryConnectionResponseBodyToSlackdirectoryconnectionsSlackDirectoryConnection(v *SlackDirectoryConnectionResponseBody) *slackdirectoryconnections.SlackDirectoryConnection {
 	res := &slackdirectoryconnections.SlackDirectoryConnection{
-		ID:             *v.ID,
-		WorkspaceID:    *v.WorkspaceID,
-		WorkspaceName:  *v.WorkspaceName,
-		Status:         *v.Status,
-		Generation:     *v.Generation,
-		LastErrorCode:  v.LastErrorCode,
-		DisconnectedAt: v.DisconnectedAt,
-		UpdatedAt:      *v.UpdatedAt,
+		ID:                      *v.ID,
+		WorkspaceID:             *v.WorkspaceID,
+		WorkspaceName:           *v.WorkspaceName,
+		Status:                  *v.Status,
+		Generation:              *v.Generation,
+		LastErrorCode:           v.LastErrorCode,
+		DisconnectedAt:          v.DisconnectedAt,
+		MemberCount:             *v.MemberCount,
+		DirectoryStatus:         *v.DirectoryStatus,
+		SyncStatus:              *v.SyncStatus,
+		SyncPhase:               v.SyncPhase,
+		SyncPages:               v.SyncPages,
+		SyncMembers:             v.SyncMembers,
+		LastSyncStartedAt:       v.LastSyncStartedAt,
+		LastSyncFailedAt:        v.LastSyncFailedAt,
+		LastFullSyncSucceededAt: v.LastFullSyncSucceededAt,
+		UpdatedAt:               *v.UpdatedAt,
 	}
 	res.GrantedScopes = make([]string, len(v.GrantedScopes))
 	for i, val := range v.GrantedScopes {
 		res.GrantedScopes[i] = val
+	}
+
+	return res
+}
+
+// unmarshalSlackDirectoryMemberResponseBodyToSlackdirectoryconnectionsSlackDirectoryMember
+// builds a value of type *slackdirectoryconnections.SlackDirectoryMember from
+// a value of type *SlackDirectoryMemberResponseBody.
+func unmarshalSlackDirectoryMemberResponseBodyToSlackdirectoryconnectionsSlackDirectoryMember(v *SlackDirectoryMemberResponseBody) *slackdirectoryconnections.SlackDirectoryMember {
+	res := &slackdirectoryconnections.SlackDirectoryMember{
+		ID:                 *v.ID,
+		ConnectionID:       *v.ConnectionID,
+		WorkspaceID:        *v.WorkspaceID,
+		WorkspaceName:      *v.WorkspaceName,
+		SlackUserID:        *v.SlackUserID,
+		DisplayName:        v.DisplayName,
+		Email:              v.Email,
+		Status:             *v.Status,
+		MemberType:         *v.MemberType,
+		LastSeenAt:         *v.LastSeenAt,
+		ObservedInLastSync: *v.ObservedInLastSync,
 	}
 
 	return res

@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -52,13 +53,14 @@ func (p *mockProvider) Exchange(ctx context.Context, code string) (*slackdirecto
 }
 
 type fixture struct {
-	build    func(slackdirectoryconnections.Provider) *slackdirectoryconnections.Service
-	service  *slackdirectoryconnections.Service
-	db       *pgxpool.Pool
-	provider *mockProvider
-	enc      *encryption.Client
-	cache    cache.Cache
-	auth     *contextvalues.AuthContext
+	build     func(slackdirectoryconnections.Provider) *slackdirectoryconnections.Service
+	service   *slackdirectoryconnections.Service
+	db        *pgxpool.Pool
+	provider  *mockProvider
+	enc       *encryption.Client
+	cache     cache.Cache
+	auth      *contextvalues.AuthContext
+	scheduler *testSyncScheduler
 }
 
 func newService(t *testing.T) (context.Context, *fixture) {
@@ -81,10 +83,11 @@ func newService(t *testing.T) (context.Context, *fixture) {
 	store := cache.NewRedisCacheAdapter(redis)
 	site, err := url.Parse("https://dashboard.example")
 	require.NoError(t, err)
+	scheduler := &testSyncScheduler{}
 	build := func(oauth slackdirectoryconnections.Provider) *slackdirectoryconnections.Service {
-		return slackdirectoryconnections.NewService(logger, tp, db, sessions, engine, audit.NewLogger(), store, enc, oauth, site)
+		return slackdirectoryconnections.NewService(logger, tp, db, sessions, engine, audit.NewLogger(), store, enc, oauth, site, scheduler)
 	}
-	return ctx, &fixture{build: build, service: build(provider), db: db, provider: provider, enc: enc, cache: store, auth: ac}
+	return ctx, &fixture{build: build, service: build(provider), scheduler: scheduler, db: db, provider: provider, enc: enc, cache: store, auth: ac}
 }
 func begin(t *testing.T, ctx context.Context, f *fixture, id *string) string {
 	t.Helper()
@@ -109,4 +112,22 @@ func authorize(t *testing.T, ctx context.Context, f *fixture, state, team string
 	}
 	t.Fatal("authorized workspace missing")
 	return nil
+}
+
+type testSyncScheduler struct {
+	inputs []slackdirectoryconnections.SyncInput
+	err    error
+	state  slackdirectoryconnections.SyncState
+}
+
+func (s *testSyncScheduler) Start(_ context.Context, input slackdirectoryconnections.SyncInput) error {
+	s.inputs = append(s.inputs, input)
+	return s.err
+}
+func (s *testSyncScheduler) State(_ context.Context, _, _ uuid.UUID) (slackdirectoryconnections.SyncState, error) {
+	state := s.state
+	if state.Status == "" {
+		state.Status = "idle"
+	}
+	return state, s.err
 }

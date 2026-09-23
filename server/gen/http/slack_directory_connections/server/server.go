@@ -18,10 +18,12 @@ import (
 
 // Server lists the slackDirectoryConnections service endpoint HTTP handlers.
 type Server struct {
-	Mounts     []*MountPoint
-	List       http.Handler
-	Begin      http.Handler
-	Disconnect http.Handler
+	Mounts      []*MountPoint
+	List        http.Handler
+	Sync        http.Handler
+	ListMembers http.Handler
+	Begin       http.Handler
+	Disconnect  http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -52,12 +54,16 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"List", "GET", "/rpc/slackDirectoryConnections.list"},
+			{"Sync", "POST", "/rpc/slackDirectoryConnections.sync"},
+			{"ListMembers", "GET", "/rpc/slackDirectoryConnections.listMembers"},
 			{"Begin", "POST", "/rpc/slackDirectoryConnections.begin"},
 			{"Disconnect", "POST", "/rpc/slackDirectoryConnections.disconnect"},
 		},
-		List:       NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
-		Begin:      NewBeginHandler(e.Begin, mux, decoder, encoder, errhandler, formatter),
-		Disconnect: NewDisconnectHandler(e.Disconnect, mux, decoder, encoder, errhandler, formatter),
+		List:        NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
+		Sync:        NewSyncHandler(e.Sync, mux, decoder, encoder, errhandler, formatter),
+		ListMembers: NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
+		Begin:       NewBeginHandler(e.Begin, mux, decoder, encoder, errhandler, formatter),
+		Disconnect:  NewDisconnectHandler(e.Disconnect, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -67,6 +73,8 @@ func (s *Server) Service() string { return "slackDirectoryConnections" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.List = m(s.List)
+	s.Sync = m(s.Sync)
+	s.ListMembers = m(s.ListMembers)
 	s.Begin = m(s.Begin)
 	s.Disconnect = m(s.Disconnect)
 }
@@ -77,6 +85,8 @@ func (s *Server) MethodNames() []string { return slackdirectoryconnections.Metho
 // Mount configures the mux to serve the slackDirectoryConnections endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListHandler(mux, h.List)
+	MountSyncHandler(mux, h.Sync)
+	MountListMembersHandler(mux, h.ListMembers)
 	MountBeginHandler(mux, h.Begin)
 	MountDisconnectHandler(mux, h.Disconnect)
 }
@@ -116,6 +126,112 @@ func NewListHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "list")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "slackDirectoryConnections")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSyncHandler configures the mux to serve the "slackDirectoryConnections"
+// service "sync" endpoint.
+func MountSyncHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/slackDirectoryConnections.sync", f)
+}
+
+// NewSyncHandler creates a HTTP handler which loads the HTTP request and calls
+// the "slackDirectoryConnections" service "sync" endpoint.
+func NewSyncHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSyncRequest(mux, decoder)
+		encodeResponse = EncodeSyncResponse(encoder)
+		encodeError    = EncodeSyncError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "sync")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "slackDirectoryConnections")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListMembersHandler configures the mux to serve the
+// "slackDirectoryConnections" service "listMembers" endpoint.
+func MountListMembersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/slackDirectoryConnections.listMembers", f)
+}
+
+// NewListMembersHandler creates a HTTP handler which loads the HTTP request
+// and calls the "slackDirectoryConnections" service "listMembers" endpoint.
+func NewListMembersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListMembersRequest(mux, decoder)
+		encodeResponse = EncodeListMembersResponse(encoder)
+		encodeError    = EncodeListMembersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listMembers")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "slackDirectoryConnections")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -15,18 +15,22 @@ import (
 
 // Client is the "slackDirectoryConnections" service client.
 type Client struct {
-	ListEndpoint       goa.Endpoint
-	BeginEndpoint      goa.Endpoint
-	DisconnectEndpoint goa.Endpoint
+	ListEndpoint        goa.Endpoint
+	SyncEndpoint        goa.Endpoint
+	ListMembersEndpoint goa.Endpoint
+	BeginEndpoint       goa.Endpoint
+	DisconnectEndpoint  goa.Endpoint
 }
 
 // NewClient initializes a "slackDirectoryConnections" service client given the
 // endpoints.
-func NewClient(list, begin, disconnect goa.Endpoint) *Client {
+func NewClient(list, sync, listMembers, begin, disconnect goa.Endpoint) *Client {
 	return &Client{
-		ListEndpoint:       list,
-		BeginEndpoint:      begin,
-		DisconnectEndpoint: disconnect,
+		ListEndpoint:        list,
+		SyncEndpoint:        sync,
+		ListMembersEndpoint: listMembers,
+		BeginEndpoint:       begin,
+		DisconnectEndpoint:  disconnect,
 	}
 }
 
@@ -51,6 +55,53 @@ func (c *Client) List(ctx context.Context, p *ListPayload) (res *ListResult, err
 		return
 	}
 	return ires.(*ListResult), nil
+}
+
+// Sync calls the "sync" endpoint of the "slackDirectoryConnections" service.
+// Sync may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): Slack connections are unavailable or authorization is not configured.
+//   - error: internal error
+func (c *Client) Sync(ctx context.Context, p *SyncPayload) (res *SyncResult, err error) {
+	var ires any
+	ires, err = c.SyncEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SyncResult), nil
+}
+
+// ListMembers calls the "listMembers" endpoint of the
+// "slackDirectoryConnections" service.
+// ListMembers may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): Slack connections are unavailable or authorization is not configured.
+//   - error: internal error
+func (c *Client) ListMembers(ctx context.Context, p *ListMembersPayload) (res *ListMembersResult, err error) {
+	var ires any
+	ires, err = c.ListMembersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListMembersResult), nil
 }
 
 // Begin calls the "begin" endpoint of the "slackDirectoryConnections" service.

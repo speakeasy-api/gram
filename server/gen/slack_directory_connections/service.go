@@ -19,6 +19,12 @@ import (
 type Service interface {
 	// List implements list.
 	List(context.Context, *ListPayload) (res *ListResult, err error)
+	// Request a complete Slack workspace directory sync. Concurrent requests join
+	// the running sync.
+	Sync(context.Context, *SyncPayload) (res *SyncResult, err error)
+	// Read observed Slack members across the organization or within one workspace.
+	// Does not create identity mappings.
+	ListMembers(context.Context, *ListMembersPayload) (res *ListMembersResult, err error)
 	// Begin implements begin.
 	Begin(context.Context, *BeginPayload) (res *BeginResult, err error)
 	// Disconnect implements disconnect.
@@ -45,7 +51,7 @@ const ServiceName = "slackDirectoryConnections"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"list", "begin", "disconnect"}
+var MethodNames = [5]string{"list", "sync", "listMembers", "begin", "disconnect"}
 
 // BeginPayload is the payload type of the slackDirectoryConnections service
 // begin method.
@@ -70,6 +76,30 @@ type DisconnectPayload struct {
 	ID string
 	// Generation last read by the administrator.
 	Generation string
+}
+
+// ListMembersPayload is the payload type of the slackDirectoryConnections
+// service listMembers method.
+type ListMembersPayload struct {
+	SessionToken *string
+	// Filter to a workspace connection.
+	ConnectionID *string
+	// Literal case-insensitive name, email or Slack ID search.
+	Search *string
+	// Continue after the last membership ID.
+	Cursor *string
+	// Maximum returned rows.
+	Limit int
+}
+
+// ListMembersResult is the result type of the slackDirectoryConnections
+// service listMembers method.
+type ListMembersResult struct {
+	Members []*SlackDirectoryMember
+	// Matching retained membership rows.
+	Total int64
+	// Cursor for the next page, when present.
+	NextCursor *string
 }
 
 // ListPayload is the payload type of the slackDirectoryConnections service
@@ -106,8 +136,68 @@ type SlackDirectoryConnection struct {
 	LastErrorCode *string
 	// When credentials were removed.
 	DisconnectedAt *string
+	// Members observed in the last complete snapshot, including guests and bots.
+	MemberCount int64
+	// Whether a snapshot belongs to the usable current authorization.
+	DirectoryStatus string
+	// Latest workflow state. Unknown means progress could not be checked.
+	SyncStatus string
+	// Bounded progress phase while syncing.
+	SyncPhase *string
+	// Completed pages in the current attempt.
+	SyncPages *int
+	// Verified members fetched in the current attempt.
+	SyncMembers *int
+	// Start of the latest attempted sync.
+	LastSyncStartedAt *string
+	// Most recent failed attempt; may precede a successful sync.
+	LastSyncFailedAt *string
+	// Last complete directory publication, possibly from an earlier authorization.
+	LastFullSyncSucceededAt *string
 	// Last connection change timestamp.
 	UpdatedAt string
+}
+
+type SlackDirectoryMember struct {
+	// Durable membership ID.
+	ID string
+	// Connection that observed this workspace member.
+	ConnectionID string
+	// Verified member workspace.
+	WorkspaceID string
+	// Workspace display name.
+	WorkspaceName string
+	// Slack workspace user ID.
+	SlackUserID string
+	// Optional observed display name.
+	DisplayName *string
+	// Observed email; never evidence of a confirmed Gram identity.
+	Email *string
+	// Observed account state.
+	Status string
+	// Observed account type.
+	MemberType string
+	// Latest published observation.
+	LastSeenAt string
+	// Whether this row was present in its workspace's last complete snapshot.
+	ObservedInLastSync bool
+}
+
+// SyncPayload is the payload type of the slackDirectoryConnections service
+// sync method.
+type SyncPayload struct {
+	SessionToken *string
+	// Connection to sync.
+	ID string
+	// Generation last read by the administrator.
+	Generation string
+}
+
+// SyncResult is the result type of the slackDirectoryConnections service sync
+// method.
+type SyncResult struct {
+	// The durable sync was started or already running.
+	Accepted bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -68,6 +68,28 @@ func (q *Queries) AuthorizeSlackDirectoryConnection(ctx context.Context, arg Aut
 	return i, err
 }
 
+const countSlackDirectoryMembers = `-- name: CountSlackDirectoryMembers :one
+SELECT count(*)::bigint FROM slack_directory_memberships m
+JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND c.slack_team_id = m.slack_team_id
+WHERE m.organization_id = $1
+  AND ($2::uuid IS NULL OR c.id = $2)
+  AND ($3::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower($3)) > 0
+    OR strpos(lower(coalesce(m.email, '')), lower($3)) > 0 OR strpos(lower(m.slack_user_id), lower($3)) > 0)
+`
+
+type CountSlackDirectoryMembersParams struct {
+	OrganizationID string
+	ConnectionID   uuid.NullUUID
+	Search         string
+}
+
+func (q *Queries) CountSlackDirectoryMembers(ctx context.Context, arg CountSlackDirectoryMembersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSlackDirectoryMembers, arg.OrganizationID, arg.ConnectionID, arg.Search)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createSlackDirectoryConnection = `-- name: CreateSlackDirectoryConnection :one
 INSERT INTO slack_directory_connections (organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health)
 VALUES ($1, $2, $3, $4, $5, $6, 'connected')
@@ -111,6 +133,40 @@ func (q *Queries) CreateSlackDirectoryConnection(ctx context.Context, arg Create
 		&i.LastErrorCode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createSlackMappingForTest = `-- name: CreateSlackMappingForTest :one
+INSERT INTO slack_identity_mappings (organization_id, slack_team_id, slack_user_id, user_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id, organization_id, slack_team_id, slack_user_id, user_id, created_at, updated_at, revoked_at
+`
+
+type CreateSlackMappingForTestParams struct {
+	OrganizationID string
+	SlackTeamID    string
+	SlackUserID    string
+	UserID         string
+}
+
+func (q *Queries) CreateSlackMappingForTest(ctx context.Context, arg CreateSlackMappingForTestParams) (SlackIdentityMapping, error) {
+	row := q.db.QueryRow(ctx, createSlackMappingForTest,
+		arg.OrganizationID,
+		arg.SlackTeamID,
+		arg.SlackUserID,
+		arg.UserID,
+	)
+	var i SlackIdentityMapping
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.SlackTeamID,
+		&i.SlackUserID,
+		&i.UserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RevokedAt,
 	)
 	return i, err
 }
@@ -159,6 +215,39 @@ func (q *Queries) DisconnectSlackDirectoryConnection(ctx context.Context, arg Di
 	return i, err
 }
 
+const failSlackDirectorySync = `-- name: FailSlackDirectorySync :execrows
+UPDATE slack_directory_connections
+SET last_sync_failed_at = clock_timestamp(), last_error_code = $1,
+    health = CASE WHEN $2::boolean THEN 'reconnect_required' ELSE health END,
+    updated_at = clock_timestamp()
+WHERE organization_id = $3 AND id = $4 AND generation = $5
+  AND last_sync_started_at = $6 AND disconnected_at IS NULL
+`
+
+type FailSlackDirectorySyncParams struct {
+	ErrorCode      pgtype.Text
+	Reconnect      bool
+	OrganizationID string
+	ID             uuid.UUID
+	Generation     uuid.UUID
+	StartedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) FailSlackDirectorySync(ctx context.Context, arg FailSlackDirectorySyncParams) (int64, error) {
+	result, err := q.db.Exec(ctx, failSlackDirectorySync,
+		arg.ErrorCode,
+		arg.Reconnect,
+		arg.OrganizationID,
+		arg.ID,
+		arg.Generation,
+		arg.StartedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getSlackDirectoryConnection = `-- name: GetSlackDirectoryConnection :one
 SELECT id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, created_at, updated_at FROM slack_directory_connections
 WHERE organization_id = $1 AND id = $2
@@ -193,6 +282,83 @@ func (q *Queries) GetSlackDirectoryConnection(ctx context.Context, arg GetSlackD
 	return i, err
 }
 
+const getSlackMappingForTest = `-- name: GetSlackMappingForTest :one
+SELECT id, organization_id, slack_team_id, slack_user_id, user_id, created_at, updated_at, revoked_at FROM slack_identity_mappings WHERE organization_id = $1 AND id = $2
+`
+
+type GetSlackMappingForTestParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) GetSlackMappingForTest(ctx context.Context, arg GetSlackMappingForTestParams) (SlackIdentityMapping, error) {
+	row := q.db.QueryRow(ctx, getSlackMappingForTest, arg.OrganizationID, arg.ID)
+	var i SlackIdentityMapping
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.SlackTeamID,
+		&i.SlackUserID,
+		&i.UserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const listSlackDirectoryConnectionSummaries = `-- name: ListSlackDirectoryConnectionSummaries :many
+SELECT c.id, c.organization_id, c.slack_team_id, c.slack_team_name, c.credentials_encrypted, c.granted_scopes, c.generation, c.health, c.disconnected_at, c.last_sync_started_at, c.last_full_sync_generation, c.last_full_sync_succeeded_at, c.last_sync_failed_at, c.last_error_code, c.created_at, c.updated_at,
+  (SELECT count(*) FROM slack_directory_memberships m WHERE m.organization_id = c.organization_id
+   AND m.slack_team_id = c.slack_team_id AND m.last_seen_at = c.last_full_sync_succeeded_at)::bigint AS member_count
+FROM slack_directory_connections c
+WHERE c.organization_id = $1
+ORDER BY c.created_at, c.id
+`
+
+type ListSlackDirectoryConnectionSummariesRow struct {
+	SlackDirectoryConnection SlackDirectoryConnection
+	MemberCount              int64
+}
+
+func (q *Queries) ListSlackDirectoryConnectionSummaries(ctx context.Context, organizationID string) ([]ListSlackDirectoryConnectionSummariesRow, error) {
+	rows, err := q.db.Query(ctx, listSlackDirectoryConnectionSummaries, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSlackDirectoryConnectionSummariesRow
+	for rows.Next() {
+		var i ListSlackDirectoryConnectionSummariesRow
+		if err := rows.Scan(
+			&i.SlackDirectoryConnection.ID,
+			&i.SlackDirectoryConnection.OrganizationID,
+			&i.SlackDirectoryConnection.SlackTeamID,
+			&i.SlackDirectoryConnection.SlackTeamName,
+			&i.SlackDirectoryConnection.CredentialsEncrypted,
+			&i.SlackDirectoryConnection.GrantedScopes,
+			&i.SlackDirectoryConnection.Generation,
+			&i.SlackDirectoryConnection.Health,
+			&i.SlackDirectoryConnection.DisconnectedAt,
+			&i.SlackDirectoryConnection.LastSyncStartedAt,
+			&i.SlackDirectoryConnection.LastFullSyncGeneration,
+			&i.SlackDirectoryConnection.LastFullSyncSucceededAt,
+			&i.SlackDirectoryConnection.LastSyncFailedAt,
+			&i.SlackDirectoryConnection.LastErrorCode,
+			&i.SlackDirectoryConnection.CreatedAt,
+			&i.SlackDirectoryConnection.UpdatedAt,
+			&i.MemberCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSlackDirectoryConnections = `-- name: ListSlackDirectoryConnections :many
 SELECT id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, created_at, updated_at FROM slack_directory_connections
 WHERE organization_id = $1
@@ -225,6 +391,94 @@ func (q *Queries) ListSlackDirectoryConnections(ctx context.Context, organizatio
 			&i.LastErrorCode,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSlackDirectoryMembers = `-- name: ListSlackDirectoryMembers :many
+SELECT m.id, m.organization_id, m.slack_team_id, m.slack_user_id, m.display_name, m.email, m.status, m.member_type, m.provider_updated_at, m.last_seen_at, m.mapping_revision, m.mapping_conflict_reason, m.mapping_conflict_detected_at, m.created_at, m.updated_at, c.id AS connection_id, c.slack_team_name AS workspace_name,
+    (m.last_seen_at = c.last_full_sync_succeeded_at)::boolean AS observed_in_last_sync
+FROM slack_directory_memberships m
+JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND c.slack_team_id = m.slack_team_id
+WHERE m.organization_id = $1
+  AND ($2::uuid IS NULL OR c.id = $2)
+  AND ($3::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower($3)) > 0
+    OR strpos(lower(coalesce(m.email, '')), lower($3)) > 0 OR strpos(lower(m.slack_user_id), lower($3)) > 0)
+  AND ($4::uuid IS NULL OR m.id > $4)
+ORDER BY m.id
+LIMIT $5
+`
+
+type ListSlackDirectoryMembersParams struct {
+	OrganizationID string
+	ConnectionID   uuid.NullUUID
+	Search         string
+	Cursor         uuid.NullUUID
+	PageSize       int32
+}
+
+type ListSlackDirectoryMembersRow struct {
+	ID                        uuid.UUID
+	OrganizationID            string
+	SlackTeamID               string
+	SlackUserID               string
+	DisplayName               pgtype.Text
+	Email                     pgtype.Text
+	Status                    string
+	MemberType                string
+	ProviderUpdatedAt         pgtype.Timestamptz
+	LastSeenAt                pgtype.Timestamptz
+	MappingRevision           int64
+	MappingConflictReason     pgtype.Text
+	MappingConflictDetectedAt pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+	ConnectionID              uuid.UUID
+	WorkspaceName             pgtype.Text
+	ObservedInLastSync        bool
+}
+
+func (q *Queries) ListSlackDirectoryMembers(ctx context.Context, arg ListSlackDirectoryMembersParams) ([]ListSlackDirectoryMembersRow, error) {
+	rows, err := q.db.Query(ctx, listSlackDirectoryMembers,
+		arg.OrganizationID,
+		arg.ConnectionID,
+		arg.Search,
+		arg.Cursor,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSlackDirectoryMembersRow
+	for rows.Next() {
+		var i ListSlackDirectoryMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.SlackTeamID,
+			&i.SlackUserID,
+			&i.DisplayName,
+			&i.Email,
+			&i.Status,
+			&i.MemberType,
+			&i.ProviderUpdatedAt,
+			&i.LastSeenAt,
+			&i.MappingRevision,
+			&i.MappingConflictReason,
+			&i.MappingConflictDetectedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ConnectionID,
+			&i.WorkspaceName,
+			&i.ObservedInLastSync,
 		); err != nil {
 			return nil, err
 		}
@@ -304,4 +558,172 @@ func (q *Queries) LockSlackDirectoryConnectionByTeam(ctx context.Context, arg Lo
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const markAbsentSlackDirectoryMembershipsUnknown = `-- name: MarkAbsentSlackDirectoryMembershipsUnknown :exec
+UPDATE slack_directory_memberships SET status = 'unknown', updated_at = clock_timestamp()
+WHERE organization_id = $1 AND slack_team_id = $2
+  AND last_seen_at <> $3 AND status <> 'unknown'
+`
+
+type MarkAbsentSlackDirectoryMembershipsUnknownParams struct {
+	OrganizationID string
+	SlackTeamID    string
+	PublishedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) MarkAbsentSlackDirectoryMembershipsUnknown(ctx context.Context, arg MarkAbsentSlackDirectoryMembershipsUnknownParams) error {
+	_, err := q.db.Exec(ctx, markAbsentSlackDirectoryMembershipsUnknown, arg.OrganizationID, arg.SlackTeamID, arg.PublishedAt)
+	return err
+}
+
+const publishSlackDirectorySync = `-- name: PublishSlackDirectorySync :one
+UPDATE slack_directory_connections
+SET last_full_sync_generation = generation, last_full_sync_succeeded_at = $1,
+    last_error_code = NULL, health = 'connected', updated_at = clock_timestamp()
+WHERE organization_id = $2 AND id = $3 AND generation = $4
+RETURNING id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, created_at, updated_at
+`
+
+type PublishSlackDirectorySyncParams struct {
+	PublishedAt    pgtype.Timestamptz
+	OrganizationID string
+	ID             uuid.UUID
+	Generation     uuid.UUID
+}
+
+func (q *Queries) PublishSlackDirectorySync(ctx context.Context, arg PublishSlackDirectorySyncParams) (SlackDirectoryConnection, error) {
+	row := q.db.QueryRow(ctx, publishSlackDirectorySync,
+		arg.PublishedAt,
+		arg.OrganizationID,
+		arg.ID,
+		arg.Generation,
+	)
+	var i SlackDirectoryConnection
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.SlackTeamID,
+		&i.SlackTeamName,
+		&i.CredentialsEncrypted,
+		&i.GrantedScopes,
+		&i.Generation,
+		&i.Health,
+		&i.DisconnectedAt,
+		&i.LastSyncStartedAt,
+		&i.LastFullSyncGeneration,
+		&i.LastFullSyncSucceededAt,
+		&i.LastSyncFailedAt,
+		&i.LastErrorCode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const setSlackMappingRevisionForTest = `-- name: SetSlackMappingRevisionForTest :exec
+UPDATE slack_directory_memberships SET mapping_revision = $1,
+ mapping_conflict_reason = 'test_review', mapping_conflict_detected_at = clock_timestamp()
+WHERE organization_id = $2 AND id = $3
+`
+
+type SetSlackMappingRevisionForTestParams struct {
+	MappingRevision int64
+	OrganizationID  string
+	ID              uuid.UUID
+}
+
+func (q *Queries) SetSlackMappingRevisionForTest(ctx context.Context, arg SetSlackMappingRevisionForTestParams) error {
+	_, err := q.db.Exec(ctx, setSlackMappingRevisionForTest, arg.MappingRevision, arg.OrganizationID, arg.ID)
+	return err
+}
+
+const startSlackDirectorySync = `-- name: StartSlackDirectorySync :execrows
+UPDATE slack_directory_connections
+SET last_sync_started_at = $1, updated_at = clock_timestamp()
+WHERE organization_id = $2 AND id = $3 AND generation = $4
+  AND disconnected_at IS NULL AND (last_sync_started_at IS NULL OR last_sync_started_at <= $1)
+`
+
+type StartSlackDirectorySyncParams struct {
+	StartedAt      pgtype.Timestamptz
+	OrganizationID string
+	ID             uuid.UUID
+	Generation     uuid.UUID
+}
+
+func (q *Queries) StartSlackDirectorySync(ctx context.Context, arg StartSlackDirectorySyncParams) (int64, error) {
+	result, err := q.db.Exec(ctx, startSlackDirectorySync,
+		arg.StartedAt,
+		arg.OrganizationID,
+		arg.ID,
+		arg.Generation,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const tryLockSlackDirectorySync = `-- name: TryLockSlackDirectorySync :one
+SELECT pg_try_advisory_lock(hashtextextended($1::text, 0))::boolean AS acquired
+`
+
+func (q *Queries) TryLockSlackDirectorySync(ctx context.Context, lockKey string) (bool, error) {
+	row := q.db.QueryRow(ctx, tryLockSlackDirectorySync, lockKey)
+	var acquired bool
+	err := row.Scan(&acquired)
+	return acquired, err
+}
+
+const unlockSlackDirectorySync = `-- name: UnlockSlackDirectorySync :one
+SELECT pg_advisory_unlock(hashtextextended($1::text, 0))::boolean AS released
+`
+
+func (q *Queries) UnlockSlackDirectorySync(ctx context.Context, lockKey string) (bool, error) {
+	row := q.db.QueryRow(ctx, unlockSlackDirectorySync, lockKey)
+	var released bool
+	err := row.Scan(&released)
+	return released, err
+}
+
+const upsertSlackDirectoryMembershipBatch = `-- name: UpsertSlackDirectoryMembershipBatch :exec
+INSERT INTO slack_directory_memberships
+(organization_id, slack_team_id, slack_user_id, display_name, email, status, member_type, provider_updated_at, last_seen_at)
+SELECT $1, $2, u.user_id, nullif(u.display_name, ''), nullif(u.email, ''), u.status, u.member_type, u.provider_updated_at, $3
+FROM (SELECT unnest($4::text[]) AS user_id,
+ unnest($5::text[]) AS display_name, unnest($6::text[]) AS email,
+ unnest($7::text[]) AS status, unnest($8::text[]) AS member_type,
+ unnest($9::timestamptz[]) AS provider_updated_at) u
+ON CONFLICT (organization_id, slack_team_id, slack_user_id) DO UPDATE SET
+    display_name = EXCLUDED.display_name, email = EXCLUDED.email, status = EXCLUDED.status,
+    member_type = EXCLUDED.member_type, provider_updated_at = EXCLUDED.provider_updated_at,
+    last_seen_at = EXCLUDED.last_seen_at, updated_at = clock_timestamp()
+`
+
+type UpsertSlackDirectoryMembershipBatchParams struct {
+	OrganizationID     string
+	SlackTeamID        string
+	LastSeenAt         pgtype.Timestamptz
+	UserIds            []string
+	DisplayNames       []string
+	Emails             []string
+	Statuses           []string
+	MemberTypes        []string
+	ProviderUpdatedAts []pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertSlackDirectoryMembershipBatch(ctx context.Context, arg UpsertSlackDirectoryMembershipBatchParams) error {
+	_, err := q.db.Exec(ctx, upsertSlackDirectoryMembershipBatch,
+		arg.OrganizationID,
+		arg.SlackTeamID,
+		arg.LastSeenAt,
+		arg.UserIds,
+		arg.DisplayNames,
+		arg.Emails,
+		arg.Statuses,
+		arg.MemberTypes,
+		arg.ProviderUpdatedAts,
+	)
+	return err
 }

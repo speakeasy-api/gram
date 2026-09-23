@@ -79,6 +79,9 @@ vi.mock("@gram/client/react-query/slackDirectoryConnections.js", () => ({
             generation: mocks.generation,
             grantedScopes: [],
             updatedAt: "2026-01-01T00:00:00Z",
+            memberCount: 0,
+            directoryStatus: "never_synced",
+            syncStatus: "idle",
           },
         ],
       },
@@ -107,6 +110,13 @@ vi.mock(
   }),
 );
 
+vi.mock("@gram/client/react-query/syncSlackDirectory.js", () => ({
+  useSyncSlackDirectoryMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+  }),
+}));
 function Location() {
   return <output data-testid="location">{useLocation().search}</output>;
 }

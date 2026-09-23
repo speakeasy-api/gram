@@ -182,7 +182,7 @@ func UsageCommands() []string {
 		"risk (create-risk-policy|list-risk-policies|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
-		"slack-directory-connections (list|begin|disconnect)",
+		"slack-directory-connections (list|sync|list-members|begin|disconnect)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-meta-mcp-server-usage|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-clients|get-tool-usage-client-tool-breakdown|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -3373,6 +3373,17 @@ func ParseEndpoint(
 		slackDirectoryConnectionsListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
 		slackDirectoryConnectionsListSessionTokenFlag = slackDirectoryConnectionsListFlags.String("session-token", "", "")
 
+		slackDirectoryConnectionsSyncFlags            = flag.NewFlagSet("sync", flag.ExitOnError)
+		slackDirectoryConnectionsSyncBodyFlag         = slackDirectoryConnectionsSyncFlags.String("body", "REQUIRED", "")
+		slackDirectoryConnectionsSyncSessionTokenFlag = slackDirectoryConnectionsSyncFlags.String("session-token", "", "")
+
+		slackDirectoryConnectionsListMembersFlags            = flag.NewFlagSet("list-members", flag.ExitOnError)
+		slackDirectoryConnectionsListMembersConnectionIDFlag = slackDirectoryConnectionsListMembersFlags.String("connection-id", "", "")
+		slackDirectoryConnectionsListMembersSearchFlag       = slackDirectoryConnectionsListMembersFlags.String("search", "", "")
+		slackDirectoryConnectionsListMembersCursorFlag       = slackDirectoryConnectionsListMembersFlags.String("cursor", "", "")
+		slackDirectoryConnectionsListMembersLimitFlag        = slackDirectoryConnectionsListMembersFlags.String("limit", "50", "")
+		slackDirectoryConnectionsListMembersSessionTokenFlag = slackDirectoryConnectionsListMembersFlags.String("session-token", "", "")
+
 		slackDirectoryConnectionsBeginFlags            = flag.NewFlagSet("begin", flag.ExitOnError)
 		slackDirectoryConnectionsBeginBodyFlag         = slackDirectoryConnectionsBeginFlags.String("body", "REQUIRED", "")
 		slackDirectoryConnectionsBeginSessionTokenFlag = slackDirectoryConnectionsBeginFlags.String("session-token", "", "")
@@ -5226,6 +5237,8 @@ func ParseEndpoint(
 
 	slackDirectoryConnectionsFlags.Usage = slackDirectoryConnectionsUsage
 	slackDirectoryConnectionsListFlags.Usage = slackDirectoryConnectionsListUsage
+	slackDirectoryConnectionsSyncFlags.Usage = slackDirectoryConnectionsSyncUsage
+	slackDirectoryConnectionsListMembersFlags.Usage = slackDirectoryConnectionsListMembersUsage
 	slackDirectoryConnectionsBeginFlags.Usage = slackDirectoryConnectionsBeginUsage
 	slackDirectoryConnectionsDisconnectFlags.Usage = slackDirectoryConnectionsDisconnectUsage
 
@@ -7686,6 +7699,12 @@ func ParseEndpoint(
 			switch epn {
 			case "list":
 				epf = slackDirectoryConnectionsListFlags
+
+			case "sync":
+				epf = slackDirectoryConnectionsSyncFlags
+
+			case "list-members":
+				epf = slackDirectoryConnectionsListMembersFlags
 
 			case "begin":
 				epf = slackDirectoryConnectionsBeginFlags
@@ -10449,6 +10468,12 @@ func ParseEndpoint(
 			case "list":
 				endpoint = c.List()
 				data, err = slackdirectoryconnectionsc.BuildListPayload(*slackDirectoryConnectionsListSessionTokenFlag)
+			case "sync":
+				endpoint = c.Sync()
+				data, err = slackdirectoryconnectionsc.BuildSyncPayload(*slackDirectoryConnectionsSyncBodyFlag, *slackDirectoryConnectionsSyncSessionTokenFlag)
+			case "list-members":
+				endpoint = c.ListMembers()
+				data, err = slackdirectoryconnectionsc.BuildListMembersPayload(*slackDirectoryConnectionsListMembersConnectionIDFlag, *slackDirectoryConnectionsListMembersSearchFlag, *slackDirectoryConnectionsListMembersCursorFlag, *slackDirectoryConnectionsListMembersLimitFlag, *slackDirectoryConnectionsListMembersSessionTokenFlag)
 			case "begin":
 				endpoint = c.Begin()
 				data, err = slackdirectoryconnectionsc.BuildBeginPayload(*slackDirectoryConnectionsBeginBodyFlag, *slackDirectoryConnectionsBeginSessionTokenFlag)
@@ -25331,6 +25356,8 @@ func slackDirectoryConnectionsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] slack-directory-connections COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list: List implements list.`)
+	fmt.Fprintln(os.Stderr, `    sync: Request a complete Slack workspace directory sync. Concurrent requests join the running sync.`)
+	fmt.Fprintln(os.Stderr, `    list-members: Read observed Slack members across the organization or within one workspace. Does not create identity mappings.`)
 	fmt.Fprintln(os.Stderr, `    begin: Begin implements begin.`)
 	fmt.Fprintln(os.Stderr, `    disconnect: Disconnect implements disconnect.`)
 	fmt.Fprintln(os.Stderr)
@@ -25353,6 +25380,52 @@ func slackDirectoryConnectionsListUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack-directory-connections list --session-token \"abc123\"")
+}
+
+func slackDirectoryConnectionsSyncUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] slack-directory-connections sync", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Request a complete Slack workspace directory sync. Concurrent requests join the running sync.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack-directory-connections sync --body '{\n      \"generation\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func slackDirectoryConnectionsListMembersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] slack-directory-connections list-members", os.Args[0])
+	fmt.Fprint(os.Stderr, " -connection-id STRING")
+	fmt.Fprint(os.Stderr, " -search STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read observed Slack members across the organization or within one workspace. Does not create identity mappings.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -connection-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -search STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack-directory-connections list-members --connection-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 2 --session-token \"abc123\"")
 }
 
 func slackDirectoryConnectionsBeginUsage() {

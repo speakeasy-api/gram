@@ -10,6 +10,19 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
+ * Whether a snapshot belongs to the usable current authorization.
+ */
+export const DirectoryStatus = {
+  NeverSynced: "never_synced",
+  Current: "current",
+  Stale: "stale",
+} as const;
+/**
+ * Whether a snapshot belongs to the usable current authorization.
+ */
+export type DirectoryStatus = ClosedEnum<typeof DirectoryStatus>;
+
+/**
  * Authorization status, independent of directory sync.
  */
 export const SlackDirectoryConnectionStatus = {
@@ -25,9 +38,29 @@ export type SlackDirectoryConnectionStatus = ClosedEnum<
 >;
 
 /**
+ * Latest workflow state. Unknown means progress could not be checked.
+ */
+export const SyncStatus = {
+  Idle: "idle",
+  Queued: "queued",
+  Running: "running",
+  Retrying: "retrying",
+  Failed: "failed",
+  Unknown: "unknown",
+} as const;
+/**
+ * Latest workflow state. Unknown means progress could not be checked.
+ */
+export type SyncStatus = ClosedEnum<typeof SyncStatus>;
+
+/**
  * An organization Slack workspace authorization. Authorization does not indicate directory sync or invocation protection.
  */
 export type SlackDirectoryConnection = {
+  /**
+   * Whether a snapshot belongs to the usable current authorization.
+   */
+  directoryStatus: DirectoryStatus;
   /**
    * When credentials were removed.
    */
@@ -49,9 +82,41 @@ export type SlackDirectoryConnection = {
    */
   lastErrorCode?: string | undefined;
   /**
+   * Last complete directory publication, possibly from an earlier authorization.
+   */
+  lastFullSyncSucceededAt?: Date | undefined;
+  /**
+   * Most recent failed attempt; may precede a successful sync.
+   */
+  lastSyncFailedAt?: Date | undefined;
+  /**
+   * Start of the latest attempted sync.
+   */
+  lastSyncStartedAt?: Date | undefined;
+  /**
+   * Members observed in the last complete snapshot, including guests and bots.
+   */
+  memberCount: number;
+  /**
    * Authorization status, independent of directory sync.
    */
   status: SlackDirectoryConnectionStatus;
+  /**
+   * Verified members fetched in the current attempt.
+   */
+  syncMembers?: number | undefined;
+  /**
+   * Completed pages in the current attempt.
+   */
+  syncPages?: number | undefined;
+  /**
+   * Bounded progress phase while syncing.
+   */
+  syncPhase?: string | undefined;
+  /**
+   * Latest workflow state. Unknown means progress could not be checked.
+   */
+  syncStatus: SyncStatus;
   /**
    * Last connection change timestamp.
    */
@@ -67,9 +132,18 @@ export type SlackDirectoryConnection = {
 };
 
 /** @internal */
+export const DirectoryStatus$inboundSchema: z.ZodMiniEnum<
+  typeof DirectoryStatus
+> = z.enum(DirectoryStatus);
+
+/** @internal */
 export const SlackDirectoryConnectionStatus$inboundSchema: z.ZodMiniEnum<
   typeof SlackDirectoryConnectionStatus
 > = z.enum(SlackDirectoryConnectionStatus);
+
+/** @internal */
+export const SyncStatus$inboundSchema: z.ZodMiniEnum<typeof SyncStatus> = z
+  .enum(SyncStatus);
 
 /** @internal */
 export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
@@ -77,6 +151,7 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    directory_status: DirectoryStatus$inboundSchema,
     disconnected_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -84,7 +159,21 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
     granted_scopes: z.array(z.string()),
     id: z.string(),
     last_error_code: z.optional(z.string()),
+    last_full_sync_succeeded_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    last_sync_failed_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    last_sync_started_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    member_count: z.int(),
     status: SlackDirectoryConnectionStatus$inboundSchema,
+    sync_members: z.optional(z.int()),
+    sync_pages: z.optional(z.int()),
+    sync_phase: z.optional(z.string()),
+    sync_status: SyncStatus$inboundSchema,
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -94,9 +183,18 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "directory_status": "directoryStatus",
       "disconnected_at": "disconnectedAt",
       "granted_scopes": "grantedScopes",
       "last_error_code": "lastErrorCode",
+      "last_full_sync_succeeded_at": "lastFullSyncSucceededAt",
+      "last_sync_failed_at": "lastSyncFailedAt",
+      "last_sync_started_at": "lastSyncStartedAt",
+      "member_count": "memberCount",
+      "sync_members": "syncMembers",
+      "sync_pages": "syncPages",
+      "sync_phase": "syncPhase",
+      "sync_status": "syncStatus",
       "updated_at": "updatedAt",
       "workspace_id": "workspaceId",
       "workspace_name": "workspaceName",
