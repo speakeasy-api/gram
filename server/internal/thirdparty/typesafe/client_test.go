@@ -191,6 +191,9 @@ func TestAskOversizedBody(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Drain the request so closing the connection after the oversized
+		// reply cannot reset it with unread bytes still queued.
+		_, _ = io.Copy(io.Discard, r.Body)
 		// Valid JSON that lands past the cap once the padding is counted.
 		padding := strings.Repeat("x", maxResponseBody)
 		_, _ = io.WriteString(w, `{"model":"`+padding+`","answers":{},"usage":{"input_tokens":0,"output_tokens":0}}`)

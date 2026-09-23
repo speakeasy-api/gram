@@ -287,6 +287,13 @@ func (c *Client) ask(ctx context.Context, apiKey string, req Request) (*Result, 
 	// Read one byte past the cap so an oversized body is distinguishable from
 	// one that is exactly at it.
 	body, err = io.ReadAll(io.LimitReader(httpResp.Body, maxResponseBody+1))
+	if len(body) > maxResponseBody {
+		// Past the cap the body is rejected whatever happens next on the
+		// wire: the client stops reading here, and the upstream may reset the
+		// connection before the reader returns, which must not be mistaken
+		// for a transport failure.
+		return nil, fmt.Errorf("%w: response body exceeds %d bytes", ErrDecode, maxResponseBody)
+	}
 	if err != nil {
 		// A deadline or cancellation that lands mid-body is still a transport
 		// failure, and callers match on the context error to tell a timeout
@@ -296,10 +303,6 @@ func (c *Client) ask(ctx context.Context, apiKey string, req Request) (*Result, 
 		}
 		return nil, fmt.Errorf("%w: read response: %w", ErrTransport, err)
 	}
-	if len(body) > maxResponseBody {
-		return nil, fmt.Errorf("%w: response body exceeds %d bytes", ErrDecode, maxResponseBody)
-	}
-
 	var resp Response
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrDecode, err)
