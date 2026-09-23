@@ -46,7 +46,7 @@ describe("downloadPluginPackage", () => {
         .spyOn(HTMLAnchorElement.prototype, "click")
         .mockImplementation(() => {});
       const { result } = renderHook(() =>
-        usePluginPackageDownload(client, "plugin-id", vi.fn(), {
+        usePluginPackageDownload(client, "plugin-id", vi.fn<() => void>(), {
           gramProject: "selected-project",
           gramSession: "selected-session",
         }),

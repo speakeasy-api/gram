@@ -356,12 +356,15 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 func (s *Service) requirePluginRead(ctx context.Context, ac *contextvalues.AuthContext) error {
 	reader, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: authz.ResourceKindOrg, ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
 	if err != nil {
-		return err
+		return fmt.Errorf("evaluate plugin read access: %w", err)
 	}
 	if reader {
 		return nil
 	}
-	return s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String())
+	if err := s.authz.RequirePluginWrite(ctx, ac.ActiveOrganizationID, ac.ProjectID.String()); err != nil {
+		return fmt.Errorf("authorize plugin read via write access: %w", err)
+	}
+	return nil
 }
 
 // filterPluginAudience keeps recipient identities and counts on the same
@@ -369,7 +372,7 @@ func (s *Service) requirePluginRead(ctx context.Context, ac *contextvalues.AuthC
 func (s *Service) filterPluginAudience(ctx context.Context, ac *contextvalues.AuthContext, plugin *gen.Plugin) (*gen.Plugin, error) {
 	admin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: authz.ResourceKindOrg, ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("evaluate plugin administrator access: %w", err)
 	}
 	if !admin {
 		plugin.Assignments = nil
@@ -1544,7 +1547,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 
 	admin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: authz.ResourceKindOrg, ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("evaluate plugin administrator access: %w", err)
 	}
 
 	result := &gen.PublishStatusResult{

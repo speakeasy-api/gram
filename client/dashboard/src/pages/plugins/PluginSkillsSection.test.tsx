@@ -68,7 +68,7 @@ describe("plugin membership authorization", () => {
       <PluginSkillsSection
         pluginId="plugin-a"
         skillId="skill-a"
-        onMutated={vi.fn()}
+        onMutated={vi.fn<(message: string) => void>()}
       />,
     );
     expect(screen.queryByRole("button", { name: "Add Skill" })).toBeNull();

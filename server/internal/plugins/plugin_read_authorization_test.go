@@ -2,6 +2,7 @@ package plugins_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"testing"
 
@@ -53,6 +54,7 @@ func TestPluginReadAuthorization(t *testing.T) {
 				run  func(*testing.T) error
 			}{
 				{"list", func(t *testing.T) error {
+					t.Helper()
 					result, err := ti.service.ListPlugins(restricted, &gen.ListPluginsPayload{})
 					if err == nil {
 						ids := []string{}
@@ -61,19 +63,27 @@ func TestPluginReadAuthorization(t *testing.T) {
 						}
 						require.Contains(t, ids, plugin.ID)
 					}
-					return err
+					if err != nil {
+						return fmt.Errorf("list: %w", err)
+					}
+					return nil
 				}},
 				{"get", func(t *testing.T) error {
+					t.Helper()
 					result, err := ti.service.GetPlugin(restricted, &gen.GetPluginPayload{ID: plugin.ID})
 					if err == nil {
 						require.Equal(t, plugin.ID, result.ID)
 					}
-					return err
+					if err != nil {
+						return fmt.Errorf("get: %w", err)
+					}
+					return nil
 				}},
 				{"download", func(t *testing.T) error {
+					t.Helper()
 					result, body, err := ti.service.DownloadPluginPackage(restricted, &gen.DownloadPluginPackagePayload{PluginID: plugin.ID, Platform: "claude"})
 					if body != nil {
-						defer body.Close()
+						defer func() { require.NoError(t, body.Close()) }()
 					}
 					if err == nil {
 						require.Equal(t, "application/zip", result.ContentType)
@@ -81,14 +91,21 @@ func TestPluginReadAuthorization(t *testing.T) {
 						require.NoError(t, readErr)
 						require.NotEmpty(t, data)
 					}
-					return err
+					if err != nil {
+						return fmt.Errorf("download: %w", err)
+					}
+					return nil
 				}},
 				{"publish_status", func(t *testing.T) error {
+					t.Helper()
 					result, err := ti.service.GetPublishStatus(restricted, &gen.GetPublishStatusPayload{})
 					if err == nil {
 						require.NotNil(t, result)
 					}
-					return err
+					if err != nil {
+						return fmt.Errorf("publish_status: %w", err)
+					}
+					return nil
 				}},
 			} {
 				t.Run(op.name, func(t *testing.T) {
@@ -107,7 +124,6 @@ func TestPluginReadAuthorization(t *testing.T) {
 
 //nolint:paralleltest // Updates deliberately share a plugin with the read assertions.
 func TestPluginAssignmentMetadataIsAdminOnly(t *testing.T) {
-	t.Parallel()
 	ctx, ti := newTestPluginsService(t)
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -186,41 +202,65 @@ func TestPluginWriterCannotManageMarketplaceOrAssignments(t *testing.T) {
 	writer := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopePluginWrite, ac.ProjectID.String()))
 	for _, op := range []struct {
 		name string
-		run  func() error
+		run  func(*testing.T) error
 	}{
-		{"get_marketplace", func() error {
+		{"get_marketplace", func(t *testing.T) error {
+			t.Helper()
 			_, err := ti.service.GetMarketplaceSettings(writer, &gen.GetMarketplaceSettingsPayload{})
-			return err
+			if err != nil {
+				return fmt.Errorf("get_marketplace: %w", err)
+			}
+			return nil
 		}},
-		{"update_marketplace", func() error {
+		{"update_marketplace", func(t *testing.T) error {
+			t.Helper()
 			name := "writer-marketplace"
 			_, err := ti.service.UpdateMarketplaceSettings(writer, &gen.UpdateMarketplaceSettingsPayload{MarketplaceName: &name})
-			return err
+			if err != nil {
+				return fmt.Errorf("update_marketplace: %w", err)
+			}
+			return nil
 		}},
-		{"list_audiences", func() error {
+		{"list_audiences", func(t *testing.T) error {
+			t.Helper()
 			_, err := ti.service.ListAudiences(writer, &gen.ListAudiencesPayload{})
-			return err
+			if err != nil {
+				return fmt.Errorf("list_audiences: %w", err)
+			}
+			return nil
 		}},
-		{"download_observability", func() error {
+		{"download_observability", func(t *testing.T) error {
+			t.Helper()
 			_, body, err := ti.service.DownloadObservabilityPlugin(writer, &gen.DownloadObservabilityPluginPayload{})
 			if body != nil {
-				defer body.Close()
+				defer func() { require.NoError(t, body.Close()) }()
 			}
-			return err
+			if err != nil {
+				return fmt.Errorf("download_observability: %w", err)
+			}
+			return nil
 		}},
-		{"download_codex_install_script", func() error {
+		{"download_codex_install_script", func(t *testing.T) error {
+			t.Helper()
 			_, body, err := ti.service.DownloadCodexInstallScript(writer, &gen.DownloadCodexInstallScriptPayload{})
 			if body != nil {
-				defer body.Close()
+				defer func() { require.NoError(t, body.Close()) }()
 			}
-			return err
+			if err != nil {
+				return fmt.Errorf("download_codex_install_script: %w", err)
+			}
+			return nil
 		}},
-		{"set_assignments", func() error {
+		{"set_assignments", func(t *testing.T) error {
+			t.Helper()
 			_, err := ti.service.SetPluginAssignments(writer, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{"*"}})
-			return err
+			if err != nil {
+				return fmt.Errorf("set_assignments: %w", err)
+			}
+			return nil
 		}},
 	} {
-		t.Run(op.name, func(t *testing.T) { t.Parallel(); requireProjectionOopsCode(t, op.run(), oops.CodeForbidden) })
+		t.Run(op.name, func(t *testing.T) { t.Parallel(); requireProjectionOopsCode(t, op.run(t), oops.CodeForbidden) })
 	}
 }
 
@@ -238,36 +278,41 @@ func TestPluginReadsAreTenantScoped(t *testing.T) {
 	plugin, err := ti.service.CreatePlugin(foreignCtx, &gen.CreatePluginPayload{Name: "Foreign plugin"})
 	require.NoError(t, err)
 	for _, tc := range []struct {
-		name string
-		ctx  context.Context
+		name    string
+		context func() context.Context
 	}{
-		{"same_org_other_project_writer", authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopePluginWrite, ac.ProjectID.String()))},
-		{"same_org_other_project_admin", authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ac.ActiveOrganizationID))},
+		{"same_org_other_project_writer", func() context.Context {
+			return authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopePluginWrite, ac.ProjectID.String()))
+		}},
+		{"same_org_other_project_admin", func() context.Context {
+			return authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ac.ActiveOrganizationID))
+		}},
 		{"other_org_same_project", func() context.Context {
 			other := foreign
 			other.ActiveOrganizationID = "org_other"
 			c := contextvalues.SetAuthContext(ctx, &other)
 			return authztest.WithExactGrants(t, c, authz.NewGrant(authz.ScopeOrgRead, other.ActiveOrganizationID))
-		}()},
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			restricted := tc.context()
 			t.Run("get", func(t *testing.T) {
 				t.Parallel()
-				_, err := ti.service.GetPlugin(tc.ctx, &gen.GetPluginPayload{ID: plugin.ID})
+				_, err := ti.service.GetPlugin(restricted, &gen.GetPluginPayload{ID: plugin.ID})
 				requireProjectionOopsCode(t, err, oops.CodeNotFound)
 			})
 			t.Run("download", func(t *testing.T) {
 				t.Parallel()
-				_, body, err := ti.service.DownloadPluginPackage(tc.ctx, &gen.DownloadPluginPackagePayload{PluginID: plugin.ID, Platform: "claude"})
+				_, body, err := ti.service.DownloadPluginPackage(restricted, &gen.DownloadPluginPackagePayload{PluginID: plugin.ID, Platform: "claude"})
 				if body != nil {
-					defer body.Close()
+					defer func() { require.NoError(t, body.Close()) }()
 				}
 				requireProjectionOopsCode(t, err, oops.CodeNotFound)
 			})
 			t.Run("list", func(t *testing.T) {
 				t.Parallel()
-				result, err := ti.service.ListPlugins(tc.ctx, &gen.ListPluginsPayload{})
+				result, err := ti.service.ListPlugins(restricted, &gen.ListPluginsPayload{})
 				require.NoError(t, err)
 				for _, p := range result.Plugins {
 					require.NotEqual(t, plugin.ID, p.ID)
@@ -279,7 +324,6 @@ func TestPluginReadsAreTenantScoped(t *testing.T) {
 
 //nolint:paralleltest // The existing publisher fixture records mutable state.
 func TestPluginWriterPublishesWithoutExposingAdministration(t *testing.T) {
-	t.Parallel()
 	publisher := &mockGitHubPublisher{}
 	ctx, ti := newTestPluginsServiceWithGitHub(t, publisher)
 	ac, ok := contextvalues.GetAuthContext(ctx)
