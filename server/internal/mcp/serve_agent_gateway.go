@@ -9,6 +9,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -20,11 +21,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -62,6 +65,18 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 		return err
 	}
 	r = r.WithContext(authedCtx)
+	ctx = authedCtx
+
+	// The same lockdown ServeMCPEndpoint applies, at the only scope this
+	// surface has. enforceCustomDomainLockdown takes a project id purely to
+	// read the owning organization off it, and the policy it then applies is
+	// the organization's; an agent gateway has no single project, but its
+	// organization is exactly what the agent key names. Skipping it would let a
+	// valid key reach the same servers on the platform hostname, outside the
+	// allowlist the org's ingress enforces.
+	if err := s.enforceAgentGatewayCustomDomainLockdown(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
+		return err
+	}
 
 	// Synthetic, never persisted: the meta runtime is shaped around rows, and
 	// an agent gateway has none. Only the fields the runtime reads are
@@ -89,6 +104,30 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 
 	if err := s.serveResolvedMetaMCPEndpoint(w, r, logger, endpoint, metaServer, agentID); err != nil {
 		return fmt.Errorf("serve agent gateway: %w", err)
+	}
+	return nil
+}
+
+// enforceAgentGatewayCustomDomainLockdown 403s a platform-host agent gateway
+// request when the caller's organization has an IP allowlist on its custom
+// domain. The two exemptions are the ones customDomainLockdownApplies makes: a
+// request that arrived through the private ingress is governed by that
+// surface's own admission, and one that arrived on the custom domain already
+// passed the allowlist at the edge.
+func (s *Service) enforceAgentGatewayCustomDomainLockdown(ctx context.Context, logger *slog.Logger, organizationID string) error {
+	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
+		return nil
+	}
+	if customdomains.FromContext(ctx) != nil {
+		return nil
+	}
+
+	lockedDown, err := s.organizationCustomDomainLockdown(ctx, logger, organizationID)
+	if err != nil {
+		return err
+	}
+	if lockedDown {
+		return oops.E(oops.CodeForbidden, nil, "this MCP server is only accessible via its custom domain")
 	}
 	return nil
 }

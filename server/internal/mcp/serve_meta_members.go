@@ -17,7 +17,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
 // metaMemberBackend classifies how the meta MCP reaches one member.
@@ -181,8 +183,25 @@ func (s *Service) resolveAgentMemberSnapshot(
 		return ctx, nil, oops.E(oops.CodeUnexpected, err, "list agent gateway members").LogError(ctx, logger)
 	}
 
+	// The gateway is mounted on both the public and the private listener, but a
+	// member's own network access mode decides which of them may reach it. The
+	// stored serving path enforces this when it resolves an endpoint by slug
+	// (mcpendpoints.Resolve); a derived snapshot resolves nothing by slug, so
+	// the same rule has to be applied to each candidate here or a private_only
+	// server would list and dispatch over the public ingress.
+	surface := networkaccess.SurfacePublic
+	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
+		surface = networkaccess.SurfacePrivate
+	}
+
 	candidates := make([]metaMemberCandidate, 0, len(rows))
 	for _, row := range rows {
+		// A mode this build cannot parse is not a mode it can serve: fail
+		// closed, exactly as the endpoint resolver does.
+		mode, err := networkaccess.Effective(row.McpServerNetworkAccessMode)
+		if err != nil || !mode.Allows(surface) {
+			continue
+		}
 		candidates = append(candidates, metaMemberCandidate{
 			serverID:    row.McpServerID,
 			projectID:   row.McpServerProjectID,

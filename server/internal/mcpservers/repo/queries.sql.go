@@ -882,6 +882,7 @@ SELECT
     s.name AS mcp_server_name,
     s.slug AS mcp_server_slug,
     s.visibility AS mcp_server_visibility,
+    s.network_access_mode AS mcp_server_network_access_mode,
     s.toolset_id AS mcp_server_toolset_id,
     s.remote_mcp_server_id AS mcp_server_remote_mcp_server_id,
     s.tunneled_mcp_server_id AS mcp_server_tunneled_mcp_server_id,
@@ -912,6 +913,7 @@ type ListServableMCPServersByOrganizationIDRow struct {
 	McpServerName                  pgtype.Text
 	McpServerSlug                  pgtype.Text
 	McpServerVisibility            string
+	McpServerNetworkAccessMode     pgtype.Text
 	McpServerToolsetID             uuid.NullUUID
 	McpServerRemoteMcpServerID     uuid.NullUUID
 	McpServerTunneledMcpServerID   uuid.NullUUID
@@ -936,7 +938,9 @@ type ListServableMCPServersByOrganizationIDRow struct {
 // slugless legacy rows are excluded — so a server invisible to the stored
 // serving path is invisible to a derived one too. Carries the same backend
 // and dispatch columns that path needs, plus each member's project, since
-// members no longer share one. Ordered by project then slug: a derived
+// members no longer share one, and each member's network access mode, which
+// the caller matches against the request's ingress surface so a private_only
+// server stays invisible on the public one. Ordered by project then slug: a derived
 // gateway has no operator-authored order, and slugs are unique only within a
 // project, so the pair is what makes the listing stable.
 func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, organizationID string) ([]ListServableMCPServersByOrganizationIDRow, error) {
@@ -955,6 +959,7 @@ func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, or
 			&i.McpServerName,
 			&i.McpServerSlug,
 			&i.McpServerVisibility,
+			&i.McpServerNetworkAccessMode,
 			&i.McpServerToolsetID,
 			&i.McpServerRemoteMcpServerID,
 			&i.McpServerTunneledMcpServerID,
