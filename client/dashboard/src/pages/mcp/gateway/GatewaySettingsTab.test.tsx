@@ -1,4 +1,7 @@
-import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
+import {
+  GatewayInstructionsSection,
+  GatewaySettingsTab,
+} from "./GatewaySettingsTab";
 import {
   act,
   cleanup,
@@ -7,7 +10,10 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GatewayInstructionsSection } from "./GatewaySettingsTab";
+
+import { MemoryRouter } from "react-router";
+import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
+import { NetworkAccessSection } from "@/pages/mcp/x/tabs/settings/sections/NetworkAccessSection";
 import builtInInstructions from "./builtin-gateway-instructions.txt?raw";
 
 const state = vi.hoisted(() => ({
@@ -46,8 +52,14 @@ vi.mock("@/pages/mcp/x/tabs/settings/sections/ServerUrlSection", () => ({
   MCP_SERVER_URL_SECTION_ID: "server-url",
   ServerUrlSection: vi.fn(),
 }));
+vi.mock("@/pages/mcp/x/tabs/settings/sections/NetworkAccessSection", () => ({
+  NetworkAccessSection: vi.fn(),
+}));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: state.invalidateQueries }),
+}));
+vi.mock("@gram/client/react-query/deleteMetaMcpServer.js", () => ({
+  useDeleteMetaMcpServerMutation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("@gram/client/react-query/updateMetaMcpServer.js", () => ({
   useUpdateMetaMcpServerMutation: ({
@@ -86,6 +98,38 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.hasScope.mockReturnValue(true);
   state.isPending = false;
+});
+
+describe("Gateway network access", () => {
+  it("passes the gateway and its loaded endpoints to the shared control", () => {
+    render(
+      <MemoryRouter>
+        <GatewaySettingsTab
+          metaMcpServer={server}
+          endpoints={[]}
+          isLoadingEndpoints={false}
+        />
+      </MemoryRouter>,
+    );
+    expect(NetworkAccessSection).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(NetworkAccessSection).mock.calls[0]?.[0]).toEqual({
+      metaMcpServer: server,
+      endpoints: [],
+    });
+  });
+
+  it("does not offer private access while endpoints are loading", () => {
+    render(
+      <MemoryRouter>
+        <GatewaySettingsTab
+          metaMcpServer={server}
+          endpoints={[]}
+          isLoadingEndpoints={true}
+        />
+      </MemoryRouter>,
+    );
+    expect(NetworkAccessSection).not.toHaveBeenCalled();
+  });
 });
 
 describe("Gateway instructions", () => {
