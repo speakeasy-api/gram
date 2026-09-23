@@ -16,7 +16,6 @@ export const FEATURE_FLAGS = {
   newCostsPage: "gram-new-costs-page",
   oktaConnections: "okta-connections",
   paygSelfServeBilling: "gram-payg-self-serve-billing",
-  promptPolicies: "gram-prompt-policies",
   rbac: "gram-rbac",
   // Multivariate (`off` | `shadow` | `llm`), org-targeted: which risk engine
   // the organization runs. Read through `useFeatureFlagVariant`; the boolean

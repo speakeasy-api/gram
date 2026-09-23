@@ -6,11 +6,6 @@ const (
 	FlagSpeakeasyOpenAPIParserV0 Flag = "speakeasy-openapi-parser-v0"
 	FlagClickhouseToolMetrics    Flag = "clickhouse-tool-metrics"
 	FlagAssistants               Flag = "assistants"
-	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
-	// based") risk policy MVP. While set, only opted-in organizations can
-	// create or update nl-type risk policies and have them enforced. The
-	// dashboard gates the matching UI behind the same key.
-	FlagPromptPolicies Flag = "gram-prompt-policies"
 	// FlagBudgets gates the Budgets (spend control) rollout end to end with
 	// one key: the dashboard hides the Budgets tab on the Costs page behind
 	// it, and the background spend-rule evaluator skips organizations

@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/exclusioncore"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
@@ -278,11 +277,6 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 	if err := json.Unmarshal(receipt.ResultPayload, &result); err != nil {
 		return nil, zero, fmt.Errorf("decode update risk policy receipt result: %w", err)
 	}
-	if receipt.Replayed && result.Policy.PolicyType == "prompt_based" {
-		if err := s.requirePromptPolicies(ctx, principal, project); err != nil {
-			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
-		}
-	}
 	return nil, UpdateRiskPolicyToolOutput{UpdateRiskPolicyReceiptResult: result, Receipt: riskMutationToolReceipt(receipt)}, nil
 }
 
@@ -409,9 +403,6 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 		prompt := strings.TrimSpace(input.Prompt)
 		if prompt == "" || utf8.RuneCountInString(prompt) > maxRiskPolicyPromptRunes || len(input.Sources)+len(input.PresidioEntities)+len(input.PromptInjectionRules)+len(input.DisabledRules)+len(input.ApprovedEmailDomains)+len(input.DetectionScopes) > 0 || input.PresidioScoreThreshold != nil {
 			return preparedRiskPolicyCreate{}, invalidRiskPolicyRequest()
-		}
-		if err := s.requirePromptPolicies(ctx, principal, project); err != nil {
-			return preparedRiskPolicyCreate{}, err
 		}
 		digest := sha256.Sum256([]byte(prompt))
 		normalized.PromptDigest = hex.EncodeToString(digest[:])
@@ -648,11 +639,6 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 	if len(normalized) != len(input.Patch) {
 		return policycore.UpdateMutation{}, nil, invalidRiskPolicyRequest()
 	}
-	if current.PolicyType == "prompt_based" {
-		if err := s.requirePromptPolicies(ctx, principal, project); err != nil {
-			return policycore.UpdateMutation{}, nil, err
-		}
-	}
 	if changedSources || changedAction {
 		if !slices.Contains(s.catalog.Actions, params.Action) || policycore.ValidateSourceAction(params.Sources, params.Action) != nil {
 			return policycore.UpdateMutation{}, nil, invalidRiskPolicyRequest()
@@ -750,18 +736,6 @@ func riskCategoryReachable(category string, sources, entities []string) bool {
 		}
 	}
 	return false
-}
-
-func (s *riskPolicyMutationService) requirePromptPolicies(ctx context.Context, principal Principal, project ResolvedProject) error {
-	organizationSlug, err := s.controls.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-	if err != nil || organizationSlug == "" {
-		return riskMutationUnavailable()
-	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.controls.flags, feature.FlagPromptPolicies, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, project.Slug))
-	if err != nil || evaluation != feature.EvaluationEnabled {
-		return riskMutationUnavailable()
-	}
-	return nil
 }
 
 func (s *riskPolicyMutationService) matchExistingCreate(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, prepared preparedRiskPolicyCreate) (*policycore.MutationResult, error) {
