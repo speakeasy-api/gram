@@ -2,6 +2,7 @@ package remotesessions
 
 import (
 	"encoding/json"
+	"strconv"
 	"testing"
 	"time"
 
@@ -19,7 +20,7 @@ func TestTokenResponseExpiresIn(t *testing.T) {
 			require.Equal(t, "a", response.AccessToken)
 			require.True(t, response.ScopeReported())
 			if value == `3600` || value == `"3600"` {
-				require.Equal(t, jsonInt(3600), response.ExpiresIn)
+				require.Equal(t, 3600, response.ExpiresIn)
 				require.Equal(t, now.Add(time.Hour), *response.AccessExpiresAt(now))
 			} else {
 				require.Zero(t, response.ExpiresIn)
@@ -34,6 +35,34 @@ func TestTokenResponseExpiresIn(t *testing.T) {
 		t.Run("invalid_"+value, func(t *testing.T) {
 			var response tokenResponse
 			require.Error(t, json.Unmarshal([]byte(`{"expires_in":`+value+`}`), &response))
+		})
+	}
+}
+
+func TestTokenResponseWireExpiresIn(t *testing.T) {
+	t.Parallel()
+	maxInt := int(^uint(0) >> 1)
+	for _, want := range []int{0, 60, 7200, -1, maxInt, -maxInt - 1} {
+		number := strconv.Itoa(want)
+		for _, raw := range []string{number, strconv.Quote(number)} {
+			t.Run(raw, func(t *testing.T) {
+				var wire tokenResponseWire
+				require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","expires_in":`+raw+`}`), &wire))
+				require.Equal(t, want, wire.ExpiresIn)
+				require.Equal(t, "a", wire.AccessToken)
+				encoded, err := json.Marshal(wire)
+				require.NoError(t, err)
+				var members map[string]json.RawMessage
+				require.NoError(t, json.Unmarshal(encoded, &members))
+				require.JSONEq(t, number, string(members["expires_in"]))
+			})
+		}
+	}
+	for _, raw := range []string{`1e3`, `"1e3"`, `999999999999999999999999`, `"999999999999999999999999"`} {
+		t.Run("invalid_"+raw, func(t *testing.T) {
+			wire := tokenResponseWire{ExpiresIn: 42}
+			require.Error(t, json.Unmarshal([]byte(`{"expires_in":`+raw+`}`), &wire))
+			require.Equal(t, 42, wire.ExpiresIn)
 		})
 	}
 }

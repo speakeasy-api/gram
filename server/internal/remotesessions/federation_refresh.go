@@ -154,7 +154,7 @@ func classifyFederatedRefreshResponse(status int, body []byte) error {
 }
 
 func federatedRefreshCredentials(tok tokenResponse, receivedAt time.Time) FederatedRefreshCredentials {
-	c := FederatedRefreshCredentials{EphemeralFederatedCredentials: EphemeralFederatedCredentials{refreshExpiresAt: nil, idToken: tok.IDToken, refreshToken: tok.RefreshToken, expiresIn: int(tok.ExpiresIn), refreshExpiresIn: tok.RefreshExpiresIn, receivedAt: receivedAt}}
+	c := FederatedRefreshCredentials{EphemeralFederatedCredentials: EphemeralFederatedCredentials{refreshExpiresAt: nil, idToken: tok.IDToken, refreshToken: tok.RefreshToken, expiresIn: tok.ExpiresIn, refreshExpiresIn: tok.RefreshExpiresIn, receivedAt: receivedAt}}
 	// Use the shortest reported bound, never the access-token expires_in.
 	// Standard explicit zero is distinct from absent; provider aliases follow
 	// the shared parser and count only when positive.

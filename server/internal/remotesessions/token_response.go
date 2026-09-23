@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,15 +16,15 @@ import (
 // RFC 6749 fields, draft-ietf-oauth-refresh-token-expiration fields, and two
 // common non-standard refresh lifetime aliases.
 type tokenResponse struct {
-	AccessToken            string  `json:"access_token"`
-	RefreshToken           string  `json:"refresh_token"`
-	TokenType              string  `json:"token_type"`
-	ExpiresIn              jsonInt `json:"expires_in"`
-	RefreshTokenTimeout    *int64  `json:"refresh_token_timeout"`
-	AuthorizationExpiresIn *int64  `json:"authorization_expires_in"`
-	RefreshExpiresIn       int64   `json:"refresh_expires_in"`
-	RefreshTokenExpiresIn  int64   `json:"refresh_token_expires_in"`
-	Scope                  string  `json:"scope"`
+	AccessToken            string `json:"access_token"`
+	RefreshToken           string `json:"refresh_token"`
+	TokenType              string `json:"token_type"`
+	ExpiresIn              int    `json:"expires_in"`
+	RefreshTokenTimeout    *int64 `json:"refresh_token_timeout"`
+	AuthorizationExpiresIn *int64 `json:"authorization_expires_in"`
+	RefreshExpiresIn       int64  `json:"refresh_expires_in"`
+	RefreshTokenExpiresIn  int64  `json:"refresh_token_expires_in"`
+	Scope                  string `json:"scope"`
 	scopePresent           bool
 
 	// IDToken is verified and reduced to claims at the exchange; never persisted or logged.
@@ -34,8 +35,35 @@ type tokenResponse struct {
 	raw []byte
 }
 
+// tokenResponseWire keeps upstream JSON compatibility rules out of the internal
+// token representation.
+type tokenResponseWire tokenResponse
+
+func (w *tokenResponseWire) UnmarshalJSON(data []byte) error {
+	// A distinct type prevents recursive calls to this unmarshaler.
+	type plain tokenResponseWire
+	var decoded plain
+	response := struct {
+		*plain
+		ExpiresIn json.Number `json:"expires_in"`
+	}{plain: &decoded}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return err
+	}
+	// Some providers encode expires_in as a string. Both forms must be integers
+	// within int range; missing and null values retain the zero default.
+	if response.ExpiresIn != "" {
+		seconds, err := strconv.Atoi(string(response.ExpiresIn))
+		if err != nil {
+			return errors.New("token response expires_in must be an integer within range")
+		}
+		decoded.ExpiresIn = seconds
+	}
+	*w = tokenResponseWire(decoded)
+	return nil
+}
+
 func (t *tokenResponse) UnmarshalJSON(data []byte) error {
-	type wire tokenResponse
 	var members map[string]json.RawMessage
 	if err := json.Unmarshal(data, &members); err != nil {
 		return fmt.Errorf("decode token response members: %w", err)
@@ -51,7 +79,7 @@ func (t *tokenResponse) UnmarshalJSON(data []byte) error {
 			return errors.New("token response scope must be a string")
 		}
 	}
-	var decoded wire
+	var decoded tokenResponseWire
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return fmt.Errorf("decode token response: %w", err)
 	}
