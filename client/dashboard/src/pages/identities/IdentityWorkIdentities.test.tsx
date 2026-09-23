@@ -7,6 +7,7 @@ import { IdentityWorkIdentities } from "./IdentityWorkIdentities";
 
 const mocks = vi.hoisted(() => ({
   query: vi.fn(),
+  options: vi.fn(),
   admin: false,
   loadingAccess: false,
   rollout: "enabled",
@@ -50,7 +51,8 @@ vi.mock("@gram/client/react-query/slackPersonAccounts.js", () => ({
   },
 }));
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: () => {
+  useQuery: (options: unknown) => {
+    mocks.options(options);
     return {
       data: mocks.pending
         ? undefined
@@ -121,6 +123,9 @@ it("reads an exact self ID and offers only contact-admin guidance", () => {
   expect(mocks.query).toHaveBeenCalledWith(
     { userId: "user_self", cursor: undefined },
     { sessionHeaderGramSession: "" },
+  );
+  expect(mocks.options).toHaveBeenCalledWith(
+    expect.objectContaining({ retry: false }),
   );
   expect(
     screen.getByText(/contact your organization administrator/),
