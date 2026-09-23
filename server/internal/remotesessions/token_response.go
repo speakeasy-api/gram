@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,8 +35,43 @@ type tokenResponse struct {
 	raw []byte
 }
 
+// tokenResponseWire keeps upstream JSON compatibility rules out of the internal
+// token representation.
+type tokenResponseWire tokenResponse
+
+func (w *tokenResponseWire) UnmarshalJSON(data []byte) error {
+	// A distinct type prevents recursive calls to this unmarshaler.
+	type plain tokenResponseWire
+	var decoded plain
+	response := struct {
+		*plain
+		ExpiresIn json.RawMessage `json:"expires_in"`
+	}{plain: &decoded, ExpiresIn: nil}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return fmt.Errorf("decode token response fields: %w", err)
+	}
+	// Some providers encode expires_in as a string, including zero-padded values.
+	// Both forms must be non-negative integers that fit int and time.Duration
+	// when converted to seconds; missing and null retain the zero default.
+	raw := bytes.TrimSpace(response.ExpiresIn)
+	if len(raw) > 0 && string(raw) != "null" {
+		value := string(raw)
+		if raw[0] == '"' {
+			if err := json.Unmarshal(raw, &value); err != nil {
+				return fmt.Errorf("decode token response expires_in: %w", err)
+			}
+		}
+		seconds, err := strconv.Atoi(value)
+		if err != nil || seconds < 0 || int64(seconds) > int64((1<<63-1)/time.Second) {
+			return errors.New("token response expires_in must be an integer within range")
+		}
+		decoded.ExpiresIn = seconds
+	}
+	*w = tokenResponseWire(decoded)
+	return nil
+}
+
 func (t *tokenResponse) UnmarshalJSON(data []byte) error {
-	type wire tokenResponse
 	var members map[string]json.RawMessage
 	if err := json.Unmarshal(data, &members); err != nil {
 		return fmt.Errorf("decode token response members: %w", err)
@@ -51,7 +87,7 @@ func (t *tokenResponse) UnmarshalJSON(data []byte) error {
 			return errors.New("token response scope must be a string")
 		}
 	}
-	var decoded wire
+	var decoded tokenResponseWire
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return fmt.Errorf("decode token response: %w", err)
 	}
