@@ -81,11 +81,11 @@ export function RolePermissionsSection({
   const activeSelected = tab === "mcp" ? mcpSelected : otherSelected;
 
   return (
-    <div className="border-border border-t pt-4">
-      <Text variant="body" className="font-medium">
-        Add permissions
-      </Text>
-      <div className="border-border mt-3 border">
+    // No heading or rule of its own: every caller already introduces this
+    // block, and a second "Add permissions" above a button of the same name
+    // read as two different controls.
+    <div>
+      <div className="border-border border">
         {/* gap-0: the tab strip and the list share one bordered box, so the
             Tabs default gap left the first row sitting lower than the rest. */}
         <Tabs value={tab} onValueChange={setTab} className="gap-0">
@@ -160,9 +160,11 @@ export function RolePermissionsSection({
             </Popover>
           </div>
 
-          <TabsContent value={tab} forceMount>
+          {/* One height whether or not anything is added, so the page does not
+              jump as the first permission lands. */}
+          <TabsContent value={tab} forceMount className="min-h-[13.5rem]">
             {activeSelected.length === 0 ? (
-              <div className="px-4 py-10 text-center">
+              <div className="flex min-h-[13.5rem] flex-col justify-center px-4 py-10 text-center">
                 <Text variant="body" className="font-medium">
                   {tab === "mcp"
                     ? "No MCP permissions"

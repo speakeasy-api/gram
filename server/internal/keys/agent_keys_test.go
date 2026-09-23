@@ -438,6 +438,19 @@ func TestKeysService_AgentKeyValidation(t *testing.T) {
 		ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, true)
 	})
 
+	t.Run("duplicate name reads as a conflict", func(t *testing.T) {
+		payload := agentKeyPayload(agentID, projectID)
+		payload.Name = "duplicate name key"
+		_, err := ti.service.CreateKey(ctx, payload)
+		require.NoError(t, err)
+
+		again := agentKeyPayload(agentID, projectID)
+		again.Name = payload.Name
+		_, err = ti.service.CreateKey(ctx, again)
+		requireOopsCode(t, err, oops.CodeConflict)
+		require.Contains(t, err.Error(), payload.Name, "the message must name the key the caller must rename")
+	})
+
 	tests := []struct {
 		name   string
 		mutate func(*gen.CreateKeyPayload)

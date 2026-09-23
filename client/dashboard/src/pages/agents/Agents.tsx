@@ -34,11 +34,12 @@ import { useAgentsSuspendMutation } from "@gram/client/react-query/agentsSuspend
 import { useCreateAgentMutation } from "@gram/client/react-query/createAgent.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Bot, Plus } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AgentAPIKeys } from "./AgentAPIKeys";
+import { AgentGatewayInstall } from "./AgentGatewayInstall";
 import {
   agentPolicyGrantsFromDraft,
   invalidateAgentPolicy,
@@ -111,6 +112,9 @@ function AgentManagementPage(): JSX.Element {
         disabled={isDemo}
         onCreated={(id) => {
           setSearchParams({ id });
+        }}
+        onCancel={() => {
+          setSearchParams({});
         }}
       />
     );
@@ -236,9 +240,11 @@ function AgentOwner({ agent }: { agent: ManagedAgent }) {
 function CreateAgent({
   disabled,
   onCreated,
+  onCancel,
 }: {
   disabled: boolean;
   onCreated: (id: string) => void;
+  onCancel: () => void;
 }) {
   const [name, setName] = useState("");
   const [draft, setDraft] = useState<AgentPolicyDraft>({});
@@ -284,25 +290,27 @@ function CreateAgent({
 
   return (
     <FormPage
-      title="Agents"
-      description="Create a first-class nonhuman principal with ownership and an independent lifecycle."
+      title="New agent"
+      description="Give a workload its own identity, then issue it a key to connect."
+      width="wide"
+      primaryAction={
+        <Button variant="secondary" onClick={onCancel}>
+          <Button.LeftIcon>
+            <ArrowLeft className="size-4" />
+          </Button.LeftIcon>
+          <Button.Text>All agents</Button.Text>
+        </Button>
+      }
     >
       <form onSubmit={onSubmit} className="border bg-card p-6">
-        <div className="mb-6 flex items-start gap-4">
-          <div className="border p-2">
-            <Bot className="size-5" aria-hidden="true" />
-          </div>
-          <div>
-            <Text className="font-medium">Create an agent</Text>
-            <Text muted small className="mt-1">
-              {disabled
-                ? "Agent management is unavailable in the shared demo because it requires active organization membership."
-                : "You will be the owner. Ownership gives you intrinsic setup access without creating a reusable permission grant."}
-            </Text>
-          </div>
-        </div>
+        {disabled && (
+          <Text muted small className="mb-6 block">
+            Agent management is unavailable in the shared demo because it
+            requires active organization membership.
+          </Text>
+        )}
         <div className="space-y-2">
-          <Label htmlFor="agent-name">Agent name</Label>
+          <Label htmlFor="agent-name">Name</Label>
           <Input
             id="agent-name"
             value={name}
@@ -312,27 +320,44 @@ function CreateAgent({
             disabled={disabled}
             autoFocus
           />
+          <Text muted small>
+            You will own this agent. Ownership is your own setup access; it
+            grants nothing to anyone else.
+          </Text>
         </div>
-        <div className="mt-6 space-y-2">
+        <div className="mt-8 space-y-2">
           <Label>Permissions</Label>
           <Text muted small>
-            The most this agent may ever be delegated. An agent with no
-            permissions can hold API keys, but they will not authorize anything.
-            Each key is narrowed again at issuance, against your live
-            permissions and the owner's.
+            The ceiling for this agent: the most any of its keys may carry. Each
+            key is narrowed again at issuance, and you can change this later.
           </Text>
-          <AgentPolicyEditor
-            draft={draft}
-            onChange={setDraft}
-            disabled={disabled || create.isPending}
-          />
+          <div className="pt-2">
+            <AgentPolicyEditor
+              draft={draft}
+              onChange={setDraft}
+              disabled={disabled || create.isPending}
+            />
+          </div>
         </div>
         {error && (
-          <p role="alert" className="mt-4 text-sm">
+          <p
+            role="alert"
+            className="border-destructive text-destructive mt-6 border p-3 text-sm"
+          >
             {error}
           </p>
         )}
-        <div className="mt-6 flex justify-end">
+        <div className="mt-8 flex items-center justify-end gap-3 border-t pt-5">
+          <Text muted small className="mr-auto">
+            Next: issue an API key to connect it.
+          </Text>
+          <Button
+            variant="tertiary"
+            onClick={onCancel}
+            disabled={create.isPending}
+          >
+            Cancel
+          </Button>
           <Button
             type="submit"
             disabled={disabled || !name.trim() || create.isPending}
@@ -445,6 +470,7 @@ function AgentSettings({
         key={`policy-${agentQuery.data.id}`}
         agent={agentQuery.data}
       />
+      <AgentConnect agent={agentQuery.data} />
       <AgentAPIKeys
         agent={agentQuery.data}
         onCreate={() => setSearchParams({ id: agentID, credential: "new" })}
@@ -459,6 +485,30 @@ function AgentSettings({
         onDeleted={onBack}
       />
     </SettingsPage>
+  );
+}
+
+/**
+ * The gateway address is not a secret, so it belongs on the agent page rather
+ * than only on the screen that issues a key. Someone reconnecting a machine
+ * needs the URL and the shape their runtime wants; they should not have to
+ * mint a credential to read them again.
+ */
+function AgentConnect({ agent }: { agent: ManagedAgent }) {
+  return (
+    <SettingsSection>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Connect</SettingsSection.Title>
+        <SettingsSection.Description>
+          Where this agent's runtime points. Its key is shown only when issued.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          <AgentGatewayInstall agentID={agent.id} secret={null} />
+        </SettingsSection.Body>
+      </SettingsSection.Panel>
+    </SettingsSection>
   );
 }
 

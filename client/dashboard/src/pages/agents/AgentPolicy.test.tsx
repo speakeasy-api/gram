@@ -304,7 +304,7 @@ describe("Creating an agent with permissions", () => {
 
   it("creates the agent and its MCP permission in one request", async () => {
     setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
+    fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "  Release assistant  " },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
@@ -325,7 +325,7 @@ describe("Creating an agent with permissions", () => {
 
   it("sends the narrowed selector the picker produced", async () => {
     setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
+    fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Narrowed" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
@@ -374,7 +374,7 @@ describe("Creating an agent with permissions", () => {
 
   it("creates a permissionless agent without confirmation", async () => {
     setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
+    fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Bare" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
@@ -390,7 +390,7 @@ describe("Creating an agent with permissions", () => {
       new Error("scope is not allowed for agent policy"),
     );
     setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
+    fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Retryable" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
@@ -401,9 +401,9 @@ describe("Creating an agent with permissions", () => {
       ),
     );
     expect(mocks.navigate).not.toHaveBeenCalled();
-    expect(
-      (screen.getByLabelText("Agent name") as HTMLInputElement).value,
-    ).toBe("Retryable");
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
+      "Retryable",
+    );
     expect(
       screen.getByRole("button", { name: "Remove mcp:connect" }),
     ).toBeTruthy();
@@ -431,7 +431,7 @@ describe("Creating an agent with permissions", () => {
       ["agent-delegable-grants", "org_example", "user_owner", "agent_new"],
       [],
     );
-    fireEvent.change(screen.getByLabelText("Agent name"), {
+    fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Fresh" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
@@ -615,7 +615,7 @@ function deferred<T>() {
 describe("Draft ownership across context changes", () => {
   it("drops an unfinished create draft and its open picker when the organization changes", async () => {
     const view = setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
+    fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Half-written" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
@@ -626,9 +626,7 @@ describe("Draft ownership across context changes", () => {
     view.rerenderPage();
 
     expect(screen.queryByText("picker mcp:connect (mcp)")).toBeNull();
-    expect(
-      (screen.getByLabelText("Agent name") as HTMLInputElement).value,
-    ).toBe("");
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("");
     expect(
       screen.getByRole("button", { name: "Add mcp:connect" }),
     ).toBeTruthy();
@@ -638,7 +636,7 @@ describe("Draft ownership across context changes", () => {
 
   it("drops an unfinished create draft when the signed-in user changes", () => {
     const view = setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
+    fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Someone else's draft" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
@@ -646,9 +644,7 @@ describe("Draft ownership across context changes", () => {
     mocks.userId = "user_other";
     view.rerenderPage();
 
-    expect(
-      (screen.getByLabelText("Agent name") as HTMLInputElement).value,
-    ).toBe("");
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("");
     expect(
       screen.getByRole("button", { name: "Add mcp:connect" }),
     ).toBeTruthy();
@@ -897,7 +893,7 @@ describe("Stored constraints the editor cannot show", () => {
 describe("Choosing the unrestricted option inside the picker", () => {
   it("keeps Done available and saves an unrestricted grant", async () => {
     setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
+    fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Unrestricted" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
@@ -928,7 +924,7 @@ describe("Choosing the unrestricted option inside the picker", () => {
 
   it("widens a narrowed permission back to unrestricted", async () => {
     setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
+    fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Rewidened" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));

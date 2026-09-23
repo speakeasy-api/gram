@@ -28,6 +28,7 @@ import { Text } from "@/components/ui/Text";
 import { Table, type Column } from "@/components/ui/Table";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { Key } from "@gram/client/models/components/key.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import {
   buildRequestedGrants,
@@ -278,6 +279,43 @@ function AgentAPIKeysContent({
     return { expiresAt, reason };
   };
   const expiryReason = expiryValidation(Date.now()).reason;
+  // One place decides whether the wizard can move on, and says why not. The
+  // order runs from the conditions the user cannot fix (no authority, nothing
+  // to grant) to the ones they can (pick a server, name the key).
+  const blockedReason: string | null = !canIssue
+    ? "You cannot issue keys for this agent."
+    : !discoveryComplete
+      ? "Loading what this agent can be delegated…"
+      : serversBusy
+        ? "Checking the servers you selected…"
+        : !servers.length
+          ? "Select at least one MCP server."
+          : scopedGrants.length === 0
+            ? "The agent's policy delegates nothing on these servers."
+            : step >= 1 && !accountsReady
+              ? "Connect an account for every server that needs one."
+              : step >= 2 && !name.trim()
+                ? "Name this key."
+                : step >= 2 && expiryReason
+                  ? expiryReason
+                  : step >= 2 && !hasSelections
+                    ? "Select at least one permission."
+                    : null;
+  // A name is required, so the wizard offers one rather than blocking on an
+  // empty field. Names are unique per organization, so a name already in the
+  // list is dated to keep the suggestion usable as typed.
+  const takenNames = (knownKeys ?? []).map((key) => key.name).join("\u0000");
+  useEffect(() => {
+    if (step !== 2) return;
+    setName((current) => {
+      if (current.trim()) return current;
+      const base = `${agent.name} key`;
+      const taken = new Set(takenNames.split("\u0000"));
+      if (!taken.has(base)) return base;
+      const dated = `${base} ${new Date().toISOString().slice(0, 10)}`;
+      return taken.has(dated) ? "" : dated;
+    });
+  }, [step, agent.name, takenNames]);
   const returnToStep = (next: number) => {
     setStep(next);
     setNarrowings({});
@@ -451,7 +489,7 @@ function AgentAPIKeysContent({
           create.reset();
           refresh();
         },
-        onError: () => {
+        onError: (failure) => {
           // A failed issuance may reflect a live policy change. Withdraw the
           // reviewed ceiling even when the error does not identify its cause.
           setNarrowings({});
@@ -459,8 +497,16 @@ function AgentAPIKeysContent({
           setReviewAccounts([]);
           setStep(2);
           if (rolloutEnabled.current) void delegable.refetch();
+          // A name already in use is the one failure the caller can fix from
+          // this screen, and the server names it. Everything else keeps the
+          // policy explanation, which is what the other causes have in common.
+          const conflict =
+            failure instanceof GramError &&
+            failure.statusCode === 409 &&
+            failure.message;
           setError(
-            "Could not create API key. Check that the requested grants are allowed by the agent policy, the owner's live permissions and your own, and that the agent is active with a valid owner.",
+            conflict ||
+              "Could not create API key. Check that the requested grants are allowed by the agent policy, the owner's live permissions and your own, and that the agent is active with a valid owner.",
           );
           create.reset();
         },
@@ -470,6 +516,26 @@ function AgentAPIKeysContent({
   const columns: Column<Key>[] = [
     { key: "name", header: "Name", render: (key) => key.name },
     { key: "keyPrefix", header: "Prefix", render: (key) => key.keyPrefix },
+    {
+      key: "createdAt",
+      header: "Created",
+      // Which key a machine is holding is usually remembered as when it was
+      // issued, so the age is part of telling two keys apart.
+      render: (key) =>
+        // The field is typed as always present, but an older row read back
+        // without it must not take the whole table down with it.
+        key.createdAt ? (
+          <time
+            className="min-w-0 truncate"
+            title={key.createdAt.toLocaleString()}
+            dateTime={key.createdAt.toISOString()}
+          >
+            {key.createdAt.toLocaleDateString()}
+          </time>
+        ) : (
+          "—"
+        ),
+    },
     {
       key: "expiresAt",
       header: "Expires",
@@ -559,17 +625,30 @@ function AgentAPIKeysContent({
       )}
       {creation && open && enabled && (
         <div className="space-y-6">
-          <Text muted>
-            {issued
-              ? "This key is shown only once. Copy it now and store it securely."
-              : "Choose where this key can connect and what it can do. Choose an expiration of up to 365 days."}
-          </Text>
+          {/* Each step states its own purpose, so the shell speaks only for
+              the one state that has none of its own: the issued key. */}
+          {issued && (
+            <Text muted>
+              This key is shown only once. Copy it now and store it securely.
+            </Text>
+          )}
+          {/* At the top of the step, not below the buttons: the old position
+              put a failure off-screen on a long step, so a click that did
+              nothing looked like a broken button. */}
+          {error && (
+            <p
+              role="alert"
+              className="border-destructive text-destructive border p-3 text-sm"
+            >
+              {error}
+            </p>
+          )}
           {!issued && (
             <ol
               aria-label="Creation steps"
               className="flex flex-wrap gap-4 text-sm"
             >
-              {["MCP servers", "Accounts", "Permissions", "Review"].map(
+              {["Servers", "Accounts", "Access", "Review"].map(
                 (label, index) => (
                   <li key={label} className="min-w-32 flex-1">
                     <button
@@ -627,10 +706,13 @@ function AgentAPIKeysContent({
                   from the agent page before creating another.
                 </Text>
               )}
+              <h2 className="text-lg font-semibold">Connect your agent</h2>
               <AgentGatewayInstall agentID={agent.id} secret={secret} />
-              <Button variant="secondary" onClick={close}>
-                Done
-              </Button>
+              <div className="flex justify-end border-t pt-5">
+                <Button variant="secondary" onClick={close}>
+                  Done
+                </Button>
+              </div>
             </div>
           ) : step >= 2 ? (
             <form
@@ -642,14 +724,18 @@ function AgentAPIKeysContent({
             >
               {step === 2 ? (
                 <>
-                  <h2 className="text-lg font-semibold">Choose permissions</h2>
-                  <label className="block space-y-2">
+                  <h2 className="text-lg font-semibold">Choose access</h2>
+                  <Text small muted>
+                    Pick what this key may do on the servers you chose. Nothing
+                    is selected by default.
+                  </Text>
+                  <label className="block space-y-2 text-sm font-medium">
                     Key name
                     <Input required value={name} onChange={setName} />
                   </label>
                   <Text small muted>
-                    Select access for your servers, then choose the tools this
-                    key can use.
+                    Names are unique in the organization. Say where the key
+                    lives — the laptop, the CI job, the container.
                   </Text>
                   <div className="space-y-2">
                     <label
@@ -738,37 +824,33 @@ function AgentAPIKeysContent({
                   Cancel
                 </Button>
               </div>
-              <Button
-                title={expiryReason}
-                disabled={
-                  !canIssue ||
-                  create.isPending ||
-                  serversBusy ||
-                  !discoveryComplete ||
-                  !servers.length ||
-                  scopedGrants.length === 0 ||
-                  (step >= 1 && !accountsReady) ||
-                  (step >= 2 &&
-                    (!discoveryComplete ||
-                      !hasSelections ||
-                      !name.trim() ||
-                      !!expiryReason))
-                }
-                onClick={() =>
-                  step < 2 ? setStep(step + 1) : issue(step === 2)
-                }
-              >
-                {create.isPending
-                  ? "Creating…"
-                  : step < 2
-                    ? "Continue"
-                    : step === 2
-                      ? "Review key"
-                      : "Create key"}
-              </Button>
+              <div className="flex items-center gap-3">
+                {/* A disabled primary with no stated reason is the wizard's
+                    commonest dead end, so the gate says what it is waiting
+                    for rather than leaving the button silently inert. */}
+                {blockedReason && !create.isPending && (
+                  <Text muted small>
+                    {blockedReason}
+                  </Text>
+                )}
+                <Button
+                  title={blockedReason ?? undefined}
+                  disabled={!!blockedReason || create.isPending}
+                  onClick={() =>
+                    step < 2 ? setStep(step + 1) : issue(step === 2)
+                  }
+                >
+                  {create.isPending
+                    ? "Creating…"
+                    : step < 2
+                      ? "Continue"
+                      : step === 2
+                        ? "Review key"
+                        : "Create key"}
+                </Button>
+              </div>
             </div>
           )}
-          {error && <p role="alert">{error}</p>}
         </div>
       )}
       <Dialog

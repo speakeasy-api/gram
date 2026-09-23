@@ -9,7 +9,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
@@ -320,6 +322,13 @@ func (s *Service) createPreparedAgentKey(ctx context.Context, tx pgx.Tx, human a
 		ExpiresAt:              pgtype.Timestamptz{Time: prepared.expiresAt, InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	if err != nil {
+		// A name already in use is the caller's to fix, and the only thing that
+		// tells them so is this message: an unexpected error here reads as a
+		// policy failure and sends them back through the whole wizard.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "api_keys_organization_id_name_key" {
+			return repo.ApiKey{}, oops.E(oops.CodeConflict, err, "An API key named %q already exists in this organization. Choose another name.", prepared.name)
+		}
 		return repo.ApiKey{}, oops.E(oops.CodeUnexpected, err, "create agent API key").LogError(ctx, s.logger)
 	}
 	expiresAt := prepared.expiresAt.Format(time.RFC3339Nano)

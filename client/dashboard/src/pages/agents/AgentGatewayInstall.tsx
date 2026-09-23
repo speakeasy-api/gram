@@ -186,7 +186,6 @@ export function AgentGatewayInstall({
   if (!isCredentialSafe(url)) {
     return (
       <div className="space-y-2">
-        <h2 className="text-lg font-semibold">Connect your agent</h2>
         <Text role="alert">
           This deployment serves MCP over plaintext HTTP at {url}. Connection
           instructions are withheld because they would send the agent key
@@ -198,7 +197,8 @@ export function AgentGatewayInstall({
 
   return (
     <div className="space-y-2">
-      <h2 className="text-lg font-semibold">Connect your agent</h2>
+      {/* No heading of its own: this renders inside a titled section on the
+          agent page and under the wizard's own heading when a key is issued. */}
       <Text muted small>
         One endpoint serving every MCP server this agent can reach. Its
         permissions decide what it finds there, so a change takes effect without
