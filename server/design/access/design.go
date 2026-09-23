@@ -498,6 +498,32 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EmployeeAIDetections"}`)
 	})
 
+	Method("listAIDetectionUsers", func() {
+		Description("List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("target_id", String, "Id of the detection target to expand, as agents report it.", func() {
+				Pattern(`^[a-z0-9][a-z0-9-]{0,63}$`)
+			})
+			Required("target_id")
+			security.SessionPayload()
+		})
+
+		Result(ListAIDetectionUsersResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAIDetectionUsers")
+			Param("target_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAIDetectionUsers")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAIDetectionUsers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AIDetectionUsers"}`)
+	})
+
 	Method("setAIToolDecision", func() {
 		Description("Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Gram can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization's scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.")
 		Security(security.Session)
@@ -1240,6 +1266,34 @@ var SetAIToolDecisionResult = Type("SetAIToolDecisionResult", func() {
 var ListAIDetectionsResult = Type("ListAIDetectionsResult", func() {
 	Required("detections")
 	Attribute("detections", ArrayOf(AIDetectionModel), "Detected AI tools aggregated per target, most recently seen first.")
+})
+
+var AIDetectionUserModel = Type("AIDetectionUser", func() {
+	Description("One enrolled user a detection target was found for, with that user's share of the organization's scan reports: the evidence AIDetection carries for the whole organization, narrowed to one person.")
+	Required("user_email", "device_count", "signals", "versions", "first_seen", "last_seen")
+
+	Attribute("user_email", String, "Canonical email of the enrolled user the detections are attributed to. Linked alias emails are folded into it.")
+	Attribute("device_count", Int64, "Distinct devices, by hardware serial, this tool was detected on for this user. Devices that report no serial are not counted.")
+	Attribute("signals", ArrayOf(String), "Detection signals observed for this user: installed and/or running.", func() {
+		Elem(func() {
+			Enum("installed", "running")
+		})
+	})
+	Attribute("versions", ArrayOf(String), "Unique non-empty detected versions for this user.")
+	Attribute("first_seen", String, func() {
+		Description("When this tool was first detected for this user.")
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen", String, func() {
+		Description("When this tool was most recently detected for this user.")
+		Format(FormatDateTime)
+	})
+})
+
+var ListAIDetectionUsersResult = Type("ListAIDetectionUsersResult", func() {
+	Required("detection", "users")
+	Attribute("detection", AIDetectionModel, "The target as the inventory lists it, so a page reached by link needs no second read for its name, category and access decision.")
+	Attribute("users", ArrayOf(AIDetectionUserModel), "Users the target was detected for, most recently seen first.")
 })
 
 var ShadowMCPAccessSummaryModel = Type("ShadowMCPAccessSummary", func() {

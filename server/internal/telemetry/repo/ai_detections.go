@@ -407,6 +407,8 @@ func (q *Queries) listAIDetectionRowsByScope(ctx context.Context, scope aiDetect
 // filters are optional; empty slices mean no restriction.
 type ListAIDetectionSummariesParams struct {
 	OrganizationID string
+	// TargetID restricts to one detection target; empty is every target.
+	TargetID string
 	// Categories restricts to detections stored with these categories.
 	Categories []string
 	// UserEmails restricts to detections attributed to these normalized
@@ -489,6 +491,11 @@ func buildListAIDetectionSummariesQuery(arg ListAIDetectionSummariesParams) (str
 		From("ai_detections").
 		Where("organization_id = ?", arg.OrganizationID).
 		GroupBy("organization_id", "target_id", "device_serial", "user_email", "signal") //nolint:glint // resolve ReplacingMergeTree rows by their exact storage key before canonical identity folding
+	if arg.TargetID != "" {
+		// On the inner read, where target_id is the second sort-key column,
+		// rather than on the aggregate, so ClickHouse prunes by key.
+		resolved = resolved.Where("target_id = ?", arg.TargetID)
+	}
 
 	sb := sq.Select(
 		"target_id",
@@ -529,6 +536,108 @@ func buildListAIDetectionSummariesQuery(arg ListAIDetectionSummariesParams) (str
 	query, args, err := withCanonicalFoldSettings(sb, canonicalOrgLit).ToSql()
 	if err != nil {
 		return "", nil, fmt.Errorf("building ai detection summary query: %w", err)
+	}
+
+	return query, args, nil
+}
+
+// ListAIDetectionUsersParams names the target to expand into the users it
+// was detected for.
+type ListAIDetectionUsersParams struct {
+	OrganizationID string
+	TargetID       string
+	// CanonicalIdentityOrg enables the identity fold on user_email: set it to
+	// the org id when the canonical identity fold is rolled out to the org,
+	// "" otherwise. Folded, a person's alias emails collapse into one row.
+	CanonicalIdentityOrg string
+}
+
+// AIDetectionUserRow aggregates one target's detections for one user, over
+// unmerged ReplacingMergeTree versions on the same grounds as
+// AIDetectionSummaryRow.
+type AIDetectionUserRow struct {
+	// UserEmail is aliased person_email in the query: the folded expression
+	// reads the base user_email column, and an alias of the same name would
+	// shadow it in GROUP BY. One row is one person, however many emails the
+	// fold collapsed into it.
+	UserEmail   string    `ch:"person_email"`
+	DeviceCount uint64    `ch:"device_count"`
+	Signals     []string  `ch:"signals"`
+	Versions    []string  `ch:"versions"`
+	FirstSeen   time.Time `ch:"first_seen"`
+	LastSeen    time.Time `ch:"last_seen"`
+}
+
+// ListAIDetectionUsers aggregates one target's detections per user for one
+// organization, most recently seen first.
+func (q *Queries) ListAIDetectionUsers(ctx context.Context, arg ListAIDetectionUsersParams) ([]AIDetectionUserRow, error) {
+	query, queryArgs, err := buildListAIDetectionUsersQuery(arg)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying ai detection users: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return rows.Close() })
+
+	result := []AIDetectionUserRow{}
+	for rows.Next() {
+		var row AIDetectionUserRow
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning ai detection user row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating ai detection user rows: %w", err)
+	}
+
+	return result, nil
+}
+
+func buildListAIDetectionUsersQuery(arg ListAIDetectionUsersParams) (string, []any, error) {
+	if arg.TargetID == "" {
+		return "", nil, fmt.Errorf("building ai detection users query: target id is required")
+	}
+
+	canonicalOrgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+	userEmailExpr := "user_email"
+	if canonicalOrgLit != "" {
+		userEmailExpr = canonicalEmailExpr(canonicalOrgLit, "user_email")
+	}
+
+	resolved := sq.Select(
+		"organization_id",
+		"target_id",
+		"device_serial",
+		"user_email",
+		"signal",
+		"argMaxIf(version, updated_at, version != '') AS resolved_version",
+		"min(first_seen) AS resolved_first_seen",
+		"max(last_seen) AS resolved_last_seen",
+	).
+		From("ai_detections").
+		Where("organization_id = ?", arg.OrganizationID).
+		Where("target_id = ?", arg.TargetID).
+		GroupBy("organization_id", "target_id", "device_serial", "user_email", "signal") //nolint:glint // resolve ReplacingMergeTree rows by their exact storage key before canonical identity folding
+
+	sb := sq.Select(
+		userEmailExpr+" AS person_email",
+		"uniqExactIf(device_serial, device_serial != '') AS device_count",
+		"arraySort(groupUniqArray(signal)) AS signals",
+		"arraySort(groupUniqArrayIf(resolved_version, resolved_version != '')) AS versions",
+		"min(resolved_first_seen) AS first_seen",
+		"max(resolved_last_seen) AS last_seen",
+	).
+		FromSelect(resolved, "resolved_ai_detections").
+		GroupBy("person_email").
+		OrderBy("last_seen DESC", "person_email ASC")
+
+	query, args, err := withCanonicalFoldSettings(sb, canonicalOrgLit).ToSql()
+	if err != nil {
+		return "", nil, fmt.Errorf("building ai detection users query: %w", err)
 	}
 
 	return query, args, nil

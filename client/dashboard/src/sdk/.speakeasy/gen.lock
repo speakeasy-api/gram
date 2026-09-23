@@ -38,6 +38,7 @@ trackedFiles:
   src/funcs/accessDeleteRole.ts: {}
   src/funcs/accessGetRole.ts: {}
   src/funcs/accessGetShadowMCPInventoryServer.ts: {}
+  src/funcs/accessListAIDetectionUsers.ts: {}
   src/funcs/accessListAIDetections.ts: {}
   src/funcs/accessListAudienceOptions.ts: {}
   src/funcs/accessListChallengeBuckets.ts: {}
@@ -790,6 +791,7 @@ trackedFiles:
   src/models/components/agentsessionmeta.ts: {}
   src/models/components/agentusage.ts: {}
   src/models/components/aidetection.ts: {}
+  src/models/components/aidetectionuser.ts: {}
   src/models/components/aiintegrationconfig.ts: {}
   src/models/components/aiintegrationschedulestate.ts: {}
   src/models/components/aiscanmatch.ts: {}
@@ -1156,6 +1158,7 @@ trackedFiles:
   src/models/components/killswitchuserbadge.ts: {}
   src/models/components/listactorattributesresult.ts: {}
   src/models/components/listaidetectionsresult.ts: {}
+  src/models/components/listaidetectionusersresult.ts: {}
   src/models/components/listaiintegrationschedulesresult.ts: {}
   src/models/components/listaiscantargetsresult.ts: {}
   src/models/components/listallowedoriginsresult.ts: {}
@@ -2151,6 +2154,7 @@ trackedFiles:
   src/models/operations/listagents.ts: {}
   src/models/operations/listagentsessions.ts: {}
   src/models/operations/listaidetections.ts: {}
+  src/models/operations/listaidetectionusers.ts: {}
   src/models/operations/listaiintegrationschedules.ts: {}
   src/models/operations/listaiscantargets.ts: {}
   src/models/operations/listallowedorigins.ts: {}
@@ -2553,6 +2557,8 @@ trackedFiles:
   src/react-query/agentsRevoke.ts: {}
   src/react-query/agentsSuspend.ts: {}
   src/react-query/agentsUpdatePolicyGrant.ts: {}
+  src/react-query/aiDetectionUsers.core.ts: {}
+  src/react-query/aiDetectionUsers.ts: {}
   src/react-query/aiDetections.core.ts: {}
   src/react-query/aiDetections.ts: {}
   src/react-query/aiIntegrationConfig.core.ts: {}
@@ -7733,6 +7739,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listAIDetectionUsers:
+    speakeasy-default-list-AI-detection-users:
+      parameters:
+        query:
+          target_id: "<id>"
+      responses:
+        "200":
+          application/json: {"detection": {"category": "harness", "device_count": 419904, "display_name": "Kristoffer.Beahan", "first_seen": "2026-12-25T01:09:53.169Z", "last_seen": "2026-07-08T21:24:34.023Z", "signals": [], "target_id": "<id>", "user_count": 166846, "versions": []}, "users": [{"device_count": 184017, "first_seen": "2024-10-09T04:39:39.413Z", "last_seen": "2025-08-18T07:36:32.482Z", "signals": [], "user_email": "<value>", "versions": ["<value 1>", "<value 2>"]}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listAIDetections:
     speakeasy-default-list-AI-detections:
       responses:

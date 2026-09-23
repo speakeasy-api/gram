@@ -33,6 +33,7 @@ type Endpoints struct {
 	ResolveShadowMCPInventoryRequest     goa.Endpoint
 	ListAIDetections                     goa.Endpoint
 	ListEmployeeAIDetections             goa.Endpoint
+	ListAIDetectionUsers                 goa.Endpoint
 	SetAIToolDecision                    goa.Endpoint
 	ListResourceAudience                 goa.Endpoint
 	SetResourceAudience                  goa.Endpoint
@@ -66,6 +67,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestEndpoint(s, a.APIKeyAuth),
 		ListAIDetections:                     NewListAIDetectionsEndpoint(s, a.APIKeyAuth),
 		ListEmployeeAIDetections:             NewListEmployeeAIDetectionsEndpoint(s, a.APIKeyAuth),
+		ListAIDetectionUsers:                 NewListAIDetectionUsersEndpoint(s, a.APIKeyAuth),
 		SetAIToolDecision:                    NewSetAIToolDecisionEndpoint(s, a.APIKeyAuth),
 		ListResourceAudience:                 NewListResourceAudienceEndpoint(s, a.APIKeyAuth),
 		SetResourceAudience:                  NewSetResourceAudienceEndpoint(s, a.APIKeyAuth),
@@ -97,6 +99,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ResolveShadowMCPInventoryRequest = m(e.ResolveShadowMCPInventoryRequest)
 	e.ListAIDetections = m(e.ListAIDetections)
 	e.ListEmployeeAIDetections = m(e.ListEmployeeAIDetections)
+	e.ListAIDetectionUsers = m(e.ListAIDetectionUsers)
 	e.SetAIToolDecision = m(e.SetAIToolDecision)
 	e.ListResourceAudience = m(e.ListResourceAudience)
 	e.SetResourceAudience = m(e.SetResourceAudience)
@@ -618,6 +621,29 @@ func NewListEmployeeAIDetectionsEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.ListEmployeeAIDetections(ctx, p)
+	}
+}
+
+// NewListAIDetectionUsersEndpoint returns an endpoint function that calls the
+// method "listAIDetectionUsers" of service "access".
+func NewListAIDetectionUsersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAIDetectionUsersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAIDetectionUsers(ctx, p)
 	}
 }
 

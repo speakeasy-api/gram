@@ -1,30 +1,12 @@
-import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { InlineEmptyState } from "@/components/inline-empty-state";
+import { detectionEvidenceColumns } from "@/components/shadow-ai/detectionColumns";
 import { ErrorAlert } from "@/components/ui/Alert";
-import { Badge } from "@/components/ui/Badge";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { categoryLabel } from "@/pages/device-agent/ai-scan-target-draft";
 import type { AIDetection } from "@gram/client/models/components/aidetection.js";
 import { useEmployeeAIDetections } from "@gram/client/react-query/employeeAIDetections.js";
-
-function SignalBadges({ signals }: { signals: string[] }): JSX.Element {
-  return (
-    <div className="flex flex-wrap gap-1">
-      {signals.includes("running") && (
-        <Badge variant="information">
-          <Badge.Text>Running</Badge.Text>
-        </Badge>
-      )}
-      {signals.includes("installed") && (
-        <Badge variant="neutral">
-          <Badge.Text>Installed</Badge.Text>
-        </Badge>
-      )}
-    </div>
-  );
-}
 
 const COLUMNS: Column<AIDetection>[] = [
   {
@@ -53,58 +35,10 @@ const COLUMNS: Column<AIDetection>[] = [
       <Text small>{categoryLabel(detection.category)}</Text>
     ),
   },
-  {
-    key: "devices",
-    header: "Devices",
-    width: "0.55fr",
-    render: (detection) => (
-      <Text small>
-        {detection.deviceCount}{" "}
-        {detection.deviceCount === 1 ? "device" : "devices"}
-      </Text>
-    ),
-  },
-  {
-    key: "signals",
-    header: "Signals",
-    width: "0.9fr",
-    render: (detection) => <SignalBadges signals={detection.signals} />,
-  },
-  {
-    key: "versions",
-    header: "Versions",
-    width: "1fr",
-    render: (detection) => (
-      <Text
-        small
-        mono
-        className="truncate"
-        title={detection.versions.join(", ")}
-      >
-        {detection.versions.length > 0 ? detection.versions.join(" · ") : "—"}
-      </Text>
-    ),
-  },
-  {
-    key: "firstSeen",
-    header: "First seen",
-    width: "0.85fr",
-    render: (detection) => (
-      <Text small className="whitespace-nowrap">
-        {formatShortDate(detection.firstSeen)}
-      </Text>
-    ),
-  },
-  {
-    key: "lastSeen",
-    header: "Last seen",
-    width: "0.85fr",
-    render: (detection) => (
-      <Text small className="whitespace-nowrap">
-        {formatShortDate(detection.lastSeen)}
-      </Text>
-    ),
-  },
+  // Devices, signals, versions and first and last seen: shared with the
+  // Shadow AI tool page, which shows the same evidence per person for one
+  // tool, so the two tables never drift apart.
+  ...detectionEvidenceColumns<AIDetection>(),
 ];
 
 export function EmployeeShadowAISection({
