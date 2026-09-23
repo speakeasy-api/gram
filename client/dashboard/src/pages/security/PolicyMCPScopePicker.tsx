@@ -2,6 +2,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Label } from "@/components/ui/Label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Text } from "@/components/ui/Text";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useToolMetadata } from "@/hooks/useToolMetadata";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RiskMCPScope } from "@gram/client/models/components/riskmcpscope.js";
@@ -21,10 +22,11 @@ export function PolicyMCPScopePicker({
   value: PolicyMCPScopeValue;
   onChange: (value: PolicyMCPScopeValue) => void;
 }): JSX.Element {
-  const serversQuery = useMcpServers(undefined, undefined, {
+  const gramProject = useProjectSlugForRequests();
+  const serversQuery = useMcpServers({ gramProject }, undefined, {
     throwOnError: false,
   });
-  const gatewaysQuery = useMetaMcpServers(undefined, undefined, {
+  const gatewaysQuery = useMetaMcpServers({ gramProject }, undefined, {
     throwOnError: false,
   });
   const toolsetsQuery = useListToolsets(undefined, undefined, {
