@@ -16,7 +16,7 @@ type AdminContext struct {
 	Workflows []string `json:"available_workflows"`
 }
 
-func registerContextTool(server *mcp.Server) {
+func registerContextTool(server *mcp.Server, organizationReadsAvailable bool) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_admin_context",
 		Title:       "Get Staff Admin Context",
@@ -27,11 +27,15 @@ func registerContextTool(server *mcp.Server) {
 		if !ok {
 			return nil, AdminContext{}, errors.New("staff context is unavailable")
 		}
+		workflows := []string{"inspect staff admin context"}
+		if organizationReadsAvailable {
+			workflows = append(workflows, "find organizations", "inspect organization account and trial")
+		}
 		return nil, AdminContext{
 			Email:     principal.Email,
 			ReadOnly:  !slices.Contains(principal.Scopes, "admin:write"),
 			Scopes:    slices.Clone(principal.Scopes),
-			Workflows: []string{"inspect staff admin context"},
+			Workflows: workflows,
 		}, nil
 	})
 }
