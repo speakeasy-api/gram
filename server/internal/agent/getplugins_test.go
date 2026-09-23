@@ -639,6 +639,34 @@ func TestGetPlugins_DeviceSyncReassignmentBeatsThrottle(t *testing.T) {
 		"an agent that stops reporting a hostname must not erase the stored one")
 }
 
+func TestGetPlugins_DeviceSyncRecordsAIScanDisabled(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	poll := func(disabled *string) int64 {
+		t.Helper()
+		_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+			Email:          new(mockidp.MockUserEmail),
+			SerialNumber:   new("C02XK1ABCDEF"),
+			AiScanDisabled: disabled,
+		})
+		require.NoError(t, err)
+		count, err := agentrepo.New(ti.conn).CountAIScanDisabledDevicesForEmail(ctx, agentrepo.CountAIScanDisabledDevicesForEmailParams{
+			OrganizationID: ti.orgID,
+			Email:          conv.NormalizeEmail(mockidp.MockUserEmail),
+		})
+		require.NoError(t, err)
+		return count
+	}
+
+	require.Equal(t, int64(0), poll(nil))
+	require.Equal(t, int64(1), poll(new("true")), "a disabled scan must land despite the heartbeat throttle")
+	require.Equal(t, int64(0), poll(nil), "re-enabling must land despite the heartbeat throttle")
+	require.Equal(t, int64(0), poll(new("yes")), "only the literal true disables")
+}
+
 // TestGetPlugins_DeviceSyncNormalizesSerialCase pins the write-side
 // normalization. The dedup key and every coverage reader compare
 // LOWER(serial_number), so a machine reporting two casings must resolve to ONE

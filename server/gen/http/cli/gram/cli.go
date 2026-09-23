@@ -205,7 +205,7 @@ func UsageExamples() string {
 		os.Args[0] + " " + "killswitches list-capabilities --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
-		os.Args[0] + " " + "agent get-plugins --legacy-email \"dev@acme.corp\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\" --environment \"ephemeral\"" + "\n" +
+		os.Args[0] + " " + "agent get-plugins --legacy-email \"dev@acme.corp\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\" --environment \"ephemeral\" --ai-scan-disabled \"true\"" + "\n" +
 		""
 }
 
@@ -416,13 +416,14 @@ func ParseEndpoint(
 
 		agentFlags = flag.NewFlagSet("agent", flag.ContinueOnError)
 
-		agentGetPluginsFlags            = flag.NewFlagSet("get-plugins", flag.ExitOnError)
-		agentGetPluginsLegacyEmailFlag  = agentGetPluginsFlags.String("legacy-email", "", "")
-		agentGetPluginsApikeyTokenFlag  = agentGetPluginsFlags.String("apikey-token", "", "")
-		agentGetPluginsEmailFlag        = agentGetPluginsFlags.String("email", "", "")
-		agentGetPluginsSerialNumberFlag = agentGetPluginsFlags.String("serial-number", "", "")
-		agentGetPluginsHostnameFlag     = agentGetPluginsFlags.String("hostname", "", "")
-		agentGetPluginsEnvironmentFlag  = agentGetPluginsFlags.String("environment", "", "")
+		agentGetPluginsFlags              = flag.NewFlagSet("get-plugins", flag.ExitOnError)
+		agentGetPluginsLegacyEmailFlag    = agentGetPluginsFlags.String("legacy-email", "", "")
+		agentGetPluginsApikeyTokenFlag    = agentGetPluginsFlags.String("apikey-token", "", "")
+		agentGetPluginsEmailFlag          = agentGetPluginsFlags.String("email", "", "")
+		agentGetPluginsSerialNumberFlag   = agentGetPluginsFlags.String("serial-number", "", "")
+		agentGetPluginsHostnameFlag       = agentGetPluginsFlags.String("hostname", "", "")
+		agentGetPluginsEnvironmentFlag    = agentGetPluginsFlags.String("environment", "", "")
+		agentGetPluginsAiScanDisabledFlag = agentGetPluginsFlags.String("ai-scan-disabled", "", "")
 
 		agentListSyncedUsersFlags            = flag.NewFlagSet("list-synced-users", flag.ExitOnError)
 		agentListSyncedUsersSessionTokenFlag = agentListSyncedUsersFlags.String("session-token", "", "")
@@ -8297,7 +8298,7 @@ func ParseEndpoint(
 			switch epn {
 			case "get-plugins":
 				endpoint = c.GetPlugins()
-				data, err = agentc.BuildGetPluginsPayload(*agentGetPluginsLegacyEmailFlag, *agentGetPluginsApikeyTokenFlag, *agentGetPluginsEmailFlag, *agentGetPluginsSerialNumberFlag, *agentGetPluginsHostnameFlag, *agentGetPluginsEnvironmentFlag)
+				data, err = agentc.BuildGetPluginsPayload(*agentGetPluginsLegacyEmailFlag, *agentGetPluginsApikeyTokenFlag, *agentGetPluginsEmailFlag, *agentGetPluginsSerialNumberFlag, *agentGetPluginsHostnameFlag, *agentGetPluginsEnvironmentFlag, *agentGetPluginsAiScanDisabledFlag)
 			case "list-synced-users":
 				endpoint = c.ListSyncedUsers()
 				data, err = agentc.BuildListSyncedUsersPayload(*agentListSyncedUsersSessionTokenFlag)
@@ -11752,6 +11753,7 @@ func agentGetPluginsUsage() {
 	fmt.Fprint(os.Stderr, " -serial-number STRING")
 	fmt.Fprint(os.Stderr, " -hostname STRING")
 	fmt.Fprint(os.Stderr, " -environment STRING")
+	fmt.Fprint(os.Stderr, " -ai-scan-disabled STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -11765,10 +11767,11 @@ func agentGetPluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    -serial-number STRING: `)
 	fmt.Fprintln(os.Stderr, `    -hostname STRING: `)
 	fmt.Fprintln(os.Stderr, `    -environment STRING: `)
+	fmt.Fprintln(os.Stderr, `    -ai-scan-disabled STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-plugins --legacy-email \"dev@acme.corp\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\" --environment \"ephemeral\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-plugins --legacy-email \"dev@acme.corp\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\" --environment \"ephemeral\" --ai-scan-disabled \"true\"")
 }
 
 func agentListSyncedUsersUsage() {

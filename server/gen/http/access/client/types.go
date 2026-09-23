@@ -355,6 +355,9 @@ type ResolveShadowMCPInventoryRequestResponseBody struct {
 type ListAIDetectionsResponseBody struct {
 	// Detected AI tools aggregated per target, most recently seen first.
 	Detections []*AIDetectionResponseBody `form:"detections,omitempty" json:"detections,omitempty" xml:"detections,omitempty"`
+	// Number of the employee's devices whose last poll reported the Shadow AI scan
+	// turned off. Set only by listEmployeeAIDetections.
+	ScanDisabledDevices *int64 `form:"scan_disabled_devices,omitempty" json:"scan_disabled_devices,omitempty" xml:"scan_disabled_devices,omitempty"`
 }
 
 // ListEmployeeAIDetectionsResponseBody is the type of the "access" service
@@ -362,6 +365,9 @@ type ListAIDetectionsResponseBody struct {
 type ListEmployeeAIDetectionsResponseBody struct {
 	// Detected AI tools aggregated per target, most recently seen first.
 	Detections []*AIDetectionResponseBody `form:"detections,omitempty" json:"detections,omitempty" xml:"detections,omitempty"`
+	// Number of the employee's devices whose last poll reported the Shadow AI scan
+	// turned off. Set only by listEmployeeAIDetections.
+	ScanDisabledDevices *int64 `form:"scan_disabled_devices,omitempty" json:"scan_disabled_devices,omitempty" xml:"scan_disabled_devices,omitempty"`
 }
 
 // SetAIToolDecisionResponseBody is the type of the "access" service
@@ -8506,7 +8512,9 @@ func NewResolveShadowMCPInventoryRequestGatewayError(body *ResolveShadowMCPInven
 // NewListAIDetectionsResultOK builds a "access" service "listAIDetections"
 // endpoint result from a HTTP "OK" response.
 func NewListAIDetectionsResultOK(body *ListAIDetectionsResponseBody) *access.ListAIDetectionsResult {
-	v := &access.ListAIDetectionsResult{}
+	v := &access.ListAIDetectionsResult{
+		ScanDisabledDevices: body.ScanDisabledDevices,
+	}
 	v.Detections = make([]*access.AIDetection, len(body.Detections))
 	for i, val := range body.Detections {
 		if val == nil {
@@ -8672,7 +8680,9 @@ func NewListAIDetectionsGatewayError(body *ListAIDetectionsGatewayErrorResponseB
 // NewListEmployeeAIDetectionsListAIDetectionsResultOK builds a "access"
 // service "listEmployeeAIDetections" endpoint result from a HTTP "OK" response.
 func NewListEmployeeAIDetectionsListAIDetectionsResultOK(body *ListEmployeeAIDetectionsResponseBody) *access.ListAIDetectionsResult {
-	v := &access.ListAIDetectionsResult{}
+	v := &access.ListAIDetectionsResult{
+		ScanDisabledDevices: body.ScanDisabledDevices,
+	}
 	v.Detections = make([]*access.AIDetection, len(body.Detections))
 	for i, val := range body.Detections {
 		if val == nil {

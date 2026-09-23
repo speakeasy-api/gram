@@ -114,6 +114,16 @@ func (s *Service) ListEmployeeAIDetections(ctx context.Context, payload *gen.Lis
 	// nothing new. Why an administrator decided about a tool is a different
 	// matter, and not part of what this endpoint answers.
 	redactAIDecisionRationale(result.Detections)
+
+	disabled, err := agentrepo.New(s.db).CountAIScanDisabledDevicesForEmail(ctx, agentrepo.CountAIScanDisabledDevicesForEmailParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		Email:          userEmail,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "count ai scan disabled devices", attr.SlogError(err))
+	} else if disabled > 0 {
+		result.ScanDisabledDevices = &disabled
+	}
 	return result, nil
 }
 

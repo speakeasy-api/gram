@@ -1,6 +1,11 @@
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { InlineEmptyState } from "@/components/inline-empty-state";
-import { ErrorAlert } from "@/components/ui/Alert";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  ErrorAlert,
+} from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
@@ -121,6 +126,7 @@ export function EmployeeShadowAISection({
     },
   );
   const detections = detectionsQuery.data?.detections ?? [];
+  const scanDisabledDevices = detectionsQuery.data?.scanDisabledDevices ?? 0;
 
   let content: JSX.Element;
   if (!userEmail) {
@@ -171,6 +177,18 @@ export function EmployeeShadowAISection({
           Organization-wide device-agent detections attributed to this identity.
         </p>
       </div>
+
+      {scanDisabledDevices > 0 && (
+        <Alert variant="warning" className="mb-4">
+          <AlertTitle>Scan disabled</AlertTitle>
+          <AlertDescription>
+            {scanDisabledDevices === 1
+              ? "Shadow AI scanning is turned off on one of this person's devices."
+              : `Shadow AI scanning is turned off on ${scanDisabledDevices} of this person's devices.`}{" "}
+            Results below may be out of date.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {content}
     </section>

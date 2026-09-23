@@ -265,6 +265,7 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 			SerialNumber:   serial,
 			Email:          email,
 			Hostname:       conv.PtrToPGTextTrimmed(payload.Hostname),
+			AiScanDisabled: payload.AiScanDisabled != nil && strings.TrimSpace(*payload.AiScanDisabled) == "true",
 		}); err != nil {
 			s.logger.WarnContext(ctx, "failed to record device agent device sync",
 				attr.SlogError(err),

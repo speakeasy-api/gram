@@ -79,6 +79,11 @@ var _ = Service("agent", func() {
 			Attribute("environment", String, "What kind of machine the agent runs on: `endpoint` (the default when omitted) for an end-user device of any form factor, `ephemeral` for a short-lived cloud sandbox or container, or `server` for a long-running shared host. Lets coverage distinguish a developer's machine from a cloud session, which reports no hardware serial and a generic hostname. An unrecognized value is treated as `endpoint`.", func() {
 				Example("ephemeral")
 			})
+			// A string rather than a Boolean so a malformed value degrades to
+			// "enabled" instead of failing the poll with a 400.
+			Attribute("ai_scan_disabled", String, "`true` when the device's resolved configuration has turned off the Shadow AI scan. Omitted when the scan is on; any other value is treated as on.", func() {
+				Example("true")
+			})
 		})
 
 		Result(GetPluginsResult)
@@ -95,6 +100,7 @@ var _ = Service("agent", func() {
 			Header("serial_number:Gram-Device-Serial")
 			Header("hostname:Gram-Device-Hostname")
 			Header("environment:Gram-Device-Environment")
+			Header("ai_scan_disabled:Gram-Device-AI-Scan-Disabled")
 			Response(StatusOK)
 		})
 

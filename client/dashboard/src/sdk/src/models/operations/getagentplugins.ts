@@ -34,6 +34,10 @@ export type GetAgentPluginsRequest = {
    * What kind of machine the agent runs on: `endpoint` (the default when omitted) for an end-user device of any form factor, `ephemeral` for a short-lived cloud sandbox or container, or `server` for a long-running shared host. Lets coverage distinguish a developer's machine from a cloud session, which reports no hardware serial and a generic hostname. An unrecognized value is treated as `endpoint`.
    */
   gramDeviceEnvironment?: string | undefined;
+  /**
+   * `true` when the device's resolved configuration has turned off the Shadow AI scan. Omitted when the scan is on; any other value is treated as on.
+   */
+  gramDeviceAIScanDisabled?: string | undefined;
 };
 
 /** @internal */
@@ -72,6 +76,7 @@ export type GetAgentPluginsRequest$Outbound = {
   "Gram-Device-Serial"?: string | undefined;
   "Gram-Device-Hostname"?: string | undefined;
   "Gram-Device-Environment"?: string | undefined;
+  "Gram-Device-AI-Scan-Disabled"?: string | undefined;
 };
 
 /** @internal */
@@ -86,6 +91,7 @@ export const GetAgentPluginsRequest$outboundSchema: z.ZodMiniType<
     gramDeviceSerial: z.optional(z.string()),
     gramDeviceHostname: z.optional(z.string()),
     gramDeviceEnvironment: z.optional(z.string()),
+    gramDeviceAIScanDisabled: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -94,6 +100,7 @@ export const GetAgentPluginsRequest$outboundSchema: z.ZodMiniType<
       gramDeviceSerial: "Gram-Device-Serial",
       gramDeviceHostname: "Gram-Device-Hostname",
       gramDeviceEnvironment: "Gram-Device-Environment",
+      gramDeviceAIScanDisabled: "Gram-Device-AI-Scan-Disabled",
     });
   }),
 );

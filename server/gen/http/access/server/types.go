@@ -357,6 +357,9 @@ type ResolveShadowMCPInventoryRequestResponseBody struct {
 type ListAIDetectionsResponseBody struct {
 	// Detected AI tools aggregated per target, most recently seen first.
 	Detections []*AIDetectionResponseBody `form:"detections" json:"detections" xml:"detections"`
+	// Number of the employee's devices whose last poll reported the Shadow AI scan
+	// turned off. Set only by listEmployeeAIDetections.
+	ScanDisabledDevices *int64 `form:"scan_disabled_devices,omitempty" json:"scan_disabled_devices,omitempty" xml:"scan_disabled_devices,omitempty"`
 }
 
 // ListEmployeeAIDetectionsResponseBody is the type of the "access" service
@@ -364,6 +367,9 @@ type ListAIDetectionsResponseBody struct {
 type ListEmployeeAIDetectionsResponseBody struct {
 	// Detected AI tools aggregated per target, most recently seen first.
 	Detections []*AIDetectionResponseBody `form:"detections" json:"detections" xml:"detections"`
+	// Number of the employee's devices whose last poll reported the Shadow AI scan
+	// turned off. Set only by listEmployeeAIDetections.
+	ScanDisabledDevices *int64 `form:"scan_disabled_devices,omitempty" json:"scan_disabled_devices,omitempty" xml:"scan_disabled_devices,omitempty"`
 }
 
 // SetAIToolDecisionResponseBody is the type of the "access" service
@@ -6119,7 +6125,9 @@ func NewResolveShadowMCPInventoryRequestResponseBody(res *access.ShadowMCPInvent
 // NewListAIDetectionsResponseBody builds the HTTP response body from the
 // result of the "listAIDetections" endpoint of the "access" service.
 func NewListAIDetectionsResponseBody(res *access.ListAIDetectionsResult) *ListAIDetectionsResponseBody {
-	body := &ListAIDetectionsResponseBody{}
+	body := &ListAIDetectionsResponseBody{
+		ScanDisabledDevices: res.ScanDisabledDevices,
+	}
 	if res.Detections != nil {
 		body.Detections = make([]*AIDetectionResponseBody, len(res.Detections))
 		for i, val := range res.Detections {
@@ -6139,7 +6147,9 @@ func NewListAIDetectionsResponseBody(res *access.ListAIDetectionsResult) *ListAI
 // the result of the "listEmployeeAIDetections" endpoint of the "access"
 // service.
 func NewListEmployeeAIDetectionsResponseBody(res *access.ListAIDetectionsResult) *ListEmployeeAIDetectionsResponseBody {
-	body := &ListEmployeeAIDetectionsResponseBody{}
+	body := &ListEmployeeAIDetectionsResponseBody{
+		ScanDisabledDevices: res.ScanDisabledDevices,
+	}
 	if res.Detections != nil {
 		body.Detections = make([]*AIDetectionResponseBody, len(res.Detections))
 		for i, val := range res.Detections {

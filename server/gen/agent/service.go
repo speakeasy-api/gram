@@ -355,6 +355,9 @@ type GetPluginsPayload struct {
 	// session, which reports no hardware serial and a generic hostname. An
 	// unrecognized value is treated as `endpoint`.
 	Environment *string
+	// `true` when the device's resolved configuration has turned off the Shadow AI
+	// scan. Omitted when the scan is on; any other value is treated as on.
+	AiScanDisabled *string
 }
 
 // GetPluginsResult is the result type of the agent service getPlugins method.

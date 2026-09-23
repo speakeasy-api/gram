@@ -1240,6 +1240,7 @@ var SetAIToolDecisionResult = Type("SetAIToolDecisionResult", func() {
 var ListAIDetectionsResult = Type("ListAIDetectionsResult", func() {
 	Required("detections")
 	Attribute("detections", ArrayOf(AIDetectionModel), "Detected AI tools aggregated per target, most recently seen first.")
+	Attribute("scan_disabled_devices", Int64, "Number of the employee's devices whose last poll reported the Shadow AI scan turned off. Set only by listEmployeeAIDetections.")
 })
 
 var ShadowMCPAccessSummaryModel = Type("ShadowMCPAccessSummary", func() {

@@ -119,8 +119,8 @@ WHERE device_agent_syncs.last_seen_at < clock_timestamp() - interval '1 minute';
 -- mutable descriptive columns, and at a ~60s poll cadence last_seen_at is
 -- almost always fresh, so a reassigned machine's new user (or a rename)
 -- could go unrecorded for the entire session.
-INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname)
-VALUES (@organization_id, @serial_number, @email, sqlc.narg('hostname'))
+INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname, ai_scan_disabled)
+VALUES (@organization_id, @serial_number, @email, sqlc.narg('hostname'), @ai_scan_disabled)
 -- Infers device_agent_device_syncs_org_lower_serial_key, the unique
 -- expression index that is this table's dedup key. Matching the readers'
 -- LOWER() comparison is what stops one machine from holding two rows.
@@ -130,9 +130,21 @@ SET last_seen_at = clock_timestamp()
   , email        = EXCLUDED.email
     -- An agent that stopped reporting a hostname must not blank a known one.
   , hostname     = COALESCE(EXCLUDED.hostname, device_agent_device_syncs.hostname)
+  , ai_scan_disabled = EXCLUDED.ai_scan_disabled
 WHERE device_agent_device_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
    OR device_agent_device_syncs.email IS DISTINCT FROM EXCLUDED.email
-   OR (EXCLUDED.hostname IS NOT NULL AND device_agent_device_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname);
+   OR (EXCLUDED.hostname IS NOT NULL AND device_agent_device_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname)
+   OR device_agent_device_syncs.ai_scan_disabled IS DISTINCT FROM EXCLUDED.ai_scan_disabled;
+
+-- name: CountAIScanDisabledDevicesForEmail :one
+-- Counts the endpoints attributed to @email whose last poll reported the
+-- Shadow AI scan turned off, so the dashboard can mark that employee's scan
+-- results as possibly out of date.
+SELECT COUNT(*)::bigint
+FROM device_agent_device_syncs
+WHERE organization_id = @organization_id
+  AND LOWER(email) = LOWER(@email)
+  AND ai_scan_disabled;
 
 -- name: UpsertDeviceAgentEnvironmentSync :exec
 -- Best-effort record that an agent polled from a box that is not somebody's

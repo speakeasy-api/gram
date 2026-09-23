@@ -61,6 +61,10 @@ func EncodeGetPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			head := *p.Environment
 			req.Header.Set("Gram-Device-Environment", head)
 		}
+		if p.AiScanDisabled != nil {
+			head := *p.AiScanDisabled
+			req.Header.Set("Gram-Device-AI-Scan-Disabled", head)
+		}
 		values := req.URL.Query()
 		if p.LegacyEmail != nil {
 			values.Add("email", *p.LegacyEmail)

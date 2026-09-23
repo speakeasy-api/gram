@@ -113,6 +113,11 @@ async function $do(
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
+    "Gram-Device-AI-Scan-Disabled": encodeSimple(
+      "Gram-Device-AI-Scan-Disabled",
+      payload?.["Gram-Device-AI-Scan-Disabled"],
+      { explode: false, charEncoding: "none" },
+    ),
     "Gram-Device-Environment": encodeSimple(
       "Gram-Device-Environment",
       payload?.["Gram-Device-Environment"],

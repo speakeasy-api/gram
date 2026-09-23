@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -13,15 +14,27 @@ export type ListAIDetectionsResult = {
    * Detected AI tools aggregated per target, most recently seen first.
    */
   detections: Array<AIDetection>;
+  /**
+   * Number of the employee's devices whose last poll reported the Shadow AI scan turned off. Set only by listEmployeeAIDetections.
+   */
+  scanDisabledDevices?: number | undefined;
 };
 
 /** @internal */
 export const ListAIDetectionsResult$inboundSchema: z.ZodMiniType<
   ListAIDetectionsResult,
   unknown
-> = z.object({
-  detections: z.array(AIDetection$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    detections: z.array(AIDetection$inboundSchema),
+    scan_disabled_devices: z.optional(z.int()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "scan_disabled_devices": "scanDisabledDevices",
+    });
+  }),
+);
 
 export function listAIDetectionsResultFromJSON(
   jsonString: string,

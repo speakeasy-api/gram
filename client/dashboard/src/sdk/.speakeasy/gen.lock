@@ -5975,6 +5975,7 @@ examples:
           Gram-Device-Hostname: "dev-macbook-pro"
           Gram-User-Email: "dev@acme.corp"
           Gram-Device-Environment: "ephemeral"
+          Gram-Device-AI-Scan-Disabled: "true"
       responses:
         "200":
           application/json: {"etag": "<value>", "marketplaces": [], "plugins": []}

@@ -79,6 +79,29 @@ func (q *Queries) ConsumeSessionHandoffLink(ctx context.Context, token string) (
 	return blob_url, err
 }
 
+const countAIScanDisabledDevicesForEmail = `-- name: CountAIScanDisabledDevicesForEmail :one
+SELECT COUNT(*)::bigint
+FROM device_agent_device_syncs
+WHERE organization_id = $1
+  AND LOWER(email) = LOWER($2)
+  AND ai_scan_disabled
+`
+
+type CountAIScanDisabledDevicesForEmailParams struct {
+	OrganizationID string
+	Email          string
+}
+
+// Counts the endpoints attributed to @email whose last poll reported the
+// Shadow AI scan turned off, so the dashboard can mark that employee's scan
+// results as possibly out of date.
+func (q *Queries) CountAIScanDisabledDevicesForEmail(ctx context.Context, arg CountAIScanDisabledDevicesForEmailParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAIScanDisabledDevicesForEmail, arg.OrganizationID, arg.Email)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deleteAIScanTarget = `-- name: DeleteAIScanTarget :one
 DELETE FROM ai_scan_targets
 WHERE organization_id = $1
@@ -861,17 +884,19 @@ func (q *Queries) UpsertDeviceAgentConfiguration(ctx context.Context, arg Upsert
 }
 
 const upsertDeviceAgentDeviceSync = `-- name: UpsertDeviceAgentDeviceSync :exec
-INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname)
-VALUES ($1, $2, $3, $4)
+INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname, ai_scan_disabled)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (organization_id, LOWER(serial_number)) DO UPDATE
 SET last_seen_at = clock_timestamp()
   , updated_at   = clock_timestamp()
   , email        = EXCLUDED.email
     -- An agent that stopped reporting a hostname must not blank a known one.
   , hostname     = COALESCE(EXCLUDED.hostname, device_agent_device_syncs.hostname)
+  , ai_scan_disabled = EXCLUDED.ai_scan_disabled
 WHERE device_agent_device_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
    OR device_agent_device_syncs.email IS DISTINCT FROM EXCLUDED.email
    OR (EXCLUDED.hostname IS NOT NULL AND device_agent_device_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname)
+   OR device_agent_device_syncs.ai_scan_disabled IS DISTINCT FROM EXCLUDED.ai_scan_disabled
 `
 
 type UpsertDeviceAgentDeviceSyncParams struct {
@@ -879,6 +904,7 @@ type UpsertDeviceAgentDeviceSyncParams struct {
 	SerialNumber   string
 	Email          string
 	Hostname       pgtype.Text
+	AiScanDisabled bool
 }
 
 // Best-effort record that the agent on the machine bearing @serial_number
@@ -900,6 +926,7 @@ func (q *Queries) UpsertDeviceAgentDeviceSync(ctx context.Context, arg UpsertDev
 		arg.SerialNumber,
 		arg.Email,
 		arg.Hostname,
+		arg.AiScanDisabled,
 	)
 	return err
 }

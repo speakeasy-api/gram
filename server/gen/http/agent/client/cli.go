@@ -18,7 +18,7 @@ import (
 
 // BuildGetPluginsPayload builds the payload for the agent getPlugins endpoint
 // from CLI flags.
-func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsApikeyToken string, agentGetPluginsEmail string, agentGetPluginsSerialNumber string, agentGetPluginsHostname string, agentGetPluginsEnvironment string) (*agent.GetPluginsPayload, error) {
+func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsApikeyToken string, agentGetPluginsEmail string, agentGetPluginsSerialNumber string, agentGetPluginsHostname string, agentGetPluginsEnvironment string, agentGetPluginsAiScanDisabled string) (*agent.GetPluginsPayload, error) {
 	var legacyEmail *string
 	{
 		if agentGetPluginsLegacyEmail != "" {
@@ -55,6 +55,12 @@ func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsAp
 			environment = &agentGetPluginsEnvironment
 		}
 	}
+	var aiScanDisabled *string
+	{
+		if agentGetPluginsAiScanDisabled != "" {
+			aiScanDisabled = &agentGetPluginsAiScanDisabled
+		}
+	}
 	v := &agent.GetPluginsPayload{}
 	v.LegacyEmail = legacyEmail
 	v.ApikeyToken = apikeyToken
@@ -62,6 +68,7 @@ func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsAp
 	v.SerialNumber = serialNumber
 	v.Hostname = hostname
 	v.Environment = environment
+	v.AiScanDisabled = aiScanDisabled
 
 	return v, nil
 }

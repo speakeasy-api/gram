@@ -434,6 +434,9 @@ type ListAIDetectionsPayload struct {
 type ListAIDetectionsResult struct {
 	// Detected AI tools aggregated per target, most recently seen first.
 	Detections []*AIDetection
+	// Number of the employee's devices whose last poll reported the Shadow AI scan
+	// turned off. Set only by listEmployeeAIDetections.
+	ScanDisabledDevices *int64
 }
 
 // ListAudienceOptionsPayload is the payload type of the access service

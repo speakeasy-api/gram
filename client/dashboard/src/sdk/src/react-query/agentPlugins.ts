@@ -114,6 +114,7 @@ export function setAgentPluginsData(
       gramDeviceSerial?: string | undefined;
       gramDeviceHostname?: string | undefined;
       gramDeviceEnvironment?: string | undefined;
+      gramDeviceAIScanDisabled?: string | undefined;
     },
   ],
   data: AgentPluginsQueryData,
@@ -133,6 +134,7 @@ export function invalidateAgentPlugins(
       gramDeviceSerial?: string | undefined;
       gramDeviceHostname?: string | undefined;
       gramDeviceEnvironment?: string | undefined;
+      gramDeviceAIScanDisabled?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

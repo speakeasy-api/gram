@@ -4155,7 +4155,7 @@ func NewCreateSessionHandoffGatewayErrorResponseBody(res *goa.ServiceError) *Cre
 }
 
 // NewGetPluginsPayload builds a agent service getPlugins endpoint payload.
-func NewGetPluginsPayload(legacyEmail *string, apikeyToken *string, email *string, serialNumber *string, hostname *string, environment *string) *agent.GetPluginsPayload {
+func NewGetPluginsPayload(legacyEmail *string, apikeyToken *string, email *string, serialNumber *string, hostname *string, environment *string, aiScanDisabled *string) *agent.GetPluginsPayload {
 	v := &agent.GetPluginsPayload{}
 	v.LegacyEmail = legacyEmail
 	v.ApikeyToken = apikeyToken
@@ -4163,6 +4163,7 @@ func NewGetPluginsPayload(legacyEmail *string, apikeyToken *string, email *strin
 	v.SerialNumber = serialNumber
 	v.Hostname = hostname
 	v.Environment = environment
+	v.AiScanDisabled = aiScanDisabled
 
 	return v
 }
