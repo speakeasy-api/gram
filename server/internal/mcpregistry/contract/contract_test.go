@@ -115,9 +115,9 @@ func TestSchemaConformance(t *testing.T) {
 		t.Fatal(err)
 	}
 	var cases []struct {
-		Name   string
-		Schema json.RawMessage
-		Valid  bool
+		Name   string          `json:"name"`
+		Schema json.RawMessage `json:"schema"`
+		Valid  bool            `json:"valid"`
 	}
 	if err := json.Unmarshal(raw, &cases); err != nil {
 		t.Fatal(err)
