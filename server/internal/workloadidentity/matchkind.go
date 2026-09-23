@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // WildcardSuffix terminates a wildcard rule's stored value. Required, and
@@ -75,6 +77,13 @@ var (
 	// the issuer signs — every other tenant of a shared issuer included.
 	ErrWildcardStemEmpty = errors.New(`a wildcard subject needs something before its "*"`)
 
+	// ErrSubjectTooLong reports a subject that could never mint a session. A
+	// workload session subject is "workload:<issuer id>:<external subject>" and
+	// is rejected rather than truncated when it exceeds
+	// urn.MaxWorkloadSubjectIDLength, so a longer subject would verify here and
+	// then fail at token exchange, where the operator cannot act on it.
+	ErrSubjectTooLong = errors.New("subject is too long to identify a workload session")
+
 	// ErrExactSubjectHasWildcard reports a "*" in an exact rule, which is almost
 	// always someone expecting a wildcard and getting a literal that matches
 	// nothing.
@@ -114,6 +123,11 @@ func WildcardStem(subject string) string {
 func ValidateSubjectRule(kind MatchKind, subject string, allowWildcard bool) error {
 	if subject == "" {
 		return ErrSubjectEmpty
+	}
+	// Measured before the kind is considered: the stored value is what the
+	// session subject is built from, trailing "*" included.
+	if len(subject) > urn.MaxWorkloadExternalSubjectLength {
+		return fmt.Errorf("%w: %d bytes, limit is %d", ErrSubjectTooLong, len(subject), urn.MaxWorkloadExternalSubjectLength)
 	}
 
 	switch kind {
