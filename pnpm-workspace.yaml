@@ -63,7 +63,7 @@ overrides:
   # distinct peer set — splitting the context and silently breaking chat
   # history loading (AGE-2977). Pin assistant-cloud's optional peer to a version
   # accepted by both runtime paths so core resolves with the same peer set.
-  assistant-cloud: 0.1.43
+  assistant-cloud: 0.2.1
 
 peerDependencyRules:
   allowedVersions:
