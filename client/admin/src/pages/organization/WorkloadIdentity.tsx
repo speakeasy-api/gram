@@ -19,6 +19,9 @@ import {
   type AdminWorkloadIdentityState,
 } from "@/lib/gramAdminApi";
 
+// Ties the warning to the input it is about, for a screen reader.
+const WILDCARD_WARNING_ID = "workload-subject-wildcard-warning";
+
 export function WorkloadIdentityRoute(): JSX.Element | null {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
   const { data } = useQuery(organizationQuery(idOrSlug));
@@ -340,6 +343,12 @@ function AdmitSubjectForm({
   const [agentID, setAgentID] = useState("");
   const [name, setName] = useState("");
 
+  // A subject is compared in full, so a `*` is just another character and the
+  // rule matches nothing. Silent, and it reads as correct in the table
+  // afterwards, which is why this says so while the operator is still typing
+  // rather than leaving them to wonder why no exchange is admitted.
+  const subjectLooksLikeWildcard = subject.includes("*");
+
   return (
     <form
       className="flex flex-wrap items-end gap-2 border-t pt-3"
@@ -371,6 +380,9 @@ function AdmitSubjectForm({
         <Input
           value={subject}
           onChange={(event) => setSubject(event.target.value)}
+          aria-describedby={
+            subjectLooksLikeWildcard ? WILDCARD_WARNING_ID : undefined
+          }
           required
         />
       </Labelled>
@@ -387,6 +399,20 @@ function AdmitSubjectForm({
       <Button type="submit" size="sm" disabled={pending}>
         Admit subject
       </Button>
+      {/* basis-full so it gets its own row rather than being squeezed between
+          two inputs in the wrapping flex layout. */}
+      {subjectLooksLikeWildcard && (
+        <p
+          id={WILDCARD_WARNING_ID}
+          role="alert"
+          className="text-destructive basis-full text-sm"
+        >
+          A subject is matched <strong>in full, literally</strong>, including
+          the <code>*</code>. This rule admits only a subject containing that
+          character, which no platform mints — not every subject beginning with
+          it.
+        </p>
+      )}
     </form>
   );
 }
