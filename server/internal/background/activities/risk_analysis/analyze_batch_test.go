@@ -594,6 +594,8 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 	})
 	require.NoError(t, err)
 	promptInjectionPub, published := capturingPromptInjectionPub(t)
+	meterPub := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	meterPub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
 
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
@@ -616,7 +618,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 		mustCELEngine(t),
 		nil,
 		nil,
-		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		metering.NewRiskRecorder(meterPub),
 		false,
 	)
 	require.NoError(t, err)
@@ -640,6 +642,21 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 	var result risk_analysis.AnalyzeBatchResult
 	require.NoError(t, val.Get(&result))
 	require.Len(t, *published, len(msgIDs)+1)
+
+	// The activity dispatches prompt injection and nothing else: no findings,
+	// no prompt_injection rows in Postgres, and no usage. All three come from
+	// the stream consumer's output now.
+	require.Zero(t, result.Findings)
+	meterPub.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+	rows, err := testrepo.New(conn).ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, rows, "every scanned unit still gets its sentinel row")
+	for _, row := range rows {
+		require.NotEqual(t, risk_analysis.SourcePromptInjection, row.Source)
+	}
 
 	var partRequest *riskv1.PromptInjectionAnalysis
 	for _, req := range *published {

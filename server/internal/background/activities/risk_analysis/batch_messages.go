@@ -156,13 +156,6 @@ func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, rol
 	return msg, true
 }
 
-func batchJudgeTrajectory(msg batchMessage) judgemessage.Trajectory {
-	return judgemessage.Trajectory{
-		PriorUserRequest:       msg.PriorUserRequest,
-		RecentUntrustedContent: msg.RecentUntrustedContent,
-	}
-}
-
 func (m batchMessage) chatMessageID() uuid.NullUUID {
 	if m.ContentPart {
 		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}

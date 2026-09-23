@@ -189,6 +189,10 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	// on identical traffic without the model ever enforcing. Custom rules,
 	// shadow_mcp and account_identity keep their engines in every mode.
 	//
+	// prompt_injection is already stream-only in the off and shadow modes —
+	// its legacy engine IS a streams consumer, not an inline scan — so what
+	// the llm mode takes from it is the dispatch, not a scan.
+	//
 	// Both model modes only publish when this worker knows an analyzer is
 	// configured: with GRAM_RISK_LLM_URL empty the streams consumer acks
 	// every request without findings. The llm mode then falls back to the

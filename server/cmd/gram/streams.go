@@ -91,8 +91,14 @@ import (
 // their own key, and leaves the rest on the subscription, which retains
 // requests for 7 days. Raise it with the limiter, not on its own.
 var promptInjectionReceiveSettings = pubsub.ReceiveSettings{
-	MaxOutstandingMessages: 64,
-	MaxOutstandingBytes:    64 * constants.MiB,
+	MaxOutstandingMessages:     64,
+	MaxOutstandingBytes:        64 * constants.MiB,
+	MaxExtension:               pubsub.DefaultReceiveSettings.MaxExtension,
+	MaxDurationPerAckExtension: pubsub.DefaultReceiveSettings.MaxDurationPerAckExtension,
+	MinDurationPerAckExtension: pubsub.DefaultReceiveSettings.MinDurationPerAckExtension,
+	EnablePerStreamFlowControl: pubsub.DefaultReceiveSettings.EnablePerStreamFlowControl,
+	NumGoroutines:              pubsub.DefaultReceiveSettings.NumGoroutines,
+	ShutdownOptions:            pubsub.DefaultReceiveSettings.ShutdownOptions,
 }
 
 func newStreamsCommand() *cli.Command {
