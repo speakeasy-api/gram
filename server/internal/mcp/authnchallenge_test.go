@@ -52,8 +52,9 @@ type mockIdentityResolver struct {
 	upsertResult string
 	upsertErr    error
 
-	hasAccessOK  bool
-	hasAccessErr error
+	hasAccessOK           bool
+	hasAccessErr          error
+	beforeMembershipCheck func()
 
 	buildAuthURLParams identity.AuthorizationURLParams
 
@@ -84,6 +85,9 @@ func (m *mockIdentityResolver) CompleteIDPLogin(_ context.Context, _ *identity.I
 }
 
 func (m *mockIdentityResolver) IsOrganizationMember(_ context.Context, _, userID string) (bool, error) {
+	if m.beforeMembershipCheck != nil {
+		m.beforeMembershipCheck()
+	}
 	m.calls = append(m.calls, "IsOrganizationMember")
 	m.memberChecks = append(m.memberChecks, userID)
 	return m.hasAccessOK, m.hasAccessErr

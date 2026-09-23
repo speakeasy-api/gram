@@ -81,6 +81,9 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	// Revalidate private authority before retry consumes state or card actions
 	// read or mutate credentials; the resolved endpoint can already be stale.
 	if err := endpoint.ValidateLiveChallenge(ctx, s.db, challengeState.Endpoint); err != nil {
+		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageConsent)
+		}
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
 	subject := *challengeState.Subject

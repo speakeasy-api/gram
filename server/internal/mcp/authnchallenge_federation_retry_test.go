@@ -52,6 +52,8 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 		{name: "unsupported_action", code: oops.CodeBadRequest},
 		{name: "authority_revoked", code: oops.CodeUnauthorized},
 		{name: "authority_repointed", code: oops.CodeUnauthorized},
+		{name: "authority_revoked_after_preflight", code: oops.CodeUnauthorized},
+		{name: "authority_repointed_after_preflight", code: oops.CodeUnauthorized},
 	} {
 		scenario := tc.name
 		t.Run(scenario, func(t *testing.T) {
@@ -130,7 +132,7 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 				// Stable issuer/client UUIDs must not authorize a different issuer string.
 				require.Equal(t, f.remoteIssuerID, state.FederatedBinding.IssuerID)
 				require.Equal(t, f.clientID, state.FederatedBinding.ClientID)
-			case "authority_revoked", "authority_repointed":
+			case "authority_revoked", "authority_repointed", "authority_revoked_after_preflight", "authority_repointed_after_preflight":
 				ingressID := uuid.New()
 				const privateBaseURL = "https://retry.example.ts.net"
 				require.NoError(t, testrepo.New(f.ti.conn).InsertNetworkIngressFixture(ctx, testrepo.InsertNetworkIngressFixtureParams{
@@ -147,18 +149,26 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 				}
 				require.NoError(t, endpoint.ValidateChallenge(ctx, state.Endpoint, state.UserSessionIssuerID))
 				require.NoError(t, endpoint.ValidateLiveChallenge(ctx, f.ti.conn, state.Endpoint))
-				if scenario == "authority_revoked" {
-					require.NoError(t, testrepo.New(f.ti.conn).SoftDeleteNetworkIngressFixture(ctx, ingressID))
+				changeAuthority := func() {
+					if strings.HasPrefix(scenario, "authority_revoked") {
+						require.NoError(t, testrepo.New(f.ti.conn).SoftDeleteNetworkIngressFixture(ctx, ingressID))
+					} else {
+						repo := ingressrepo.New(f.ti.conn)
+						row, err := repo.GetNetworkIngressByID(ctx, ingressrepo.GetNetworkIngressByIDParams{ID: ingressID, OrganizationID: f.organizationID})
+						require.NoError(t, err)
+						count, err := repo.RecordNetworkIngressObservation(ctx, ingressrepo.RecordNetworkIngressObservationParams{
+							ID: ingressID, OrganizationID: f.organizationID, ExpectedUpdatedAt: row.UpdatedAt,
+							Status: row.Status, DnsName: conv.ToPGText("repointed.example.ts.net"),
+						})
+						require.NoError(t, err)
+						require.EqualValues(t, 1, count)
+					}
+				}
+				if strings.HasSuffix(scenario, "_after_preflight") {
+					// Membership is checked inside retry, after the action preflight.
+					f.resolver.beforeMembershipCheck = changeAuthority
 				} else {
-					repo := ingressrepo.New(f.ti.conn)
-					row, err := repo.GetNetworkIngressByID(ctx, ingressrepo.GetNetworkIngressByIDParams{ID: ingressID, OrganizationID: f.organizationID})
-					require.NoError(t, err)
-					count, err := repo.RecordNetworkIngressObservation(ctx, ingressrepo.RecordNetworkIngressObservationParams{
-						ID: ingressID, OrganizationID: f.organizationID, ExpectedUpdatedAt: row.UpdatedAt,
-						Status: row.Status, DnsName: conv.ToPGText("repointed.example.ts.net"),
-					})
-					require.NoError(t, err)
-					require.EqualValues(t, 1, count)
+					changeAuthority()
 				}
 				// The cached request checks still pass: only a live read detects revocation.
 				require.NoError(t, endpoint.ValidateChallenge(ctx, state.Endpoint, state.UserSessionIssuerID))
@@ -196,6 +206,9 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 				var failure *oops.ShareableError
 				require.ErrorAs(t, err, &failure)
 				require.Equal(t, tc.code, failure.Code)
+				if strings.HasSuffix(scenario, "_after_preflight") {
+					require.Len(t, f.resolver.memberChecks, 2, "retry must pass action preflight and reach its membership check")
+				}
 				if scenario == "issuer_url_drift" || scenario == "issuer_trailing_slash" {
 					require.ErrorContains(t, err, "Trusted login binding changed")
 				}

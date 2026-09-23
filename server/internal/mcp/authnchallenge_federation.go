@@ -409,6 +409,11 @@ func (s *Service) retryFederatedDelegation(w http.ResponseWriter, r *http.Reques
 	if !state.FederatedBinding.matches(issuerID, clientID, provider) {
 		return oops.E(oops.CodeFailedPrecondition, nil, "Trusted login binding changed. Restart login")
 	}
+	// Membership and provider resolution can outlive the action preflight.
+	// Recheck authority before spending the single-use retry challenge.
+	if err := endpoint.ValidateLiveChallenge(ctx, s.db, state.Endpoint); err != nil {
+		return oauthAuthorityError(err)
+	}
 	consumed, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+state.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, nil, "Delegation retry state was already consumed or expired")
@@ -417,9 +422,6 @@ func (s *Service) retryFederatedDelegation(w http.ResponseWriter, r *http.Reques
 		return oops.E(oops.CodeUnauthorized, nil, "Delegation retry identity changed")
 	}
 	if err := endpoint.ValidateChallenge(ctx, consumed.Endpoint, consumed.UserSessionIssuerID); err != nil {
-		return oauthAuthorityError(err)
-	}
-	if err := endpoint.ValidateLiveChallenge(ctx, s.db, consumed.Endpoint); err != nil {
 		return oauthAuthorityError(err)
 	}
 	consumed.ID = uuid.NewString()
