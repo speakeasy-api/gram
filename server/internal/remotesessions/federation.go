@@ -20,6 +20,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -76,7 +77,10 @@ func (m *ChallengeManager) LoadFederatedProvider(ctx context.Context, organizati
 	defer cancel()
 	row, err := repo.New(m.db).GetTrustedRemoteSessionClientForOrganization(ctx, repo.GetTrustedRemoteSessionClientForOrganizationParams{OrganizationID: organizationID, IssuerID: issuerID, ClientID: clientID})
 	if err != nil {
-		return nil, ErrFederatedConfiguration
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrFederatedConfiguration
+		}
+		return nil, fmt.Errorf("read federated registration: %w", err)
 	}
 	issuerURL, err := url.Parse(row.RemoteSessionIssuer.Issuer)
 	if err != nil || !validIssuerDiscoveryURL(issuerURL) || issuerURL.RawQuery != "" || issuerURL.Fragment != "" {
@@ -90,7 +94,7 @@ func (m *ChallengeManager) LoadFederatedProvider(ctx context.Context, organizati
 	// the package's legacy trailing-slash issuer normalization.
 	doc, discoveryErr := m.loadFederatedMetadata(ctx, organizationID, row.RemoteSessionIssuer, doer)
 	if discoveryErr != nil {
-		return nil, ErrFederatedConfiguration
+		return nil, discoveryErr
 	}
 	p, err := newFederatedProvider(organizationID, row.RemoteSessionIssuer, row.RemoteSessionClient, doc)
 	if err != nil {

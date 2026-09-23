@@ -42,6 +42,8 @@ type Identity interface {
 	DiscardCredentials()
 }
 
+// RefreshResult may accompany a verification error. In that case Credentials
+// are for encrypted quarantine only; Identity must not be admitted or replayed.
 type RefreshResult struct {
 	Identity    Identity
 	Credentials Credentials

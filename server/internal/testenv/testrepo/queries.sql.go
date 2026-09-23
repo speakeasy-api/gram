@@ -806,6 +806,17 @@ func (q *Queries) DisableAttachmentSourceRefreshFixture(ctx context.Context, id 
 	return result.RowsAffected(), nil
 }
 
+const disableDelegationOrganizationFixture = `-- name: DisableDelegationOrganizationFixture :exec
+UPDATE organization_metadata SET disabled_at = clock_timestamp()
+WHERE id = $1::text
+`
+
+// Test-only revocation of organization-scoped delegation authority.
+func (q *Queries) DisableDelegationOrganizationFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, disableDelegationOrganizationFixture, organizationID)
+	return err
+}
+
 const disableDeviceIntegrationSchedulesFixture = `-- name: DisableDeviceIntegrationSchedulesFixture :exec
 UPDATE device_integration_schedules
 SET disabled_at = clock_timestamp()
@@ -1068,6 +1079,31 @@ func (q *Queries) GetChatSessionLinkByParentFixture(ctx context.Context, parentC
 		&i.OrganizationID,
 		&i.ProjectID,
 	)
+	return i, err
+}
+
+const getDelegationRefreshClaimFixture = `-- name: GetDelegationRefreshClaimFixture :one
+SELECT refresh_claim_id, last_refresh_attempt_at FROM trusted_issuer_sessions
+WHERE organization_id = $1::text
+AND remote_session_client_id = $2::uuid AND subject_urn = $3
+`
+
+type GetDelegationRefreshClaimFixtureParams struct {
+	OrganizationID string
+	ClientID       uuid.UUID
+	Subject        string
+}
+
+type GetDelegationRefreshClaimFixtureRow struct {
+	RefreshClaimID       uuid.NullUUID
+	LastRefreshAttemptAt pgtype.Timestamptz
+}
+
+// Inspect persisted cleanup even after the authority has been revoked.
+func (q *Queries) GetDelegationRefreshClaimFixture(ctx context.Context, arg GetDelegationRefreshClaimFixtureParams) (GetDelegationRefreshClaimFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getDelegationRefreshClaimFixture, arg.OrganizationID, arg.ClientID, arg.Subject)
+	var i GetDelegationRefreshClaimFixtureRow
+	err := row.Scan(&i.RefreshClaimID, &i.LastRefreshAttemptAt)
 	return i, err
 }
 
@@ -3281,6 +3317,39 @@ func (q *Queries) RevokeAttachmentByIDFixture(ctx context.Context, id uuid.UUID)
 	return result.RowsAffected(), nil
 }
 
+const revokeDelegationClientsFixture = `-- name: RevokeDelegationClientsFixture :exec
+UPDATE remote_session_clients SET deleted_at = clock_timestamp()
+WHERE organization_id = $1::text
+`
+
+// Test-only revocation of organization-scoped delegation authority.
+func (q *Queries) RevokeDelegationClientsFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, revokeDelegationClientsFixture, organizationID)
+	return err
+}
+
+const revokeDelegationIssuersFixture = `-- name: RevokeDelegationIssuersFixture :exec
+UPDATE remote_session_issuers SET deleted_at = clock_timestamp()
+WHERE organization_id = $1::text
+`
+
+// Test-only revocation of organization-scoped delegation authority.
+func (q *Queries) RevokeDelegationIssuersFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, revokeDelegationIssuersFixture, organizationID)
+	return err
+}
+
+const revokeDelegationUserIssuersFixture = `-- name: RevokeDelegationUserIssuersFixture :exec
+UPDATE user_session_issuers SET deleted_at = clock_timestamp()
+WHERE organization_id = $1::text
+`
+
+// Test-only revocation of organization-scoped delegation authority.
+func (q *Queries) RevokeDelegationUserIssuersFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, revokeDelegationUserIssuersFixture, organizationID)
+	return err
+}
+
 const scrubDeploymentFunctionMachineSpecs = `-- name: ScrubDeploymentFunctionMachineSpecs :exec
 UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deployment_id = $1
 `
@@ -3384,6 +3453,76 @@ func (q *Queries) SeedCapturedAgentChatMessageFixture(ctx context.Context, arg S
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedDelegationLoaderClientFixture = `-- name: SeedDelegationLoaderClientFixture :exec
+INSERT INTO remote_session_clients (id, organization_id, remote_session_issuer_id, client_id, scope, token_endpoint_auth_method)
+VALUES ($1, $2::text, $3, $4, $5::text[], 'client_secret_basic')
+`
+
+type SeedDelegationLoaderClientFixtureParams struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	RemoteSessionIssuerID uuid.UUID
+	ClientID              string
+	Scope                 []string
+}
+
+// Permit deliberately mismatched issuer ownership to test loader isolation.
+func (q *Queries) SeedDelegationLoaderClientFixture(ctx context.Context, arg SeedDelegationLoaderClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedDelegationLoaderClientFixture,
+		arg.ID,
+		arg.OrganizationID,
+		arg.RemoteSessionIssuerID,
+		arg.ClientID,
+		arg.Scope,
+	)
+	return err
+}
+
+const seedDelegationLoaderIssuerFixture = `-- name: SeedDelegationLoaderIssuerFixture :exec
+INSERT INTO remote_session_issuers (id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, jwks_uri)
+VALUES ($1, $2::text, $3, $4, $5::text, $6::text, $7::text)
+`
+
+type SeedDelegationLoaderIssuerFixtureParams struct {
+	ID                    uuid.UUID
+	OrganizationID        pgtype.Text
+	Slug                  string
+	Issuer                string
+	AuthorizationEndpoint pgtype.Text
+	TokenEndpoint         pgtype.Text
+	JwksUri               pgtype.Text
+}
+
+// A NULL organization represents a globally shared issuer.
+func (q *Queries) SeedDelegationLoaderIssuerFixture(ctx context.Context, arg SeedDelegationLoaderIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedDelegationLoaderIssuerFixture,
+		arg.ID,
+		arg.OrganizationID,
+		arg.Slug,
+		arg.Issuer,
+		arg.AuthorizationEndpoint,
+		arg.TokenEndpoint,
+		arg.JwksUri,
+	)
+	return err
+}
+
+const seedDelegationLoaderOrganizationFixture = `-- name: SeedDelegationLoaderOrganizationFixture :exec
+INSERT INTO organization_metadata (id, name, slug)
+VALUES ($1, $2, $3)
+`
+
+type SeedDelegationLoaderOrganizationFixtureParams struct {
+	OrganizationID string
+	Name           string
+	Slug           string
+}
+
+func (q *Queries) SeedDelegationLoaderOrganizationFixture(ctx context.Context, arg SeedDelegationLoaderOrganizationFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedDelegationLoaderOrganizationFixture, arg.OrganizationID, arg.Name, arg.Slug)
+	return err
 }
 
 const seedJsonWebKeySetFixture = `-- name: SeedJsonWebKeySetFixture :one

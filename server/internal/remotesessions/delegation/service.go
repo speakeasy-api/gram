@@ -454,6 +454,26 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if refreshErr != nil {
+		var failure *RefreshError
+		// A successful exchange followed by unavailable verification may have
+		// spent the old token. Preserve rotation only behind the held claim;
+		// never admit its unverified assertion or automatically replay it.
+		if result != nil && result.Credentials != nil && errors.As(refreshErr, &failure) && failure.Kind == RefreshAmbiguous {
+			c.assertion = ""
+			c.assertionExpiry = time.Time{}
+			if rotation := result.Credentials.RefreshToken(); rotation != "" {
+				c.refresh, err = s.encrypt(rotation)
+				if err != nil {
+					return Assertion{}, err
+				}
+			}
+			if expiry := result.Credentials.RefreshExpiresAt(); expiry != nil {
+				c.refreshExpiry = *expiry
+				if !expiry.After(s.now()) {
+					c.refresh = ""
+				}
+			}
+		}
 		return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, refreshErr)
 	}
 	if result == nil || result.Credentials == nil {
@@ -590,6 +610,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 		}
 		outcome = ErrReauthentication
 	case RefreshConfiguration:
+		next = clearDelegationSecrets(next)
 		next.status = "configuration_failure"
 		outcome = ErrConfiguration
 	case RefreshInvalidIdentity:

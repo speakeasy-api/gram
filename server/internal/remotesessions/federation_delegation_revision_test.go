@@ -7,13 +7,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFederatedDelegationSameSetKeyRotationChangesRevision(t *testing.T) {
 	t.Parallel()
 	p := federatedFixture(t)
+	p.client.TokenEndpointAuthMethod = pgtype.Text{String: "private_key_jwt", Valid: true}
+	p.client.JsonWebKeySetID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	p.signingKeyRevision = "active-key-version-one"
 	registration, offline := p.DelegationConfigurationHash(), p.OfflineConfigurationHash()
 	fingerprint := p.Fingerprint()
