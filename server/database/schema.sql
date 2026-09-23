@@ -1252,6 +1252,7 @@ CREATE TABLE IF NOT EXISTS device_agent_device_syncs (
 
   email TEXT NOT NULL,
   hostname TEXT,
+  ai_scan_disabled BOOLEAN NOT NULL DEFAULT FALSE,
 
   first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),

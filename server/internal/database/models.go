@@ -693,6 +693,7 @@ type DeviceAgentDeviceSync struct {
 	SerialNumber   string
 	Email          string
 	Hostname       pgtype.Text
+	AiScanDisabled bool
 	FirstSeenAt    pgtype.Timestamptz
 	LastSeenAt     pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
