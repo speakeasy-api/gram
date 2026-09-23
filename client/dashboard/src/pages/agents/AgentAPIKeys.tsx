@@ -1,3 +1,4 @@
+import { AgentGatewayInstall } from "./AgentGatewayInstall";
 import { sessionAccountIdentity } from "@/components/sessions/session-account-identity";
 import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
@@ -15,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { CopyButton } from "@/components/ui/CopyButton";
 import { AgentKeyReview, type KeyReviewAccount } from "./AgentKeyReview";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import type { ListBindingsResponseBody } from "@gram/client/models/components/listbindingsresponsebody.js";
@@ -145,7 +145,6 @@ function AgentAPIKeysContent({
   const [reviewGrants, setReviewGrants] = useState<AgentPolicyGrantForm[]>([]);
   const [reviewAccounts, setReviewAccounts] = useState<KeyReviewAccount[]>([]);
   const [secret, setSecret] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revoke, setRevoke] = useState<Key | null>(null);
   const keys = useListAPIKeys({ agentId: agent.id }, security, {
@@ -225,7 +224,6 @@ function AgentAPIKeysContent({
       setIssued(false);
       setOpen(false);
       setSecret(null);
-      setCopied(false);
       resetCreation();
       if (creation && flag.status !== "loading") onDone?.();
     }
@@ -250,7 +248,6 @@ function AgentAPIKeysContent({
   const close = () => {
     setOpen(false);
     setSecret(null);
-    setCopied(false);
     setIssued(false);
     setName("");
     setNarrowings({});
@@ -624,28 +621,13 @@ function AgentAPIKeysContent({
           )}
           {issued ? (
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold">Save your API key</h2>
-              {secret ? (
-                <code className="block break-all">{secret}</code>
-              ) : (
+              {secret ? null : (
                 <Text role="alert">
                   The key was created but its secret was not returned. Revoke it
                   from the agent page before creating another.
                 </Text>
               )}
-              <ServerEndpoints servers={servers} />
-              <Button
-                disabled={!secret}
-                onClick={() => {
-                  if (!secret) return;
-                  void navigator.clipboard.writeText(secret).then(
-                    () => setCopied(true),
-                    () => setError("Could not copy API key. Copy it manually."),
-                  );
-                }}
-              >
-                {copied ? "Copied" : "Copy API key"}
-              </Button>
+              <AgentGatewayInstall agentID={agent.id} secret={secret} />
               <Button variant="secondary" onClick={close}>
                 Done
               </Button>
@@ -882,39 +864,6 @@ function DelegableGrantSection({
       <Button type="button" variant="secondary" onClick={onRetry}>
         Retry permissions
       </Button>
-    </div>
-  );
-}
-
-function ServerEndpoints({ servers }: { servers: KeyServer[] }) {
-  return (
-    <div className="space-y-3">
-      {servers.map((server) => (
-        <div key={server.id}>
-          <Text className="font-medium">{server.name}</Text>
-          {server.endpoints?.length ? (
-            server.endpoints.map((url) => (
-              <div
-                key={url}
-                className="flex items-center gap-2 rounded-md border p-3"
-              >
-                <code className="min-w-0 flex-1 break-all text-sm">{url}</code>
-                <CopyButton text={url} tooltip="Copy server URL" />
-              </div>
-            ))
-          ) : (
-            <Text small muted>
-              {server.kind === "Unproxied"
-                ? "Unproxied servers require their own upstream connection and do not accept this Gram key."
-                : "No connection URL is available. Open this server’s settings to configure its endpoint."}
-            </Text>
-          )}
-        </div>
-      ))}
-      <Text small muted>
-        Use the key as a Bearer token only with Gram endpoints. Do not send it
-        to an upstream server.
-      </Text>
     </div>
   );
 }
