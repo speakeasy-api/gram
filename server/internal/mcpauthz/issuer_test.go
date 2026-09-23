@@ -35,12 +35,12 @@ func keyPEM(t *testing.T, bits int) (string, string) {
 	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pub}))
 }
 
-func issuerForTest(t *testing.T) *Issuer {
+func issuerForTest(t *testing.T) (*Issuer, string) {
 	t.Helper()
 	private, public := keyPEM(t, 2048)
 	issuer, err := New(private, public, "https://gram.example/", false)
 	require.NoError(t, err)
-	return issuer
+	return issuer, public
 }
 
 func targetForTest() Target {
@@ -66,31 +66,13 @@ func sessionContext(t *testing.T, ctx context.Context, subject urn.SessionSubjec
 	return mcpidentity.NewValidatorBoundary().StampValidatedSession(ctx, proof)
 }
 
-func servedKeys(t *testing.T, issuer *Issuer) jose.JSONWebKeySet {
-	t.Helper()
-	w := httptest.NewRecorder()
-	issuer.Middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("JWKS must bypass authentication") })).ServeHTTP(w, httptest.NewRequest(http.MethodGet, JWKSPath, nil))
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, "public, max-age=300, must-revalidate", w.Header().Get("Cache-Control"))
-	var keys jose.JSONWebKeySet
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &keys))
-	var raw struct {
-		Keys []map[string]any `json:"keys"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &raw))
-	for _, key := range raw.Keys {
-		for _, secret := range []string{"d", "p", "q", "dp", "dq", "qi", "oth"} {
-			require.NotContains(t, key, secret)
-		}
-	}
-	return keys
-}
-
 func verifiedClaims(t *testing.T, raw string, keys jose.JSONWebKeySet) (josejwt.Claims, map[string]any) {
 	t.Helper()
 	token, err := josejwt.ParseSigned(raw, []jose.SignatureAlgorithm{jose.RS256})
 	require.NoError(t, err)
 	require.Equal(t, "speakeasy-authz+jwt", token.Headers[0].ExtraHeaders[jose.HeaderType])
+	require.NotEmpty(t, token.Headers[0].KeyID)
+	require.Len(t, keys.Key(token.Headers[0].KeyID), 1)
 	var standard josejwt.Claims
 	var claims map[string]any
 	require.NoError(t, token.Claims(keys, &standard, &claims))
@@ -99,12 +81,12 @@ func verifiedClaims(t *testing.T, raw string, keys jose.JSONWebKeySet) (josejwt.
 
 func TestAssertionVerifiesWithPublicJWKSAndBindsDestination(t *testing.T) {
 	t.Parallel()
-	issuer := issuerForTest(t)
+	issuer, publicPEM := issuerForTest(t)
 	target := targetForTest()
 	ctx := sessionContext(t, tenantContext(t, target), urn.NewUserSubject("user_test"), time.Hour)
 	raw, err := issuer.Mint(ctx, target)
 	require.NoError(t, err)
-	standard, claims := verifiedClaims(t, raw, servedKeys(t, issuer))
+	standard, claims := verifiedClaims(t, raw, servedKeys(t, publicPEM))
 	expected := josejwt.Expected{Issuer: "https://gram.example", Subject: "user:user_test", AnyAudience: josejwt.Audience{urn.NewTunneledMcpServer(target.TunnelID).String()}, Time: time.Now()}
 	require.NoError(t, standard.ValidateWithLeeway(expected, 0))
 	require.Equal(t, target.OrganizationID, claims["organization_id"])
@@ -134,13 +116,13 @@ func TestAssertionVerifiesWithPublicJWKSAndBindsDestination(t *testing.T) {
 
 func TestAssertionUsesExactConfiguredResourceAudience(t *testing.T) {
 	t.Parallel()
-	issuer := issuerForTest(t)
+	issuer, publicPEM := issuerForTest(t)
 	target := targetForTest()
 	target.ResourceIdentifier = "https://mcp.internal.example.com/a%2Fb/?tenant=example/"
 	ctx := sessionContext(t, tenantContext(t, target), urn.NewUserSubject("user_test"), time.Hour)
 	raw, err := issuer.Mint(ctx, target)
 	require.NoError(t, err)
-	standard, claims := verifiedClaims(t, raw, servedKeys(t, issuer))
+	standard, claims := verifiedClaims(t, raw, servedKeys(t, publicPEM))
 	expected := josejwt.Expected{Issuer: "https://gram.example", Subject: "user:user_test", AnyAudience: josejwt.Audience{target.ResourceIdentifier}, Time: time.Now()}
 	require.NoError(t, standard.ValidateWithLeeway(expected, 0))
 	require.Equal(t, target.ResourceIdentifier, claims["aud"])
@@ -159,13 +141,13 @@ func TestAssertionUsesExactConfiguredResourceAudience(t *testing.T) {
 
 func TestAPIKeyAssertionNeverPromotesCreator(t *testing.T) {
 	t.Parallel()
-	issuer := issuerForTest(t)
+	issuer, publicPEM := issuerForTest(t)
 	target := targetForTest()
 	keyID := uuid.NewString()
 	ctx := mcpidentity.NewValidatorBoundary().StampAPIKey(tenantContext(t, target), keyID)
 	raw, err := issuer.Mint(ctx, target)
 	require.NoError(t, err)
-	_, claims := verifiedClaims(t, raw, servedKeys(t, issuer))
+	_, claims := verifiedClaims(t, raw, servedKeys(t, publicPEM))
 	require.Equal(t, "api_key:"+keyID, claims["sub"])
 	require.Equal(t, "api_key", claims["principal_type"])
 	encoded, err := json.Marshal(claims)
@@ -177,9 +159,9 @@ func TestAPIKeyAssertionNeverPromotesCreator(t *testing.T) {
 
 func TestSessionAPIKeyAndAgentRetainVerifiedSubject(t *testing.T) {
 	t.Parallel()
-	issuer := issuerForTest(t)
+	issuer, publicPEM := issuerForTest(t)
 	target := targetForTest()
-	keys := servedKeys(t, issuer)
+	keys := servedKeys(t, publicPEM)
 	for _, subject := range []urn.SessionSubject{urn.NewAPIKeySubject(uuid.New()), urn.NewAgentSubject(uuid.New())} {
 		ctx := sessionContext(t, tenantContext(t, target), subject, 20*time.Second)
 		raw, err := issuer.Mint(ctx, target)
@@ -193,7 +175,7 @@ func TestSessionAPIKeyAndAgentRetainVerifiedSubject(t *testing.T) {
 
 func TestUnsupportedProvenanceOmitsAssertion(t *testing.T) {
 	t.Parallel()
-	issuer := issuerForTest(t)
+	issuer, _ := issuerForTest(t)
 	target := targetForTest()
 	ctx := tenantContext(t, target)
 	b := mcpidentity.NewValidatorBoundary()
@@ -207,9 +189,9 @@ func TestUnsupportedProvenanceOmitsAssertion(t *testing.T) {
 
 func TestHumanAssertionIncludesOnlyMatchingUserEmail(t *testing.T) {
 	t.Parallel()
-	issuer := issuerForTest(t)
+	issuer, publicPEM := issuerForTest(t)
 	target := targetForTest()
-	keys := servedKeys(t, issuer)
+	keys := servedKeys(t, publicPEM)
 	for _, discovery := range []bool{false, true} {
 		for _, matchingUser := range []bool{false, true} {
 			auth := &contextvalues.AuthContext{ActiveOrganizationID: target.OrganizationID, ProjectID: &target.ProjectID, UserID: "another_user", Email: new("user@example.invalid")}
@@ -238,13 +220,13 @@ func TestHumanAssertionIncludesOnlyMatchingUserEmail(t *testing.T) {
 
 func TestDiscoveryAssertionIsScopedAndExpiresWithChallenge(t *testing.T) {
 	t.Parallel()
-	issuer := issuerForTest(t)
+	issuer, publicPEM := issuerForTest(t)
 	target := targetForTest()
 	deadline := time.Now().Add(15 * time.Second)
 	ctx := mcpidentity.NewValidatorBoundary().StampConsentDiscovery(tenantContext(t, target), "user_test", deadline)
 	raw, err := issuer.Mint(ctx, target)
 	require.NoError(t, err)
-	standard, claims := verifiedClaims(t, raw, servedKeys(t, issuer))
+	standard, claims := verifiedClaims(t, raw, servedKeys(t, publicPEM))
 	require.Equal(t, "mcp_discovery", claims["purpose"])
 	require.Equal(t, "user:user_test", claims["sub"])
 	require.Equal(t, deadline.Unix(), standard.Expiry.Time().Unix())
@@ -260,8 +242,6 @@ func TestRotationPrepublishOverlapAndRetirement(t *testing.T) {
 	require.NoError(t, err)
 	b, err := New(privateB, publicA+publicB, "https://gram.example", false)
 	require.NoError(t, err)
-	require.Equal(t, a.jwks, b.jwks)
-	require.Equal(t, a.etag, b.etag)
 	require.NotEqual(t, a.kid, b.kid)
 	target := targetForTest()
 	ctx := mcpidentity.NewValidatorBoundary().StampAPIKey(tenantContext(t, target), uuid.NewString())
@@ -269,13 +249,11 @@ func TestRotationPrepublishOverlapAndRetirement(t *testing.T) {
 	require.NoError(t, err)
 	fresh, err := b.Mint(ctx, target)
 	require.NoError(t, err)
-	verifiedClaims(t, old, servedKeys(t, b))
-	verifiedClaims(t, fresh, servedKeys(t, a))
-	retired, err := New(privateB, publicB, "https://gram.example", false)
-	require.NoError(t, err)
+	verifiedClaims(t, old, servedKeys(t, publicA+publicB))
+	verifiedClaims(t, fresh, servedKeys(t, publicB+publicA))
 	token, err := josejwt.ParseSigned(old, []jose.SignatureAlgorithm{jose.RS256})
 	require.NoError(t, err)
-	require.Error(t, token.Claims(servedKeys(t, retired), &josejwt.Claims{}))
+	require.Error(t, token.Claims(servedKeys(t, publicB), &josejwt.Claims{}))
 	// Key order, duplicates and whitespace leave the RFC 7638 kid unchanged.
 	same, err := New(privateA, "\n"+publicB+publicA+publicA, "https://gram.example", false)
 	require.NoError(t, err)
@@ -300,7 +278,7 @@ func TestStartupRejectsPartialOrUnsafeConfiguration(t *testing.T) {
 	disabled, err := New("", "", "", false)
 	require.NoError(t, err)
 	require.False(t, disabled.Enabled())
-	require.Empty(t, servedKeys(t, disabled).Keys)
+	require.Empty(t, servedKeys(t, "").Keys)
 	raw, err := disabled.Mint(t.Context(), targetForTest())
 	require.NoError(t, err)
 	require.Empty(t, raw)
@@ -308,7 +286,7 @@ func TestStartupRejectsPartialOrUnsafeConfiguration(t *testing.T) {
 
 func TestStartupRequiresPKCS8PrivateAndSPKIPublicKeys(t *testing.T) {
 	t.Parallel()
-	issuer := issuerForTest(t)
+	issuer, _ := issuerForTest(t)
 	private, public := keyPEM(t, 2048)
 	legacyPrivate := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(issuer.key)}))
 	legacyPublic := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PUBLIC KEY", Bytes: x509.MarshalPKCS1PublicKey(&issuer.key.PublicKey)}))
@@ -322,26 +300,19 @@ func TestStartupRequiresPKCS8PrivateAndSPKIPublicKeys(t *testing.T) {
 	require.ErrorContains(t, err, "GRAM_AUTHZ_PRIVATE_KEY")
 }
 
-func TestJWKSCacheAndInboundStripping(t *testing.T) {
+func TestInboundAssertionStripping(t *testing.T) {
 	t.Parallel()
-	issuer := issuerForTest(t)
 	var forwarded http.Header
-	handler := issuer.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := StripMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		forwarded = r.Header.Clone()
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	req := httptest.NewRequest(http.MethodGet, JWKSPath, nil)
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	req.Header.Set("If-None-Match", w.Header().Get("ETag"))
-	w = httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	require.Equal(t, http.StatusNotModified, w.Code)
-	require.Empty(t, w.Body.String())
-	req = httptest.NewRequest(http.MethodPost, "/mcp/test", nil)
-	req.Header = http.Header{"SPEAKEASY_AUTHZ": {"fake"}, "Speakeasy_authz": {"fake"}, "speakeasy-authz": {"fake"}}
-	w = httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	require.Equal(t, http.StatusNoContent, w.Code)
-	require.Empty(t, forwarded)
+	for _, path := range []string{"/mcp/test", "/.well-known/jwks.json"} {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req.Header = http.Header{"SPEAKEASY_AUTHZ": {"fake"}, "Speakeasy_authz": {"fake"}, "speakeasy-authz": {"fake"}, "Authorization": {"Bearer upstream"}}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		require.Equal(t, http.StatusNoContent, w.Code, "stripping middleware must not serve a public key route")
+		require.Equal(t, http.Header{"Authorization": {"Bearer upstream"}}, forwarded)
+	}
 }

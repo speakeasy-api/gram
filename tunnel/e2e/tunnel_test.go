@@ -51,7 +51,7 @@ func TestTunnelEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	routes := newSnapshotStore()
 	keys := gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext})
-	gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
+	gw, err := gateway.New(gateway.Config{AuthzPublicKeys: "", ForwardToken: forwardToken}, keys, routes, logger)
 	require.NoError(t, err)
 	cleanupGateway(t, gw)
 
@@ -173,7 +173,7 @@ func TestTunnelRouteSurvivesCurrentGatewayDisconnect(t *testing.T) {
 		}))
 		t.Cleanup(mcp.Close)
 
-		gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
+		gw, err := gateway.New(gateway.Config{AuthzPublicKeys: "", ForwardToken: forwardToken}, keys, routes, logger)
 		require.NoError(t, err)
 		cleanupGateway(t, gw)
 
@@ -237,7 +237,7 @@ func TestTunnelConsumerSessionSticksToAgent(t *testing.T) {
 
 	routes := route.NewRouteTable()
 	keys := gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext})
-	gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
+	gw, err := gateway.New(gateway.Config{AuthzPublicKeys: "", ForwardToken: forwardToken}, keys, routes, logger)
 	require.NoError(t, err)
 	cleanupGateway(t, gw)
 
@@ -291,7 +291,7 @@ func TestTunnelRevoke(t *testing.T) {
 	plaintext, _, err := wire.NewKey()
 	require.NoError(t, err)
 	routes := route.NewRouteTable()
-	gw, err := gateway.New(gateway.Config{ForwardToken: "forward-token"}, gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext}), routes, logger)
+	gw, err := gateway.New(gateway.Config{AuthzPublicKeys: "", ForwardToken: "forward-token"}, gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext}), routes, logger)
 	require.NoError(t, err)
 	cleanupGateway(t, gw)
 	publicServer := httptest.NewServer(gw.PublicHandler())
@@ -340,7 +340,7 @@ func TestTunnelRevokeDeletesAllGatewayOwners(t *testing.T) {
 	keys := gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext})
 
 	startGateway := func() (*gateway.Gateway, context.CancelFunc) {
-		gw, err := gateway.New(gateway.Config{ForwardToken: forwardToken}, keys, routes, logger)
+		gw, err := gateway.New(gateway.Config{AuthzPublicKeys: "", ForwardToken: forwardToken}, keys, routes, logger)
 		require.NoError(t, err)
 		publicServer := httptest.NewServer(gw.PublicHandler())
 		t.Cleanup(publicServer.Close)
@@ -532,7 +532,7 @@ func TestTunnelGatewayShedsConnectsAtSessionCap(t *testing.T) {
 	require.NoError(t, err)
 	routes := newSnapshotStore()
 	gw, err := gateway.New(
-		gateway.Config{ForwardToken: "forward-token", MaxSessions: 1},
+		gateway.Config{AuthzPublicKeys: "", ForwardToken: "forward-token", MaxSessions: 1},
 		gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext}),
 		routes,
 		logger,
