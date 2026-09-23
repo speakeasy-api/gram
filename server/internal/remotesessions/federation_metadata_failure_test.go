@@ -39,7 +39,7 @@ func TestFederatedMetadataMalformedSuccessIsConfiguration(t *testing.T) {
 				encoded = []byte(`{"issuer":`)
 			}
 			doer := federatedHTTPDoerFunc(func(*http.Request) (*http.Response, error) {
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(string(encoded)))}, nil
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(string(encoded)))}, nil
 			})
 			_, probeErr := attemptIssuerProbe(t.Context(), doer, p.issuer.Issuer+"/.well-known/openid-configuration")
 			require.ErrorIs(t, probeErr, errInvalidDiscoveryDocument)
@@ -72,11 +72,11 @@ func TestFederatedMetadataTransientResponseRemainsUnavailable(t *testing.T) {
 				if tc.transportError != nil {
 					return nil, tc.transportError
 				}
-				var body io.Reader = strings.NewReader("unavailable")
+				var body io.Reader = strings.NewReader(`{"error":"unavailable"}`)
 				if tc.bodyError != nil {
 					body = io.MultiReader(strings.NewReader(`{"issuer":`), iotest.ErrReader(tc.bodyError))
 				}
-				return &http.Response{StatusCode: tc.status, Body: io.NopCloser(body)}, nil
+				return &http.Response{StatusCode: tc.status, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(body)}, nil
 			})
 			_, probeErr := attemptIssuerProbe(t.Context(), doer, p.issuer.Issuer+"/.well-known/openid-configuration")
 			require.Error(t, probeErr)
