@@ -305,8 +305,14 @@ export function AgentGatewayInstall({
           {all.map((recipe) => (
             // forceMount: every recipe stays in the DOM so switching tabs does
             // not re-render a snippet, and so the copy target exists whichever
-            // tab is showing.
-            <TabsContent key={recipe.id} value={recipe.id} forceMount>
+            // tab is showing. A force-mounted panel is not hidden for us, so
+            // the inactive ones are hidden here or every recipe renders at once.
+            <TabsContent
+              key={recipe.id}
+              value={recipe.id}
+              forceMount
+              className="data-[state=inactive]:hidden"
+            >
               <div className="space-y-3 p-4">
                 <pre className="overflow-x-auto text-xs">
                   <code>{recipe.body}</code>
