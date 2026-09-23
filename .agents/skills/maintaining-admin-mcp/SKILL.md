@@ -1,6 +1,6 @@
 ---
 name: maintaining-admin-mcp
-description: Assess staff Admin MCP parity when adding, changing, or removing admin dashboard workflows, backend admin APIs, staff permissions, or staff-facing product capabilities. Use for changes to client/admin, server/internal/admin, and server/internal/adminmcp.
+description: Use when adding, changing, or removing admin dashboard workflows, backend admin APIs, staff permissions, or staff-facing product capabilities in client/admin, server/internal/admin, or server/internal/adminmcp. Assess staff Admin MCP parity and update its tools where applicable.
 ---
 
 # Maintaining Staff Admin MCP

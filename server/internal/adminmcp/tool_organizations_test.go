@@ -66,10 +66,11 @@ func TestFindOrganizationsBoundsAndSafeProjection(t *testing.T) {
 		NextCursor: &cursor,
 		Total:      3,
 	}}
-	status, body, data := callStaffReadTool(t, reads, "find_organizations", `{"query":"  example  ","limit":5}`)
+	status, body, data := callStaffReadTool(t, reads, "find_organizations", `{"query":"  example  ","limit":5,"cursor":"org-previous"}`)
 	require.Equal(t, http.StatusOK, status)
 	require.Equal(t, "example", *reads.listInput.Q)
 	require.Equal(t, 5, *reads.listInput.Limit)
+	require.Equal(t, "org-previous", *reads.listInput.Cursor)
 	require.NotContains(t, body, secret)
 	var output FindOrganizationsOutput
 	require.NoError(t, json.Unmarshal(data, &output))
@@ -80,7 +81,12 @@ func TestFindOrganizationsBoundsAndSafeProjection(t *testing.T) {
 	require.Equal(t, &cursor, output.NextCursor)
 	require.EqualValues(t, 3, output.Total)
 
-	for _, args := range []string{`{"query":"ab"}`, `{"query":"example","limit":21}`} {
+	defaultReads := &recordingOrganizationReader{list: &gen.AdminListOrganizationsResult{}}
+	status, _, _ = callStaffReadTool(t, defaultReads, "find_organizations", `{"query":"example"}`)
+	require.Equal(t, http.StatusOK, status)
+	require.Equal(t, 10, *defaultReads.listInput.Limit)
+
+	for _, args := range []string{`{"query":"ab"}`, `{"query":"example","limit":21}`, `{"query":"example","limit":-1}`} {
 		other := &recordingOrganizationReader{}
 		_, body, _ := callStaffReadTool(t, other, "find_organizations", args)
 		require.Contains(t, body, `"isError":true`)
