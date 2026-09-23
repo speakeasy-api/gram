@@ -747,7 +747,7 @@ func TestCreate_ProvisionFailureLeavesOrgRetryable(t *testing.T) {
 
 	broken := si.build(provisiontest.NewProvisioner(t, si.conn.conn, func(context.Context, oauth2.TokenSource) (gcpkms.ProvisioningClient, error) {
 		return nil, errors.New("kms unreachable")
-	}, testServerURL, si.credentialID))
+	}, testServerURL, si.credentialID, ""))
 	_, err := broken.Create(ctx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
 	requireOopsCode(t, err, oops.CodeUnexpected)
 
@@ -920,7 +920,7 @@ func TestCreate_ConcurrentInstanceCannotAbandonProvisioning(t *testing.T) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
-	}, testServerURL, si.credentialID)
+	}, testServerURL, si.credentialID, "")
 	firstService := si.build(blocked)
 	secondService := si.build(si.provisioner)
 	first := make(chan error, 1)
@@ -1043,7 +1043,7 @@ func TestCreate_SmallPoolAdmissionPreventsCrossOrganizationStarvation(t *testing
 				case <-ctx.Done():
 					return nil, ctx.Err()
 				}
-			}, testServerURL, si.credentialID)
+			}, testServerURL, si.credentialID, "")
 			results := make(chan error, slots)
 			for i := range slots {
 				// Separate Service values deliberately share the same pool: admission

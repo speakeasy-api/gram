@@ -26,7 +26,7 @@ func TestListPlatformExternalCredentials_ReturnsPlatformCredentials(t *testing.T
 	a := createPlatformGCPAmbientCredential(t, ctx, ti, "platform-a")
 	b := createPlatformGCPAmbientCredential(t, ctx, ti, "platform-b")
 
-	result, err := ti.service.ListPlatformExternalCredentials(withAdmin(t, ctx), &adminecgen.ListPlatformExternalCredentialsPayload{
+	result, err := ti.service.ListPlatformExternalCredentials(withAdmin(t, ctx, ti), &adminecgen.ListPlatformExternalCredentialsPayload{
 		Provider:     nil,
 		SessionToken: nil,
 	})
@@ -43,14 +43,14 @@ func TestListPlatformExternalCredentials_ProviderFilter(t *testing.T) {
 
 	cred := createPlatformGCPAmbientCredential(t, ctx, ti, "platform-gcp")
 
-	result, err := ti.service.ListPlatformExternalCredentials(withAdmin(t, ctx), &adminecgen.ListPlatformExternalCredentialsPayload{
+	result, err := ti.service.ListPlatformExternalCredentials(withAdmin(t, ctx, ti), &adminecgen.ListPlatformExternalCredentialsPayload{
 		Provider:     new("gcp_iam"),
 		SessionToken: nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{cred.ID}, platformCredentialIDs(result))
 
-	awsOnly, err := ti.service.ListPlatformExternalCredentials(withAdmin(t, ctx), &adminecgen.ListPlatformExternalCredentialsPayload{
+	awsOnly, err := ti.service.ListPlatformExternalCredentials(withAdmin(t, ctx, ti), &adminecgen.ListPlatformExternalCredentialsPayload{
 		Provider:     new("aws_iam"),
 		SessionToken: nil,
 	})
@@ -67,7 +67,7 @@ func TestListPlatformExternalCredentials_DisjointFromOrg(t *testing.T) {
 	platformCred := createPlatformGCPAmbientCredential(t, ctx, ti, "platform-scoped")
 	orgCred := createGCPImpersonationCredential(t, ctx, ti, "org-scoped")
 
-	platformResult, err := ti.service.ListPlatformExternalCredentials(withAdmin(t, ctx), &adminecgen.ListPlatformExternalCredentialsPayload{
+	platformResult, err := ti.service.ListPlatformExternalCredentials(withAdmin(t, ctx, ti), &adminecgen.ListPlatformExternalCredentialsPayload{
 		Provider:     nil,
 		SessionToken: nil,
 	})
