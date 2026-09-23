@@ -3980,6 +3980,9 @@ func EncodeGetRiskOverviewRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.To != nil {
 			values.Add("to", *p.To)
 		}
+		if p.McpServerID != nil {
+			values.Add("mcp_server_id", *p.McpServerID)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -5200,6 +5203,9 @@ func EncodeGetRiskSignalsRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		}
 		if p.To != nil {
 			values.Add("to", *p.To)
+		}
+		if p.McpServerID != nil {
+			values.Add("mcp_server_id", *p.McpServerID)
 		}
 		req.URL.RawQuery = values.Encode()
 		return nil

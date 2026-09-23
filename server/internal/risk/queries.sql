@@ -1766,10 +1766,9 @@ WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[]);
 
 -- name: MarkRiskResultsFalsePositive :many
--- Returns the full rows the UPDATE actually changed: they drive audit logging
--- and the ClickHouse mirror's outbox enqueue, both inside the same
--- transaction as this UPDATE, so a retry that changes nothing correctly
--- audits and mirrors nothing.
+-- Returns the full rows the UPDATE actually changed for audit logging.
+-- ClickHouse copies are selected independently by requested id, so retries can
+-- repair a post-commit ClickHouse failure even when this UPDATE matches nothing.
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
   , false_positive_reason = sqlc.narg(reason)

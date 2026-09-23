@@ -655,6 +655,9 @@ var _ = Service("risk", func() {
 			Attribute("to", String, "Exclusive end of the overview window. Defaults to now.", func() {
 				Format(FormatDateTime)
 			})
+			Attribute("mcp_server_id", String, "Optional concrete MCP server ID to match exactly.", func() {
+				Format(FormatUUID)
+			})
 		})
 
 		Result(RiskOverviewResult)
@@ -666,6 +669,7 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("from")
 			Param("to")
+			Param("mcp_server_id")
 			Response(StatusOK)
 		})
 
@@ -814,6 +818,9 @@ var _ = Service("risk", func() {
 			Attribute("to", String, "Exclusive end of the signals window. Defaults to now.", func() {
 				Format(FormatDateTime)
 			})
+			Attribute("mcp_server_id", String, "Optional concrete MCP server ID to match exactly.", func() {
+				Format(FormatUUID)
+			})
 		})
 
 		Result(RiskSignalsResult)
@@ -825,6 +832,7 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("from")
 			Param("to")
+			Param("mcp_server_id")
 			Response(StatusOK)
 		})
 

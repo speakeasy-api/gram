@@ -5215,10 +5215,9 @@ type MarkRiskResultsFalsePositiveParams struct {
 	Ids       []uuid.UUID
 }
 
-// Returns the full rows the UPDATE actually changed: they drive audit logging
-// and the ClickHouse mirror's outbox enqueue, both inside the same
-// transaction as this UPDATE, so a retry that changes nothing correctly
-// audits and mirrors nothing.
+// Returns the full rows the UPDATE actually changed for audit logging.
+// ClickHouse copies are selected independently by requested id, so retries can
+// repair a post-commit ClickHouse failure even when this UPDATE matches nothing.
 func (q *Queries) MarkRiskResultsFalsePositive(ctx context.Context, arg MarkRiskResultsFalsePositiveParams) ([]RiskResult, error) {
 	rows, err := q.db.Query(ctx, markRiskResultsFalsePositive, arg.Reason, arg.ProjectID, arg.Ids)
 	if err != nil {

@@ -74,20 +74,11 @@ func TestListRiskResults_MCPServerFilterIncludesUnanchoredAndScopesAllPaths(t *t
 	hiddenPolicy := unanchored
 	hiddenPolicy.ID = uuid.New()
 	hiddenPolicy.RiskPolicyID = disabled.ID
-	// A manual dismissal mirrored from Postgres appends a suppression copy
-	// that carries no execution metadata. It must still outrank the scanner
-	// copy under the server filter, or the dismissed finding resurfaces.
+	// A direct ClickHouse dismissal copy preserves immutable execution
+	// metadata, so the server predicate can be pushed before dedup.
 	dismissedAnchored := anchored
 	dismissedAnchored.ID = uuid.New()
 	dismissedCopy := dismissedAnchored
-	dismissedCopy.MCPServerID = ""
-	dismissedCopy.ExecutionID = ""
-	dismissedCopy.ToolName = ""
-	dismissedCopy.MediationSurface = ""
-	dismissedCopy.MCPMethod = ""
-	dismissedCopy.PrincipalKind = ""
-	dismissedCopy.IdentityStamped = false
-	dismissedCopy.EnforcementOutcome = ""
 	dismissedAt := at.Add(time.Minute)
 	dismissedCopy.ExcludedAt = &dismissedAt
 	dismissedCopy.FalsePositiveAt = &dismissedAt

@@ -541,6 +541,8 @@ type GetRiskOverviewPayload struct {
 	From *string
 	// Exclusive end of the overview window. Defaults to now.
 	To *string
+	// Optional concrete MCP server ID to match exactly.
+	McpServerID *string
 }
 
 // GetRiskPolicyChallengePayload is the payload type of the risk service
@@ -612,6 +614,8 @@ type GetRiskSignalsPayload struct {
 	From *string
 	// Exclusive end of the signals window. Defaults to now.
 	To *string
+	// Optional concrete MCP server ID to match exactly.
+	McpServerID *string
 }
 
 // GetRiskUserBreakdownPayload is the payload type of the risk service

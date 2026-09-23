@@ -230,7 +230,14 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 			return zero, ErrRiskFeatureNotEnabled
 		}
 	}
-	params := chrepo.RiskSignalWindowParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID.String(), From: from, To: to}
+	params := chrepo.RiskSignalWindowParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID.String(),
+		MCPServerID:    "",
+		WideFrom:       time.Time{},
+		From:           from,
+		To:             to,
+	}
 	policies, err := s.policies.ListRiskFindingPolicies(ctx, riskrepo.ListRiskFindingPoliciesParams{
 		ProjectID:      project.ID,
 		OrganizationID: principal.OrganizationID,

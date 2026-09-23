@@ -16,6 +16,7 @@ import (
 type RiskOverviewWindowParams struct {
 	OrganizationID string
 	ProjectID      string
+	MCPServerID    string
 	From           time.Time
 	To             time.Time
 }
@@ -23,10 +24,10 @@ type RiskOverviewWindowParams struct {
 // overviewFindings returns the base builder every overview read shares:
 // tenant + window scoped, live findings only.
 //
-// risk_findings is append-only: a manual dismiss/undo (enqueueFalsePositiveMirror)
-// appends a fresh row for an id that may already have one, rather than
-// updating in place, and Pub/Sub's at-least-once delivery can also redeliver
-// an identical row. Deduping to one row per id is therefore required for
+// risk_findings is append-only: a manual dismiss/undo appends a fresh row for
+// an id that may already have one, rather than updating in place, and Pub/Sub
+// at-least-once delivery can also redeliver an identical row.
+// Deduping to one row per id is therefore required for
 // correctness, not just cheapness — collapsing straight to a count would
 // double-count an id with two rows and, worse, a stale first row would still
 // satisfy "false_positive_at IS NULL" even after a second row dismissed it.
@@ -44,6 +45,9 @@ func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.Se
 		Where(notShadowCond).
 		Where("created_at >= ?", p.From).
 		Where("created_at < ?", p.To)
+	if p.MCPServerID != "" {
+		latest = latest.Where("mcp_server_id = ?", p.MCPServerID)
+	}
 
 	return sq.Select(columns...).
 		FromSelect(latest, "latest").

@@ -1714,8 +1714,12 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 		return nil, oops.E(oops.CodeInvalid, err, "invalid overview window").LogError(ctx, s.logger)
 	}
 
-	if s.overviewFromClickHouse(ctx, authCtx) {
-		return s.getRiskOverviewFromClickHouse(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, from, to)
+	mcpServerID := conv.PtrValOr(payload.McpServerID, "")
+	if mcpServerID != "" || s.overviewFromClickHouse(ctx, authCtx) {
+		if s.findingsCH == nil {
+			return nil, oops.E(oops.CodeNotImplemented, nil, "filtered risk overview requires the ClickHouse findings store").LogError(ctx, s.logger)
+		}
+		return s.getRiskOverviewFromClickHouse(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, mcpServerID, from, to)
 	}
 
 	window := riskOverviewWindowParams(from, to)
