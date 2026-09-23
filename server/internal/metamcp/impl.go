@@ -39,8 +39,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -54,6 +57,8 @@ type Service struct {
 	audit                    *audit.Logger
 	temporalEnv              *tenv.Environment
 	networkAccessEligibility networkaccess.EligibilityChecker
+	distributionAdmission    *admission.Guard
+	publisher                plugins.PluginPublishSignaler
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -80,6 +85,44 @@ func NewService(
 		audit:                    auditLogger,
 		temporalEnv:              temporalEnv,
 		networkAccessEligibility: networkAccessEligibility,
+		distributionAdmission:    nil,
+		publisher:                nil,
+	}
+}
+
+func (s *Service) WithDistributionAdmission(guard *admission.Guard) *Service {
+	s.distributionAdmission = guard
+	return s
+}
+
+func (s *Service) WithPluginPublisher(publisher plugins.PluginPublishSignaler) *Service {
+	s.publisher = publisher
+	return s
+}
+
+func (s *Service) signalPluginPublish(ctx context.Context, projectID uuid.UUID, userID string, gatewayID uuid.UUID, detached bool) {
+	if s.publisher == nil {
+		return
+	}
+	if !detached {
+		attached, err := pluginsrepo.New(s.db).HasPluginMembershipForGateway(ctx, pluginsrepo.HasPluginMembershipForGatewayParams{ProjectID: projectID, GatewayID: gatewayID})
+		if err != nil {
+			s.logger.WarnContext(ctx, "check gateway plugin membership", attr.SlogError(err))
+			return
+		}
+		if !attached {
+			return
+		}
+	}
+	connected, err := pluginsrepo.New(s.db).HasPluginGithubConnectionForProject(ctx, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "check plugin connection after gateway mutation", attr.SlogError(err))
+		return
+	}
+	if connected {
+		if err := s.publisher.SignalPluginPublish(context.WithoutCancel(ctx), projectID, userID); err != nil {
+			s.logger.WarnContext(ctx, "signal plugin publish after gateway mutation", attr.SlogError(err))
+		}
 	}
 }
 
@@ -283,6 +326,9 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
+	}
 
 	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
 		return nil, fmt.Errorf("finalize network access admission: %w", err)
@@ -403,6 +449,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	if rewiredIssuer {
 		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{issuerID.UUID})
 	}
+	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, false)
 
 	return afterView, nil
 }
@@ -448,6 +495,9 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
+	}
 
 	txRepo := repo.New(dbtx)
 	endpointsRepo := mcpendpointsrepo.New(dbtx)
@@ -503,6 +553,24 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	metaURN := urn.NewMetaMcpServer(existing.ID)
+
+	detached, err := pluginsrepo.New(dbtx).SoftDeletePluginServersByGatewayID(ctx, pluginsrepo.SoftDeletePluginServersByGatewayIDParams{
+		ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+		GatewayID: uuid.NullUUID{UUID: existing.ID, Valid: true},
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "detach gateway from plugins").LogError(ctx, logger)
+	}
+	for _, attachment := range detached {
+		if err := s.audit.LogPluginServerRemove(ctx, dbtx, audit.LogPluginServerRemoveEvent{
+			OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+			Actor: actor, ActorDisplayName: authCtx.Email, ActorSlug: nil,
+			PluginID: attachment.PluginID, PluginName: attachment.PluginName, PluginSlug: attachment.PluginSlug,
+			ServerID: attachment.ID, ToolsetURN: nil, McpServerURN: nil, MetaMcpServerURN: &metaURN,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log gateway plugin detachment").LogError(ctx, logger)
+		}
+	}
 
 	members, err := txRepo.DeleteMetaMCPMembersByMetaMCPServerID(ctx, repo.DeleteMetaMCPMembersByMetaMCPServerIDParams{
 		MetaMcpServerID: existing.ID,
@@ -577,6 +645,7 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, len(detached) > 0)
 	if err := s.reconcileCustomDomains(ctx, rootDomainIDs(rootEndpoints)); err != nil {
 		return err
 	}
@@ -654,12 +723,23 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sort_order").LogError(ctx, logger)
 	}
 
+	var rollout admission.RolloutConfig
+	var rolloutErr error
+	if s.distributionAdmission == nil {
+		rolloutErr = admission.ErrUnavailable
+	} else {
+		rollout, rolloutErr = s.distributionAdmission.ResolveProject(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
+	}
 	txRepo := repo.New(dbtx)
 
 	meta, err := txRepo.LockMetaMCPServer(ctx, repo.LockMetaMCPServerParams{
@@ -712,6 +792,17 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	}
 	if sharing > 0 {
 		return nil, oops.E(oops.CodeConflict, nil, "another member of this meta mcp server already fronts the same backend").LogError(ctx, logger)
+	}
+
+	if err := s.distributionAdmission.CheckGatewayMemberAddition(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, metaID, mcpServerID); err != nil {
+		switch {
+		case errors.Is(err, admission.ErrApprovalRequired):
+			return nil, oops.E(oops.CodeConflict, err, "gateway member requires Shadow MCP approval").LogError(ctx, logger)
+		case errors.Is(err, admission.ErrDistributionDisabled):
+			return nil, oops.E(oops.CodeConflict, err, "direct-remote distribution is temporarily disabled").LogError(ctx, logger)
+		default:
+			return nil, oops.E(oops.CodeUnavailable, err, "gateway member distribution approval could not be verified safely").LogError(ctx, logger)
+		}
 	}
 
 	member, err := txRepo.CreateMetaMCPMember(ctx, repo.CreateMetaMCPMemberParams{
@@ -788,6 +879,7 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	if wiredGatewayIssuer {
 		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
 	}
+	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, metaID, false)
 
 	return mv.BuildMetaMcpMemberViewFromParts(member, server), nil
 }
@@ -883,6 +975,7 @@ func (s *Service) UpdateMetaMcpMember(ctx context.Context, payload *gen.UpdateMe
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, meta.ID, false)
 
 	return mv.BuildMetaMcpMemberViewFromParts(updated, server), nil
 }
@@ -1006,6 +1099,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	if wiredGatewayIssuer {
 		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
 	}
+	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, meta.ID, false)
 
 	return nil
 }

@@ -7,11 +7,65 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+func TestGatewayMemberAdmissionChecksEveryPluginAudience(t *testing.T) {
+	t.Parallel()
+	fixture := newAdmissionFixture(t)
+	serverID, remoteID := seedAdmissionRemote(t, fixture)
+	seedBlockingPolicy(t, fixture)
+	ctx := t.Context()
+	gateway, err := metamcprepo.New(fixture.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID: fixture.orgID, ProjectID: fixture.projectID, Name: "Gateway", Visibility: "private",
+	})
+	require.NoError(t, err)
+	plugin, err := pluginsrepo.New(fixture.conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
+		OrganizationID: fixture.orgID, ProjectID: fixture.projectID, Name: "Gateway plugin", Slug: "gateway", Description: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(fixture.conn).AddGatewayPluginServer(ctx, pluginsrepo.AddGatewayPluginServerParams{
+		PluginID: plugin.ID, ProjectID: fixture.projectID, MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true},
+		DisplayName: "Gateway", Policy: "required", SortOrder: 0,
+	})
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(fixture.conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
+		OrganizationID: fixture.orgID, PluginID: plugin.ID, PrincipalUrn: "role:developers",
+	})
+	require.NoError(t, err)
+
+	guard := NewGuard(nil, nil)
+	rollout := RolloutConfig{Mode: ModeEnforce}
+	tx := testenv.BeginTx(t, ctx, fixture.conn)
+	require.ErrorIs(t, guard.CheckGatewayMemberAddition(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, gateway.ID, serverID), ErrApprovalRequired)
+	require.NoError(t, tx.Rollback(ctx))
+
+	seedDecision(t, fixture, "https://mcp.example.test/server", "approved", []string{"role:developers"})
+	tx = testenv.BeginTx(t, ctx, fixture.conn)
+	require.NoError(t, guard.CheckGatewayMemberAddition(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, gateway.ID, serverID))
+	require.NoError(t, tx.Rollback(ctx))
+
+	_, err = pluginsrepo.New(fixture.conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
+		OrganizationID: fixture.orgID, PluginID: plugin.ID, PrincipalUrn: "role:operators",
+	})
+	require.NoError(t, err)
+	tx = testenv.BeginTx(t, ctx, fixture.conn)
+	require.ErrorIs(t, guard.CheckGatewayMemberAddition(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, gateway.ID, serverID), ErrApprovalRequired)
+	require.NoError(t, tx.Rollback(ctx))
+
+	_, err = metamcprepo.New(fixture.conn).CreateMetaMCPMember(ctx, metamcprepo.CreateMetaMCPMemberParams{
+		ProjectID: fixture.projectID, MetaMcpServerID: gateway.ID, McpServerID: serverID,
+	})
+	require.NoError(t, err)
+	tx = testenv.BeginTx(t, ctx, fixture.conn)
+	require.ErrorIs(t, guard.CheckGatewayAttachment(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID), ErrApprovalRequired)
+	require.ErrorIs(t, guard.CheckPluginAudience(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, []string{"role:developers", "role:operators"}), ErrApprovalRequired)
+	require.ErrorIs(t, guard.CheckRemoteTarget(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, remoteID, "https://mcp.example.test/changed"), ErrApprovalRequired)
+}
 
 func TestGuardRemoteTargetKillSwitchWithoutAttachments(t *testing.T) {
 	t.Parallel()

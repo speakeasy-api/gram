@@ -1152,6 +1152,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 			ServerID:         pluginServer.ID,
 			ToolsetURN:       nil,
 			McpServerURN:     &deletedServerURN,
+			MetaMcpServerURN: nil,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "log mcp server plugin detachment").LogError(ctx, logger)
 		}

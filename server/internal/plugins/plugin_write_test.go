@@ -2,10 +2,14 @@ package plugins_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
@@ -13,8 +17,115 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
+
+func TestGatewayPluginAttachmentFailsClosedWithoutGate(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestPluginsService(t)
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Gateway gate"})
+	require.NoError(t, err)
+
+	gatewayID := uuid.NewString()
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID: plugin.ID, MetaMcpServerID: &gatewayID, Policy: "required",
+	})
+	var gateErr *oops.ShareableError
+	require.ErrorAs(t, err, &gateErr)
+	require.Equal(t, oops.CodeUnavailable, gateErr.Code)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "gateway-gate-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(toolset.ID.String()), MetaMcpServerID: &gatewayID, Policy: "required",
+	})
+	var backendErr *oops.ShareableError
+	require.ErrorAs(t, err, &backendErr)
+	require.Equal(t, oops.CodeBadRequest, backendErr.Code)
+}
+
+func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
+	t.Parallel()
+	features := &feature.InMemory{}
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	features.SetFlag(feature.FlagGatewayPluginMembership, ac.ActiveOrganizationID, true)
+	features.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, ac.ActiveOrganizationID, false)
+	features.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, ac.ActiveOrganizationID, false)
+	ti.service.WithDistributionAdmission(admission.NewGuard(features, nil))
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Gateway member"})
+	require.NoError(t, err)
+	issuer, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID: *ac.ProjectID, OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), Slug: "gateway-issuer",
+		AuthnChallengeMode: "interactive", SessionDuration: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Valid: true},
+	})
+	require.NoError(t, err)
+	gateway, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Gateway", Visibility: "private",
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, NetworkAccessMode: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: *ac.ProjectID, MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true}, Slug: "gateway-test",
+	})
+	require.NoError(t, err)
+
+	attached, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID: plugin.ID, MetaMcpServerID: conv.PtrEmpty(gateway.ID.String()), Policy: "required",
+	})
+	require.NoError(t, err)
+	require.Equal(t, gateway.ID.String(), *attached.MetaMcpServerID)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID: plugin.ID, MetaMcpServerID: conv.PtrEmpty(gateway.ID.String()), Policy: "required",
+	})
+	var duplicate *oops.ShareableError
+	require.ErrorAs(t, err, &duplicate)
+	require.Equal(t, oops.CodeConflict, duplicate.Code)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	var config struct {
+		MCPServers map[string]struct {
+			URL string `json:"url"`
+		} `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"], &config))
+	require.Equal(t, "https://app.getgram.ai/mcp/gateway-test", config.MCPServers["Gateway"].URL)
+
+	fixtures := testrepo.New(ti.conn)
+	_, err = fixtures.SetMetaMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMetaMCPServerNetworkAccessModeFixtureParams{
+		ID: gateway.ID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
+		NetworkAccessMode: pgtype.Text{String: "private_only", Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.ErrorContains(t, errors.Unwrap(err), "no endpoint in the private ingress namespace")
+	require.NoError(t, fixtures.InsertNetworkIngressFixture(ctx, testrepo.InsertNetworkIngressFixtureParams{
+		ID: uuid.New(), OrganizationID: ac.ActiveOrganizationID, DnsName: pgtype.Text{String: "tail.example", Valid: true},
+	}))
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"], &config))
+	require.Equal(t, "https://tail.example/mcp/gateway-test", config.MCPServers["Gateway"].URL)
+
+	ti.service.WithDistributionAdmission(nil)
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	var unavailable *oops.ShareableError
+	require.ErrorAs(t, err, &unavailable)
+	require.Equal(t, oops.CodeUnavailable, unavailable.Code)
+
+	features.SetFlag(feature.FlagGatewayPluginMembership, ac.ActiveOrganizationID, false)
+	err = ti.service.RemovePluginServer(ctx, &gen.RemovePluginServerPayload{PluginID: plugin.ID, ID: attached.ID})
+	require.NoError(t, err)
+}
 
 //nolint:paralleltest // Operations mutate and delete the same plugin and server, so subtests must run sequentially.
 func TestPluginWriteAuthorization(t *testing.T) {

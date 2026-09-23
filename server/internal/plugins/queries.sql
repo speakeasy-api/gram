@@ -231,10 +231,29 @@ WHERE plugins.id = plugin_servers.plugin_id
   AND plugin_servers.deleted IS FALSE
 RETURNING plugin_servers.*, plugins.name AS plugin_name, plugins.slug AS plugin_slug;
 
+-- name: SoftDeletePluginServersByGatewayID :many
+UPDATE plugin_servers
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM plugins
+WHERE plugins.id = plugin_servers.plugin_id
+  AND plugins.project_id = @project_id
+  AND plugins.organization_id = @organization_id
+  AND plugin_servers.meta_mcp_server_id = @gateway_id
+  AND plugin_servers.deleted IS FALSE
+RETURNING plugin_servers.*, plugins.name AS plugin_name, plugins.slug AS plugin_slug;
+
+-- name: HasPluginMembershipForGateway :one
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers ps
+  JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = @project_id AND p.deleted IS FALSE
+  JOIN meta_mcp_servers g ON g.id = ps.meta_mcp_server_id
+    AND g.project_id = p.project_id AND g.organization_id = p.organization_id AND g.deleted IS FALSE
+  WHERE ps.deleted IS FALSE AND g.id = @gateway_id
+)::bool;
+
 -- name: AddPluginServer :one
--- Inserts a plugin server backed by exactly one of a toolset or an mcp_server.
--- The plugin_servers backend-exclusivity CHECK enforces the XOR; callers must
--- supply exactly one of toolset_id / mcp_server_id.
+-- Legacy insert for toolset and MCP server backends only. Gateway attachments
+-- must use AddGatewayPluginServer, which supplies the project scope explicitly.
 INSERT INTO plugin_servers (plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order)
 VALUES (
   @plugin_id,
@@ -245,6 +264,21 @@ VALUES (
   @sort_order
 )
 RETURNING *;
+
+-- name: AddGatewayPluginServer :one
+INSERT INTO plugin_servers (plugin_id, project_id, meta_mcp_server_id, display_name, policy, sort_order)
+SELECT p.id, p.project_id, @meta_mcp_server_id, @display_name, @policy, @sort_order
+FROM plugins p
+JOIN meta_mcp_servers g ON g.id = @meta_mcp_server_id
+  AND g.project_id = p.project_id AND g.deleted IS FALSE
+WHERE p.id = @plugin_id AND p.project_id = @project_id AND p.deleted IS FALSE
+RETURNING *;
+
+-- name: GetGatewayForPluginServer :one
+SELECT g.id, g.name, g.visibility, (g.user_session_issuer_id IS NOT NULL)::bool AS has_oauth,
+  EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.meta_mcp_server_id = g.id AND e.project_id = g.project_id AND e.deleted IS FALSE) AS has_endpoint
+FROM meta_mcp_servers g
+WHERE g.id = @meta_mcp_server_id AND g.project_id = @project_id AND g.deleted IS FALSE;
 
 -- name: GetMcpServerForPluginServer :one
 -- Resolve an mcp_server for plugin-server validation, scoped to the project so
@@ -527,6 +561,41 @@ WHERE p.project_id = @project_id
   )
 ORDER BY p.slug, ps.sort_order ASC;
 
+-- name: ListPluginsWithGatewaysForProject :many
+SELECT p.id AS plugin_id, p.name AS plugin_name, p.slug AS plugin_slug,
+  p.description AS plugin_description, ps.id AS server_id,
+  ps.display_name AS server_display_name, ps.policy AS server_policy,
+  ps.sort_order AS server_sort_order, g.id AS gateway_id,
+  (g.visibility = 'public')::bool AS gateway_is_public,
+  (g.user_session_issuer_id IS NOT NULL)::bool AS gateway_is_oauth,
+  g.network_access_mode,
+  COALESCE(ep.slug, '') AS endpoint_slug, ep.custom_domain AS endpoint_custom_domain,
+  COALESCE(private_ep.slug, '') AS private_endpoint_slug,
+  ingress.dns_name AS private_dns_name
+FROM plugins p
+JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE AND ps.meta_mcp_server_id IS NOT NULL
+JOIN meta_mcp_servers g ON g.id = ps.meta_mcp_server_id AND g.project_id = p.project_id AND g.deleted IS FALSE AND g.visibility <> 'disabled'
+LEFT JOIN network_ingresses ingress ON ingress.organization_id = p.organization_id AND ingress.enabled IS TRUE AND ingress.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT e.slug FROM mcp_endpoints e
+  WHERE e.meta_mcp_server_id = g.id AND e.project_id = p.project_id AND e.deleted IS FALSE
+    AND ((ingress.endpoint_namespace_kind = 'platform' AND ingress.custom_domain_id IS NULL AND e.custom_domain_id IS NULL)
+      OR (ingress.endpoint_namespace_kind = 'custom_domain' AND ingress.custom_domain_id IS NOT NULL AND e.custom_domain_id = ingress.custom_domain_id))
+  ORDER BY e.created_at, e.id LIMIT 1
+) private_ep ON TRUE
+LEFT JOIN LATERAL (
+  SELECT e.slug, cd.domain AS custom_domain
+  FROM mcp_endpoints e
+  LEFT JOIN custom_domains cd ON cd.id = e.custom_domain_id AND cd.organization_id = p.organization_id
+    AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
+  WHERE e.meta_mcp_server_id = g.id AND e.project_id = p.project_id AND e.deleted IS FALSE
+    AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at, e.id LIMIT 1
+) ep ON TRUE
+WHERE p.project_id = @project_id AND p.deleted IS FALSE
+  AND (COALESCE(cardinality(@plugin_ids::uuid[]), 0) = 0 OR p.id = ANY(@plugin_ids::uuid[]))
+ORDER BY p.slug, ps.sort_order;
+
 -- name: ListAgentPluginCompatibilityIssuesForProject :many
 -- Classifies every active intended attachment, including broken references that
 -- the package-resolution queries intentionally omit. A tombstoned attachment
@@ -538,7 +607,24 @@ WITH intended AS (
     p.id AS plugin_id,
     ps.id AS server_id,
     CASE
-      WHEN ps.toolset_id IS NULL AND ps.mcp_server_id IS NULL THEN 'missing_backend'
+      WHEN ps.toolset_id IS NULL AND ps.mcp_server_id IS NULL AND ps.meta_mcp_server_id IS NULL THEN 'missing_backend'
+      WHEN ps.meta_mcp_server_id IS NOT NULL AND g.id IS NULL THEN 'gateway_missing'
+      WHEN ps.meta_mcp_server_id IS NOT NULL AND g.visibility = 'disabled' THEN 'gateway_disabled'
+      WHEN ps.meta_mcp_server_id IS NOT NULL AND g.network_access_mode IS NOT NULL AND g.network_access_mode NOT IN ('', 'public_only', 'dual', 'private_only') THEN 'gateway_network_mode_invalid'
+      WHEN ps.meta_mcp_server_id IS NOT NULL AND g.network_access_mode = 'private_only' AND NOT EXISTS (
+        SELECT 1 FROM network_ingresses ni
+        JOIN mcp_endpoints e ON e.meta_mcp_server_id = g.id AND e.project_id = p.project_id AND e.deleted IS FALSE
+          AND ((ni.endpoint_namespace_kind = 'platform' AND ni.custom_domain_id IS NULL AND e.custom_domain_id IS NULL)
+            OR (ni.endpoint_namespace_kind = 'custom_domain' AND ni.custom_domain_id IS NOT NULL AND e.custom_domain_id = ni.custom_domain_id))
+        WHERE ni.organization_id = p.organization_id AND ni.enabled IS TRUE AND ni.deleted IS FALSE
+          AND ni.dns_name IS NOT NULL AND ni.dns_name <> ''
+      ) THEN 'gateway_private_endpoint_unresolved'
+      WHEN ps.meta_mcp_server_id IS NOT NULL AND g.network_access_mode IS DISTINCT FROM 'private_only' AND NOT EXISTS (
+        SELECT 1 FROM mcp_endpoints e LEFT JOIN custom_domains cd ON cd.id = e.custom_domain_id
+          AND cd.organization_id = p.organization_id AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
+        WHERE e.meta_mcp_server_id = g.id AND e.project_id = p.project_id AND e.deleted IS FALSE
+          AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+      ) THEN 'gateway_endpoint_unresolved'
       WHEN ps.toolset_id IS NOT NULL AND t.id IS NULL THEN 'toolset_missing'
       WHEN ps.toolset_id IS NOT NULL AND t.project_id <> p.project_id THEN 'toolset_wrong_project'
       WHEN ps.toolset_id IS NOT NULL AND t.deleted IS TRUE THEN 'toolset_deleted'
@@ -620,7 +706,8 @@ WITH intended AS (
     END::text AS reason
   FROM plugins p
   JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
-  LEFT JOIN toolsets t ON t.id = ps.toolset_id
+   LEFT JOIN meta_mcp_servers g ON g.id = ps.meta_mcp_server_id AND g.project_id = p.project_id AND g.deleted IS FALSE
+   LEFT JOIN toolsets t ON t.id = ps.toolset_id
   LEFT JOIN mcp_servers s ON s.id = ps.mcp_server_id
   LEFT JOIN remote_mcp_servers rms ON rms.id = s.remote_mcp_server_id
   LEFT JOIN tunneled_mcp_servers tms ON tms.id = s.tunneled_mcp_server_id

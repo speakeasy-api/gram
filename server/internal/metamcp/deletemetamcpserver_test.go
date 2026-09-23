@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/meta_mcp"
@@ -13,7 +14,38 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
+
+func TestDeleteMetaMcpServer_DetachesPluginGateway(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	gateway, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{Name: "plugin gateway"})
+	require.NoError(t, err)
+	gatewayID := uuid.MustParse(gateway.ID)
+	plugin, err := pluginsrepo.New(ti.conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
+		OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Gateway distribution",
+		Slug: "gateway-distribution", Description: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(ti.conn).AddGatewayPluginServer(ctx, pluginsrepo.AddGatewayPluginServerParams{
+		PluginID: plugin.ID, ProjectID: *ac.ProjectID, MetaMcpServerID: uuid.NullUUID{UUID: gatewayID, Valid: true},
+		DisplayName: "Gateway", Policy: "required", SortOrder: 0,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, ti.service.DeleteMetaMcpServer(ctx, &gen.DeleteMetaMcpServerPayload{ID: gateway.ID}))
+	live, err := pluginsrepo.New(ti.conn).ListPluginServers(ctx, plugin.ID)
+	require.NoError(t, err)
+	require.Empty(t, live)
+	attachedToGateway, err := pluginsrepo.New(ti.conn).HasPluginMembershipForGateway(ctx, pluginsrepo.HasPluginMembershipForGatewayParams{
+		ProjectID: *ac.ProjectID, GatewayID: gatewayID,
+	})
+	require.NoError(t, err)
+	require.False(t, attachedToGateway)
+}
 
 func TestDeleteMetaMcpServer_TombstonesMembershipsAndEndpoints(t *testing.T) {
 	t.Parallel()

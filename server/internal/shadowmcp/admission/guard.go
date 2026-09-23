@@ -132,6 +132,92 @@ func (g *Guard) CheckProspectiveDefaultAttachment(ctx context.Context, tx pgx.Tx
 	return g.CheckAttachmentWithSeededAudience(ctx, tx, rollout, rolloutErr, organizationID, projectID, mcpServerID, desired)
 }
 
+// CheckGatewayAttachment validates adding one gateway to an exact existing
+// plugin against every direct-remote member reached by that gateway. The
+// gateway's immediate member set is resolved transactionally by the query, and
+// nested gateways are not traversed.
+func (g *Guard) CheckGatewayAttachment(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, pluginID, gatewayID uuid.UUID) error {
+	targets, err := platformrepo.New(tx).ListDirectRemoteAdmissionTargetsForGateway(ctx, platformrepo.ListDirectRemoteAdmissionTargetsForGatewayParams{
+		PluginID:       pluginID,
+		GatewayID:      gatewayID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return unavailable(fmt.Errorf("list direct-remote gateway targets: %w", err))
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	if err := requireUsableRollout(rollout, rolloutErr); err != nil {
+		return err
+	}
+
+	assignments, err := listPluginAssignments(ctx, tx, organizationID, projectID, pluginID)
+	if err != nil {
+		return unavailable(err)
+	}
+	for _, target := range targets {
+		if !target.RemoteUrl.Valid || target.RemoteUrl.String == "" {
+			return unavailable(errors.New("direct-remote gateway target has no live remote URL"))
+		}
+		if err := g.checkURL(ctx, tx, rollout, organizationID, projectID, target.RemoteUrl.String, assignments); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CheckGatewayMemberAddition checks a new member against every live plugin
+// carrying its gateway. The query preserves plugins with no assignments so
+// the complete audience, including an empty one, is evaluated.
+func (g *Guard) CheckGatewayMemberAddition(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, gatewayID, mcpServerID uuid.UUID) error {
+	target, scoped, err := directRemoteTarget(ctx, tx, organizationID, projectID, mcpServerID)
+	if err != nil {
+		return unavailable(err)
+	}
+	if !scoped {
+		return nil
+	}
+
+	rows, err := platformrepo.New(tx).ListDirectRemoteAdmissionAudiencesForGateway(ctx, platformrepo.ListDirectRemoteAdmissionAudiencesForGatewayParams{
+		GatewayID:      gatewayID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return unavailable(fmt.Errorf("list direct-remote gateway audiences: %w", err))
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	if target == "" {
+		return unavailable(errors.New("direct-remote gateway member has no live remote URL"))
+	}
+	if g == nil {
+		return unavailable(errors.New("distribution admission guard is missing"))
+	}
+	if err := requireUsableRollout(rollout, rolloutErr); err != nil {
+		return err
+	}
+
+	audiences := make(map[uuid.UUID][]string)
+	for _, row := range rows {
+		if _, ok := audiences[row.PluginID]; !ok {
+			audiences[row.PluginID] = nil
+		}
+		if row.PrincipalUrn.Valid {
+			audiences[row.PluginID] = append(audiences[row.PluginID], row.PrincipalUrn.String)
+		}
+	}
+	for _, audience := range audiences {
+		if err := g.checkURL(ctx, tx, rollout, organizationID, projectID, target, audience); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // CheckPluginAudience validates the complete desired assignment set against
 // every in-scope MCP currently attached to one exact plugin.
 func (g *Guard) CheckPluginAudience(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, pluginID uuid.UUID, desired []string) error {

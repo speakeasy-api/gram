@@ -148,7 +148,7 @@ type PluginServer struct {
 	// DisplayName is the name the generated package gives this server.
 	DisplayName string `json:"display_name"`
 
-	// Backend is what the entry is backed by: "toolset" or "mcp_server".
+	// Backend is what the entry is backed by: "toolset", "mcp_server", or "gateway".
 	Backend string `json:"backend"`
 
 	// MCPSlug is the server's MCP slug, empty when the backing server has no
@@ -557,6 +557,8 @@ func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Princi
 		backend := "mcp_server"
 		if server.ToolsetBacked {
 			backend = "toolset"
+		} else if server.GatewayBacked {
+			backend = "gateway"
 		}
 		output.Servers = append(output.Servers, PluginServer{DisplayName: server.DisplayName, Backend: backend, MCPSlug: server.McpSlug, Policy: server.Policy, Enabled: server.Enabled})
 	}
@@ -700,6 +702,8 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		backend := "mcp_server"
 		if server.ToolsetBacked {
 			backend = "toolset"
+		} else if server.GatewayBacked {
+			backend = "gateway"
 		}
 		output.Servers = append(output.Servers, PluginServer{
 			DisplayName: server.DisplayName,
