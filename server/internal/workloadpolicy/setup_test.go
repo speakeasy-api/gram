@@ -121,14 +121,6 @@ func withScopes(t *testing.T, ctx context.Context, ti *testInstance, scopes ...a
 	return authztest.WithExactGrants(t, ctx, grants...)
 }
 
-// ptr is for the optional payload fields, where nil and false mean different
-// things: nil is "not asked for" and false is "explicitly off".
-//
-//go:fix inline
-func ptr[T any](v T) *T {
-	return new(v)
-}
-
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	t.Helper()
 	var shareErr *oops.ShareableError
