@@ -53,7 +53,9 @@ export function IdentityProviderStep({
         <SingleSignOnSection
           index={1}
           configured={!!onboardingStatus?.ssoConfigured}
-          domainVerified={!!onboardingStatus?.domainVerified}
+          // Only a status response can say the domain is unverified; while
+          // loading or after an error, WorkOS still enforces the rule.
+          domainVerified={onboardingStatus?.domainVerified !== false}
           isLoading={isLoading}
         />
         <DirectorySyncSection

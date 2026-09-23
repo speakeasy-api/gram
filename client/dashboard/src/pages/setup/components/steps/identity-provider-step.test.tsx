@@ -124,4 +124,21 @@ describe("IdentityProviderStep", () => {
     });
     expect(connect.disabled).toBe(true);
   });
+
+  it("does not block SSO setup when the status request fails", () => {
+    onboardingStatus.current = {
+      data: undefined,
+      isLoading: false,
+      refetch: vi.fn(),
+    } as unknown as typeof onboardingStatus.current;
+
+    render(<IdentityProviderStep onComplete={() => {}} />);
+
+    expect(screen.queryByText(/Verify a domain first/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
+    const connect = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Connect",
+    });
+    expect(connect.disabled).toBe(false);
+  });
 });

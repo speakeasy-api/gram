@@ -35,6 +35,10 @@ const (
 	setupTaskStatusDone            = "done"
 )
 
+// setupDomainCheckTimeout bounds the live WorkOS domain check that
+// ListSetupTasks runs for orgs with no stored verified domains.
+const setupDomainCheckTimeout = 3 * time.Second
+
 type setupTaskDefinition struct {
 	Key           string
 	Title         string
@@ -86,8 +90,12 @@ func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTask
 	// from showing blocked until someone opens the onboarding status. Active
 	// SSO already completes the domain task, so it needs no check.
 	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
+	// The check is best effort, so a slow WorkOS cannot hold up the board.
 	if workosOrgID != "" && !org.SsoEnabled.Bool {
-		if _, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains); err != nil {
+		refreshCtx, cancel := context.WithTimeout(ctx, setupDomainCheckTimeout)
+		_, err := s.refreshVerifiedDomains(refreshCtx, org.ID, workosOrgID, org.VerifiedDomains)
+		cancel()
+		if err != nil {
 			s.logger.WarnContext(ctx, "setup tasks: check domain verification", attr.SlogError(err), attr.SlogWorkOSOrganizationID(workosOrgID))
 		}
 	}
