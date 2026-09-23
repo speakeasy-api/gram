@@ -1,0 +1,19 @@
+server/cmd/gram/private_ingress_runtime.go
+  s_7fdecb48b43fe7::t_78f3ab3457b6f0 202-209,255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1cfce21f500431a446b5230ee27bb1570af24c86",
+  "prompts": {},
+  "sessions": {
+    "s_7fdecb48b43fe7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bf058b0c-2e83-40c5-b904-7bbe807d7039",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
