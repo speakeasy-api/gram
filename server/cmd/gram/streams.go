@@ -403,9 +403,10 @@ func newStreamsCommand() *cli.Command {
 				metricPub    gcp.Publisher[*otelv1.Metric]
 				spanPub      gcp.Publisher[*otelv1.Span]
 				riskMeterPub gcp.Publisher[*meteringv1.MeterReading]
+				shadowPub    gcp.Publisher[*riskv1.JudgeShadowAnalysis]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub, shadowPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -457,11 +458,10 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
 			}
-			shadowPub, err := newJudgeShadowTopic(ctx, psbroker)
+			shadowPub, err = newJudgeShadowTopic(ctx, psbroker)
 			if err != nil {
 				return err
 			}
-			shutdownFuncs = append(shutdownFuncs, shadowPub.Stop)
 			judgeShadow := judgeshadow.NewPublisher(logger, featureFlags, shadowPub, judgeshadow.DefaultSampleRate)
 			shadowHandler, err := newJudgeShadowHandler(logger, featureFlags, guardianPolicy, meterProvider, openRouter)
 			if err != nil {

@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n(gram/risk/v1/judge_shadow_analyzer.proto\x12\x0cgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"U\n\x13JudgeShadowAnalyzer:>\x92\xb5\x18:\x12\x04\x08\x80\xa3\x05\"\x02\x08\x1e\x32\x08\n\x02\x08\n\x12\x02\x08<J\x02\x10\x05R gram.risk.v1.JudgeShadowAnalysisB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n(gram/risk/v1/judge_shadow_analyzer.proto\x12\x0cgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"U\n\x13JudgeShadowAnalyzer:>\x92\xb5\x18:\x12\x04\x08\x80\xa3\x05\"\x02\x08<2\x08\n\x02\x08\n\x12\x02\x08<J\x02\x10\x05R gram.risk.v1.JudgeShadowAnalysisB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,7 +34,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1'
   _globals['_JUDGESHADOWANALYZER']._loaded_options = None
-  _globals['_JUDGESHADOWANALYZER']._serialized_options = b'\222\265\030:\022\004\010\200\243\005\"\002\010\0362\010\n\002\010\n\022\002\010<J\002\020\005R gram.risk.v1.JudgeShadowAnalysis'
+  _globals['_JUDGESHADOWANALYZER']._serialized_options = b'\222\265\030:\022\004\010\200\243\005\"\002\010<2\010\n\002\010\n\022\002\010<J\002\020\005R gram.risk.v1.JudgeShadowAnalysis'
   _globals['_JUDGESHADOWANALYZER']._serialized_start=87
   _globals['_JUDGESHADOWANALYZER']._serialized_end=172
 # @@protoc_insertion_point(module_scope)

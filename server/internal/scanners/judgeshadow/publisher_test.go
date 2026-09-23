@@ -101,3 +101,36 @@ func TestWrapPolicyPublishesWhenSampledAndEnabled(t *testing.T) {
 	require.Equal(t, "match", event.GetBaselineOutcome())
 	require.Equal(t, "baseline-model", event.GetBaselineModel())
 }
+
+func TestWrapInjectionPublishesWhenSampledAndEnabled(t *testing.T) {
+	t.Parallel()
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagJevPromptInjectionShadow, "org-1", true)
+	pub := gcp.NewMockPublisher[*riskv1.JudgeShadowAnalysis]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+
+	p := NewPublisher(testenv.NewLogger(t), flags, pub, 1)
+
+	want := []promptinjection.Result{{Label: promptinjection.LabelInjection, Completed: true, Model: "baseline-model"}}
+	baseline := func(_ context.Context, _ promptinjection.Request) ([]promptinjection.Result, error) {
+		return want, nil
+	}
+
+	req := promptinjection.Request{
+		OrgID:     "org-1",
+		ProjectID: "proj-1",
+		Messages:  []judgemessage.Message{judgemessage.New(message.ToolRequest, "Bash", "{}")},
+	}
+	got, err := p.WrapInjection(baseline)(t.Context(), req)
+
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+	pub.AssertNumberOfCalls(t, "Publish", 1)
+	event, ok := pub.Calls[0].Arguments.Get(1).(*riskv1.JudgeShadowAnalysis)
+	require.True(t, ok)
+	require.Equal(t, promptinjection.Source, event.GetDetector())
+	require.Equal(t, "org-1", event.GetOrganizationId())
+	require.Equal(t, "match", event.GetBaselineOutcome())
+	require.Equal(t, "baseline-model", event.GetBaselineModel())
+}

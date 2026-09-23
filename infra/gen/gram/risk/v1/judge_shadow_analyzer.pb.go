@@ -69,7 +69,7 @@ var File_gram_risk_v1_judge_shadow_analyzer_proto protoreflect.FileDescriptor
 const file_gram_risk_v1_judge_shadow_analyzer_proto_rawDesc = "" +
 	"\n" +
 	"(gram/risk/v1/judge_shadow_analyzer.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"U\n" +
-	"\x13JudgeShadowAnalyzer:>\x92\xb5\x18:\x12\x04\b\x80\xa3\x05\"\x02\b\x1e2\b\n" +
+	"\x13JudgeShadowAnalyzer:>\x92\xb5\x18:\x12\x04\b\x80\xa3\x05\"\x02\b<2\b\n" +
 	"\x02\b\n" +
 	"\x12\x02\b<J\x02\x10\x05R gram.risk.v1.JudgeShadowAnalysisB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 

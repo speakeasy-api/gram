@@ -4,7 +4,8 @@ type Flag string
 
 const (
 	// FlagJevPromptInjectionShadow enables sampled comparisons only, never enforcement.
-	// Evaluated locally in server/worker/streams, targeted by organization ID as
+	// Evaluated locally by judgeshadow.Enabled (server/internal/scanners/judgeshadow),
+	// wired in cmd/gram/{streams,start,worker}.go, targeted by organization ID as
 	// the distinct ID (no groups or person properties). Missing/error means off.
 	FlagJevPromptInjectionShadow Flag = "jev-prompt-injection-shadow"
 	// FlagJevPromptPolicyShadow has the same local organization-ID targeting and

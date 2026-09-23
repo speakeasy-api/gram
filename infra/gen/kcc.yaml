@@ -1695,7 +1695,7 @@ pubsub:
       topic_proto_message: gram-risk-v1-judge-shadow-analysis
     name: gram-risk-v1-judge-shadow-analyzer
     spec:
-      ackDeadlineSeconds: 30
+      ackDeadlineSeconds: 60
       deadLetterPolicy:
         deadLetterTopicRef:
           name: gram-risk-v1-judge-shadow-analyzer-dlq

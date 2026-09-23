@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -222,4 +223,49 @@ func TestEvaluateRejectsNegativeCost(t *testing.T) {
 	})
 	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
 	require.ErrorContains(t, err, "invalid typesafe response metadata")
+}
+
+func TestEvaluateRejectsOversizedResponse(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"padding":"` + strings.Repeat("a", 1<<20) + `"}`))
+	})
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
+	require.ErrorContains(t, err, "typesafe response exceeds limit")
+}
+
+func TestEvaluateRejectsMalformedJSON(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{not json`))
+	})
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
+	require.ErrorContains(t, err, "invalid typesafe response JSON")
+}
+
+func TestEvaluateRejectsNegativeTokens(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"model":"typesafe/jev-1.13","answers":{"match":{"type":"noul","noul":0.4}},"usage":{"input_tokens":-1,"output_tokens":1,"cost":0.1}}`))
+	})
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
+	require.ErrorContains(t, err, "invalid typesafe response metadata")
+}
+
+func TestEvaluateRejectsNonNoulAnswerType(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"model":"typesafe/jev-1.13","answers":{"match":{"type":"other","noul":0.4}},"usage":{"input_tokens":5,"output_tokens":1,"cost":0.1}}`))
+	})
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
+	require.ErrorContains(t, err, "invalid typesafe probability")
+}
+
+func TestEvaluateRejectsNullProbability(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"model":"typesafe/jev-1.13","answers":{"match":{"type":"noul","noul":null}},"usage":{"input_tokens":5,"output_tokens":1,"cost":0.1}}`))
+	})
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
+	require.ErrorContains(t, err, "invalid typesafe probability")
 }
