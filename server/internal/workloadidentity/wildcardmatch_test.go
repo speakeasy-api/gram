@@ -1,12 +1,14 @@
 package workloadidentity_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
@@ -259,6 +261,15 @@ func TestValidateSubjectRule(t *testing.T) {
 		{name: "a bare star is refused", kind: workloadidentity.MatchKindWildcard, subject: "*", allowWildcard: true, wantErr: workloadidentity.ErrWildcardStemEmpty},
 
 		{name: "empty subject matches nothing", kind: workloadidentity.MatchKindExact, subject: "", allowWildcard: true, wantErr: workloadidentity.ErrSubjectEmpty},
+
+		// A longer subject verifies here and then fails at token exchange, where
+		// it surfaces as a workload that authenticates and cannot get a session.
+		// Refuse it on the write path instead, so the operator can act on it.
+		{name: "a subject at the cap is accepted", kind: workloadidentity.MatchKindExact, subject: strings.Repeat("s", urn.MaxWorkloadExternalSubjectLength), allowWildcard: false, wantErr: nil},
+		{name: "a subject one byte over the cap is refused", kind: workloadidentity.MatchKindExact, subject: strings.Repeat("s", urn.MaxWorkloadExternalSubjectLength+1), allowWildcard: false, wantErr: workloadidentity.ErrSubjectTooLong},
+
+		// Measured on the stored value, terminator included.
+		{name: "a wildcard rule is measured with its star", kind: workloadidentity.MatchKindWildcard, subject: strings.Repeat("s", urn.MaxWorkloadExternalSubjectLength) + "*", allowWildcard: true, wantErr: workloadidentity.ErrSubjectTooLong},
 		{name: "unknown kind", kind: workloadidentity.MatchKind("regex"), subject: fleetRule, allowWildcard: true, wantErr: workloadidentity.ErrMatchKindUnknown},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
