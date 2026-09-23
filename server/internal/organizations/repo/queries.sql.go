@@ -210,7 +210,7 @@ INSERT INTO organization_metadata (
     $5,
     $6
 )
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, creation_source, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 `
 
 type CreateOrganizationMetadataFromWorkOSParams struct {
@@ -250,6 +250,7 @@ func (q *Queries) CreateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -422,7 +423,7 @@ func (q *Queries) GetInvitationByTokenHash(ctx context.Context, tokenHash string
 }
 
 const getOrganizationByWorkosID = `-- name: GetOrganizationByWorkosID :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, creation_source, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE workos_id = $1
 `
@@ -445,6 +446,7 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -454,7 +456,7 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype
 }
 
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, creation_source, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 `
@@ -477,6 +479,7 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -486,7 +489,7 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 }
 
 const getOrganizationMetadataBySlug = `-- name: GetOrganizationMetadataBySlug :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, creation_source, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE slug = $1
 `
@@ -509,6 +512,7 @@ func (q *Queries) GetOrganizationMetadataBySlug(ctx context.Context, slug string
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1253,7 +1257,7 @@ func (q *Queries) LockActiveOrganizationUser(ctx context.Context, arg LockActive
 }
 
 const lockOrganizationForInviteAcceptance = `-- name: LockOrganizationForInviteAcceptance :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, creation_source, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 FOR UPDATE
@@ -1277,6 +1281,7 @@ func (q *Queries) LockOrganizationForInviteAcceptance(ctx context.Context, id st
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1286,7 +1291,7 @@ func (q *Queries) LockOrganizationForInviteAcceptance(ctx context.Context, id st
 }
 
 const lockOrganizationForSetupTaskUpdate = `-- name: LockOrganizationForSetupTaskUpdate :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, creation_source, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 FOR UPDATE
@@ -1310,6 +1315,7 @@ func (q *Queries) LockOrganizationForSetupTaskUpdate(ctx context.Context, organi
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1624,7 +1630,7 @@ SET gram_account_type = $1,
 WHERE id = $2
   AND gram_account_type = $3
   AND gram_account_type NOT IN ('payg', 'enterprise')
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, creation_source, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 `
 
 type SetAccountTypeIfUnchangedParams struct {
@@ -1651,6 +1657,7 @@ func (q *Queries) SetAccountTypeIfUnchanged(ctx context.Context, arg SetAccountT
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1665,7 +1672,7 @@ SET workos_id = $1,
     updated_at = clock_timestamp()
 WHERE id = $2 AND
     workos_id IS NULL
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, creation_source, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 `
 
 type SetOrgWorkosIDParams struct {
@@ -1691,6 +1698,7 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -2043,7 +2051,7 @@ SET name = $1,
     workos_last_event_id = $4,
     updated_at = clock_timestamp()
 WHERE id = $5
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, creation_source, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 `
 
 type UpdateOrganizationMetadataFromWorkOSParams struct {
@@ -2082,6 +2090,7 @@ func (q *Queries) UpdateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -2122,7 +2131,7 @@ ON CONFLICT (id) DO UPDATE SET
     -- upsert from an unrelated path cannot erase the flow that created the row.
     creation_source = COALESCE(EXCLUDED.creation_source, organization_metadata.creation_source),
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, creation_source, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 `
 
 type UpsertOrganizationMetadataParams struct {
@@ -2159,6 +2168,7 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -2189,7 +2199,7 @@ ON CONFLICT (id) DO UPDATE SET
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, creation_source, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 `
 
 type UpsertOrganizationMetadataFromWorkOSParams struct {
@@ -2230,6 +2240,7 @@ func (q *Queries) UpsertOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,

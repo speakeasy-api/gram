@@ -1749,6 +1749,7 @@ type OrganizationMetadatum struct {
 	FreeTrialEndsAt    pgtype.Timestamptz
 	ScimEnabled        pgtype.Bool
 	SsoEnabled         pgtype.Bool
+	VerifiedDomains    []string
 	CreationSource     pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
