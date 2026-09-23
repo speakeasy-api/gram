@@ -318,7 +318,7 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 		// identity-less session carries nothing else, and later events may
 		// omit the hostname the fallback attribution needs.
 		if metadata.SessionID != "" && !isAgentActor(ctx) && (metadata.UserEmail != "" || metadata.Hostname != "") {
-			if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
+			if err := s.cacheSessionMetadata(ctx, *metadata); err != nil {
 				s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
 					attr.SlogError(err),
 					attr.SlogGenAIConversationID(metadata.SessionID),
@@ -326,7 +326,7 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 			}
 		}
 	} else {
-		s.refreshMCPListTTL(ctx, metadata.SessionID)
+		s.refreshMCPListTTL(ctx, metadata.ProjectID, metadata.SessionID)
 	}
 
 	s.writeCodexHookToClickHouse(ctx, payload, metadata, blockReason)
@@ -367,10 +367,10 @@ func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.
 	}
 
 	entries := ParseCodexMCPList(raw)
-	if !s.claimMCPListSnapshot(ctx, *payload.SessionID) {
+	if !s.claimMCPListSnapshot(ctx, projectID, *payload.SessionID) {
 		return
 	}
-	if err := s.cache.Set(ctx, sessionMCPListCacheKey(*payload.SessionID), entries, sessionMCPListTTL); err != nil {
+	if err := s.cache.Set(ctx, sessionMCPListCacheKey(projectID, *payload.SessionID), entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache Codex MCP list snapshot",
 			attr.SlogEvent("codex_hook_mcp_list_cache_set_failed"),
 			attr.SlogError(err),
@@ -476,7 +476,7 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		// SessionStart is excluded: recordCodexHook already persists this
 		// metadata (attribution included) for that event; this write-back
 		// exists for sessions whose SessionStart was never seen.
-		if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
+		if err := s.cacheSessionMetadata(ctx, *metadata); err != nil {
 			s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
 				attr.SlogError(err),
 				attr.SlogGenAIConversationID(metadata.SessionID),

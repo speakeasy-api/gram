@@ -46,7 +46,7 @@ func TestCodex_PreToolUse_ShadowMCPAllowsGramHostedMetaTool(t *testing.T) {
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := "codex-session-gram-mcp-meta-tool"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), []MCPServerEntry{{
 		RawLine:       "",
 		Source:        "local",
 		PluginName:    "",
@@ -81,7 +81,7 @@ func TestCodex_PreToolUse_ShadowMCPBlocksExternalMetaTool(t *testing.T) {
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := "codex-session-external-mcp-meta-tool"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), []MCPServerEntry{{
 		RawLine:       "",
 		Source:        "local",
 		PluginName:    "",
@@ -331,7 +331,7 @@ func TestBuildCodexTelemetryAttributes_EnrichesMCPToolFromInventory(t *testing.T
 	ctx, ti := newTestHooksService(t)
 
 	sessionID := "codex-session-telemetry-inventory"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), []MCPServerEntry{{
 		RawLine:       "",
 		Source:        "local",
 		PluginName:    "",
@@ -369,7 +369,7 @@ func TestBuildCodexTelemetryAttributes_EnrichesMCPMetaToolFromInventory(t *testi
 	ctx, ti := newTestHooksService(t)
 
 	sessionID := "codex-session-telemetry-meta-inventory"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), []MCPServerEntry{{
 		RawLine:       "",
 		Source:        "local",
 		PluginName:    "",
@@ -409,7 +409,7 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 
 	sessionID := "codex-session-evidence-inventory"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), []MCPServerEntry{{
 		RawLine:       "",
 		Source:        "local",
 		PluginName:    "",
@@ -456,7 +456,7 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 	require.Equal(t, "https://chat.example.com/mcp/int-linear", evidence.FullURL)
 	require.NotNil(t, matched)
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), []MCPServerEntry{{
 		RawLine:       "",
 		Source:        "local",
 		PluginName:    "",
@@ -491,7 +491,7 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 	require.Empty(t, evidence.FullURL)
 	require.Nil(t, matched, "ambiguous Codex namespaces must not resolve to the first matching inventory row")
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), []MCPServerEntry{{
 		RawLine:       "",
 		Source:        "local",
 		PluginName:    "",

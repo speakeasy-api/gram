@@ -120,8 +120,8 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 		// with provider=openai entries whose shape — AccountType set, no
 		// account UUID — would otherwise satisfy the company-credential arm
 		// below and stamp Claude rows with Codex attribution.
-		var cached SessionMetadata
-		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil && !agent &&
+		cached, cachedErr := s.getSessionMetadata(ctx, session.SessionID)
+		if cachedErr == nil && !agent &&
 			cached.Provider == providerAnthropic && cached.GramOrgID == orgID && cached.ProjectID == projectID &&
 			(cached.UserAccountID != "" || (cached.AccountType != "" && cached.ExternalAccountUUID == "")) &&
 			!sessionEnrichesAttribution(session, cached) {
@@ -191,6 +191,12 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 		)
 
 		_, metadataErr := s.getSessionMetadata(ctx, completeMetadata.SessionID)
+		// owned: this project holds the session id (its entry is cached, or this
+		// batch's write succeeds). foreign: another project holds it, so this
+		// batch stamps its own rows but adopts neither the cached identity nor
+		// the unauthenticated hooks. A cache error sets neither.
+		owned := metadataErr == nil
+		foreign := errors.Is(metadataErr, errSessionMetadataOtherProject)
 
 		// Attribute the account: classify team vs personal, link it to the
 		// owning employee (directly for team accounts, via the device bridge for
@@ -239,30 +245,30 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 		// session independently so a single cache failure does not abort
 		// flushing the remaining sessions in the batch.
 		// Agent sessions never seed the human-keyed session cache.
-		if !linkFailed && !agent {
-			if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
+		if !linkFailed && !agent && !foreign {
+			switch err := s.cacheSessionMetadata(ctx, completeMetadata); {
+			case err == nil:
+				owned = true
+			case errors.Is(err, errSessionMetadataOtherProject):
+				foreign = true
+			default:
 				sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
 					attr.SlogEvent("claude_logs_cache_set_failed"),
 					attr.SlogError(err),
 				)
 			}
 		}
-		if metadataErr != nil {
-			entries, err := s.getCachedMCPList(ctx, completeMetadata.SessionID)
-			if err == nil {
-				s.upsertShadowMCPInventoryURLs(ctx, completeMetadata.GramOrgID, completeMetadata.ProjectID, completeMetadata.SessionID, entries)
-			} else {
-				sessionLogger.WarnContext(ctx, "failed to read cached MCP list for shadow inventory capture",
-					attr.SlogEvent("claude_otel_mcp_list_cache_miss"),
-					attr.SlogError(err),
-				)
-			}
+		if foreign {
+			owned = false
+			sessionLogger.WarnContext(ctx, "session id already attributed to another project; not adopting it",
+				attr.SlogEvent("claude_logs_session_owned_by_other_project"),
+			)
 		}
 
-		// Buffered hooks came from unauthenticated requests; an agent batch must
-		// never adopt them.
+		// Agent batches never adopt buffered hooks. Unauthenticated hooks flush
+		// only once this project owns the session id.
 		if !agent {
-			s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
+			s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata, owned)
 		}
 
 		sessionLogger.InfoContext(ctx, "Stored session metadata",

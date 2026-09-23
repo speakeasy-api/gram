@@ -340,7 +340,7 @@ func TestClaudeSessionSurface_ResolvesBareClaudeAdapterToClaudeCode(t *testing.T
 
 	// A cached SessionStart variant still overrides the slug.
 	coworkSession := uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(coworkSession), agentVariantCowork, sessionMCPListTTL))
+	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(testProjectID(t, ctx), coworkSession), agentVariantCowork, sessionMCPListTTL))
 	assert.Equal(t, agentVariantCowork, ti.service.claudeSessionSurface(ctx, &SessionMetadata{
 		SessionID:   coworkSession,
 		ServiceName: "claude",
@@ -413,7 +413,7 @@ func TestClaudeChatSource_CoworkFromVariantOverridesAmbiguousServiceName(t *test
 	sessionID := uuid.NewString()
 	chatID := sessionIDToUUID(sessionID)
 	prompt := "hello from legacy cowork"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(testProjectID(t, ctx), sessionID),
 		agentVariantCowork, sessionMCPListTTL))
 
 	metadata := &SessionMetadata{
