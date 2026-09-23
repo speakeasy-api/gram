@@ -1,7 +1,7 @@
 # Intent-ranked command palette (Jev launcher) — design
 
 **Date:** 2026-09-19
-**Status:** Approved in conversation, pending written review
+**Status:** Approved; amended 2026-09-22 to route Jev through OpenRouter
 **Reference:** [dabit3/jev-experiments/jev-launcher](https://github.com/dabit3/jev-experiments/tree/main/jev-launcher)
 
 ## Summary
@@ -11,7 +11,7 @@ and lets cmdk's substring filter order them. This change adds an
 intent layer modelled on the Jev launcher: on every keystroke the client
 sends the typed text and a short list of fuzzy-prefiltered candidates to
 a new `launcher.judge` management method, which forwards typed questions
-to the TypeSafe Jev API and returns probability distributions. The client
+to the TypeSafe Jev API via OpenRouter and returns probability distributions. The client
 re-ranks the list from those distributions, shows a green ↵ on the top row
 when the intent is settled, and — new for Gram — lets Jev choose a verb
 per row. Verbs in this version are `open`, `enable`/`disable` an MCP
@@ -29,7 +29,7 @@ generates text; it only picks among options the code supplies.
 - Fuzzy order renders immediately; Jev's answer replaces it when it lands.
   Nothing waits on the network.
 - A wrong Enter on a mutating verb is impossible without a second Enter.
-- With no TypeSafe key configured, the palette behaves exactly as today.
+- With no OpenRouter key resolvable for the org, the palette behaves exactly as today.
 
 ## Non-goals (this version)
 
@@ -39,7 +39,7 @@ generates text; it only picks among options the code supplies.
   request, and per-plugin publish are candidates for a follow-up.
 - Billing or per-org cost accounting for Jev calls. Usage is logged only.
 - Sending People (org members) to Jev. See _Data leaving the tenant_.
-- A feature flag. The feature is on wherever the key is set.
+- A feature flag. The feature is on wherever an OpenRouter key resolves.
 
 ## Architecture
 
@@ -61,7 +61,7 @@ Four units, each testable alone:
 | Candidate hooks | `client/dashboard/src/components/command-palette/candidates/*.ts`     | existing `@gram/client` list hooks, `useRBAC`, routes |
 | Ranker          | `client/dashboard/src/components/command-palette/ranker.ts` (pure)    | nothing                                               |
 | Judge client    | `client/dashboard/src/components/command-palette/useLauncherJudge.ts` | generated `useLauncherJudgeMutation`                  |
-| Judge service   | `server/internal/launcher/` + `server/internal/thirdparty/typesafe/`  | env key, o11y                                         |
+| Judge service   | `server/internal/launcher/` + `server/internal/thirdparty/typesafe/`  | OpenRouter provisioner, o11y                                         |
 
 ## Client
 
@@ -299,26 +299,34 @@ hand-assembled headers.
 
 `server/internal/thirdparty/typesafe/`:
 
-- `client.go`: `POST https://api.typesafe.ai/v1/systemone`, `Authorization: Bearer <key>`,
-  body `{model: "jev-latest", state, questions}`, 4 s timeout, no retry.
-  Returns typed errors for transport, non-200, and decode failures.
+- `client.go`: `POST https://openrouter.ai/api/v1/systemone` (OpenRouter hosts
+  Jev's System One API unchanged, in beta), `Authorization: Bearer <OpenRouter key>`,
+  body `{model: "typesafe/jev-latest", state, questions}`, 4 s timeout, no
+  retry. The key is passed per call, never held by the client. Returns typed
+  errors for transport, non-200, and decode failures.
 - Response shape: `answers[<id>].probabilities[<option>]` for Choice,
   `answers[<id>].noul` for Noul, `usage.{input_tokens,output_tokens}`.
+  OpenRouter adds `id`, `provider` and `usage.cost`; they are tolerated and
+  `usage.cost` is recorded when present.
 - Records span attributes: latency, input/output tokens, candidate count,
   org and project ids. No query text in telemetry.
 
 ### Configuration
 
-- New CLI flag `typesafe-api-key`, env `TYPESAFE_API_KEY`, threaded through
-  `server/cmd/gram/start.go` and `deps.go` the same way as
-  `openrouter-dev-key`. Declared `"unset"` in `mise.toml`; real value in
-  `mise.local.toml`. Unset ⇒ `judge` returns `{disabled: true}`.
-- `model` is a constant `jev-latest` in code; not configurable this version.
+No new configuration. The launcher service takes the existing OpenRouter
+provisioner (the `openRouter` value built in `server/cmd/gram/start.go`) and
+resolves the org's key per request with `ProvisionAPIKey(ctx, orgID,
+openrouter.KeyTypeInternal)`, the same slot the other internal judges use.
+Locally that provisioner is the development one, which returns
+`OPENROUTER_DEV_KEY` from `mise.local.toml`. An empty or `unset` key, or a
+provisioning error, makes `judge` return `{disabled: true}` with no
+outbound call. `model` is the constant `typesafe/jev-latest`.
 
 ### Wiring
 
 Register the service in `server/cmd/gram/start.go` next to the other
-management services. Regenerate: `mise gen:goa-server` then `mise gen:sdk`.
+management services, passing the `openRouter` provisioner and a client built
+on `guardianPolicy.PooledClient()`. Regenerate: `mise gen:goa-server` then `mise gen:sdk`.
 No SQL, no migration, no Temporal.
 
 ### Data leaving the tenant
@@ -370,7 +378,7 @@ observability, not behaviour.
 
 **Manual**
 
-- `mise run playwright` against the local stack with `TYPESAFE_API_KEY`
+- `mise run playwright` against the local stack with `OPENROUTER_DEV_KEY`
   set: `the disabled slack mcp`, `turn off jira`, `publish marketplace`,
   `people in sales` (fuzzy only), `sett` (ready on Settings page).
 
@@ -378,10 +386,9 @@ observability, not behaviour.
 
 1. PR 1: server (`launcher` service + `typesafe` client + config), SDK regen.
 2. PR 2: client (candidate hooks refactor + ranker + judge hook + confirm flow).
-3. Set `TYPESAFE_API_KEY` in the environments where it should be live.
+3. Nothing to configure: orgs with a provisioned OpenRouter key get it live.
 
-PR 2 is safe to merge before the key exists: it degrades to today's
-behaviour on `disabled: true`.
+PR 2 degrades to today's behaviour on `disabled: true`.
 
 ## Open questions
 
