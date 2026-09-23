@@ -6393,6 +6393,8 @@ WHERE deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS plugin_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   plugin_id uuid NOT NULL,
+  -- Only gateway memberships set project_id, preserving legacy insert paths.
+  project_id uuid,
   toolset_id uuid,
   mcp_server_id uuid,
   meta_mcp_server_id uuid,
@@ -6407,6 +6409,7 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
 
   CONSTRAINT plugin_servers_pkey PRIMARY KEY (id),
   CONSTRAINT plugin_servers_plugin_id_fkey FOREIGN KEY (plugin_id) REFERENCES plugins (id) ON DELETE CASCADE,
+  CONSTRAINT plugin_servers_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id) ON DELETE CASCADE,
   -- RESTRICT is intentional: CASCADE would silently destroy rows.
   -- Toolsets use soft deletes so RESTRICT only blocks manual hard deletes.
   -- If a hard-delete path is added later, it must purge soft-deleted
@@ -6418,7 +6421,8 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   CONSTRAINT plugin_servers_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE RESTRICT,
   -- Gateways must be detached before deletion. A hard delete can clear the
   -- reference only after the plugin member has been soft-deleted.
-  CONSTRAINT plugin_servers_meta_mcp_server_id_fkey FOREIGN KEY (meta_mcp_server_id) REFERENCES meta_mcp_servers (id) ON DELETE SET NULL,
+  CONSTRAINT plugin_servers_project_id_meta_mcp_server_id_fkey FOREIGN KEY (project_id, meta_mcp_server_id) REFERENCES meta_mcp_servers (project_id, id) ON DELETE SET NULL,
+  CONSTRAINT plugin_servers_gateway_project_check CHECK (meta_mcp_server_id IS NULL OR project_id IS NOT NULL),
   CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional')),
   CONSTRAINT plugin_servers_backend_exclusivity_check CHECK (
     num_nonnulls(toolset_id, mcp_server_id, meta_mcp_server_id) = 1
@@ -6444,6 +6448,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_mcp_server_id_key
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_meta_mcp_server_id_key
   ON plugin_servers (plugin_id, meta_mcp_server_id)
   WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS plugin_servers_meta_mcp_server_id_idx
+  ON plugin_servers (meta_mcp_server_id);
 
 -- Controls who receives a plugin. Reuses the RBAC principal URN pattern
 -- (role:slug, user:id, or * for all org members).
