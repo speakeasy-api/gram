@@ -22,13 +22,20 @@ func TestConsentDiscoveryRequiresResolvedLiveHumanChallenge(t *testing.T) {
 	require.Equal(t, mcpidentity.KindConsentDiscovery, identity.Kind())
 	require.Equal(t, user.ID, identity.UserID())
 	require.Equal(t, now.Add(state.TTL()), identity.ExpiresAt())
+	// Challenge creation can land on another replica with a small clock skew.
+	skewed := state
+	skewed.CreatedAt = now.Add(30 * time.Second)
+	skewedIdentity, ok := mcpidentity.FromContext(service.stampConsentDiscovery(ctx, skewed))
+	require.True(t, ok)
+	require.Equal(t, skewed.CreatedAt.Add(skewed.TTL()), skewedIdentity.ExpiresAt())
+
 	states := []AuthnChallengeState{
 		{Subject: &user, AuthorizerUserID: user.ID, AuthorizerImpersonated: new(true), CreatedAt: now},
 		{Subject: &user, AuthorizerUserID: user.ID, CreatedAt: now},
 		{Subject: &user, CreatedAt: now}, // Synthetic probe or legacy unproven subject.
 		{Subject: &user, AuthorizerUserID: "another-user", AuthorizerImpersonated: new(false), CreatedAt: now},
 		{Subject: &user, AuthorizerUserID: user.ID, AuthorizerImpersonated: new(false), CreatedAt: now.Add(-11 * time.Minute)},
-		{Subject: &user, AuthorizerUserID: user.ID, AuthorizerImpersonated: new(false), CreatedAt: now.Add(time.Hour)},
+		{Subject: &user, AuthorizerUserID: user.ID, AuthorizerImpersonated: new(false), CreatedAt: now.Add(2 * time.Minute)},
 		{Subject: &user, AuthorizerUserID: user.ID, AuthorizerImpersonated: new(false), Federation: &FederatedChallenge{}, CreatedAt: now},
 		{Subject: new(urn.NewAgentSubject(uuid.New())), AuthorizerUserID: user.ID, AuthorizerImpersonated: new(false), CreatedAt: now},
 		{Subject: new(urn.NewAnonymousSubject(uuid.NewString())), AuthorizerUserID: user.ID, AuthorizerImpersonated: new(false), CreatedAt: now},

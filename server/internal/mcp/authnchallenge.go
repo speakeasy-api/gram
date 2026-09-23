@@ -39,6 +39,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
@@ -285,6 +287,10 @@ var (
 	errAgentSessionCredentialLoad = errors.New("load agent session credential")
 )
 
+// errIssuerGateCallerProfile marks an operational lookup failure while preparing
+// a caller assertion, after the session subject has already been validated.
+var errIssuerGateCallerProfile = errors.New("resolve caller assertion user profile")
+
 // errCredentialRejected marks a rejection the presented credential itself
 // earned: a bad signature, the wrong audience, an expired or revoked token, a
 // session row that is gone, or a principal whose admission has been withdrawn.
@@ -348,6 +354,8 @@ func issuerGateFailureReason(err error) string {
 	switch {
 	case errors.Is(err, errIssuerGateOrgLookup):
 		return "org_lookup_failed"
+	case errors.Is(err, errIssuerGateCallerProfile):
+		return "caller_profile_unavailable"
 	case errors.Is(err, errToolSelectionResourceMismatch):
 		return "tool_selection_resource_mismatch"
 	case errors.Is(err, errToolSelectionLoad):
@@ -633,6 +641,22 @@ func (s *Service) contextForSessionSubject(
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
 		authCtx.UserID = subject.ID
+		// Assertion emails describe the resolved human, never an inherited
+		// context's credential creator or another principal's owner.
+		needsProfile, err := s.endpointNeedsCallerProfile(ctx, endpoint)
+		if err != nil {
+			return nil, err
+		}
+		if needsProfile {
+			profile, _, err := s.sessions.GetUserInfo(ctx, subject.ID)
+			if err != nil {
+				return nil, fmt.Errorf("%w: %w", errIssuerGateCallerProfile, err)
+			}
+			if profile == nil || profile.UserID != subject.ID {
+				return nil, fmt.Errorf("%w: profile does not match session subject", errIssuerGateCallerProfile)
+			}
+			authCtx.Email = &profile.Email
+		}
 		return contextvalues.WithAuthenticatedActor(
 			ctx, authCtx, urn.NewPrincipal(urn.PrincipalTypeUser, subject.ID),
 		), nil
@@ -660,6 +684,26 @@ func (s *Service) contextForSessionSubject(
 		), nil
 	}
 	return ctx, oops.C(oops.CodeUnauthorized)
+}
+
+func (s *Service) endpointNeedsCallerProfile(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
+	if s.remoteProxyManager == nil || !s.remoteProxyManager.IssuesCallerAssertions(mcpservers.VisibilityPrivate, true) {
+		return false, nil
+	}
+	// Meta dispatch can select a private tunneled member after authentication.
+	if endpoint.MetaMcpServerID.Valid {
+		return true, nil
+	}
+	if endpoint.IsPublic || !endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid {
+		return false, nil
+	}
+	server, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
+		ID: endpoint.McpServerID.UUID, ProjectID: endpoint.ProjectID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("%w: resolve destination: %w", errIssuerGateCallerProfile, err)
+	}
+	return s.remoteProxyManager.IssuesCallerAssertions(server.Visibility, server.TunneledMcpServerID.Valid), nil
 }
 
 // AuthenticateChallengeHeader builds the WWW-Authenticate value (RFC 9728

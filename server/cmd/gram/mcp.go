@@ -198,7 +198,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err := validateServerURL(serverURL, serviceEnv); err != nil {
 		return fmt.Errorf("invalid server url: %w", err)
 	}
-	callerAssertions, err := mcpauthz.New(c.String("authz-private-key"), c.String("authz-public-keys"), serverURL.String(), c.String("environment") == "local")
+	callerAssertions, err := newCallerAssertions(c)
 	if err != nil {
 		return fmt.Errorf("configure caller assertions: %w", err)
 	}
@@ -425,8 +425,8 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 // omits the marketplace, hooks, and management-API layers.
 func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, authenticationHost *mcp.AuthenticationHost, chatSessions middleware.ChatSessionValidator, publishers *background.Publishers, callerAssertions *mcpauthz.Issuer) (goahttp.Muxer, error) {
 	mux := goahttp.NewMuxer()
-	mux.Use(callerAssertions.Middleware)
 	mux.Use(middleware.NetworkServingPolicyVersion)
+	mux.Use(callerAssertions.Middleware)
 	mux.Use(middleware.StripPrivateIngressHeaders)
 	mux.Use(func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
