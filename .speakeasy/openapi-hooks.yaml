@@ -881,6 +881,8 @@ tags:
     description: Dashboard API for interacting with resources.
   - name: risk
     description: Manage risk analysis policies and view scan results.
+  - name: sigint
+    description: Manage project-scoped custom signals and sensors. Signals are reusable live definitions; sensors attach an ordered set of signals in multi-label, exclusive, or ordered-score mode.
   - name: skillEfficacy
     description: Manage organization-wide skill efficacy sampling settings.
   - name: skills

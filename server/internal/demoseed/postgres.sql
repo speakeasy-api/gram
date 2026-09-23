@@ -491,12 +491,109 @@ BEGIN
   DELETE FROM workload_agent_assignments WHERE organization_id = demo_org;
   DELETE FROM workload_identity_admissions WHERE organization_id = demo_org;
   DELETE FROM workload_issuers WHERE organization_id = demo_org;
+  -- Sigint ownership/reference FKs use ON DELETE SET NULL with non-null
+  -- columns, so every project-scoped row, including tombstones, must be
+  -- physically removed child-first before the project can be recreated.
+  DELETE FROM sigint_sensor_signals
+  WHERE project_id IN (
+    SELECT id FROM projects
+    WHERE id = proj_a AND organization_id = demo_org
+  );
+  DELETE FROM sigint_sensors
+  WHERE project_id IN (
+    SELECT id FROM projects
+    WHERE id = proj_a AND organization_id = demo_org
+  );
+  DELETE FROM sigint_custom_signals
+  WHERE project_id IN (
+    SELECT id FROM projects
+    WHERE id = proj_a AND organization_id = demo_org
+  );
   DELETE FROM projects WHERE organization_id = demo_org;
 
   -- Single project: the demo org intentionally has exactly one project so
   -- new users land somewhere obvious.
   INSERT INTO projects (id, name, slug, organization_id) VALUES
     (proj_a, 'Default', 'default', demo_org);
+
+  -- Signals intelligence examples cover every authoring mode. API is shared
+  -- by two sensors, while Draft campaign intentionally has no memberships so
+  -- the incomplete authoring state remains visible.
+  INSERT INTO sigint_custom_signals
+    (id, project_id, name, description, classifier_criteria)
+  VALUES
+    (demo.det_uuid('gram-demo-sigint-signal-api'), proj_a, 'API',
+     'Requests involving the public or internal API.',
+     'The conversation concerns API endpoints, requests, responses, or contracts.'),
+    (demo.det_uuid('gram-demo-sigint-signal-database'), proj_a, 'Database',
+     'Requests involving persistent data stores.',
+     'The conversation concerns queries, migrations, schemas, or database operations.'),
+    (demo.det_uuid('gram-demo-sigint-signal-authentication'), proj_a, 'Authentication',
+     'Requests involving identity and authentication.',
+     'The conversation concerns sign-in, credentials, sessions, or identity providers.'),
+    (demo.det_uuid('gram-demo-sigint-signal-worker'), proj_a, 'Worker',
+     'Requests primarily involving asynchronous workers.',
+     'The conversation concerns background jobs, queues, or worker processes.'),
+    (demo.det_uuid('gram-demo-sigint-signal-low'), proj_a, 'Low',
+     'Little or no customer impact.',
+     'The issue is cosmetic or has a straightforward workaround.'),
+    (demo.det_uuid('gram-demo-sigint-signal-medium'), proj_a, 'Medium',
+     'Noticeable but bounded customer impact.',
+     'The issue impairs a workflow but does not make the product broadly unavailable.'),
+    (demo.det_uuid('gram-demo-sigint-signal-high'), proj_a, 'High',
+     'Severe or widespread customer impact.',
+     'The issue blocks a critical workflow or affects many customers.'),
+    (demo.det_uuid('gram-demo-sigint-signal-launch'), proj_a, 'Launch',
+     'A future product launch campaign.', NULL),
+    (demo.det_uuid('gram-demo-sigint-signal-renewal'), proj_a, 'Renewal',
+     'A future customer renewal campaign.', NULL);
+
+  INSERT INTO sigint_sensors
+    (id, project_id, name, description, instructions, mode)
+  VALUES
+    (demo.det_uuid('gram-demo-sigint-sensor-service-areas'), proj_a,
+     'Service areas', 'Labels every service area discussed in a conversation.',
+     'Select every product service that materially appears.', 'multi_label'),
+    (demo.det_uuid('gram-demo-sigint-sensor-primary-service'), proj_a,
+     'Primary service', 'Chooses the service most central to a conversation.',
+     'Choose the single service that best describes the main request.', 'exclusive'),
+    (demo.det_uuid('gram-demo-sigint-sensor-impact'), proj_a,
+     'Customer impact', 'Orders conversations by customer impact.',
+     'Score impact from low to high using the supplied levels.', 'ordered_score'),
+    (demo.det_uuid('gram-demo-sigint-sensor-draft-campaign'), proj_a,
+     'Draft campaign', 'An incomplete campaign classifier awaiting its labels.',
+     NULL, 'multi_label');
+
+  INSERT INTO sigint_sensor_signals
+    (id, project_id, sensor_id, signal_id, sort_order)
+  VALUES
+    (demo.det_uuid('gram-demo-sigint-membership-service-api'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-service-areas'),
+     demo.det_uuid('gram-demo-sigint-signal-api'), 0),
+    (demo.det_uuid('gram-demo-sigint-membership-service-database'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-service-areas'),
+     demo.det_uuid('gram-demo-sigint-signal-database'), 1),
+    (demo.det_uuid('gram-demo-sigint-membership-service-authentication'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-service-areas'),
+     demo.det_uuid('gram-demo-sigint-signal-authentication'), 2),
+    (demo.det_uuid('gram-demo-sigint-membership-primary-api'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-primary-service'),
+     demo.det_uuid('gram-demo-sigint-signal-api'), 0),
+    (demo.det_uuid('gram-demo-sigint-membership-primary-database'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-primary-service'),
+     demo.det_uuid('gram-demo-sigint-signal-database'), 1),
+    (demo.det_uuid('gram-demo-sigint-membership-primary-worker'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-primary-service'),
+     demo.det_uuid('gram-demo-sigint-signal-worker'), 2),
+    (demo.det_uuid('gram-demo-sigint-membership-impact-low'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-impact'),
+     demo.det_uuid('gram-demo-sigint-signal-low'), 0),
+    (demo.det_uuid('gram-demo-sigint-membership-impact-medium'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-impact'),
+     demo.det_uuid('gram-demo-sigint-signal-medium'), 1),
+    (demo.det_uuid('gram-demo-sigint-membership-impact-high'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-impact'),
+     demo.det_uuid('gram-demo-sigint-signal-high'), 2);
 
   -- 'rbac' is required for the agent-sessions list: without it
   -- authz.ShouldEnforce is false and chatVisibilityScope falls back to
@@ -3137,6 +3234,95 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE organization_id = demo_org AND status NOT IN ('approved', 'blocked');
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % AI tool rows carry a status other than approved or blocked', stray;
+  END IF;
+
+  -- Sigint postflights preserve the complete authoring story: all modes,
+  -- ordered memberships, a shared catalog entry, and an incomplete draft.
+  SELECT count(*) INTO stray FROM sigint_custom_signals
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 9 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 9 sigint signals, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM sigint_sensors
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 sigint sensors, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM sigint_sensors
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND (id, mode) IN (
+      (demo.det_uuid('gram-demo-sigint-sensor-service-areas'), 'multi_label'),
+      (demo.det_uuid('gram-demo-sigint-sensor-primary-service'), 'exclusive'),
+      (demo.det_uuid('gram-demo-sigint-sensor-impact'), 'ordered_score'),
+      (demo.det_uuid('gram-demo-sigint-sensor-draft-campaign'), 'multi_label')
+    );
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: sigint sensor modes do not match the seeded examples';
+  END IF;
+
+  SELECT count(*) INTO stray FROM sigint_sensor_signals
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 9 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 9 sigint sensor memberships, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM sigint_sensor_signals
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND signal_id = demo.det_uuid('gram-demo-sigint-signal-api');
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: shared API signal has % memberships, expected 2', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM sigint_sensor_signals
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND sensor_id = demo.det_uuid('gram-demo-sigint-sensor-draft-campaign');
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: incomplete sigint sensor unexpectedly has % memberships', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM (
+    SELECT array_agg(signal_id ORDER BY sort_order) AS signal_ids
+    FROM sigint_sensor_signals
+    WHERE project_id = proj_a AND deleted IS FALSE
+      AND sensor_id = demo.det_uuid('gram-demo-sigint-sensor-impact')
+    HAVING array_agg(signal_id ORDER BY sort_order) = ARRAY[
+      demo.det_uuid('gram-demo-sigint-signal-low'),
+      demo.det_uuid('gram-demo-sigint-signal-medium'),
+      demo.det_uuid('gram-demo-sigint-signal-high')
+    ]::uuid[]
+  ) ordered_score;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: ordered-score sigint membership order is invalid';
+  END IF;
+
+  SELECT count(*) INTO stray FROM (
+    SELECT sort_order,
+           row_number() OVER (
+             PARTITION BY sensor_id ORDER BY sort_order, id
+           ) - 1 AS expected_order
+    FROM sigint_sensor_signals
+    WHERE project_id = proj_a AND deleted IS FALSE
+  ) memberships
+  WHERE sort_order <> expected_order;
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % sigint memberships have non-consecutive order', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM sigint_sensor_signals ss
+  LEFT JOIN sigint_sensors s
+    ON s.project_id = ss.project_id AND s.id = ss.sensor_id
+  LEFT JOIN sigint_custom_signals cs
+    ON cs.project_id = ss.project_id AND cs.id = ss.signal_id
+  WHERE ss.project_id = proj_a AND ss.deleted IS FALSE
+    AND (s.id IS NULL OR s.deleted IS TRUE
+      OR cs.id IS NULL OR cs.deleted IS TRUE);
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % sigint memberships reference missing or deleted resources', stray;
   END IF;
 
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',

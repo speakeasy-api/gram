@@ -70,6 +70,7 @@ import { RemoteSessionIssuers } from "./remotesessionissuers.js";
 import { RemoteSessions } from "./remotesessions.js";
 import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
+import { Sigint } from "./sigint.js";
 import { SkillEfficacy } from "./skillefficacy.js";
 import { Skills } from "./skills.js";
 import { SpendRules } from "./spendrules.js";
@@ -445,6 +446,11 @@ export class Gram extends ClientSDK {
   private _risk?: Risk;
   get risk(): Risk {
     return (this._risk ??= new Risk(this._options));
+  }
+
+  private _sigint?: Sigint;
+  get sigint(): Sigint {
+    return (this._sigint ??= new Sigint(this._options));
   }
 
   private _skillEfficacy?: SkillEfficacy;

@@ -585,6 +585,16 @@ trackedFiles:
   src/funcs/riskSessionQuarantinesReleaseSessionQuarantine.ts: {}
   src/funcs/riskSignalsAnalysisStatus.ts: {}
   src/funcs/riskSignalsGet.ts: {}
+  src/funcs/sigintCreateSensor.ts: {}
+  src/funcs/sigintCreateSignal.ts: {}
+  src/funcs/sigintDeleteSensor.ts: {}
+  src/funcs/sigintDeleteSignal.ts: {}
+  src/funcs/sigintGetSensor.ts: {}
+  src/funcs/sigintGetSignal.ts: {}
+  src/funcs/sigintListSensors.ts: {}
+  src/funcs/sigintListSignals.ts: {}
+  src/funcs/sigintUpdateSensor.ts: {}
+  src/funcs/sigintUpdateSignal.ts: {}
   src/funcs/skillEfficacyGetSettings.ts: {}
   src/funcs/skillEfficacyQueryInsights.ts: {}
   src/funcs/skillEfficacyUpsertSettings.ts: {}
@@ -932,6 +942,8 @@ trackedFiles:
   src/models/components/createserverheaderform.ts: {}
   src/models/components/createsessionhandoffrequestbody.ts: {}
   src/models/components/createsessionhandoffresult.ts: {}
+  src/models/components/createsigintsensorform.ts: {}
+  src/models/components/createsigintsignalform.ts: {}
   src/models/components/createsignedchatattachmenturlform2.ts: {}
   src/models/components/createsignedchatattachmenturlresult.ts: {}
   src/models/components/createskillrequestbody.ts: {}
@@ -1268,6 +1280,8 @@ trackedFiles:
   src/models/components/listsetuptasksresult.ts: {}
   src/models/components/listshadowmcpinventoryresult.ts: {}
   src/models/components/listshadowmcpinventoryusersresult.ts: {}
+  src/models/components/listsigintsensorsresult.ts: {}
+  src/models/components/listsigintsignalsresult.ts: {}
   src/models/components/listskilldistributionsresult.ts: {}
   src/models/components/listskillfeedbackresult.ts: {}
   src/models/components/listskillsresult.ts: {}
@@ -1599,6 +1613,8 @@ trackedFiles:
   src/models/components/shadowmcpinventoryusersource.ts: {}
   src/models/components/sharedskill2.ts: {}
   src/models/components/shareskillrequestbody.ts: {}
+  src/models/components/sigintsensor.ts: {}
+  src/models/components/sigintsignal.ts: {}
   src/models/components/skill.ts: {}
   src/models/components/skilladoption.ts: {}
   src/models/components/skillbreakdownrow.ts: {}
@@ -1780,6 +1796,8 @@ trackedFiles:
   src/models/components/updateserverheaderform.ts: {}
   src/models/components/updatesetuptaskrequestbody.ts: {}
   src/models/components/updateshadowmcpinventoryservernameform.ts: {}
+  src/models/components/updatesigintsensorform.ts: {}
+  src/models/components/updatesigintsignalform.ts: {}
   src/models/components/updateskillrequestbody.ts: {}
   src/models/components/updatespendrulerequestbody.ts: {}
   src/models/components/updatetoolsetrequestbody.ts: {}
@@ -1924,6 +1942,8 @@ trackedFiles:
   src/models/operations/createriskpolicy.ts: {}
   src/models/operations/createriskpolicybypassrequest.ts: {}
   src/models/operations/createrole.ts: {}
+  src/models/operations/createsigintsensor.ts: {}
+  src/models/operations/createsigintsignal.ts: {}
   src/models/operations/createsignedchatattachmenturl.ts: {}
   src/models/operations/createskill.ts: {}
   src/models/operations/createspendrule.ts: {}
@@ -1984,6 +2004,8 @@ trackedFiles:
   src/models/operations/deleteriskpolicy.ts: {}
   src/models/operations/deleterole.ts: {}
   src/models/operations/deleteservernameoverride.ts: {}
+  src/models/operations/deletesigintsensor.ts: {}
+  src/models/operations/deletesigintsignal.ts: {}
   src/models/operations/deletesourceenvironmentlink.ts: {}
   src/models/operations/deletetemplate.ts: {}
   src/models/operations/deletetoolset.ts: {}
@@ -2117,6 +2139,8 @@ trackedFiles:
   src/models/operations/getrole.ts: {}
   src/models/operations/getshadowmcpinventoryserver.ts: {}
   src/models/operations/getsharedskill.ts: {}
+  src/models/operations/getsigintsensor.ts: {}
+  src/models/operations/getsigintsignal.ts: {}
   src/models/operations/getskill.ts: {}
   src/models/operations/getskillefficacysettings.ts: {}
   src/models/operations/getsourceenvironment.ts: {}
@@ -2285,6 +2309,8 @@ trackedFiles:
   src/models/operations/listshadowmcpinventory.ts: {}
   src/models/operations/listshadowmcpinventoryserversforuser.ts: {}
   src/models/operations/listshadowmcpinventoryusers.ts: {}
+  src/models/operations/listsigintsensors.ts: {}
+  src/models/operations/listsigintsignals.ts: {}
   src/models/operations/listskilldistributions.ts: {}
   src/models/operations/listskillfeedback.ts: {}
   src/models/operations/listskills.ts: {}
@@ -2514,6 +2540,8 @@ trackedFiles:
   src/models/operations/updaterole.ts: {}
   src/models/operations/updatesetuptask.ts: {}
   src/models/operations/updateshadowmcpinventoryservername.ts: {}
+  src/models/operations/updatesigintsensor.ts: {}
+  src/models/operations/updatesigintsignal.ts: {}
   src/models/operations/updateskill.ts: {}
   src/models/operations/updatespendrule.ts: {}
   src/models/operations/updatetemplate.ts: {}
@@ -2698,6 +2726,8 @@ trackedFiles:
   src/react-query/createRemoteSessionClient.ts: {}
   src/react-query/createRemoteSessionIssuer.ts: {}
   src/react-query/createRole.ts: {}
+  src/react-query/createSigintSensor.ts: {}
+  src/react-query/createSigintSignal.ts: {}
   src/react-query/createSignedChatAttachmentURL.ts: {}
   src/react-query/createSkill.ts: {}
   src/react-query/createStripeCheckout.ts: {}
@@ -2750,6 +2780,8 @@ trackedFiles:
   src/react-query/deleteRemoteSessionClient.ts: {}
   src/react-query/deleteRemoteSessionIssuer.ts: {}
   src/react-query/deleteRole.ts: {}
+  src/react-query/deleteSigintSensor.ts: {}
+  src/react-query/deleteSigintSignal.ts: {}
   src/react-query/deleteSourceEnvironmentLink.ts: {}
   src/react-query/deleteTemplate.ts: {}
   src/react-query/deleteToolset.ts: {}
@@ -2870,6 +2902,10 @@ trackedFiles:
   src/react-query/getRemoteMcpServer.ts: {}
   src/react-query/getRemoteMcpServerHeader.core.ts: {}
   src/react-query/getRemoteMcpServerHeader.ts: {}
+  src/react-query/getSigintSensor.core.ts: {}
+  src/react-query/getSigintSensor.ts: {}
+  src/react-query/getSigintSignal.core.ts: {}
+  src/react-query/getSigintSignal.ts: {}
   src/react-query/getSourceEnvironment.core.ts: {}
   src/react-query/getSourceEnvironment.ts: {}
   src/react-query/getSpendBreakdown.core.ts: {}
@@ -3403,6 +3439,10 @@ trackedFiles:
   src/react-query/shareSkill.ts: {}
   src/react-query/sharedSkill.core.ts: {}
   src/react-query/sharedSkill.ts: {}
+  src/react-query/sigintSensors.core.ts: {}
+  src/react-query/sigintSensors.ts: {}
+  src/react-query/sigintSignals.core.ts: {}
+  src/react-query/sigintSignals.ts: {}
   src/react-query/skill.core.ts: {}
   src/react-query/skill.ts: {}
   src/react-query/skillDistributions.core.ts: {}
@@ -3520,6 +3560,8 @@ trackedFiles:
   src/react-query/updateRole.ts: {}
   src/react-query/updateSetupTask.ts: {}
   src/react-query/updateShadowMCPInventoryServerName.ts: {}
+  src/react-query/updateSigintSensor.ts: {}
+  src/react-query/updateSigintSignal.ts: {}
   src/react-query/updateSkill.ts: {}
   src/react-query/updateTemplate.ts: {}
   src/react-query/updateToolset.ts: {}
@@ -3660,6 +3702,7 @@ trackedFiles:
   src/sdk/rules.ts: {}
   src/sdk/sdk.ts: {}
   src/sdk/sessionquarantines.ts: {}
+  src/sdk/sigint.ts: {}
   src/sdk/signals.ts: {}
   src/sdk/skillefficacy.ts: {}
   src/sdk/skills.ts: {}
@@ -4770,6 +4813,28 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  createSigintSensor:
+    speakeasy-default-create-sigint-sensor:
+      requestBody:
+        application/json: {"mode": "ordered_score", "name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-11-17T07:55:55.903Z", "id": "9b0aba32-79a3-453e-aa22-a34624b4f576", "mode": "ordered_score", "name": "<value>", "project_id": "abe56e10-dc34-4d84-b95b-2f35529523a0", "signal_ids": ["c027a78e-b0d9-499a-8bd4-0e3c18fec4fe", "776f5e85-92f4-4089-aaf2-04bc346fead1"], "updated_at": "2026-04-20T06:53:45.466Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  createSigintSignal:
+    speakeasy-default-create-sigint-signal:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-09-24T09:38:32.011Z", "id": "56436b43-1895-44e3-8ba3-edfaed1ca636", "name": "<value>", "project_id": "36ef8828-3e66-4deb-a6e7-71a4182f574f", "updated_at": "2025-02-07T22:50:51.208Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   createSignedChatAttachmentURL:
     speakeasy-default-create-signed-chat-attachment-URL:
       requestBody:
@@ -5459,6 +5524,30 @@ examples:
       responses:
         "200":
           application/json: {"access": "<value>", "allowed_policy_ids": [], "blocked_policy_ids": ["<value 1>", "<value 2>"], "request_count": 626288}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  deleteSigintSensor:
+    speakeasy-default-delete-sigint-sensor:
+      parameters:
+        query:
+          id: "cb4b46d2-b9eb-402c-9cf5-431c3d7285c2"
+      responses:
+        "200":
+          application/json: {"created_at": "2025-12-08T14:54:57.251Z", "id": "1fa69653-45a6-4186-8298-368c3f2315ec", "mode": "exclusive", "name": "<value>", "project_id": "50d06624-0605-4472-b70b-8da8d4e7e67d", "signal_ids": ["e4a11fad-f856-4d36-9db0-bfae59f61c0f", "ed9e31be-6e3e-4b67-a2b5-7d0f6249f4ed", "d2d4a503-5247-454b-9d06-0de1f5b8863d"], "updated_at": "2024-12-20T06:52:43.938Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  deleteSigintSignal:
+    speakeasy-default-delete-sigint-signal:
+      parameters:
+        query:
+          id: "69317ec4-635d-4703-bc59-4d9809a875fb"
+      responses:
+        "200":
+          application/json: {"created_at": "2026-01-06T04:04:37.331Z", "id": "23dfbb0f-1bcb-4201-9b11-05f897f499ca", "name": "<value>", "project_id": "1e6423dd-52af-407e-bcc2-b8dac79e9262", "updated_at": "2025-10-11T11:03:52.371Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -7087,6 +7176,30 @@ examples:
       responses:
         "200":
           application/json: {"content": "<value>", "display_name": "Dawn_Bednar71", "name": "<value>", "updated_at": "2024-12-29T06:19:07.288Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getSigintSensor:
+    speakeasy-default-get-sigint-sensor:
+      parameters:
+        query:
+          id: "72bcb542-d65c-43d0-a556-7a422d22a30d"
+      responses:
+        "200":
+          application/json: {"created_at": "2026-03-07T13:20:55.414Z", "id": "de30666c-efc0-4fc7-9b2a-493954432815", "mode": "ordered_score", "name": "<value>", "project_id": "3d75568e-fff7-4958-b752-e58ae713ec4e", "signal_ids": ["3945f1d3-5702-4fcc-9e6b-e6ab6ba24520"], "updated_at": "2024-05-05T15:10:41.876Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getSigintSignal:
+    speakeasy-default-get-sigint-signal:
+      parameters:
+        query:
+          id: "cc72d5d3-3eae-4c25-9367-36ffaa941aa4"
+      responses:
+        "200":
+          application/json: {"created_at": "2025-02-10T08:57:00.085Z", "id": "505a4c1d-b915-462a-bfdb-d1670110fcc3", "name": "<value>", "project_id": "d6f69d21-ed45-4555-a8bb-0e2447fe28e8", "updated_at": "2025-02-21T02:41:45.229Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -9115,6 +9228,30 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listSigintSensors:
+    speakeasy-default-list-sigint-sensors:
+      parameters:
+        query:
+          limit: 50
+      responses:
+        "200":
+          application/json: {"sensors": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listSigintSignals:
+    speakeasy-default-list-sigint-signals:
+      parameters:
+        query:
+          limit: 50
+      responses:
+        "200":
+          application/json: {"signals": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listSkillDistributions:
     speakeasy-default-list-skill-distributions:
       parameters:
@@ -11813,6 +11950,28 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  updateSigintSensor:
+    speakeasy-default-update-sigint-sensor:
+      requestBody:
+        application/json: {"id": "5a4fb2a1-5c08-4df6-bf7b-f9312a0e46e8"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-05-03T21:42:07.872Z", "id": "6e82e2bb-bede-4d68-ab5d-5a7a4665874a", "mode": "exclusive", "name": "<value>", "project_id": "31ec639d-3570-4f32-9a44-7df13dc3fab2", "signal_ids": ["e7ba4ee5-80e7-46ce-9189-e3215f144598"], "updated_at": "2025-05-25T21:10:51.226Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  updateSigintSignal:
+    speakeasy-default-update-sigint-signal:
+      requestBody:
+        application/json: {"id": "b90b0716-db3d-4c25-a05b-7468d9e95ed4"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-11-13T21:12:02.126Z", "id": "21489b79-8472-4bb2-88aa-34ec457bcd8b", "name": "<value>", "project_id": "8a39245d-673a-4e6f-af27-807770c595ac", "updated_at": "2026-03-02T14:21:21.536Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   updateSkill:
     speakeasy-default-update-skill:
       requestBody:

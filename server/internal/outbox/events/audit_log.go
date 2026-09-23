@@ -83,6 +83,8 @@ var (
 	AccessRequestV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_request_event_v1", "Emitted when changes to access requests are made")
 	ShadowMCPAccessRuleV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.shadow_mcp_access_rule_event_v1", "Deprecated: use audit_log.access_rule_event_v1.")
 	ShadowMCPApprovalV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.shadow_mcp_approval_event_v1", "Deprecated: use audit_log.access_request_event_v1.")
+	SigintSensorV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.sigint_sensor_event_v1", "Emitted when changes to signals intelligence sensors are made")
+	SigintSignalV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.sigint_signal_event_v1", "Emitted when changes to custom signals are made")
 	SkillEfficacySettingsV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.skill_efficacy_settings_event_v1", "Emitted when skill efficacy sampling settings are changed")
 	SkillV1                                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.skill_event_v1", "Emitted when changes to skills are made")
 	SpendRuleV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.spend_rule_event_v1", "Emitted when changes to spend rules are made")
