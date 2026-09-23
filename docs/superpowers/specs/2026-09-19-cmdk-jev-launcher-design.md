@@ -61,7 +61,7 @@ Four units, each testable alone:
 | Candidate hooks | `client/dashboard/src/components/command-palette/candidates/*.ts`     | existing `@gram/client` list hooks, `useRBAC`, routes |
 | Ranker          | `client/dashboard/src/components/command-palette/ranker.ts` (pure)    | nothing                                               |
 | Judge client    | `client/dashboard/src/components/command-palette/useLauncherJudge.ts` | generated `useLauncherJudgeMutation`                  |
-| Judge service   | `server/internal/launcher/` + `server/internal/thirdparty/typesafe/`  | OpenRouter provisioner, o11y                                         |
+| Judge service   | `server/internal/launcher/` + `server/internal/thirdparty/typesafe/`  | OpenRouter provisioner, o11y                          |
 
 ## Client
 
