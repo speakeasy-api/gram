@@ -5,14 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
@@ -108,6 +112,50 @@ func TestPersonAccountsRejectsInactiveTargetAndCaller(t *testing.T) {
 	deleted := addPerson(t, ctx, f)
 	require.NoError(t, repo.New(f.db).DeleteSlackMappingUserForTest(ctx, deleted))
 	_, err = f.service.ListPersonAccounts(ctx, personAccountsRequest(deleted))
+	requireMappingCode(t, err, oops.CodeNotFound)
+}
+
+func TestPersonAccountsDemoVisitorReadsActiveDemoPerson(t *testing.T) {
+	t.Parallel()
+	ctx, f := newService(t)
+	visitor := *f.auth
+	visitor.ActiveOrganizationID = constants.DemoOrganizationID
+	visitor.OrganizationSlug = "acme-demo"
+	f.auth = &visitor
+	ctx = authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &visitor), authz.DemoScopeGrants()...)
+	f.flags.SetFlag(feature.FlagClaudeTagSupport, constants.DemoOrganizationID, true)
+	emptyTime := pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite}
+	require.NoError(t, testrepo.New(f.db).CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+		ID: constants.DemoOrganizationID, Name: "Acme Demo Workspace", Slug: "acme-demo", GramAccountType: "demo",
+		WorkosID: pgtype.Text{String: "", Valid: false}, Whitelisted: true,
+		FreeTrialStartedAt: conv.ToPGTimestamptz(time.Now()), FreeTrialEndsAt: conv.ToPGTimestamptz(time.Now().Add(14 * 24 * time.Hour)),
+		DisabledAt: emptyTime, CreatedAt: emptyTime,
+	}))
+	active, err := orgrepo.New(f.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{OrganizationID: constants.DemoOrganizationID, UserID: visitor.UserID})
+	require.NoError(t, err)
+	require.False(t, active, "Explore Demo keeps the visitor outside the demo membership directory")
+	person := addPerson(t, ctx, f)
+	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
+	require.NoError(t, syncer(f, snapshot("UEXAMPLE01")).Run(ctx, syncRequest(f, c), nil))
+	m := readMapping(t, ctx, f, members(t, ctx, f)[0].ID.String())
+	_, err = f.service.SetMapping(ctx, mappingRequest(m, &person))
+	require.NoError(t, err)
+	result, err := f.service.ListPersonAccounts(ctx, personAccountsRequest(person))
+	require.NoError(t, err)
+	require.Len(t, result.Accounts, 1)
+	require.Equal(t, person, result.Accounts[0].Member.Mapping.UserID)
+	support := visitor
+	support.SupportOrganizationID = constants.DemoOrganizationID
+	support.IsAdmin = true
+	supportCtx := contextvalues.WithValidatedSupportSession(ctx, &support)
+	require.True(t, contextvalues.IsSupportSession(supportCtx))
+	_, err = f.service.ListPersonAccounts(supportCtx, personAccountsRequest(person))
+	requireMappingCode(t, err, oops.CodeForbidden)
+	// The demo exception applies only to the caller; the subject must still be an active demo person.
+	_, err = f.service.ListPersonAccounts(ctx, personAccountsRequest(visitor.UserID))
+	requireMappingCode(t, err, oops.CodeNotFound)
+	require.NoError(t, repo.New(f.db).DeactivateSlackMappingPersonForTest(ctx, repo.DeactivateSlackMappingPersonForTestParams{OrganizationID: constants.DemoOrganizationID, UserID: conv.ToPGText(person)}))
+	_, err = f.service.ListPersonAccounts(ctx, personAccountsRequest(person))
 	requireMappingCode(t, err, oops.CodeNotFound)
 }
 

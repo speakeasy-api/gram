@@ -53,7 +53,7 @@ function Location() {
       <button
         onClick={() =>
           void navigate(
-            "?tab=slack-workspaces&slack_view=members&slack_member=membership-two&slack_mapping=needs_review",
+            "?tab=slack-workspaces&slack_view=members&slack_member=membership-two&slack_workspace=filtered-workspace&slack_mapping=needs_review",
           )
         }
       >
@@ -112,6 +112,9 @@ it("follows URL selection changes and closes without dropping workspace or mappi
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(screen.getByRole("status").textContent).toContain(
     "slack_mapping=needs_review",
+  );
+  expect(screen.getByRole("status").textContent).toContain(
+    "slack_workspace=filtered-workspace",
   );
   expect(screen.getByRole("status").textContent).not.toContain("slack_member");
 });

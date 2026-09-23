@@ -459,4 +459,12 @@ the PR, don't commit them.
 
 With an ordinary `org:admin` session, open Organization Identity > Slack workspaces. The seed shows Acme Engineering and Acme Operations as requiring authorization. Neither has usable credentials. Disconnected workspaces are hidden. In the retargeted local organization, when the matching Slack app credentials (`SLACK_CLIENT_ID` and the existing `SLACK_CLIENT_SECRET`) are unconfigured, Connect Slack is disabled. Shared Explore Demo always shows a read-only explanation and disables Connect Slack and Disconnect, even with valid app credentials. Its server refuses mutation requests before OAuth state or credentials can be used. In the retargeted local organization, disconnecting Acme Operations requires confirmation and removes it from the list. Reseeding restores the two history rows with fresh connection generations.
 
-The mutation check runs only in the local organization. Support sessions cannot use these endpoints. Live Slack authorization requires dedicated app credentials and a registered callback; the seeded rows do not demonstrate an OAuth exchange.
+The mutation check runs only in the local organization. Support sessions cannot use these endpoints. Live Slack authorization requires matching Slack app credentials and a registered callback; the seeded rows do not demonstrate an OAuth exchange.
+
+## Work identities
+
+Enable `claude-tag-support` for the organization. For the shared demo check, enter through `/explore-demo` with an ordinary browser session. Support impersonation is refused by these endpoints. The visitor must not need a membership in the demo organization.
+
+Open Amara Okafor's identity and select Accounts & devices. Work identities should show three memberships across Acme Engineering and Acme Operations, including two accounts in Engineering. The guest account shows Deactivated, Needs review and the source finding; directory freshness stays visible separately. Each Review link opens that exact membership in Organization Identity. Cancel closes it without changing the mapping or dropping the workspace filter.
+
+Repeat in the seeded local organization. An employee can read their own mapped accounts and sees contact-admin guidance, without Review controls. Another employee's profile must not request these accounts. Verify the empty state for a person without mappings and retry after a failed read. With rollout disabled, the panel is hidden. Opening or closing Review must not create a mapping or change its revision. Seed data demonstrates navigation and retained mappings; live OAuth requires the configured Slack app.

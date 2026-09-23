@@ -40,9 +40,17 @@ vi.mock("@/lib/dates", () => ({
     <time>{date.toISOString()}</time>
   ),
 }));
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
+}));
 vi.mock("@gram/client/react-query/slackPersonAccounts.js", () => ({
-  useSlackPersonAccounts: (...args: unknown[]) => {
+  buildSlackPersonAccountsQuery: (_client: unknown, ...args: unknown[]) => {
     mocks.query(...args);
+    return { queryKey: ["personal-slack-test"], queryFn: vi.fn() };
+  },
+}));
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: () => {
     return {
       data: mocks.pending
         ? undefined
@@ -113,7 +121,6 @@ it("reads an exact self ID and offers only contact-admin guidance", () => {
   expect(mocks.query).toHaveBeenCalledWith(
     { userId: "user_self", cursor: undefined },
     { sessionHeaderGramSession: "" },
-    expect.objectContaining({ retry: false }),
   );
   expect(
     screen.getByText(/contact your organization administrator/),
@@ -191,7 +198,6 @@ it("admins see all memberships and deep-link to the exact organization membershi
   expect(mocks.query).toHaveBeenCalledWith(
     expect.objectContaining({ userId: "user_other" }),
     expect.anything(),
-    expect.anything(),
   );
   const link = screen.getByRole("link", {
     name: /Review Slack mapping.*Example Operations/,
@@ -205,6 +211,7 @@ it("admins see all memberships and deep-link to the exact organization membershi
     "00000000-0000-4000-8000-000000000004",
   );
   expect(url.searchParams.get("slack_view")).toBe("members");
+  expect(url.searchParams.get("tab")).toBe("slack-workspaces");
   expect(screen.getAllByText("UEXAMPLE01")).toHaveLength(2);
 });
 it("keeps source state, review finding and directory freshness distinct", () => {
@@ -243,8 +250,14 @@ it("does not flash an empty state while loading", () => {
   expect(screen.queryByText("No mapped Slack accounts.")).toBeNull();
 });
 it("hides cached accounts on an access error and lets the caller retry", () => {
+  const page = show();
+  expect(screen.getByText("UEXAMPLE01")).toBeTruthy();
   mocks.error = true;
-  show();
+  page.rerender(
+    <MemoryRouter>
+      <IdentityWorkIdentities identity={identity} />
+    </MemoryRouter>,
+  );
   expect(screen.queryByText("UEXAMPLE01")).toBeNull();
   expect(screen.queryByText("No mapped Slack accounts.")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -257,12 +270,10 @@ it("pages through memberships without changing the subject", () => {
   expect(mocks.query).toHaveBeenLastCalledWith(
     { userId: "user_self", cursor: account.member.id },
     expect.anything(),
-    expect.anything(),
   );
   fireEvent.click(screen.getByRole("button", { name: "Previous accounts" }));
   expect(mocks.query).toHaveBeenLastCalledWith(
     { userId: "user_self", cursor: undefined },
-    expect.anything(),
     expect.anything(),
   );
 });

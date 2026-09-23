@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -20,9 +21,14 @@ func (s *Service) ListPersonAccounts(ctx context.Context, p *gen.ListPersonAccou
 	if p.UserID == "" {
 		return nil, oops.C(oops.CodeBadRequest)
 	}
-	// Check live membership even when a session or cached admin grant survives removal.
+	// Demo visitors receive organization access without joining the shared sandbox.
+	// Real organizations require live caller membership even if a cached grant survives removal.
 	people := orgrepo.New(s.db)
-	for _, userID := range []string{ac.UserID, p.UserID} {
+	userIDs := []string{p.UserID}
+	if ac.ActiveOrganizationID != constants.DemoOrganizationID {
+		userIDs = append(userIDs, ac.UserID)
+	}
+	for _, userID := range userIDs {
 		active, err := people.HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{OrganizationID: ac.ActiveOrganizationID, UserID: userID})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "could not check organization membership").LogError(ctx, s.logger)

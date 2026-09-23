@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
@@ -11,7 +12,8 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import type { SlackPersonAccount } from "@gram/client/models/components/slackpersonaccount.js";
-import { useSlackPersonAccounts } from "@gram/client/react-query/slackPersonAccounts.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { buildSlackPersonAccountsQuery } from "@gram/client/react-query/slackPersonAccounts.js";
 import { SESSION_SECURITY } from "../org/identity-provider/identityProviderQueries";
 import { MappingStatus } from "../org/slack-workspaces/MappingStatus";
 import { stateLabels, typeLabels } from "../org/slack-workspaces/memberLabels";
@@ -59,19 +61,24 @@ function WorkIdentities({
   canReview: boolean;
 }): JSX.Element {
   const routes = useOrgRoutes();
+  const organization = useOrganization();
+  const client = useGramContext();
   const [cursors, setCursors] = useState<Array<string | undefined>>([
     undefined,
   ]);
-  const query = useSlackPersonAccounts(
+  const built = buildSlackPersonAccountsQuery(
+    client,
     { userId, cursor: cursors.at(-1) },
     SESSION_SECURITY,
-    {
-      retry: false,
-      throwOnError: false,
-      staleTime: 0,
-      refetchOnMount: "always",
-    },
   );
+  const query = useQuery({
+    ...built,
+    queryKey: [...built.queryKey, { organizationId: organization.id }],
+    retry: false,
+    throwOnError: false,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const accounts = query.data?.accounts ?? [];
   return (
     <IdentityPanel
