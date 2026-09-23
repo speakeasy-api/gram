@@ -3,7 +3,6 @@ package mcpriskscan_test
 import (
 	"bytes"
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -30,12 +29,14 @@ func TestNoop_DoesNotPromoteCredentialOwnerToPrincipal(t *testing.T) {
 	ctx := contextvalues.SetAuthContext(t.Context(), &authCtx)
 	event := mcpriskscan.Event{
 		Surface: mcpriskscan.SurfaceHostedMCP, OrganizationID: "", ProjectID: "", ServerID: "",
-		ToolsetID: "", ToolName: "ping", ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
+		ToolsetID: "", ToolName: "ping", ResourceURI: "", PromptName: "",
 		Method: mcpriskscan.MethodToolsCall,
 	}
-	evaluator.Scan(ctx, nil, event)
-	evaluator.Scan(mcpidentity.NewValidatorBoundary().StampAPIKey(ctx), nil, event)
-	evaluator.Scan(mcpidentity.NewValidatorBoundary().StampAssistant(ctx), nil, event)
+	evaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, event, mcpriskscan.BorrowPayload(nil)))
+	apiKeyCtx := mcpidentity.NewValidatorBoundary().StampAPIKey(ctx)
+	evaluator.Scan(apiKeyCtx, mcpriskscan.NewRequest(apiKeyCtx, event, mcpriskscan.BorrowPayload(nil)))
+	assistantCtx := mcpidentity.NewValidatorBoundary().StampAssistant(ctx)
+	evaluator.Scan(assistantCtx, mcpriskscan.NewRequest(assistantCtx, event, mcpriskscan.BorrowPayload(nil)))
 
 	spans := recorder.Ended()
 	require.Len(t, spans, 3)
@@ -49,7 +50,7 @@ func TestNoop_DoesNotPromoteCredentialOwnerToPrincipal(t *testing.T) {
 		require.Equal(t, wantKind, attrs["gram.mcp.risk.scan.principal_kind"].AsString())
 		require.Equal(t, i != 0, attrs["gram.mcp.risk.scan.identity_stamped"].AsBool())
 		require.Equal(t, "ping", attrs[attr.ToolNameKey].AsString())
-		require.Equal(t, mcpriskscan.PhaseBeforeExecution, attrs["gram.mcp.risk.scan.phase"].AsString())
+		require.Equal(t, mcpriskscan.PhaseRequest, attrs["gram.mcp.risk.scan.phase"].AsString())
 	}
 	require.Equal(t, "credential-owner", authCtx.UserID)
 }
@@ -62,19 +63,22 @@ func TestNoop_DoesNotExportRequestPayload(t *testing.T) {
 	evaluator := mcpriskscan.NewNoop(provider, testenv.NewMeterProvider(t), testenv.NewLogger(t))
 	event := mcpriskscan.Event{
 		Surface: mcpriskscan.SurfaceHostedMCP, OrganizationID: "", ProjectID: "", ServerID: "",
-		ToolsetID: "", ToolName: "ping", ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
+		ToolsetID: "", ToolName: "ping", ResourceURI: "", PromptName: "",
 		Method: mcpriskscan.MethodToolsCall,
 	}
-	evaluator.Scan(t.Context(), nil, event)
-	payload := bytes.NewReader([]byte(`{"private_argument":"sensitive-tool-input"}`))
-	unread := payload.Len()
-	evaluator.Scan(t.Context(), payload, event)
-	require.Equal(t, unread, payload.Len(), "the no-op must not consume the payload reader")
+	evaluator.Scan(t.Context(), mcpriskscan.NewRequest(t.Context(), event, mcpriskscan.BorrowPayload(nil)))
+	payload := []byte(`{"private_argument":"sensitive-tool-input"}`)
+	original := bytes.Clone(payload)
+	evaluator.Scan(t.Context(), mcpriskscan.NewRequest(t.Context(), event, mcpriskscan.BorrowPayload(payload)))
+	require.Equal(t, original, payload, "the no-op must not mutate borrowed payload bytes")
 
 	spans := recorder.Ended()
 	require.Len(t, spans, 2)
-	// Payload contents must not add or alter attributes.
-	require.Equal(t, spans[0].Attributes(), spans[1].Attributes())
+	for _, span := range spans {
+		for _, kv := range span.Attributes() {
+			require.NotContains(t, kv.Value.Emit(), "sensitive-tool-input")
+		}
+	}
 }
 
 func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
@@ -88,11 +92,11 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 	})
 	evaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, testenv.NewLogger(t))
 	wantCounts := make(map[attribute.Set]int64)
-	for _, seam := range []struct{ surface, method, phase string }{
-		{mcpriskscan.SurfaceHostedMCP, mcpriskscan.MethodToolsCall, mcpriskscan.PhaseBeforeExecution},
-		{mcpriskscan.SurfaceRemoteMCP, mcpriskscan.MethodToolsCall, mcpriskscan.PhaseBeforeExecution},
-		{mcpriskscan.SurfaceHostedMCP, mcpriskscan.MethodResourcesRead, mcpriskscan.PhaseBeforeRead},
-		{mcpriskscan.SurfaceHostedMCP, mcpriskscan.MethodPromptsGet, mcpriskscan.PhaseBeforeRender},
+	for _, seam := range []struct{ surface, method string }{
+		{mcpriskscan.SurfaceHostedMCP, mcpriskscan.MethodToolsCall},
+		{mcpriskscan.SurfaceRemoteMCP, mcpriskscan.MethodToolsCall},
+		{mcpriskscan.SurfaceHostedMCP, mcpriskscan.MethodResourcesRead},
+		{mcpriskscan.SurfaceHostedMCP, mcpriskscan.MethodPromptsGet},
 	} {
 		attrs := attribute.NewSet(
 			attribute.String("gram.mcp.risk.scan.surface", seam.surface),
@@ -101,12 +105,12 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 		wantCounts[attrs] = 2
 		ctx := t.Context()
 		for _, suffix := range []string{"first", "second"} {
-			evaluator.Scan(ctx, strings.NewReader(suffix), mcpriskscan.Event{
-				Surface: seam.surface, Method: seam.method, Phase: seam.phase,
+			evaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+				Surface: seam.surface, Method: seam.method,
 				OrganizationID: "org-" + suffix, ProjectID: "project-" + suffix,
 				ServerID: "server-" + suffix, ToolsetID: "toolset-" + suffix,
 				ToolName: "tool-" + suffix, ResourceURI: "resource://" + suffix, PromptName: "prompt-" + suffix,
-			})
+			}, mcpriskscan.BorrowPayload([]byte(suffix))))
 			ctx = mcpidentity.NewValidatorBoundary().StampAPIKey(ctx)
 		}
 	}
@@ -140,4 +144,76 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 		require.Greater(t, point.Sum, float64(0), "record elapsed scan time, not a constant zero")
 	}
 	require.Equal(t, wantCounts, durationCounts, "every scan must record duration with the same bounded dimensions")
+}
+
+func TestEvaluator_ClaimsAnOwnedSubjectOnce(t *testing.T) {
+	t.Parallel()
+	var calls int
+	evaluator := mcpriskscan.NewEvaluator(mcpriskscan.ObserverFunc(func(_ context.Context, subject mcpriskscan.Subject) {
+		calls++
+		require.True(t, subject.EvaluationOwner())
+	}))
+	subject := mcpriskscan.NewRequest(t.Context(), mcpriskscan.Event{
+		Surface: mcpriskscan.SurfaceHostedMCP,
+		Method:  mcpriskscan.MethodToolsCall,
+	}, mcpriskscan.BorrowPayload([]byte(`{"query":"once"}`)))
+
+	evaluator.Scan(t.Context(), subject)
+	evaluator.Scan(t.Context(), subject)
+
+	require.Equal(t, 1, calls)
+}
+
+func TestEvaluator_IgnoresNonOwnerSurface(t *testing.T) {
+	t.Parallel()
+	var calls int
+	evaluator := mcpriskscan.NewEvaluator(mcpriskscan.ObserverFunc(func(context.Context, mcpriskscan.Subject) {
+		calls++
+	}))
+	subject := mcpriskscan.NewRequest(t.Context(), mcpriskscan.Event{
+		Surface: "meta_mcp",
+		Method:  mcpriskscan.MethodToolsCall,
+	}, mcpriskscan.BorrowPayload([]byte(`{"query":"delegated"}`)))
+
+	require.False(t, subject.EvaluationOwner())
+	evaluator.Scan(t.Context(), subject)
+	require.Zero(t, calls, "meta routes must delegate evaluation to the concrete member seam")
+}
+
+func TestNewResponse_ReusesExecutionAndTrustedPrincipal(t *testing.T) {
+	t.Parallel()
+	ctx := mcpidentity.NewValidatorBoundary().StampAPIKey(t.Context())
+	request := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+		Surface: mcpriskscan.SurfaceRemoteMCP,
+		Method:  mcpriskscan.MethodToolsCall,
+	}, mcpriskscan.BorrowPayload([]byte(`{"query":"request"}`)))
+	response := mcpriskscan.NewResponse(request, mcpriskscan.BorrowPayload([]byte(`{"result":"terminal"}`)))
+
+	require.Equal(t, request.Event.ExecutionID(), response.Event.ExecutionID())
+	require.Equal(t, mcpriskscan.PhaseResponse, response.Event.Phase())
+	require.Equal(t, mcpidentity.KindAPIKey, response.Event.Principal().Kind())
+	require.True(t, response.Event.IdentityStamped())
+	require.Equal(t, mcpriskscan.PayloadAvailable, response.Payload.Availability())
+	require.JSONEq(t, `{"result":"terminal"}`, string(response.Payload.Bytes()))
+	require.True(t, response.EvaluationOwner())
+
+	var calls int
+	evaluator := mcpriskscan.NewEvaluator(mcpriskscan.ObserverFunc(func(context.Context, mcpriskscan.Subject) {
+		calls++
+	}))
+	evaluator.Scan(ctx, response)
+	evaluator.Scan(ctx, mcpriskscan.NewResponse(request, mcpriskscan.BorrowPayload([]byte(`{"result":"duplicate terminal"}`))))
+	require.Equal(t, 1, calls, "repeated terminal events must share the response-phase claim")
+}
+
+func TestBorrowPayload_IsCompleteOrUnavailable(t *testing.T) {
+	t.Parallel()
+	atLimit := bytes.Repeat([]byte{'x'}, mcpriskscan.MaxPayloadBytes)
+	available := mcpriskscan.BorrowPayload(atLimit)
+	require.Equal(t, mcpriskscan.PayloadAvailable, available.Availability())
+	require.Len(t, available.Bytes(), mcpriskscan.MaxPayloadBytes)
+
+	oversized := mcpriskscan.BorrowPayload(append(atLimit, 'x'))
+	require.Equal(t, mcpriskscan.PayloadOversized, oversized.Availability())
+	require.Nil(t, oversized.Bytes(), "oversized content must not be truncated")
 }

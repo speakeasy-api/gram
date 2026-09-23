@@ -23,7 +23,7 @@ import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
 import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";
 import { useOrganization, useSession } from "@/contexts/Auth";
-import { useRBAC } from "@/hooks/useRBAC";
+import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import { emailsMatch, resolveChatOwner } from "@/lib/chat-owner";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
@@ -906,9 +906,25 @@ export function InsightsProvider({
   const hideTrigger =
     (override?.hideTrigger ?? false) || dockHiddenByPage || onAddFlowRoute;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
+  const organization = useOrganization();
+  const targetProjectId = organization.projects.find(
+    (project) => project.slug === mcpConfig.projectSlug,
+  )?.id;
+  const { grants, isLoading: permissionsLoading, hasScope } = useRBAC();
+  const canReadSkills =
+    !permissionsLoading &&
+    !!targetProjectId &&
+    hasScopeInGrants(
+      grants ?? [],
+      "skill:read",
+      targetProjectId,
+      targetProjectId,
+    );
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const selectedSkillIdsRef = useRef(selectedSkillIds);
-  selectedSkillIdsRef.current = selectedSkillIds;
+  // The transport retains this callback across renders. Gate its ref immediately,
+  // rather than waiting for the effect that clears the composer's selection.
+  selectedSkillIdsRef.current = canReadSkills ? selectedSkillIds : [];
   const getSelectedSkillIds = useCallback(
     () => selectedSkillIdsRef.current,
     [],
@@ -922,7 +938,7 @@ export function InsightsProvider({
 
   useEffect(() => {
     setSelectedSkillIds([]);
-  }, [mcpConfig.projectSlug]);
+  }, [mcpConfig.projectSlug, canReadSkills]);
 
   // Server-side Project Assistant. Resolved lazily the first time the chat
   // panel is opened or a chat route is visited; once resolved it stays, so the
@@ -945,14 +961,17 @@ export function InsightsProvider({
     { limit: 200, gramProject: mcpConfig.projectSlug },
     undefined,
     {
-      enabled: assistantReady,
+      enabled: assistantReady && canReadSkills,
       throwOnError: false,
     },
   );
-  useDrainInfiniteQuery(skillsQuery, assistantReady);
+  useDrainInfiniteQuery(skillsQuery, assistantReady && canReadSkills);
   const composerSkills = useMemo(
     () =>
-      (skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? [])
+      (canReadSkills
+        ? (skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? [])
+        : []
+      )
         .filter((skill) => skill.hasValidVersion)
         .map((skill) => ({
           id: skill.id,
@@ -960,7 +979,7 @@ export function InsightsProvider({
           displayName: skill.displayName,
           summary: skill.summary,
         })),
-    [skillsQuery.data?.pages],
+    [skillsQuery.data?.pages, canReadSkills],
   );
 
   // Derive "Continue chat" from the server: if the viewer's most recent
@@ -993,8 +1012,6 @@ export function InsightsProvider({
   // extra request, and avoids the cross-origin auth mismatch a direct fetch
   // from inside Elements would hit (its request headers are scoped to the
   // chat API, not `access.listMembers`).
-  const organization = useOrganization();
-  const { hasScope } = useRBAC();
   const canReadMembers = hasScope("org:read", organization.id);
   const { data: membersData } = useMembers(undefined, undefined, {
     enabled: canReadMembers,
@@ -1189,8 +1206,10 @@ export function InsightsProvider({
           skills: composerSkills,
           selectedSkillIds,
           onSelectedSkillIdsChange: setSelectedSkillIds,
-          loading: skillsQuery.isPending || skillsQuery.isFetchingNextPage,
-          error: !!skillsQuery.error,
+          loading:
+            canReadSkills &&
+            (skillsQuery.isPending || skillsQuery.isFetchingNextPage),
+          error: canReadSkills && !!skillsQuery.error,
           maxSelected: 10,
         },
       },
@@ -1218,6 +1237,7 @@ export function InsightsProvider({
       managedAssistantId,
       composerSkills,
       selectedSkillIds,
+      canReadSkills,
       skillsQuery.isPending,
       skillsQuery.isFetchingNextPage,
       skillsQuery.error,

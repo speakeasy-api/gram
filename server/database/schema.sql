@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 
   scim_enabled boolean DEFAULT FALSE,
   sso_enabled boolean DEFAULT FALSE,
+  verified_domains TEXT[] DEFAULT '{}', -- WorkOS domains in a verified state; SSO only works for these, and setup requires at least one
 
   creation_source TEXT, -- which flow created the organization; NULL where nothing recorded one
 
@@ -6573,6 +6574,8 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- must clear to surface; absent means the scanner applies its default (0.5).
   -- New per-scanner options live here rather than as a column each.
   analyzer_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+  -- NULL targets every MCP server; otherwise stores selected servers and tools.
+  mcp_scope JSONB,
   prompt_injection_rules TEXT[],
   -- Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card')
   -- the policy author has unchecked within an otherwise-enabled category.

@@ -57,17 +57,20 @@ export function OrgSidebar({
 }: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
-  const { isLoading: rbacLoading } = useRBAC();
+  const { isLoading: rbacLoading, hasScope } = useRBAC();
+  const canReadFeatures = !rbacLoading && hasScope("org:read", organization.id);
   const canSetUpOrg = useCanSetUpOrg();
   const telemetry = useTelemetry();
-  const { data: productFeatures } = useProductFeatures(
+  const { data: featuresData } = useProductFeatures(
     { organizationId: organization.id },
     undefined,
     {
+      enabled: canReadFeatures,
       staleTime: 30_000,
       throwOnError: false,
     },
   );
+  const productFeatures = canReadFeatures ? featuresData : undefined;
   const isPlatformAdmin = useIsPlatformAdmin();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;

@@ -10,7 +10,6 @@ afterEach(cleanup);
 function Card({ onContinue }: { onContinue: () => void }): JSX.Element {
   return (
     <StepContainer
-      icon={null}
       title="Card"
       description="A card with two steps"
       onContinue={onContinue}

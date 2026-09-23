@@ -1,10 +1,15 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityProviderStep } from "./identity-provider-step";
 
 const onboardingStatus = vi.hoisted(() => ({
   current: {
-    data: { ssoConfigured: false, dsyncConfigured: false },
+    data: {
+      ssoConfigured: false,
+      dsyncConfigured: false,
+      domainVerified: true,
+    },
     isLoading: false,
     refetch: vi.fn(),
   },
@@ -17,6 +22,19 @@ vi.mock("@gram/client/react-query/onboardingStatus", () => ({
 vi.mock("@gram/client/react-query/generateWorkOSAdminPortalLink.js", () => ({
   useGenerateWorkOSAdminPortalLinkMutation: () => portal,
 }));
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({
+    setupTask: {
+      Link: ({
+        params,
+        children,
+      }: {
+        params: string[];
+        children: ReactNode;
+      }) => <a href={`/acme/setup/${params[0]}`}>{children}</a>,
+    },
+  }),
+}));
 vi.mock("@/components/ui/hooks/useConfig", () => ({
   useConfig: () => ({ theme: "light" }),
 }));
@@ -24,7 +42,11 @@ vi.mock("@/components/ui/hooks/useConfig", () => ({
 afterEach(cleanup);
 beforeEach(() => {
   onboardingStatus.current = {
-    data: { ssoConfigured: false, dsyncConfigured: false },
+    data: {
+      ssoConfigured: false,
+      dsyncConfigured: false,
+      domainVerified: true,
+    },
     isLoading: false,
     refetch: vi.fn(),
   };
@@ -57,7 +79,11 @@ describe("IdentityProviderStep", () => {
 
   it("shows both halves as connected once the server says so", () => {
     onboardingStatus.current = {
-      data: { ssoConfigured: true, dsyncConfigured: true },
+      data: {
+        ssoConfigured: true,
+        dsyncConfigured: true,
+        domainVerified: true,
+      },
       isLoading: false,
       refetch: vi.fn(),
     };
@@ -70,5 +96,49 @@ describe("IdentityProviderStep", () => {
     expect(
       screen.queryByRole("button", { name: "Connect directory" }),
     ).toBeNull();
+  });
+
+  it("blocks SSO setup until a domain is verified", () => {
+    onboardingStatus.current = {
+      data: {
+        ssoConfigured: false,
+        dsyncConfigured: false,
+        domainVerified: false,
+      },
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+
+    render(<IdentityProviderStep onComplete={() => {}} />);
+
+    expect(screen.getByText(/Verify a domain first/)).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Go to domain verification" })
+        .getAttribute("href"),
+    ).toBe("/acme/setup/domain");
+
+    fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
+    const connect = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Connect",
+    });
+    expect(connect.disabled).toBe(true);
+  });
+
+  it("does not block SSO setup when the status request fails", () => {
+    onboardingStatus.current = {
+      data: undefined,
+      isLoading: false,
+      refetch: vi.fn(),
+    } as unknown as typeof onboardingStatus.current;
+
+    render(<IdentityProviderStep onComplete={() => {}} />);
+
+    expect(screen.queryByText(/Verify a domain first/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
+    const connect = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Connect",
+    });
+    expect(connect.disabled).toBe(false);
   });
 });

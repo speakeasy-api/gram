@@ -15,8 +15,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
 // metaMemberBackend classifies how the meta MCP reaches one member.
@@ -31,7 +34,12 @@ const (
 
 // metaMember is one servable, authorized member in a request's snapshot.
 type metaMember struct {
-	serverID              uuid.UUID
+	serverID uuid.UUID
+	// The member's own project. A stored gateway's members all share the
+	// gateway's project, but an agent gateway's can span several, so member
+	// dispatch keys on this rather than on the request's project.
+	projectID             uuid.UUID
+	projectSlug           string
 	slug                  string
 	name                  string
 	sortOrder             int32
@@ -78,9 +86,32 @@ func (s *Service) memberStatus(ctx context.Context, member metaMember) string {
 	}
 }
 
-// resolveMetaMemberSnapshot loads the servable members and applies the
-// per-member RBAC filter; unproxied members (no meta MCP dispatch path) are
-// excluded, so pre-validation memberships degrade to invisibility.
+// metaMemberCandidate is one membership before admission: the member server's
+// identity and backend wiring, carried independently of where the membership
+// came from. Stored meta servers enumerate meta_mcp_server_members rows; an
+// agent gateway enumerates the servers its delegated policy names. Admission
+// is the same for both, so it must not be reimplemented per source.
+type metaMemberCandidate struct {
+	serverID                   uuid.UUID
+	projectID                  uuid.UUID
+	projectSlug                string
+	slug                       string
+	name                       string
+	sortOrder                  int32
+	visibility                 string
+	unproxied                  bool
+	toolsetID                  uuid.NullUUID
+	remoteServerID             uuid.NullUUID
+	tunneledServerID           uuid.NullUUID
+	environmentID              uuid.NullUUID
+	toolVariationsGroupID      uuid.NullUUID
+	remoteSessionIssuerID      uuid.NullUUID
+	tunneledResourceIdentifier string
+}
+
+// resolveMetaMemberSnapshot loads a stored meta server's servable members and
+// applies the per-member RBAC filter; unproxied members (no meta MCP dispatch
+// path) are excluded, so pre-validation memberships degrade to invisibility.
 func (s *Service) resolveMetaMemberSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -103,14 +134,138 @@ func (s *Service) resolveMetaMemberSnapshot(
 		return ctx, nil, oops.E(oops.CodeUnexpected, err, "list meta mcp members").LogError(ctx, logger)
 	}
 
-	members := make([]metaMember, 0, len(rows))
+	candidates := make([]metaMemberCandidate, 0, len(rows))
 	for _, row := range rows {
-		if row.McpServerUnproxiedMcpServerID.Valid {
+		candidates = append(candidates, metaMemberCandidate{
+			serverID: row.McpServerID,
+			// A stored gateway's members are all in its own project, which the
+			// membership query already constrains. Its slugs are unique within
+			// that project, so they need no qualifying prefix.
+			projectID:                  projectID,
+			projectSlug:                "",
+			slug:                       conv.PtrValOr(conv.FromPGText[string](row.McpServerSlug), ""),
+			name:                       conv.PtrValOr(conv.FromPGText[string](row.McpServerName), ""),
+			sortOrder:                  row.SortOrder,
+			visibility:                 row.McpServerVisibility,
+			unproxied:                  row.McpServerUnproxiedMcpServerID.Valid,
+			toolsetID:                  row.McpServerToolsetID,
+			remoteServerID:             row.McpServerRemoteMcpServerID,
+			tunneledServerID:           row.McpServerTunneledMcpServerID,
+			environmentID:              row.McpServerEnvironmentID,
+			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
+			remoteSessionIssuerID:      row.McpServerRemoteSessionIssuerID,
+			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
+		})
+	}
+
+	return s.admitMetaMembers(ctx, logger, candidates)
+}
+
+// resolveAgentMemberSnapshot derives an agent gateway's members from the
+// caller's own access rather than from stored membership rows: every servable
+// server in the organization is a candidate, and the grants carried by the
+// agent key decide which survive admission. Nothing is persisted, so a grant
+// revoked in the dashboard stops appearing on the agent's very next request
+// with nothing to redistribute or re-install.
+func (s *Service) resolveAgentMemberSnapshot(
+	ctx context.Context,
+	logger *slog.Logger,
+	organizationID string,
+) (context.Context, []metaMember, error) {
+	// Unconditional for the same reason resolveMetaMemberSnapshot prepares it.
+	ctx, err := s.authz.PrepareContext(ctx)
+	if err != nil {
+		return ctx, nil, oops.E(oops.CodeUnexpected, err, "load access grants").LogError(ctx, logger)
+	}
+
+	rows, err := mcpserversrepo.New(s.db).ListServableMCPServersByOrganizationID(ctx, organizationID)
+	if err != nil {
+		return ctx, nil, oops.E(oops.CodeUnexpected, err, "list agent gateway members").LogError(ctx, logger)
+	}
+
+	// The gateway is mounted on both the public and the private listener, but a
+	// member's own network access mode decides which of them may reach it. The
+	// stored serving path enforces this when it resolves an endpoint by slug
+	// (mcpendpoints.Resolve); a derived snapshot resolves nothing by slug, so
+	// the same rule has to be applied to each candidate here or a private_only
+	// server would list and dispatch over the public ingress.
+	surface := networkaccess.SurfacePublic
+	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
+		surface = networkaccess.SurfacePrivate
+	}
+
+	candidates := make([]metaMemberCandidate, 0, len(rows))
+	for _, row := range rows {
+		// A mode this build cannot parse is not a mode it can serve: fail
+		// closed, exactly as the endpoint resolver does.
+		mode, err := networkaccess.Effective(row.McpServerNetworkAccessMode)
+		if err != nil || !mode.Allows(surface) {
+			continue
+		}
+		candidates = append(candidates, metaMemberCandidate{
+			serverID:    row.McpServerID,
+			projectID:   row.McpServerProjectID,
+			projectSlug: row.McpServerProjectSlug,
+			slug:        conv.PtrValOr(conv.FromPGText[string](row.McpServerSlug), ""),
+			name:        conv.PtrValOr(conv.FromPGText[string](row.McpServerName), ""),
+			// A derived gateway has no operator-authored ordering; the query
+			// orders by project and slug so the listing is stable across
+			// requests.
+			sortOrder:                  0,
+			visibility:                 row.McpServerVisibility,
+			unproxied:                  row.McpServerUnproxiedMcpServerID.Valid,
+			toolsetID:                  row.McpServerToolsetID,
+			remoteServerID:             row.McpServerRemoteMcpServerID,
+			tunneledServerID:           row.McpServerTunneledMcpServerID,
+			environmentID:              row.McpServerEnvironmentID,
+			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
+			remoteSessionIssuerID:      row.McpServerRemoteSessionIssuerID,
+			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
+		})
+	}
+
+	ctx, members, err := s.admitMetaMembers(ctx, logger, candidates)
+	if err != nil {
+		return ctx, nil, err
+	}
+	return ctx, qualifyAgentMemberSlugs(members), nil
+}
+
+// qualifyAgentMemberSlugs prefixes every member slug with its project's.
+//
+// Slugs are unique per project, not per organization, and an agent gateway can
+// span projects — so two members could answer to the same slug, and the
+// qualified serverslug--toolname contract would resolve to whichever came
+// first. Qualifying every member, rather than only the colliding ones, keeps a
+// member's name stable: an unrelated project adding a server must not rename
+// anything an agent already holds.
+func qualifyAgentMemberSlugs(members []metaMember) []metaMember {
+	qualified := make([]metaMember, 0, len(members))
+	for _, member := range members {
+		if member.projectSlug != "" {
+			member.slug = member.projectSlug + "." + member.slug
+		}
+		qualified = append(qualified, member)
+	}
+	return qualified
+}
+
+// admitMetaMembers applies the visibility and RBAC filter every meta surface
+// shares. The caller must have prepared the authz context; admission is not
+// the place to discover an unprepared one.
+func (s *Service) admitMetaMembers(
+	ctx context.Context,
+	logger *slog.Logger,
+	candidates []metaMemberCandidate,
+) (context.Context, []metaMember, error) {
+	members := make([]metaMember, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.unproxied {
 			continue
 		}
 
 		backend := metaMemberBackendProxied
-		if row.McpServerToolsetID.Valid {
+		if candidate.toolsetID.Valid {
 			backend = metaMemberBackendHosted
 		}
 
@@ -118,9 +273,9 @@ func (s *Service) resolveMetaMemberSnapshot(
 		// servers and the mcp_servers id for proxy backends. Checking the
 		// wrong one silently hides the member from every resource-scoped
 		// grant the dashboard writes (see grantResourceIdForMcpServer).
-		connectResourceID := row.McpServerID
-		if row.McpServerToolsetID.Valid {
-			connectResourceID = row.McpServerToolsetID.UUID
+		connectResourceID := candidate.serverID
+		if candidate.toolsetID.Valid {
+			connectResourceID = candidate.toolsetID.UUID
 		}
 
 		// Visibility gates exposure and fails closed: public members are open,
@@ -130,10 +285,10 @@ func (s *Service) resolveMetaMemberSnapshot(
 		// This gates on the member server's own visibility only: a hosted
 		// member whose toolset is private still lists here (its endpoint is
 		// public), then reads as nonexistent on drill-down (loadMemberToolset).
-		switch row.McpServerVisibility {
+		switch candidate.visibility {
 		case mcpservers.VisibilityPublic:
 		case mcpservers.VisibilityPrivate:
-			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), projectID.String())); err != nil {
+			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), candidate.projectID.String())); err != nil {
 				// Forbidden and Unauthorized (anonymous callers on an ungated
 				// endpoint carry no AuthContext) are denials: filter the
 				// member. Anything else is an evaluation failure.
@@ -148,19 +303,21 @@ func (s *Service) resolveMetaMemberSnapshot(
 		}
 
 		members = append(members, metaMember{
-			serverID:                   row.McpServerID,
-			slug:                       conv.PtrValOr(conv.FromPGText[string](row.McpServerSlug), ""),
-			name:                       conv.PtrValOr(conv.FromPGText[string](row.McpServerName), ""),
-			sortOrder:                  row.SortOrder,
+			serverID:                   candidate.serverID,
+			projectID:                  candidate.projectID,
+			projectSlug:                candidate.projectSlug,
+			slug:                       candidate.slug,
+			name:                       candidate.name,
+			sortOrder:                  candidate.sortOrder,
 			backend:                    backend,
-			toolsetID:                  row.McpServerToolsetID,
-			remoteServerID:             row.McpServerRemoteMcpServerID,
-			tunneledServerID:           row.McpServerTunneledMcpServerID,
-			visibility:                 row.McpServerVisibility,
-			environmentID:              row.McpServerEnvironmentID,
-			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
-			remoteSessionIssuerID:      row.McpServerRemoteSessionIssuerID,
-			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
+			toolsetID:                  candidate.toolsetID,
+			remoteServerID:             candidate.remoteServerID,
+			tunneledServerID:           candidate.tunneledServerID,
+			visibility:                 candidate.visibility,
+			environmentID:              candidate.environmentID,
+			toolVariationsGroupID:      candidate.toolVariationsGroupID,
+			remoteSessionIssuerID:      candidate.remoteSessionIssuerID,
+			tunneledResourceIdentifier: candidate.tunneledResourceIdentifier,
 		})
 	}
 

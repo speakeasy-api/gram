@@ -39,8 +39,8 @@ type Service interface {
 	DisableWebhooks(context.Context, *DisableWebhooksPayload) (err error)
 	// Create a webhook portal session.
 	CreatePortalSession(context.Context, *CreatePortalSessionPayload) (res *CreatePortalSessionResult, err error)
-	// Get the onboarding status for the active organization by checking WorkOS SSO
-	// connections and directory sync state.
+	// Get the onboarding status for the active organization by checking WorkOS
+	// domain verification, SSO connections, and directory sync state.
 	GetOnboardingStatus(context.Context, *GetOnboardingStatusPayload) (res *OnboardingStatusResult, err error)
 	// Return recent hook events for the active organization so the onboarding
 	// wizard can confirm that coding agent instrumentation is delivering events to
@@ -216,6 +216,12 @@ type OnboardingStatusResult struct {
 	SsoConfigured bool
 	// Whether the organization has at least one linked directory sync in WorkOS.
 	DsyncConfigured bool
+	// Whether the organization has at least one verified domain in WorkOS. Single
+	// sign-on cannot be set up until one is verified.
+	DomainVerified bool
+	// Domains WorkOS has verified for the organization. Single sign-on only works
+	// for users on these domains.
+	VerifiedDomains []string
 }
 
 // Organization is the result type of the organizations service get method.

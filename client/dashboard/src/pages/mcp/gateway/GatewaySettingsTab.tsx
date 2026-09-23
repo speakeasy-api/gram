@@ -1,37 +1,39 @@
-import { RequireScope } from "@/components/require-scope";
-import { useRBAC } from "@/hooks/useRBAC";
+import { Check, Copy, Loader2 } from "lucide-react";
 import {
   DangerSettingsSection,
   FooterSaveButton,
   SettingsSection,
 } from "@/components/detail/settings-section";
-import { Button } from "@/components/ui/Button";
-import { Dialog } from "@/components/ui/Dialog";
 import { Field, FieldError, FieldLabel } from "@/components/ui/Field";
-import { Input } from "@/components/ui/Input";
-import { Textarea } from "@/components/moon/textarea";
-import { cn } from "@/lib/utils";
-import { Text } from "@/components/ui/Text";
-import { useRoutes } from "@/routes";
-import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
-import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
-import { invalidateAllGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
-import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
-import { invalidateAllMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
-import { useDeleteMetaMcpServerMutation } from "@gram/client/react-query/deleteMetaMcpServer.js";
-import { useUpdateMetaMcpServerMutation } from "@gram/client/react-query/updateMetaMcpServer.js";
-import { useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import builtInInstructions from "./builtin-gateway-instructions.txt?raw";
-import { useLocation, useNavigate } from "react-router";
-import { toast } from "sonner";
-import { AuthenticationSectionBody } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
-import { useMetaMcpAuthTarget } from "@/pages/mcp/x/tabs/settings/sections/authentication/authTarget";
 import {
   MCP_SERVER_URL_SECTION_ID,
   ServerUrlSection,
 } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
+
+import { AuthenticationSectionBody } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
+import { NetworkAccessSection } from "@/pages/mcp/x/tabs/settings/sections/NetworkAccessSection";
+import { RequireScope } from "@/components/require-scope";
+import { Text } from "@/components/ui/Text";
+import { Textarea } from "@/components/moon/textarea";
+import builtInInstructions from "./builtin-gateway-instructions.txt?raw";
+import { cn } from "@/lib/utils";
+import { invalidateAllGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
+import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { invalidateAllMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
+import { toast } from "sonner";
+import { useDeleteMetaMcpServerMutation } from "@gram/client/react-query/deleteMetaMcpServer.js";
+import { useMetaMcpAuthTarget } from "@/pages/mcp/x/tabs/settings/sections/authentication/authTarget";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useRoutes } from "@/routes";
+import { useUpdateMetaMcpServerMutation } from "@gram/client/react-query/updateMetaMcpServer.js";
 
 // Shares mcp_servers' 40-char display-name convention.
 const NAME_MAX_LENGTH = 40;
@@ -85,7 +87,14 @@ export function GatewaySettingsTab({
         endpoints={endpoints}
         isLoadingEndpoints={isLoadingEndpoints}
         subject="gateway"
+        mcpServer={metaMcpServer}
       />
+      {!isLoadingEndpoints && (
+        <NetworkAccessSection
+          metaMcpServer={metaMcpServer}
+          endpoints={endpoints}
+        />
+      )}
       <GatewayAuthenticationSection
         metaMcpServer={metaMcpServer}
         endpoints={endpoints}

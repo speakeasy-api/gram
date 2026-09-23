@@ -3,7 +3,6 @@ import {
   Check,
   ChevronDown,
   ExternalLink,
-  KeyRound,
   Loader2,
   Search,
 } from "lucide-react";
@@ -17,6 +16,8 @@ import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn, getServerURL } from "@/lib/utils";
+import { useOrgRoutes } from "@/routes";
+import { setupTaskSlug } from "../../task-slugs";
 import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
 import { IDP_PROVIDERS } from "../../providers";
@@ -44,11 +45,6 @@ export function IdentityProviderStep({
 
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <KeyRound className="text-foreground h-6 w-6" />
-        </div>
-      }
       title="Set up identity provider"
       description="Connect your SSO provider so your team signs in with existing credentials, then sync its directory so users, groups, and roles stay in step with your identity provider. Both can be finished later from organization settings."
       onContinue={onComplete}
@@ -57,6 +53,9 @@ export function IdentityProviderStep({
         <SingleSignOnSection
           index={1}
           configured={!!onboardingStatus?.ssoConfigured}
+          // Only a status response can say the domain is unverified; while
+          // loading or after an error, WorkOS still enforces the rule.
+          domainVerified={onboardingStatus?.domainVerified !== false}
           isLoading={isLoading}
         />
         <DirectorySyncSection
@@ -148,8 +147,12 @@ interface SectionProps {
 function SingleSignOnSection({
   index,
   configured,
+  domainVerified,
   isLoading,
-}: SectionProps): JSX.Element {
+}: SectionProps & { domainVerified: boolean }): JSX.Element {
+  const orgRoutes = useOrgRoutes();
+  // WorkOS rejects a new SSO connection until the org has a verified domain.
+  const needsDomain = !domainVerified && !configured;
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
@@ -324,6 +327,18 @@ function SingleSignOnSection({
           </PortalNote>
         )}
 
+        {needsDomain && (
+          <p className="text-muted-foreground text-sm">
+            Verify a domain first.{" "}
+            <orgRoutes.setupTask.Link
+              params={[setupTaskSlug("domain-verification")]}
+              className="text-foreground underline underline-offset-2"
+            >
+              Go to domain verification
+            </orgRoutes.setupTask.Link>
+          </p>
+        )}
+
         <div className="flex justify-end">
           {portalOpened ? (
             <Button
@@ -339,7 +354,7 @@ function SingleSignOnSection({
               variant="primary"
               size="sm"
               onClick={handleConnect}
-              disabled={!provider || isPending}
+              disabled={!provider || isPending || needsDomain}
             >
               {isPending ? "Opening..." : "Connect"}
             </Button>

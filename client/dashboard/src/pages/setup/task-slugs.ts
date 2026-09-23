@@ -2,6 +2,7 @@
 // from the task keys the server uses so a key can change without moving a
 // page, and so the URLs read as destinations rather than identifiers.
 export const SETUP_TASK_SLUGS: Record<string, string> = {
+  "domain-verification": "domain",
   "identity-provider": "idp",
   "anthropic-observability": "anthropic-observability",
   "anthropic-admin-controls": "anthropic-admin-controls",

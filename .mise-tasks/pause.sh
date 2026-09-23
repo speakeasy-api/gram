@@ -72,19 +72,19 @@ if [ "$locked" != true ]; then
     exit 1
 fi
 
-# Stopping a Gram worker does not stop Temporal schedules: the shared server
-# would keep firing them, accumulating executions and CPU work while the stack
-# is asleep. Pause them before stopping the worker, and remember only the ones
-# changed here so wake does not override a developer's manual pause.
-if ! mise run temporal:schedules --state pause --lock-owner "$$"; then
-    echo "⚠️  Some Temporal schedules could not be paused; the stack will still be stopped." >&2
-fi
-
+# Stop registration and shutdown-triggered work before taking the schedule
+# inventory. pitchfork waits for exit (and escalates to SIGKILL if necessary).
 # Missing/stopped daemons are successful no-ops in Pitchfork. Real stop errors
 # must surface rather than marking a still-running application stack paused.
 if pitchfork supervisor status &> /dev/null; then
     pitchfork stop --group application
     pitchfork stop idle-pause
+fi
+
+# Pause before stopping Temporal to avoid catchup after deliberate sleep.
+# Preserve bookkeeping so wake does not undo a developer's manual pause.
+if ! mise run temporal:schedules --state pause --lock-owner "$$"; then
+    echo "⚠️  Some Temporal schedules could not be paused; the stack will still be stopped." >&2
 fi
 
 docker compose --profile "*" stop
