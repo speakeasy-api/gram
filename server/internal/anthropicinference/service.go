@@ -136,6 +136,10 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 			break
 		}
 		group.Go(func() error {
+			// Admission can block until a slot opens after cancellation.
+			if groupCtx.Err() != nil {
+				return nil
+			}
 			outcome, err := s.scanner.ScanForInferenceEnforcement(groupCtx, scanRequest(config, frame, userID, len(priorInputs)+offset, input))
 			if err != nil {
 				if groupCtx.Err() != nil {
