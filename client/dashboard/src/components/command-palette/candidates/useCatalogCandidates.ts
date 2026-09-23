@@ -32,6 +32,7 @@ export function useCatalogCandidates({
   const { data } = useListMCPCatalog({ gramProject }, undefined, {
     enabled,
     staleTime: CATALOG_STALE_TIME_MS,
+    throwOnError: false,
   });
 
   return useMemo(() => {

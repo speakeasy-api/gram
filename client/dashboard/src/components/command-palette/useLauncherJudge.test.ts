@@ -75,10 +75,12 @@ beforeEach(() => {
   mocks.mutateAsync.mockReset();
 });
 
+const SCOPE = "acme/default";
+
 describe("useLauncherJudge", () => {
   it("drops a stale response that resolves after a newer one", async () => {
     const calls = captureCalls();
-    const { result } = renderHook(() => useLauncherJudge());
+    const { result } = renderHook(() => useLauncherJudge(SCOPE));
 
     act(() => result.current.judge("a", [candidate("a"), candidate("b")]));
     act(() => result.current.judge("ab", [candidate("a"), candidate("b")]));
@@ -106,7 +108,7 @@ describe("useLauncherJudge", () => {
 
   it("aborts the previous request and keeps its answer from applying", async () => {
     const calls = captureCalls();
-    const { result } = renderHook(() => useLauncherJudge());
+    const { result } = renderHook(() => useLauncherJudge(SCOPE));
 
     act(() => result.current.judge("a", [candidate("a")]));
     expect(calls[0]?.signal?.aborted).toBe(false);
@@ -115,8 +117,8 @@ describe("useLauncherJudge", () => {
     expect(calls[0]?.signal?.aborted).toBe(true);
     expect(calls[1]?.signal?.aborted).toBe(false);
 
-    // The aborted request rejects, then (defensively) resolves late: neither
-    // touches the state while the newer request is still in flight.
+    // The aborted request rejects while the newer request is in flight: its
+    // failure must not clear the state the newer request is working with.
     calls[0]?.reject(new Error("aborted"));
     await flush();
     expect(result.current.state.inFlight).toBe(true);
@@ -133,7 +135,7 @@ describe("useLauncherJudge", () => {
 
   it("keeps the previous judgment, dimmed, while a newer request is in flight", async () => {
     const calls = captureCalls();
-    const { result } = renderHook(() => useLauncherJudge());
+    const { result } = renderHook(() => useLauncherJudge(SCOPE));
 
     act(() => result.current.judge("a", [candidate("a")]));
     calls[0]?.resolve(judgmentFor("a"));
@@ -151,7 +153,7 @@ describe("useLauncherJudge", () => {
 
   it("latches disabled and stops calling the mutation", async () => {
     const calls = captureCalls();
-    const { result } = renderHook(() => useLauncherJudge());
+    const { result } = renderHook(() => useLauncherJudge(SCOPE));
 
     act(() => result.current.judge("a", [candidate("a")]));
     calls[0]?.resolve({ disabled: true });
@@ -169,7 +171,7 @@ describe("useLauncherJudge", () => {
 
   it("clears the judgment on error without throwing", async () => {
     const calls = captureCalls();
-    const { result } = renderHook(() => useLauncherJudge());
+    const { result } = renderHook(() => useLauncherJudge(SCOPE));
 
     act(() => result.current.judge("a", [candidate("a")]));
     calls[0]?.resolve(judgmentFor("a"));
@@ -192,7 +194,7 @@ describe("useLauncherJudge", () => {
 
   it("strips person candidates and keywords from the request body", () => {
     const calls = captureCalls();
-    const { result } = renderHook(() => useLauncherJudge());
+    const { result } = renderHook(() => useLauncherJudge(SCOPE));
 
     act(() =>
       result.current.judge("al", [
@@ -218,7 +220,7 @@ describe("useLauncherJudge", () => {
 
   it("forwards the current route as context for tie-breaks", () => {
     const calls = captureCalls();
-    const { result } = renderHook(() => useLauncherJudge());
+    const { result } = renderHook(() => useLauncherJudge(SCOPE));
 
     act(() =>
       result.current.judge("sett", [candidate("page:/settings")], "/acme/mcp"),
@@ -231,7 +233,7 @@ describe("useLauncherJudge", () => {
 
   it("never sends fuzzy-only candidates such as identity-page recents", () => {
     const calls = captureCalls();
-    const { result } = renderHook(() => useLauncherJudge());
+    const { result } = renderHook(() => useLauncherJudge(SCOPE));
 
     const identityRecent: LauncherCandidate = {
       ...candidate(
@@ -253,7 +255,7 @@ describe("useLauncherJudge", () => {
 
   it("clamps the query, titles and details to the limits the server enforces", () => {
     const calls = captureCalls();
-    const { result } = renderHook(() => useLauncherJudge());
+    const { result } = renderHook(() => useLauncherJudge(SCOPE));
 
     const long: LauncherCandidate = {
       ...candidate("access_request:1", "access_request"),
@@ -282,7 +284,7 @@ describe("useLauncherJudge", () => {
 
   it("skips the call and clears the judgment when nothing is worth sending", async () => {
     const calls = captureCalls();
-    const { result } = renderHook(() => useLauncherJudge());
+    const { result } = renderHook(() => useLauncherJudge(SCOPE));
 
     act(() => result.current.judge("a", [candidate("a")]));
     calls[0]?.resolve(judgmentFor("a"));
@@ -300,9 +302,128 @@ describe("useLauncherJudge", () => {
     expect(mocks.mutateAsync).toHaveBeenCalledTimes(1);
   });
 
+  // The intent service is provisioned per tenant: a latch taken in an
+  // organization without one must not follow the user into one that has it.
+  it("drops the disabled latch when the scope changes and asks again", async () => {
+    const calls = captureCalls();
+    const { result, rerender } = renderHook(
+      ({ scope }: { scope: string }) => useLauncherJudge(scope),
+      { initialProps: { scope: "no-key-org/default" } },
+    );
+
+    act(() => result.current.judge("a", [candidate("a")]));
+    calls[0]?.resolve({ disabled: true });
+    await flush();
+    expect(result.current.state.disabled).toBe(true);
+
+    rerender({ scope: "keyed-org/default" });
+    expect(result.current.state.disabled).toBe(false);
+
+    act(() => result.current.judge("a", [candidate("a")]));
+    expect(mocks.mutateAsync).toHaveBeenCalledTimes(2);
+    calls[1]?.resolve(judgmentFor("a"));
+    await flush();
+    expect(result.current.state.judgment?.target).toEqual({
+      a: 0.9,
+      none: 0.1,
+    });
+
+    // Returning to the tenant without a service asks once more and latches
+    // again there, rather than remembering the earlier answer.
+    rerender({ scope: "no-key-org/default" });
+    expect(result.current.state.disabled).toBe(false);
+    expect(result.current.state.judgment).toBeNull();
+    act(() => result.current.judge("a", [candidate("a")]));
+    expect(mocks.mutateAsync).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps the latch while the scope is unchanged across re-renders", async () => {
+    const calls = captureCalls();
+    const { result, rerender } = renderHook(
+      ({ scope }: { scope: string }) => useLauncherJudge(scope),
+      { initialProps: { scope: SCOPE } },
+    );
+
+    act(() => result.current.judge("a", [candidate("a")]));
+    calls[0]?.resolve({ disabled: true });
+    await flush();
+
+    rerender({ scope: SCOPE });
+    expect(result.current.state.disabled).toBe(true);
+    act(() => result.current.judge("ab", [candidate("a")]));
+    expect(mocks.mutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets no request from the previous scope land after the scope changes", async () => {
+    const calls = captureCalls();
+    const { result, rerender } = renderHook(
+      ({ scope }: { scope: string }) => useLauncherJudge(scope),
+      { initialProps: { scope: "acme/one" } },
+    );
+
+    act(() => result.current.judge("a", [candidate("a")]));
+    rerender({ scope: "acme/two" });
+    expect(calls[0]?.signal?.aborted).toBe(true);
+    expect(result.current.state.inFlight).toBe(false);
+
+    calls[0]?.resolve(judgmentFor("a"));
+    await flush();
+    expect(result.current.state.judgment).toBeNull();
+  });
+
+  // Dismissing the palette must not let a slow answer land afterwards.
+  it("reset aborts the request in flight and its late answer never lands", async () => {
+    const calls = captureCalls();
+    const { result } = renderHook(() => useLauncherJudge(SCOPE));
+
+    act(() => result.current.judge("a", [candidate("a")]));
+    expect(result.current.state.inFlight).toBe(true);
+
+    act(() => result.current.reset());
+    expect(calls[0]?.signal?.aborted).toBe(true);
+    expect(result.current.state.inFlight).toBe(false);
+
+    calls[0]?.resolve(judgmentFor("a"));
+    await flush();
+    expect(result.current.state.judgment).toBeNull();
+    expect(result.current.state.fresh).toBe(false);
+    expect(result.current.state.latencyMs).toBeNull();
+
+    // A rejection of the same stale request is just as inert.
+    act(() => result.current.judge("b", [candidate("b")]));
+    act(() => result.current.reset());
+    calls[1]?.reject(new Error("aborted"));
+    await flush();
+    expect(result.current.state.judgment).toBeNull();
+    expect(result.current.state.inFlight).toBe(false);
+  });
+
+  it("keeps the newer judgment when an older request rejects after it applied", async () => {
+    const calls = captureCalls();
+    const { result } = renderHook(() => useLauncherJudge(SCOPE));
+
+    act(() => result.current.judge("a", [candidate("a"), candidate("b")]));
+    act(() => result.current.judge("ab", [candidate("a"), candidate("b")]));
+    calls[1]?.resolve(judgmentFor("b", 55));
+    await flush();
+    expect(result.current.state.judgment?.target).toEqual({
+      b: 0.9,
+      none: 0.1,
+    });
+
+    calls[0]?.reject(new Error("aborted"));
+    await flush();
+    expect(result.current.state.judgment?.target).toEqual({
+      b: 0.9,
+      none: 0.1,
+    });
+    expect(result.current.state.fresh).toBe(true);
+    expect(result.current.state.latencyMs).toBe(55);
+  });
+
   it("reset clears the judgment and latency", async () => {
     const calls = captureCalls();
-    const { result } = renderHook(() => useLauncherJudge());
+    const { result } = renderHook(() => useLauncherJudge(SCOPE));
 
     act(() => result.current.judge("a", [candidate("a")]));
     calls[0]?.resolve(judgmentFor("a"));

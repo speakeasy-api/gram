@@ -24,13 +24,18 @@ func BuildJudgePayload(launcherJudgeBody string, launcherJudgeSessionToken strin
 	{
 		err = json.Unmarshal([]byte(launcherJudgeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"candidates\": [\n         {\n            \"detail\": \"aaa\",\n            \"id\": \"abc123\",\n            \"kind\": \"abc123\",\n            \"title\": \"aaa\",\n            \"verbs\": [\n               \"abc123\"\n            ]\n         },\n         {\n            \"detail\": \"aaa\",\n            \"id\": \"abc123\",\n            \"kind\": \"abc123\",\n            \"title\": \"aaa\",\n            \"verbs\": [\n               \"abc123\"\n            ]\n         },\n         {\n            \"detail\": \"aaa\",\n            \"id\": \"abc123\",\n            \"kind\": \"abc123\",\n            \"title\": \"aaa\",\n            \"verbs\": [\n               \"abc123\"\n            ]\n         }\n      ],\n      \"context\": {\n         \"route\": \"abc123\"\n      },\n      \"query\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"candidates\": [\n         {\n            \"detail\": \"aaa\",\n            \"id\": \"aaa\",\n            \"kind\": \"aaa\",\n            \"title\": \"aaa\",\n            \"verbs\": [\n               \"aaa\",\n               \"aaa\",\n               \"aaa\"\n            ]\n         },\n         {\n            \"detail\": \"aaa\",\n            \"id\": \"aaa\",\n            \"kind\": \"aaa\",\n            \"title\": \"aaa\",\n            \"verbs\": [\n               \"aaa\",\n               \"aaa\",\n               \"aaa\"\n            ]\n         },\n         {\n            \"detail\": \"aaa\",\n            \"id\": \"aaa\",\n            \"kind\": \"aaa\",\n            \"title\": \"aaa\",\n            \"verbs\": [\n               \"aaa\",\n               \"aaa\",\n               \"aaa\"\n            ]\n         }\n      ],\n      \"context\": {\n         \"route\": \"aaa\"\n      },\n      \"query\": \"aaa\"\n   }'")
 		}
 		if body.Candidates == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("candidates", "body"))
 		}
 		if utf8.RuneCountInString(body.Query) > 200 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.query", body.Query, utf8.RuneCountInString(body.Query), 200, false))
+		}
+		if body.Context != nil {
+			if err2 := ValidateLauncherContextRequestBody(body.Context); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 		if len(body.Candidates) > 32 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.candidates", body.Candidates, len(body.Candidates), 32, false))

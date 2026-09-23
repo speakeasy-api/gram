@@ -1,7 +1,7 @@
 import type { LauncherCandidate as JudgeCandidate } from "@gram/client/models/components/launchercandidate.js";
 import type { LauncherJudgment } from "@gram/client/models/components/launcherjudgment.js";
 import { useLauncherJudgeMutation } from "@gram/client/react-query/launcherJudge.js";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   isSendable,
   type Judgment,
@@ -15,7 +15,10 @@ export interface JudgeState {
   fresh: boolean;
   inFlight: boolean;
   latencyMs: number | null;
-  /** Latched for the session once the server reports no intent service. */
+  /**
+   * Latched once the server reports no intent service, for the scope the hook
+   * was asked about; a different organization or project asks again.
+   */
   disabled: boolean;
 }
 
@@ -62,8 +65,14 @@ function toJudgment(result: LauncherJudgment): Judgment {
  * Drives `launcher.judge` for the command palette. Every call aborts the
  * previous request; answers apply only when newer than the newest one already
  * applied, so a slow early keystroke can never overwrite a later one.
+ *
+ * `scopeKey` names the tenant the calls are made for (organization and
+ * project). The intent service is provisioned per tenant, so "no service" is
+ * latched for that key alone: when the key changes, the latch and any
+ * judgment made under the old key are dropped and the next keystroke asks
+ * again.
  */
-export function useLauncherJudge(): {
+export function useLauncherJudge(scopeKey: string): {
   state: JudgeState;
   judge: (query: string, sent: LauncherCandidate[], route?: string) => void;
   reset: () => void;
@@ -75,16 +84,30 @@ export function useLauncherJudge(): {
   const sequence = useRef(0);
   const newestApplied = useRef(0);
   const controller = useRef<AbortController | null>(null);
-  const disabled = useRef(false);
+  // The scope the server reported no intent service for, if any.
+  const disabledScope = useRef<string | null>(null);
+  const scope = useRef(scopeKey);
 
   const abortInFlight = useCallback(() => {
     controller.current?.abort();
     controller.current = null;
   }, []);
 
+  // A new tenant starts clean: nothing latched, nothing judged, nothing in
+  // flight from the previous one allowed to land.
+  useEffect(() => {
+    if (scope.current === scopeKey) return;
+    scope.current = scopeKey;
+    disabledScope.current = null;
+    sequence.current += 1;
+    newestApplied.current = sequence.current;
+    abortInFlight();
+    setState(IDLE);
+  }, [scopeKey, abortInFlight]);
+
   const judge = useCallback(
     (query: string, sent: LauncherCandidate[], route?: string) => {
-      if (disabled.current) return;
+      if (disabledScope.current === scopeKey) return;
 
       const seq = ++sequence.current;
       abortInFlight();
@@ -124,7 +147,7 @@ export function useLauncherJudge(): {
           const current = seq === sequence.current;
 
           if (result.disabled) {
-            disabled.current = true;
+            disabledScope.current = scopeKey;
             abortInFlight();
             setState({ ...IDLE, disabled: true });
             return;
@@ -153,7 +176,7 @@ export function useLauncherJudge(): {
           }));
         });
     },
-    [abortInFlight, mutateAsync],
+    [abortInFlight, mutateAsync, scopeKey],
   );
 
   const reset = useCallback(() => {

@@ -1,9 +1,11 @@
 package typesafe
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
@@ -165,6 +168,44 @@ func TestAskUpstreamStatus(t *testing.T) {
 	}
 }
 
+func TestAskUpstreamStatusFlattensBody(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = io.WriteString(w, "denied\nlevel=INFO msg=\"forged log line\"\x00\ttail")
+	}))
+	t.Cleanup(server.Close)
+
+	client, _ := newTestClient(t, server.URL)
+	result, err := client.Ask(t.Context(), "test-key", sampleRequest())
+	require.Nil(t, result)
+	require.ErrorIs(t, err, ErrUpstreamStatus)
+	require.NotContains(t, err.Error(), "\n", "provider newlines must not reach logs or spans")
+	require.NotContains(t, err.Error(), "\x00")
+	require.NotContains(t, err.Error(), "\t")
+	require.Contains(t, err.Error(), "forged log line", "the sanitized reason is still readable")
+}
+
+func TestAskOversizedBody(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Valid JSON that lands past the cap once the padding is counted.
+		padding := strings.Repeat("x", maxResponseBody)
+		_, _ = io.WriteString(w, `{"model":"`+padding+`","answers":{},"usage":{"input_tokens":0,"output_tokens":0}}`)
+	}))
+	t.Cleanup(server.Close)
+
+	client, _ := newTestClient(t, server.URL)
+	result, err := client.Ask(t.Context(), "test-key", sampleRequest())
+	require.Nil(t, result)
+	require.ErrorIs(t, err, ErrDecode)
+	require.ErrorContains(t, err, "exceeds")
+	require.NotErrorIs(t, err, ErrTransport)
+	require.NotErrorIs(t, err, ErrUpstreamStatus)
+}
+
 func TestAskMalformedJSON(t *testing.T) {
 	t.Parallel()
 
@@ -204,6 +245,75 @@ func TestAskTimeout(t *testing.T) {
 	require.ErrorIs(t, err, ErrTransport)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Less(t, time.Since(started), 2*time.Second)
+}
+
+func TestAskTimeoutWhileReadingBody(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Commit a 200 and part of a body, then stall so the deadline lands
+		// while the client is still reading.
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"model":"jev-latest","answers":`)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { close(release) })
+
+	client, _ := newTestClient(t, server.URL, WithTimeout(50*time.Millisecond))
+	result, err := client.Ask(t.Context(), "test-key", sampleRequest())
+	require.Nil(t, result)
+	require.ErrorIs(t, err, ErrTransport)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NotErrorIs(t, err, ErrDecode, "a stalled body is not a malformed one")
+}
+
+// TestAskCanceledIsRoutine pins that the per-keystroke abort path neither
+// warns nor marks the span as failed; only genuine failures do.
+func TestAskCanceledIsRoutine(t *testing.T) {
+	t.Parallel()
+
+	arrived := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		close(arrived)
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{AddSource: false, Level: slog.LevelDebug, ReplaceAttr: nil}))
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { _ = provider.Shutdown(t.Context()) })
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	client := NewClient(policy.Client(), logger, WithEndpoint(server.URL), WithTracerProvider(provider))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	go func() {
+		<-arrived
+		cancel()
+	}()
+	t.Cleanup(cancel)
+
+	result, err := client.Ask(ctx, "test-key", sampleRequest())
+	require.Nil(t, result)
+	require.ErrorIs(t, err, ErrTransport)
+	require.ErrorIs(t, err, context.Canceled)
+
+	spans := recorder.Ended()
+	require.Len(t, spans, 1)
+	require.NotEqual(t, codes.Error, spans[0].Status().Code, "a cancelled judgement is not a failed span")
+	require.NotContains(t, logs.String(), "level=WARN")
+	require.Contains(t, logs.String(), "typesafe judgement canceled")
 }
 
 func TestAskMissingAPIKey(t *testing.T) {

@@ -12,7 +12,9 @@ const IDENTITY_PAGE_RE = /\/identities\/[^/]+/;
 /**
  * Recently visited pages (localStorage) as candidates. Takes the same gating
  * the palette applies today: the read only happens while the palette is open
- * and the user id has resolved, so the shared anonymous key is never read.
+ * and the user id has resolved, so the shared anonymous key is never read —
+ * and until it has resolved there are no candidates at all, so entries read
+ * for an earlier user or scope never show under the next one.
  */
 export function useRecentCandidates({
   enabled,
@@ -26,16 +28,17 @@ export function useRecentCandidates({
   projectSlug: string | undefined;
 }): LauncherCandidate[] {
   const navigate = useNavigate();
+  const resolved = enabled && Boolean(userId);
   const recents = useRecentlyVisited(
     userId ?? undefined,
     orgSlug,
     projectSlug,
-    enabled && Boolean(userId),
+    resolved,
   );
 
   return useMemo(
     () =>
-      recents.map((recent): LauncherCandidate => {
+      (resolved ? recents : []).map((recent): LauncherCandidate => {
         // Prefer a live name override over a stored URL-derived fallback so
         // id-keyed pages show the resource name once it has loaded.
         const label = getRecentLabelOverride(recent.href) ?? recent.label;
@@ -57,6 +60,6 @@ export function useRecentCandidates({
           },
         };
       }),
-    [recents, navigate],
+    [resolved, recents, navigate],
   );
 }

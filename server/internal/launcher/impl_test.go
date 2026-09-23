@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/launcher"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -21,29 +23,49 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/typesafe"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
-type fakeProvisioner struct {
+const testOrgID = "org_test"
+
+// fakeKeys stands in for the OpenRouter provisioner. It satisfies both the
+// read-only lookup the launcher depends on and ProvisionAPIKey, so tests can
+// prove the launcher never reaches for the provisioning path even when the
+// value handed to it would allow it.
+type fakeKeys struct {
 	key string
+	ok  bool
 	err error
 
-	mu    sync.Mutex
-	calls []provisionCall
+	mu             sync.Mutex
+	lookups        []keyCall
+	provisionCalls int
 }
 
-type provisionCall struct {
+type keyCall struct {
 	orgID   string
 	keyType openrouter.KeyType
 }
 
-func (f *fakeProvisioner) ProvisionAPIKey(_ context.Context, orgID string, keyType openrouter.KeyType) (string, error) {
+func (f *fakeKeys) LookupAPIKey(_ context.Context, orgID string, keyType openrouter.KeyType) (string, bool, error) {
 	f.mu.Lock()
-	f.calls = append(f.calls, provisionCall{orgID: orgID, keyType: keyType})
+	f.lookups = append(f.lookups, keyCall{orgID: orgID, keyType: keyType})
 	f.mu.Unlock()
 	if f.err != nil {
-		return "", f.err
+		return "", false, f.err
 	}
-	return f.key, nil
+	return f.key, f.ok, nil
+}
+
+func (f *fakeKeys) ProvisionAPIKey(_ context.Context, _ string, _ openrouter.KeyType) (string, error) {
+	f.mu.Lock()
+	f.provisionCalls++
+	f.mu.Unlock()
+	return "sk-or-minted", nil
+}
+
+func newFakeKeys(key string) *fakeKeys {
+	return &fakeKeys{key: key, ok: key != "", err: nil, mu: sync.Mutex{}, lookups: nil, provisionCalls: 0}
 }
 
 // fakeJev is an httptest stand-in for the OpenRouter-hosted System One
@@ -94,32 +116,41 @@ const happyBody = `{
 	"usage": {"input_tokens": 300, "output_tokens": 9, "cost": 0.0004}
 }`
 
-func newTestService(t *testing.T, jev *fakeJev, provisioner keyProvisioner) *Service {
+func newTestService(t *testing.T, jev *fakeJev, keys keyLookup) *Service {
 	t.Helper()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 	client := typesafe.NewClient(policy.Client(), testenv.NewLogger(t), typesafe.WithEndpoint(jev.server.URL))
 	return &Service{
-		tracer:      testenv.NewTracerProvider(t).Tracer("test"),
-		logger:      testenv.NewLogger(t),
-		db:          nil,
-		auth:        nil,
-		provisioner: provisioner,
-		client:      client,
-		metrics:     newMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)),
+		tracer:  testenv.NewTracerProvider(t).Tracer("test"),
+		logger:  testenv.NewLogger(t),
+		db:      nil,
+		auth:    nil,
+		authz:   authz.NewEngine(testenv.NewLogger(t), nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		keys:    keys,
+		client:  client,
+		metrics: newMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)),
 	}
 }
 
+// authedContext is a session-authenticated member holding exactly the org
+// read scope the launcher requires. A session id is set so RBAC is enforced
+// rather than skipped as an internal call.
 func authedContext(t *testing.T) context.Context {
 	t.Helper()
+	return authztest.WithExactGrants(t, sessionContext(t), authz.NewGrant(authz.ScopeOrgRead, testOrgID))
+}
+
+func sessionContext(t *testing.T) context.Context {
+	t.Helper()
 	return contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID:  "org_test",
+		ActiveOrganizationID:  testOrgID,
 		UserID:                "user_test",
 		ExternalUserID:        "",
 		APIKeyID:              "",
 		APIKeyName:            "",
 		OrgWidePluginHooksKey: false,
-		SessionID:             nil,
+		SessionID:             conv.PtrEmpty("sess_test"),
 		ProjectID:             nil,
 		OrganizationSlug:      "test",
 		Email:                 nil,
@@ -146,8 +177,8 @@ func TestJudgeMapsAnswersToCallerIDs(t *testing.T) {
 	t.Parallel()
 
 	jev := newFakeJev(t, http.StatusOK, happyBody)
-	prov := &fakeProvisioner{key: "sk-or-org-key", err: nil, mu: sync.Mutex{}, calls: nil}
-	svc := newTestService(t, jev, prov)
+	keys := newFakeKeys("sk-or-org-key")
+	svc := newTestService(t, jev, keys)
 
 	res, err := svc.Judge(authedContext(t), fixturePayload())
 	require.NoError(t, err)
@@ -163,10 +194,13 @@ func TestJudgeMapsAnswersToCallerIDs(t *testing.T) {
 	require.InDelta(t, 0.2, res.Action["open"], 1e-9)
 	require.Len(t, res.Action, 5)
 
+	// The design promises every field is present whenever disabled is false.
+	require.NotNil(t, res.Target)
+	require.NotNil(t, res.Action)
 	require.NotNil(t, res.Ready)
 	require.InDelta(t, 0.82, *res.Ready, 1e-9)
 	require.NotNil(t, res.LatencyMs)
-	require.GreaterOrEqual(t, *res.LatencyMs, int64(0))
+	require.Less(t, *res.LatencyMs, typesafe.DefaultTimeout.Milliseconds(), "a successful round trip completes inside the client timeout")
 
 	require.Equal(t, int32(1), jev.requests.Load())
 	jev.mu.Lock()
@@ -175,9 +209,10 @@ func TestJudgeMapsAnswersToCallerIDs(t *testing.T) {
 	require.Equal(t, "typesafe/jev-latest", jev.lastModel)
 	require.Len(t, jev.lastTarget, 4)
 
-	prov.mu.Lock()
-	defer prov.mu.Unlock()
-	require.Equal(t, []provisionCall{{orgID: "org_test", keyType: openrouter.KeyTypeInternal}}, prov.calls)
+	keys.mu.Lock()
+	defer keys.mu.Unlock()
+	require.Equal(t, []keyCall{{orgID: testOrgID, keyType: openrouter.KeyTypeInternal}}, keys.lookups)
+	require.Zero(t, keys.provisionCalls, "the launcher only reads existing keys")
 }
 
 func TestJudgeMissingAnswersFallBack(t *testing.T) {
@@ -190,7 +225,7 @@ func TestJudgeMissingAnswersFallBack(t *testing.T) {
 		},
 		"usage": {"input_tokens": 10, "output_tokens": 1}
 	}`)
-	svc := newTestService(t, jev, &fakeProvisioner{key: "k", err: nil, mu: sync.Mutex{}, calls: nil})
+	svc := newTestService(t, jev, newFakeKeys("k"))
 
 	res, err := svc.Judge(authedContext(t), fixturePayload())
 	require.NoError(t, err)
@@ -199,6 +234,25 @@ func TestJudgeMissingAnswersFallBack(t *testing.T) {
 	require.Equal(t, map[string]float64{"unclear": 1}, res.Action)
 	require.NotNil(t, res.Ready)
 	require.InDelta(t, 0, *res.Ready, 1e-9)
+	require.NotNil(t, res.LatencyMs, "latency is reported even when the judge answers partially")
+}
+
+func TestJudgeTransportFailure(t *testing.T) {
+	t.Parallel()
+
+	jev := newFakeJev(t, http.StatusOK, happyBody)
+	svc := newTestService(t, jev, newFakeKeys("k"))
+	// Closing the listener leaves the client pointed at a dead port, the
+	// shape of an OpenRouter outage or a network partition.
+	jev.server.Close()
+
+	res, err := svc.Judge(authedContext(t), fixturePayload())
+	require.Nil(t, res)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeGatewayError, oopsErr.Code)
+	require.ErrorIs(t, err, typesafe.ErrTransport)
+	require.Equal(t, int32(0), jev.requests.Load())
 }
 
 func TestJudgeDropsPersonCandidates(t *testing.T) {
@@ -213,7 +267,7 @@ func TestJudgeDropsPersonCandidates(t *testing.T) {
 		},
 		"usage": {"input_tokens": 10, "output_tokens": 1}
 	}`)
-	svc := newTestService(t, jev, &fakeProvisioner{key: "k", err: nil, mu: sync.Mutex{}, calls: nil})
+	svc := newTestService(t, jev, newFakeKeys("k"))
 
 	payload := fixturePayload()
 	payload.Candidates = []*gen.LauncherCandidate{
@@ -235,17 +289,17 @@ func TestJudgeDropsPersonCandidates(t *testing.T) {
 func TestJudgeDisabledWithoutKey(t *testing.T) {
 	t.Parallel()
 
-	cases := map[string]*fakeProvisioner{
-		"empty key":         {key: "", err: nil, mu: sync.Mutex{}, calls: nil},
-		"unset placeholder": {key: "unset", err: nil, mu: sync.Mutex{}, calls: nil},
-		"provisioner error": {key: "", err: errors.New("no key for org"), mu: sync.Mutex{}, calls: nil},
+	cases := map[string]*fakeKeys{
+		"no key provisioned": newFakeKeys(""),
+		"empty key row":      {key: "", ok: true, err: nil, mu: sync.Mutex{}, lookups: nil, provisionCalls: 0},
+		"unset placeholder":  newFakeKeys("unset"),
 	}
-	for name, prov := range cases {
+	for name, keys := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			jev := newFakeJev(t, http.StatusOK, happyBody)
-			svc := newTestService(t, jev, prov)
+			svc := newTestService(t, jev, keys)
 
 			res, err := svc.Judge(authedContext(t), fixturePayload())
 			require.NoError(t, err)
@@ -255,8 +309,127 @@ func TestJudgeDisabledWithoutKey(t *testing.T) {
 			require.Nil(t, res.Ready)
 			require.Nil(t, res.LatencyMs)
 			require.Equal(t, int32(0), jev.requests.Load(), "no outbound call without a usable key")
+
+			keys.mu.Lock()
+			defer keys.mu.Unlock()
+			require.Zero(t, keys.provisionCalls, "an organization without a key must not have one minted by the palette")
 		})
 	}
+}
+
+// TestJudgeKeyLookupErrorIsGatewayError pins that a key which exists but
+// cannot be read right now (DB blip, admin lock) surfaces as a retryable
+// gateway error rather than disabled, which the palette would latch on.
+func TestJudgeKeyLookupErrorIsGatewayError(t *testing.T) {
+	t.Parallel()
+
+	jev := newFakeJev(t, http.StatusOK, happyBody)
+	keys := &fakeKeys{key: "", ok: false, err: errors.New("key disabled"), mu: sync.Mutex{}, lookups: nil, provisionCalls: 0}
+	svc := newTestService(t, jev, keys)
+
+	res, err := svc.Judge(authedContext(t), fixturePayload())
+	require.Nil(t, res)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeGatewayError, oopsErr.Code)
+	require.Equal(t, int32(0), jev.requests.Load())
+}
+
+func TestJudgeRequiresOrgRead(t *testing.T) {
+	t.Parallel()
+
+	jev := newFakeJev(t, http.StatusOK, happyBody)
+	keys := newFakeKeys("k")
+	svc := newTestService(t, jev, keys)
+
+	res, err := svc.Judge(authztest.WithExactGrants(t, sessionContext(t)), fixturePayload())
+	require.Nil(t, res)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Equal(t, int32(0), jev.requests.Load(), "no key is spent for a caller without the scope")
+
+	keys.mu.Lock()
+	defer keys.mu.Unlock()
+	require.Empty(t, keys.lookups, "the key is not even read for a caller without the scope")
+}
+
+func TestJudgeRejectsReservedAndDuplicateIDs(t *testing.T) {
+	t.Parallel()
+
+	for name, ids := range map[string][]string{
+		"reserved none": {"page:/settings", "none"},
+		"duplicate":     {"page:/settings", "page:/settings"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			jev := newFakeJev(t, http.StatusOK, happyBody)
+			svc := newTestService(t, jev, newFakeKeys("k"))
+
+			payload := fixturePayload()
+			payload.Candidates = nil
+			for _, id := range ids {
+				payload.Candidates = append(payload.Candidates, &gen.LauncherCandidate{ID: id, Kind: "page", Title: "P", Detail: nil, Verbs: nil})
+			}
+
+			res, err := svc.Judge(authedContext(t), payload)
+			require.Nil(t, res)
+			var oopsErr *oops.ShareableError
+			require.ErrorAs(t, err, &oopsErr)
+			require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+			require.Equal(t, int32(0), jev.requests.Load())
+		})
+	}
+}
+
+func TestJudgeNoRankableCandidatesSkipsUpstream(t *testing.T) {
+	t.Parallel()
+
+	for name, cands := range map[string][]*gen.LauncherCandidate{
+		"empty list": {},
+		"only people": {
+			{ID: "person:1", Kind: "person", Title: "Ada Lovelace", Detail: conv.PtrEmpty("Member · admin"), Verbs: []string{"open"}},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			jev := newFakeJev(t, http.StatusOK, happyBody)
+			svc := newTestService(t, jev, newFakeKeys("k"))
+
+			payload := fixturePayload()
+			payload.Candidates = cands
+
+			res, err := svc.Judge(authedContext(t), payload)
+			require.NoError(t, err)
+			require.False(t, res.Disabled)
+			require.Equal(t, map[string]float64{"none": 1}, res.Target)
+			require.Equal(t, map[string]float64{"unclear": 1}, res.Action)
+			require.NotNil(t, res.Ready)
+			require.InDelta(t, 0, *res.Ready, 1e-9)
+			require.NotNil(t, res.LatencyMs)
+			require.Zero(t, *res.LatencyMs)
+			require.Equal(t, int32(0), jev.requests.Load(), "nothing to rank means nothing to ask")
+		})
+	}
+}
+
+func TestJudgeRejectsNullCandidate(t *testing.T) {
+	t.Parallel()
+
+	jev := newFakeJev(t, http.StatusOK, happyBody)
+	svc := newTestService(t, jev, newFakeKeys("k"))
+
+	payload := fixturePayload()
+	payload.Candidates = append(payload.Candidates, nil)
+
+	res, err := svc.Judge(authedContext(t), payload)
+	require.Nil(t, res)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Equal(t, int32(0), jev.requests.Load())
 }
 
 func TestJudgeUpstreamFailure(t *testing.T) {
@@ -274,7 +447,7 @@ func TestJudgeUpstreamFailure(t *testing.T) {
 			t.Parallel()
 
 			jev := newFakeJev(t, tc.status, tc.body)
-			svc := newTestService(t, jev, &fakeProvisioner{key: "k", err: nil, mu: sync.Mutex{}, calls: nil})
+			svc := newTestService(t, jev, newFakeKeys("k"))
 
 			res, err := svc.Judge(authedContext(t), fixturePayload())
 			require.Nil(t, res)
@@ -290,7 +463,7 @@ func TestJudgeRejectsTooManyCandidates(t *testing.T) {
 	t.Parallel()
 
 	jev := newFakeJev(t, http.StatusOK, happyBody)
-	svc := newTestService(t, jev, &fakeProvisioner{key: "k", err: nil, mu: sync.Mutex{}, calls: nil})
+	svc := newTestService(t, jev, newFakeKeys("k"))
 
 	payload := fixturePayload()
 	payload.Candidates = nil

@@ -17,7 +17,7 @@ export type LauncherJudgment = {
    */
   action?: { [k: string]: number } | undefined;
   /**
-   * True when no intent service is configured; the other fields are then absent.
+   * True when no intent service is configured; the other fields are then absent. When false, target, action, ready and latency_ms are always present.
    */
   disabled: boolean;
   /**

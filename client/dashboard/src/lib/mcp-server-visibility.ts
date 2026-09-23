@@ -6,6 +6,8 @@ import type { UpdateMcpServerForm } from "@gram/client/models/components/updatem
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllPlugins } from "@gram/client/react-query/plugins.js";
+import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus.js";
 import type { QueryClient } from "@tanstack/react-query";
 
 /**
@@ -47,8 +49,10 @@ export function mcpServerVisibilityToast(
 
 /**
  * Refreshes every query that reflects an MCP server's visibility: the server
- * list, the server detail, and the endpoints that serve (or stop serving)
- * traffic for it.
+ * list, the server detail, the endpoints that serve (or stop serving) traffic
+ * for it, and plugin membership plus publish freshness — enabling a disabled
+ * server auto-attaches it to the Default plugin server-side, which the plugin
+ * banner's membership check and the marketplace state need to pick up.
  */
 export async function invalidateMcpServerQueries(
   queryClient: QueryClient,
@@ -57,5 +61,7 @@ export async function invalidateMcpServerQueries(
     invalidateAllMcpServers(queryClient, { refetchType: "all" }),
     invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
     invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+    invalidateAllPlugins(queryClient, { refetchType: "all" }),
+    invalidateAllPublishStatus(queryClient, { refetchType: "all" }),
   ]);
 }

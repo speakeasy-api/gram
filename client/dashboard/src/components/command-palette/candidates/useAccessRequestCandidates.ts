@@ -17,7 +17,8 @@ export function useAccessRequestCandidates({
   const { data } = useListMcpApprovalRequests(
     { status: "requested", gramProject: projectSlug },
     undefined,
-    { enabled },
+    // Never throws: a failed list degrades to no candidates.
+    { enabled, throwOnError: false },
   );
 
   return useMemo(

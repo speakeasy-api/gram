@@ -223,12 +223,9 @@ list ──Enter on verb≠open──▶ confirm(candidate, verb) ──Enter─
     `invalidateAllGetMcpServer`, `invalidateAllMcpEndpoints`. Toast copies
     `mcpServerVisibilityToast`. These helpers are lifted into a shared
     module so the settings page and the palette share one implementation.
-  - `publish`: `usePublishPluginsMutation` with `githubUsernames: []`, then
+  - `publish`: `usePublishPluginsMutation` with `githubUsernames: []`
+    (the server accepts an empty collaborator list), then
     `invalidateAllPublishStatus`. Toast matches `Plugins.tsx`.
-    _Assumption to verify in implementation:_ the server accepts an empty
-    collaborator list. If it does not, `run("publish")` instead navigates
-    to the plugins page with `?publish=1`, which opens the existing
-    `PublishDialog`.
 - `ready` never bypasses confirm. Publish is one-way; the unconditional
   second Enter is the price of offering it at all.
 
@@ -297,7 +294,10 @@ hand-assembled headers.
   - `ready` (Noul): the launcher's wording with "web_search" replaced by
     the "Ask Project Assistant" fallback.
 
-- Candidate `criteria` string: `"<Kind label>: <title> — <detail> (verbs: open, disable)"`.
+- Candidate `criteria` string: `<Kind label>: "<title>" — "<detail>" (verbs: open, disable)`.
+  Title and detail are quoted (`strconv.Quote`) because they are
+  workspace-controlled text; the `target` and `action` instructions tell the
+  judge they are data, never instructions.
 
 `server/internal/thirdparty/typesafe/`:
 
@@ -317,12 +317,13 @@ hand-assembled headers.
 
 No new configuration. The launcher service takes the existing OpenRouter
 provisioner (the `openRouter` value built in `server/cmd/gram/start.go`) and
-resolves the org's key per request with `ProvisionAPIKey(ctx, orgID,
+reads the org's existing key per request with `LookupAPIKey(ctx, orgID,
 openrouter.KeyTypeInternal)`, the same slot the other internal judges use.
-Locally that provisioner is the development one, which returns
-`OPENROUTER_DEV_KEY` from `mise.local.toml`. An empty or `unset` key, or a
-provisioning error, makes `judge` return `{disabled: true}` with no
-outbound call. `model` is the constant `typesafe/jev-latest`.
+It never provisions a key: typing into the palette must not mint one for an
+organization that has none. Locally that provisioner is the development one,
+which returns `OPENROUTER_DEV_KEY` from `mise.local.toml`. A missing, empty or
+`unset` key, or a lookup error, makes `judge` return `{disabled: true}` with
+no outbound call. `model` is the constant `typesafe/jev-latest`.
 
 ### Wiring
 
@@ -388,15 +389,12 @@ observability, not behaviour.
 
 ## Rollout
 
-1. PR 1: server (`launcher` service + `typesafe` client + config), SDK regen.
-2. PR 2: client (candidate hooks refactor + ranker + judge hook + confirm flow).
-3. Nothing to configure: orgs with a provisioned OpenRouter key get it live.
-
-PR 2 degrades to today's behaviour on `disabled: true`.
+Server (`launcher` service + `typesafe` client), SDK regen and client
+(candidate hooks refactor + ranker + judge hook + confirm flow) ship in one
+PR. Nothing to configure: orgs with an existing OpenRouter key get it live;
+everyone else keeps today's fuzzy ordering via `disabled: true`.
 
 ## Open questions
 
-- Does `publishPlugins` accept an empty `github_usernames` list? (Verify in
-  PR 2; fallback documented above.)
 - Should `assistant` candidates get `pause`/`resume` trigger verbs in a
   follow-up? Out of scope here.

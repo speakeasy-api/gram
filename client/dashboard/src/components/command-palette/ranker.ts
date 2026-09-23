@@ -106,9 +106,11 @@ export const STOP_WORDS: ReadonlySet<string> = new Set([
 const LATIN_MARKS_RE = /(?<=\p{Script=Latin})\p{M}+/gu;
 
 /**
- * Lowercase, fold Latin accents, split on anything that is not a letter or
- * digit in any script, drop empties. Unicode-aware so a Cyrillic or CJK
- * title tokenises to its words rather than to nothing.
+ * Lowercase, fold Latin accents, split on anything that is not a letter,
+ * combining mark or digit in any script, drop empties. Unicode-aware so a
+ * Cyrillic or CJK title tokenises to its words rather than to nothing, and
+ * marks that survive folding (Devanagari vowel signs, Arabic harakat) stay
+ * attached to their word instead of splitting it.
  */
 export function tokens(text: string): string[] {
   return text
@@ -116,7 +118,7 @@ export function tokens(text: string): string[] {
     .replace(LATIN_MARKS_RE, "")
     .normalize("NFC")
     .toLowerCase()
-    .split(/[^\p{L}\p{N}]+/u)
+    .split(/[^\p{L}\p{M}\p{N}]+/u)
     .filter((token) => token.length > 0);
 }
 
@@ -321,8 +323,12 @@ function argmax(
 }
 
 /**
- * The verb Jev picked for this row. "open" when there is no judgment, when
- * "unclear" wins overall, or when none of the row's verbs has any mass.
+ * The verb Jev picked for this row: the overall winning verb when the row
+ * carries it, otherwise "open". A row never shows a different mutating verb
+ * just because it is the best of the ones it happens to have — with
+ * {enable: 0.6, disable: 0.25} an [open, disable] row reads "open", not
+ * "Disable". "open" also when there is no judgment, when "unclear" wins
+ * overall, or when the winner has no mass.
  */
 export function resolveVerb(
   c: LauncherCandidate,
@@ -330,10 +336,10 @@ export function resolveVerb(
 ): Verb {
   if (!judgment) return "open";
   const overall = argmax(Object.keys(judgment.action), judgment.action);
-  if (overall.key === UNCLEAR) return "open";
-  const own = argmax(c.verbs, judgment.action);
-  if (own.key === null || own.p <= 0) return "open";
-  return own.key as Verb;
+  if (overall.key === null || overall.key === UNCLEAR || overall.p <= 0) {
+    return "open";
+  }
+  return c.verbs.includes(overall.key as Verb) ? (overall.key as Verb) : "open";
 }
 
 /** Whether the top row should show the green ↵ affordance. */

@@ -82,6 +82,7 @@ type LauncherContext struct {
 // LauncherJudgment is the result type of the launcher service judge method.
 type LauncherJudgment struct {
 	// True when no intent service is configured; the other fields are then absent.
+	// When false, target, action, ready and latency_ms are always present.
 	Disabled bool
 	// Probability that each candidate id, or 'none', is the item the user means.
 	Target map[string]float64

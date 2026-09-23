@@ -1,3 +1,4 @@
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useMemo } from "react";
@@ -9,9 +10,15 @@ export function useAssistantCandidates({
   enabled: boolean;
 }): LauncherCandidate[] {
   const routes = useRoutes();
-  const { data } = useAssistantsList(undefined, undefined, {
+  const gramProject = useProjectSlugForRequests();
+  // Keyed by project: the SDK folds gramProject into the query key, so
+  // omitting it would share one cache entry across projects. Never throws:
+  // a failing source degrades to no candidates rather than blanking the
+  // palette.
+  const { data } = useAssistantsList({ gramProject }, undefined, {
     enabled,
     retry: false,
+    throwOnError: false,
   });
 
   return useMemo(

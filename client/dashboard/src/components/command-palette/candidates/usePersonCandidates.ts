@@ -30,7 +30,11 @@ export function usePersonCandidates({
   // The palette opens over whatever page the reader had narrowed, so the
   // person's page opens on that same window rather than the default one.
   const { search } = useLocation();
-  const { data } = useMembers(undefined, undefined, { enabled });
+  // Never throws: a failed list degrades to no candidates.
+  const { data } = useMembers(undefined, undefined, {
+    enabled,
+    throwOnError: false,
+  });
 
   return useMemo(
     () =>

@@ -47,9 +47,19 @@ export function useLauncherCandidates({
   // Approval requests are an org-admin surface, matching the queue page.
   const canReadApprovals = hasScope("org:admin");
   const canReadPeople = hasAnyScope(["org:read", "org:admin"]);
-  // What listCatalog itself requires, rather than the looser any-of gate the
-  // catalog page renders behind: an mcp:write-only reader would pass that one
-  // and then have the request refused.
+  // The MCP page's own gate (pages/mcp/MCP.tsx), so a member who cannot open
+  // the listing never fires its (forbidden) list calls from the palette.
+  // Sources are a tab of that section and their detail page gates on
+  // mcp:read, so they share it.
+  const canListMcp = hasAnyScope(["mcp:read", "mcp:write"]);
+  // The scopes that reach the Plugins page from the nav
+  // (hooks/useProjectNavRoutes.ts), so the list is only fetched for members
+  // who can open it.
+  const canListPlugins = hasAnyScope(["project:read", "project:write"]);
+  // What listCatalog itself requires (server/internal/externalmcp/impl.go),
+  // rather than the looser any-of gate the catalog page renders behind: an
+  // mcp:write-only reader would pass that one and then have the request
+  // refused.
   const canBrowseCatalog = hasScope("project:read");
 
   const projectEnabled = enabled && inProject;
@@ -62,14 +72,20 @@ export function useLauncherCandidates({
     projectSlug,
   });
   const marketplace = useMarketplaceCandidate({ enabled, inProject });
-  const mcpServers = useMcpServerCandidates({ enabled: projectEnabled });
+  const mcpServers = useMcpServerCandidates({
+    enabled: projectEnabled && canListMcp,
+  });
   const catalog = useCatalogCandidates({
     enabled: projectEnabled && canBrowseCatalog,
   });
-  const plugins = usePluginCandidates({ enabled: projectEnabled });
+  const plugins = usePluginCandidates({
+    enabled: projectEnabled && canListPlugins,
+  });
   const assistants = useAssistantCandidates({ enabled: projectEnabled });
   const environments = useEnvironmentCandidates({ enabled: projectEnabled });
-  const sources = useSourceCandidates({ enabled: projectEnabled });
+  const sources = useSourceCandidates({
+    enabled: projectEnabled && canListMcp,
+  });
   const deployments = useDeploymentCandidates({ enabled: projectEnabled });
   const policies = usePolicyCandidates({
     enabled: projectEnabled && isAdmin,
@@ -88,14 +104,14 @@ export function useLauncherCandidates({
       ...actions,
       ...recents,
       ...marketplace,
-      ...projectOnly(mcpServers),
+      ...(inProject && canListMcp ? mcpServers : []),
       // Directly below the project's own servers: when a name matches both,
       // what you already run should read first and the catalog offer second.
       ...(inProject && canBrowseCatalog ? catalog : []),
-      ...projectOnly(plugins),
+      ...(inProject && canListPlugins ? plugins : []),
       ...projectOnly(assistants),
       ...projectOnly(environments),
-      ...projectOnly(sources),
+      ...(inProject && canListMcp ? sources : []),
       ...projectOnly(deployments),
       ...adminOnly(policies),
       ...adminOnly(rules),
@@ -107,6 +123,8 @@ export function useLauncherCandidates({
     isAdmin,
     canReadApprovals,
     canReadPeople,
+    canListMcp,
+    canListPlugins,
     canBrowseCatalog,
     actions,
     recents,

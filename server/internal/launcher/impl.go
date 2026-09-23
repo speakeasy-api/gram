@@ -43,30 +43,32 @@ const unsetKeyPlaceholder = "unset"
 
 const meterJudgeOutcome = "gram.launcher.judge"
 
-// keyProvisioner resolves the OpenRouter key that pays for an organization's
-// judgements. openrouter.Provisioner satisfies it; the narrow interface keeps
-// tests free of the full provisioning surface.
-type keyProvisioner interface {
-	ProvisionAPIKey(ctx context.Context, orgID string, keyType openrouter.KeyType) (string, error)
+// keyLookup resolves the OpenRouter key that pays for an organization's
+// judgements. It is deliberately the read-only openrouter.ExistingKeyLookup
+// shape: typing into the palette must never mint a key for an organization
+// that has none, only report the judge as disabled.
+type keyLookup interface {
+	LookupAPIKey(ctx context.Context, orgID string, keyType openrouter.KeyType) (string, bool, error)
 }
 
 // Service implements the launcher management service.
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	auth        *auth.Auth
-	provisioner keyProvisioner
-	client      *typesafe.Client
-	metrics     *judgeMetrics
+	tracer  trace.Tracer
+	logger  *slog.Logger
+	db      *pgxpool.Pool
+	auth    *auth.Auth
+	authz   *authz.Engine
+	keys    keyLookup
+	client  *typesafe.Client
+	metrics *judgeMetrics
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-// NewService wires the launcher service. provisioner supplies each
-// organization's internal OpenRouter key per request; client is the always
-// constructed System One client that key is handed to.
+// NewService wires the launcher service. keys reads each organization's
+// existing internal OpenRouter key per request without provisioning one;
+// client is the always constructed System One client that key is handed to.
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -74,18 +76,19 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
-	provisioner openrouter.Provisioner,
+	keys openrouter.ExistingKeyLookup,
 	client *typesafe.Client,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("launcher"))
 	return &Service{
-		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/launcher"),
-		logger:      logger,
-		db:          db,
-		auth:        auth.New(logger, db, sessions, authzEngine),
-		provisioner: provisioner,
-		client:      client,
-		metrics:     newMetrics(logger, meterProvider),
+		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/launcher"),
+		logger:  logger,
+		db:      db,
+		auth:    auth.New(logger, db, sessions, authzEngine),
+		authz:   authzEngine,
+		keys:    keys,
+		client:  client,
+		metrics: newMetrics(logger, meterProvider),
 	}
 }
 
@@ -107,31 +110,43 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 // Judge asks the intent service which candidate the query refers to, what
 // action it asks for and whether it is settled enough to act on. When the
-// organization has no usable OpenRouter key the judgment is returned with
-// Disabled set and no outbound call is made.
+// organization has no OpenRouter key the judgment is returned with Disabled
+// set and no outbound call is made; a key is never provisioned here. A key
+// that exists but cannot be read is a gateway error, so the palette retries
+// on the next keystroke instead of latching into fuzzy-only mode.
 func (s *Service) Judge(ctx context.Context, payload *gen.JudgePayload) (*gen.LauncherJudgment, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	// Every judgement spends the organization's internal OpenRouter key, so
+	// it is gated like the list endpoints whose rows the candidates came from.
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
 	if len(payload.Candidates) > maxCandidates {
 		return nil, oops.E(oops.CodeBadRequest, nil, "at most %d candidates can be judged at once", maxCandidates)
 	}
 
-	apiKey, err := s.provisioner.ProvisionAPIKey(ctx, authCtx.ActiveOrganizationID, openrouter.KeyTypeInternal)
-	if err != nil {
-		s.logger.DebugContext(ctx, "launcher judge disabled: openrouter key unavailable", attr.SlogError(err))
-		s.metrics.record(ctx, outcomeDisabled)
-		return disabledJudgment(), nil
-	}
-	if apiKey == "" || apiKey == unsetKeyPlaceholder {
-		s.metrics.record(ctx, outcomeDisabled)
-		return disabledJudgment(), nil
-	}
-
 	cands := make([]Candidate, 0, len(payload.Candidates))
-	for _, c := range payload.Candidates {
+	seen := make(map[string]struct{}, len(payload.Candidates))
+	for i, c := range payload.Candidates {
+		// The generated decoder passes a JSON null element through as nil.
+		if c == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "candidate %d is null", i)
+		}
+		// Answers are re-keyed by caller id, so an id that collides with the
+		// reserved "none" option or with another candidate would silently
+		// overwrite a probability.
+		if c.ID == targetNone {
+			return nil, oops.E(oops.CodeBadRequest, nil, "candidate id %q is reserved", targetNone)
+		}
+		if _, dup := seen[c.ID]; dup {
+			return nil, oops.E(oops.CodeBadRequest, nil, "candidate id %q is duplicated", c.ID)
+		}
+		seen[c.ID] = struct{}{}
 		cands = append(cands, Candidate{
 			ID:     c.ID,
 			Kind:   c.Kind,
@@ -145,9 +160,25 @@ func (s *Service) Judge(ctx context.Context, payload *gen.JudgePayload) (*gen.La
 		route = conv.PtrValOr(payload.Context.Route, "")
 	}
 
+	apiKey, ok, err := s.keys.LookupAPIKey(ctx, authCtx.ActiveOrganizationID, openrouter.KeyTypeInternal)
+	if err != nil {
+		s.metrics.record(ctx, o11y.OutcomeFromErrorWithTimeout(err))
+		return nil, oops.E(oops.CodeGatewayError, err, "intent service unavailable").LogWarn(ctx, s.logger)
+	}
+	if !ok || apiKey == "" || apiKey == unsetKeyPlaceholder {
+		s.metrics.record(ctx, outcomeDisabled)
+		return disabledJudgment(), nil
+	}
+
 	req, callerIDs, err := BuildRequest(payload.Query, route, cands)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to build intent request").LogError(ctx, s.logger)
+	}
+	// Nothing survived the person filter (or nothing was sent): there is no
+	// target to rank, so answer locally rather than pay for a judgement.
+	if len(callerIDs) == 0 {
+		s.metrics.record(ctx, o11y.OutcomeSuccess)
+		return emptyJudgment(), nil
 	}
 
 	result, err := s.client.Ask(ctx, apiKey, req)
@@ -167,6 +198,21 @@ func disabledJudgment() *gen.LauncherJudgment {
 		Action:    nil,
 		Ready:     nil,
 		LatencyMs: nil,
+	}
+}
+
+// emptyJudgment is the enabled answer for a request with no rankable
+// candidates: nothing matches, no action is discernible and Enter must not
+// act.
+func emptyJudgment() *gen.LauncherJudgment {
+	ready := 0.0
+	latency := int64(0)
+	return &gen.LauncherJudgment{
+		Disabled:  false,
+		Target:    map[string]float64{targetNone: 1},
+		Action:    map[string]float64{actionUnclear: 1},
+		Ready:     &ready,
+		LatencyMs: &latency,
 	}
 }
 

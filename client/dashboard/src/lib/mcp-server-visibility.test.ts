@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   invalidateAllMcpServers: vi.fn(() => Promise.resolve()),
   invalidateAllGetMcpServer: vi.fn(() => Promise.resolve()),
   invalidateAllMcpEndpoints: vi.fn(() => Promise.resolve()),
+  invalidateAllPlugins: vi.fn(() => Promise.resolve()),
+  invalidateAllPublishStatus: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
@@ -21,6 +23,12 @@ vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
 }));
 vi.mock("@gram/client/react-query/mcpEndpoints.js", () => ({
   invalidateAllMcpEndpoints: mocks.invalidateAllMcpEndpoints,
+}));
+vi.mock("@gram/client/react-query/plugins.js", () => ({
+  invalidateAllPlugins: mocks.invalidateAllPlugins,
+}));
+vi.mock("@gram/client/react-query/publishStatus.js", () => ({
+  invalidateAllPublishStatus: mocks.invalidateAllPublishStatus,
 }));
 
 function mcpServer(overrides: Partial<McpServer> = {}): McpServer {
@@ -119,9 +127,11 @@ describe("invalidateMcpServerQueries", () => {
     mocks.invalidateAllMcpServers.mockClear();
     mocks.invalidateAllGetMcpServer.mockClear();
     mocks.invalidateAllMcpEndpoints.mockClear();
+    mocks.invalidateAllPlugins.mockClear();
+    mocks.invalidateAllPublishStatus.mockClear();
   });
 
-  it("invalidates the server list, server detail and endpoint queries", async () => {
+  it("invalidates the server list, detail, endpoint, plugin and publish-status queries", async () => {
     const queryClient = {} as QueryClient;
 
     await invalidateMcpServerQueries(queryClient);
@@ -139,6 +149,18 @@ describe("invalidateMcpServerQueries", () => {
     );
     expect(mocks.invalidateAllMcpEndpoints).toHaveBeenCalledTimes(1);
     expect(mocks.invalidateAllMcpEndpoints).toHaveBeenCalledWith(
+      queryClient,
+      filters,
+    );
+    // Enabling a server auto-attaches it to the Default plugin server-side,
+    // so plugin membership and publish freshness must refresh with it.
+    expect(mocks.invalidateAllPlugins).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidateAllPlugins).toHaveBeenCalledWith(
+      queryClient,
+      filters,
+    );
+    expect(mocks.invalidateAllPublishStatus).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidateAllPublishStatus).toHaveBeenCalledWith(
       queryClient,
       filters,
     );

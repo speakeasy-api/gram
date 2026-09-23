@@ -1,3 +1,4 @@
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
@@ -13,10 +14,13 @@ import type { LauncherCandidate, Verb } from "./types";
 
 function detailFor(status: PublishStatusResult): string {
   if (!status.connected) return "Plugin marketplace · not connected";
+  // `upToDate` is tri-state: a connected project may not report freshness at
+  // all, and an unknown state must read as neither current nor stale.
+  if (status.upToDate === true) return "Plugin marketplace · up to date";
   if (status.upToDate === false) {
     return "Plugin marketplace · unpublished changes";
   }
-  return "Plugin marketplace · up to date";
+  return "Plugin marketplace · connected";
 }
 
 function verbsFor(status: PublishStatusResult, isAdmin: boolean): Verb[] {
@@ -41,8 +45,12 @@ export function useMarketplaceCandidate({
   const queryClient = useQueryClient();
   const { hasScope } = useRBAC();
   const isAdmin = hasScope("org:admin");
-  const { data: status } = usePublishStatus(undefined, undefined, {
+  const gramProject = useProjectSlugForRequests();
+  // Keyed by project (the SDK folds gramProject into the query key) and never
+  // throws, so a failed status read leaves the palette without this row.
+  const { data: status } = usePublishStatus({ gramProject }, undefined, {
     enabled: enabled && inProject,
+    throwOnError: false,
   });
   const { mutateAsync: publishPlugins } = usePublishPluginsMutation();
 

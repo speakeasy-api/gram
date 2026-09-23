@@ -29,6 +29,7 @@ type JudgeRequestBody struct {
 // HTTP response body.
 type JudgeResponseBody struct {
 	// True when no intent service is configured; the other fields are then absent.
+	// When false, target, action, ready and latency_ms are always present.
 	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
 	// Probability that each candidate id, or 'none', is the item the user means.
 	Target map[string]float64 `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
@@ -445,6 +446,11 @@ func ValidateJudgeRequestBody(body *JudgeRequestBody) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.query", *body.Query, utf8.RuneCountInString(*body.Query), 200, false))
 		}
 	}
+	if body.Context != nil {
+		if err2 := ValidateLauncherContextRequestBody(body.Context); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if len(body.Candidates) > 32 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.candidates", body.Candidates, len(body.Candidates), 32, false))
 	}
@@ -453,6 +459,17 @@ func ValidateJudgeRequestBody(body *JudgeRequestBody) (err error) {
 			if err2 := ValidateLauncherCandidateRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	return
+}
+
+// ValidateLauncherContextRequestBody runs the validations defined on
+// LauncherContextRequestBody
+func ValidateLauncherContextRequestBody(body *LauncherContextRequestBody) (err error) {
+	if body.Route != nil {
+		if utf8.RuneCountInString(*body.Route) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.route", *body.Route, utf8.RuneCountInString(*body.Route), 512, false))
 		}
 	}
 	return
@@ -470,6 +487,16 @@ func ValidateLauncherCandidateRequestBody(body *LauncherCandidateRequestBody) (e
 	if body.Title == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
 	}
+	if body.ID != nil {
+		if utf8.RuneCountInString(*body.ID) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", *body.ID, utf8.RuneCountInString(*body.ID), 200, false))
+		}
+	}
+	if body.Kind != nil {
+		if utf8.RuneCountInString(*body.Kind) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.kind", *body.Kind, utf8.RuneCountInString(*body.Kind), 64, false))
+		}
+	}
 	if body.Title != nil {
 		if utf8.RuneCountInString(*body.Title) > 120 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.title", *body.Title, utf8.RuneCountInString(*body.Title), 120, false))
@@ -478,6 +505,14 @@ func ValidateLauncherCandidateRequestBody(body *LauncherCandidateRequestBody) (e
 	if body.Detail != nil {
 		if utf8.RuneCountInString(*body.Detail) > 160 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.detail", *body.Detail, utf8.RuneCountInString(*body.Detail), 160, false))
+		}
+	}
+	if len(body.Verbs) > 8 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.verbs", body.Verbs, len(body.Verbs), 8, false))
+	}
+	for _, e := range body.Verbs {
+		if utf8.RuneCountInString(e) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.verbs[*]", e, utf8.RuneCountInString(e), 32, false))
 		}
 	}
 	return

@@ -1,4 +1,5 @@
 import { BUILTIN_RULES_BY_CATEGORY } from "@/pages/security/detection-rules-data";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { useRiskListCustomDetectionRules } from "@gram/client/react-query/riskListCustomDetectionRules.js";
 import { useMemo } from "react";
@@ -20,8 +21,14 @@ export function useRuleCandidates({
 }): LauncherCandidate[] {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const { data } = useRiskListCustomDetectionRules(undefined, undefined, {
+  const gramProject = useProjectSlugForRequests();
+  // Keyed by project: the SDK folds gramProject into the query key, so
+  // omitting it would share one cache entry across projects. Never throws:
+  // a failing source degrades to no candidates rather than blanking the
+  // palette.
+  const { data } = useRiskListCustomDetectionRules({ gramProject }, undefined, {
     enabled,
+    throwOnError: false,
   });
 
   return useMemo(() => {
@@ -32,8 +39,11 @@ export function useRuleCandidates({
         title: rule.title,
         severity: rule.defaultSeverity as string,
       }));
+    // A custom rule is addressed by its stable `custom.*` rule id, which is
+    // what the deep link and the rules page look up; `rule.id` is the row's
+    // database uuid and resolves to nothing there.
     const custom = (data?.rules ?? []).map((rule) => ({
-      id: rule.id,
+      id: rule.ruleId,
       title: rule.title,
       severity: rule.severity as string,
     }));

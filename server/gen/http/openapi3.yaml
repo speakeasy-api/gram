@@ -87129,9 +87129,11 @@ components:
                 id:
                     type: string
                     description: Caller-chosen stable identifier echoed back in the judgment.
+                    maxLength: 200
                 kind:
                     type: string
                     description: The candidate kind, such as page, mcp_server, plugin or marketplace.
+                    maxLength: 64
                 title:
                     type: string
                     description: Display title of the candidate.
@@ -87140,7 +87142,9 @@ components:
                     type: array
                     items:
                         type: string
+                        maxLength: 32
                     description: Verbs the caller may run on this candidate, such as open, enable, disable or publish.
+                    maxItems: 8
             description: One item the palette could open or act on.
             required:
                 - id
@@ -87152,6 +87156,7 @@ components:
                 route:
                     type: string
                     description: The current dashboard route path.
+                    maxLength: 512
             description: The dashboard location the palette was opened from.
         LauncherJudgment:
             type: object
@@ -87164,7 +87169,7 @@ components:
                         format: double
                 disabled:
                     type: boolean
-                    description: True when no intent service is configured; the other fields are then absent.
+                    description: True when no intent service is configured; the other fields are then absent. When false, target, action, ready and latency_ms are always present.
                 latency_ms:
                     type: integer
                     description: Round trip time to the intent service in milliseconds.

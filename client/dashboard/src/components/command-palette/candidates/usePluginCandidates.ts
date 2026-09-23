@@ -1,3 +1,4 @@
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
 import { useMemo } from "react";
@@ -16,7 +17,15 @@ export function usePluginCandidates({
   enabled: boolean;
 }): LauncherCandidate[] {
   const routes = useRoutes();
-  const { data } = usePlugins(undefined, undefined, { enabled });
+  const gramProject = useProjectSlugForRequests();
+  // Keyed by project: the SDK folds gramProject into the query key, so
+  // omitting it would share one cache entry across projects. Never throws:
+  // a failing source degrades to no candidates rather than blanking the
+  // palette.
+  const { data } = usePlugins({ gramProject }, undefined, {
+    enabled,
+    throwOnError: false,
+  });
 
   return useMemo(
     () =>

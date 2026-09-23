@@ -59,6 +59,17 @@ describe("tokens", () => {
     expect(tokens("通知 サーバー")).toEqual(["通知", "サーバー"]);
     expect(tokens("Zoë's Café")).toEqual(["zoe", "s", "cafe"]);
   });
+
+  it("folds a decomposed Latin accent the same as a composed one", () => {
+    expect(tokens("Zoe\u0308's Cafe\u0301")).toEqual(["zoe", "s", "cafe"]);
+  });
+
+  // Vowel signs in Devanagari are combining marks with no composed form, so
+  // they must count as word characters or every word splits at each one.
+  it("keeps combining marks on non-Latin scripts inside their word", () => {
+    expect(tokens("हिन्दी सर्वर")).toEqual(["हिन्दी", "सर्वर"]);
+    expect(tokens("हिन्दी".normalize("NFD"))).toEqual(["हिन्दी"]);
+  });
 });
 
 describe("STOP_WORDS", () => {
@@ -358,7 +369,7 @@ describe("resolveVerb", () => {
     ).toBe("open");
   });
 
-  it("returns open when the best supported verb has probability 0", () => {
+  it("returns open when the candidate lacks the overall winner even if it has mass on another verb", () => {
     expect(
       resolveVerb(
         candidate("Marketplace", { verbs: ["open", "publish"] }),
@@ -367,7 +378,33 @@ describe("resolveVerb", () => {
     ).toBe("open");
   });
 
-  it("breaks ties toward the earlier verb", () => {
+  // The row's own best verb is not the answer when a different mutating verb
+  // won overall: the user asked to enable something, not to disable this.
+  it("does not fall back to the row's own best verb when another verb won", () => {
+    expect(
+      resolveVerb(
+        candidate("Slack MCP", { verbs: ["open", "disable"] }),
+        judgment({ enable: 0.6, disable: 0.25, open: 0.1, unclear: 0.05 }),
+      ),
+    ).toBe("open");
+    expect(
+      resolveVerb(
+        candidate("Jira MCP", { verbs: ["open", "enable"] }),
+        judgment({ enable: 0.6, disable: 0.25, open: 0.1, unclear: 0.05 }),
+      ),
+    ).toBe("enable");
+  });
+
+  it("returns open when every verb has probability 0", () => {
+    expect(
+      resolveVerb(
+        candidate("Slack MCP", { verbs: ["open", "disable"] }),
+        judgment({ open: 0, disable: 0 }),
+      ),
+    ).toBe("open");
+  });
+
+  it("breaks overall ties toward the earlier key", () => {
     const verbs: Verb[] = ["open", "disable"];
     expect(
       resolveVerb(
@@ -375,6 +412,12 @@ describe("resolveVerb", () => {
         judgment({ open: 0.5, disable: 0.5 }),
       ),
     ).toBe("open");
+    expect(
+      resolveVerb(
+        candidate("Slack MCP", { verbs }),
+        judgment({ disable: 0.5, open: 0.5 }),
+      ),
+    ).toBe("disable");
   });
 });
 

@@ -1,3 +1,4 @@
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { useMemo } from "react";
@@ -9,9 +10,15 @@ export function useEnvironmentCandidates({
   enabled: boolean;
 }): LauncherCandidate[] {
   const routes = useRoutes();
-  const { data } = useListEnvironments(undefined, undefined, {
+  const gramProject = useProjectSlugForRequests();
+  // Keyed by project: the SDK folds gramProject into the query key, so
+  // omitting it would share one cache entry across projects. Never throws:
+  // a failing source degrades to no candidates rather than blanking the
+  // palette.
+  const { data } = useListEnvironments({ gramProject }, undefined, {
     enabled,
     refetchOnWindowFocus: false,
+    throwOnError: false,
   });
 
   return useMemo(

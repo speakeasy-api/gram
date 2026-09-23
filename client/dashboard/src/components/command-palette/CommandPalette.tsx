@@ -105,9 +105,10 @@ function idleRows(candidates: LauncherCandidate[]): {
 }
 
 /**
- * Buckets rows by their display group in order of first appearance, so the
- * DOM keeps the global ranked order (cmdk auto-selects the first item in DOM
- * order) and a group appears at the position of its best row.
+ * Buckets the idle rows by their display group in order of first appearance.
+ * Only the idle list is grouped: ranked rows render flat (see `RankedRows`),
+ * because merging a group's rows into the position of its first row would
+ * pull later rows ahead of better-ranked rows from other groups.
  */
 function groupRows(rows: DisplayRow[]): Array<{
   heading: string;
@@ -207,6 +208,71 @@ function RowGroups({
 }
 
 /**
+ * Ranked rows, one flat list in ranked order: cmdk moves ↑/↓ through the DOM,
+ * so the DOM order must be the ranked order for ↓ from the top to reach rank
+ * 2. Headings are not needed here — the detail column already names the kind.
+ */
+function RankedRows({
+  rows,
+  readyValue,
+  runningValue,
+  onSelect,
+}: {
+  rows: DisplayRow[];
+  readyValue: string | null;
+  runningValue: string | null;
+  onSelect: (row: DisplayRow) => void;
+}): JSX.Element {
+  return (
+    <>
+      {rows.map((row) => (
+        <PaletteRow
+          key={row.candidate.id}
+          row={row}
+          ready={readyValue === row.candidate.id}
+          running={runningValue === row.candidate.id}
+          onSelect={() => onSelect(row)}
+        />
+      ))}
+    </>
+  );
+}
+
+/** What cmdk last reported as selected, and the order it was selected in. */
+interface Selection {
+  /** The query the selection was made under. */
+  query: string;
+  /** The DOM order (see `domOrder`) the selection was made in. */
+  key: string;
+  value: string;
+  /** The top row of that order, to tell a deliberate ↑/↓ move from none. */
+  top: string;
+}
+
+/**
+ * The value to hand cmdk for the current order. A selection made in this
+ * very order stands. When the order changed under it (a judgment landing
+ * asynchronously reorders the rows), a row the user had moved to stays
+ * highlighted as long as it is still listed and the query has not changed,
+ * so an Enter pressed after ↓ runs the row they were looking at; otherwise
+ * the highlight snaps to the new top row.
+ */
+function resolveSelection(
+  selection: Selection | null,
+  query: string,
+  key: string,
+  order: string[],
+): string {
+  const top = order[0] ?? "";
+  if (!selection) return top;
+  if (selection.key === key) return selection.value;
+  const moved = selection.value !== selection.top;
+  const kept =
+    moved && selection.query === query && order.includes(selection.value);
+  return kept ? selection.value : top;
+}
+
+/**
  * Replaces the input while a mutating verb awaits its second Enter. It holds
  * focus so Enter lands here rather than on cmdk, and swallows it while the
  * run is in flight. Escape is handled by the dialog (see `handleEscape`).
@@ -277,7 +343,11 @@ export function CommandPalette(): JSX.Element {
     orgSlug,
     projectSlug,
   });
-  const { state, judge, reset } = useLauncherJudge();
+  // The intent service is keyed per organization and project, so the "no
+  // service" latch is too: moving to a tenant that has one asks again.
+  const { state, judge, reset } = useLauncherJudge(
+    `${orgSlug ?? ""}/${projectSlug ?? ""}`,
+  );
 
   const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
@@ -291,10 +361,25 @@ export function CommandPalette(): JSX.Element {
 
   // Ask Jev on every keystroke while open. The hook aborts the previous
   // request itself; an empty query clears the judgment without a call.
+  //
+  // Keyed on what would be sent rather than on the array's identity: a
+  // background refetch of any candidate query rebuilds the array with the
+  // same content, and re-asking then would abort a good request in flight.
+  const sendableKey = useMemo(
+    () =>
+      pre.sendable
+        .map((c) => [c.id, c.title, c.detail, c.verbs.join(",")].join("\u0001"))
+        .join("\n"),
+    [pre.sendable],
+  );
+  const sendableRef = useRef(pre.sendable);
+  useEffect(() => {
+    sendableRef.current = pre.sendable;
+  }, [pre.sendable]);
   useEffect(() => {
     if (!isOpen || state.disabled) return;
-    judge(trimmedQuery, pre.sendable, pathname);
-  }, [isOpen, state.disabled, trimmedQuery, pre.sendable, pathname, judge]);
+    judge(trimmedQuery, sendableRef.current, pathname);
+  }, [isOpen, state.disabled, trimmedQuery, sendableKey, pathname, judge]);
 
   useEffect(() => {
     if (!isOpen) reset();
@@ -303,11 +388,9 @@ export function CommandPalette(): JSX.Element {
   // cmdk only reselects the first item when its search changes, so when a
   // judgment reorders the rows the highlight would stay on a now-demoted row.
   // Controlling the value pins it to the top row whenever the DOM order
-  // changes, and remembers a ↑/↓ move only for the order it was made in.
-  const [selectedFor, setSelectedFor] = useState<{
-    key: string;
-    value: string;
-  } | null>(null);
+  // changes — unless the user had moved off the top, in which case their row
+  // keeps the highlight (see `resolveSelection`).
+  const [selectedFor, setSelectedFor] = useState<Selection | null>(null);
   const domOrder = useMemo((): string[] => {
     if (mode.mode !== "list") return [mode.row.candidate.id];
     const ask = inProject ? [ASK_AI_VALUE] : [];
@@ -321,8 +404,12 @@ export function CommandPalette(): JSX.Element {
     return [...rows.map((r) => r.candidate.id), ...ask];
   }, [mode, inProject, hasQuery, idle, rows]);
   const rowsKey = domOrder.join("\n");
-  const selectedValue =
-    selectedFor?.key === rowsKey ? selectedFor.value : (domOrder[0] ?? "");
+  const selectedValue = resolveSelection(
+    selectedFor,
+    trimmedQuery,
+    rowsKey,
+    domOrder,
+  );
 
   // The green ↵ is purely visual: Enter always runs the highlighted row.
   const topRow = rows[0];
@@ -389,7 +476,7 @@ export function CommandPalette(): JSX.Element {
       setMode(LIST);
       return;
     }
-    if (query) {
+    if (hasQuery) {
       e.preventDefault();
       setQuery("");
     }
@@ -445,7 +532,14 @@ export function CommandPalette(): JSX.Element {
       }}
       shouldFilter={false}
       value={selectedValue}
-      onValueChange={(value) => setSelectedFor({ key: rowsKey, value })}
+      onValueChange={(value) =>
+        setSelectedFor({
+          query: trimmedQuery,
+          key: rowsKey,
+          value,
+          top: domOrder[0] ?? "",
+        })
+      }
       onEscapeKeyDown={handleEscape}
     >
       {/* Speakeasy brand hairline */}
@@ -487,7 +581,7 @@ export function CommandPalette(): JSX.Element {
         )}
       >
         {mode.mode !== "list" && (
-          <RowGroups rows={[mode.row]} {...rowGroupProps} />
+          <RankedRows rows={[mode.row]} {...rowGroupProps} />
         )}
 
         {mode.mode === "list" && !hasQuery && (
@@ -508,7 +602,7 @@ export function CommandPalette(): JSX.Element {
             {rows.length === 0 && !inProject && (
               <div className="py-6 text-center text-sm">No results found.</div>
             )}
-            <RowGroups rows={rows} {...rowGroupProps} />
+            <RankedRows rows={rows} {...rowGroupProps} />
             {askAiGroup}
           </>
         )}

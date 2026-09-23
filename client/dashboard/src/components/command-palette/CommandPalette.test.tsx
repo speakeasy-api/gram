@@ -59,6 +59,7 @@ const IDLE_JUDGE: JudgeState = {
 
 const runSettings = vi.fn();
 const runSlack = vi.fn();
+const runSessions = vi.fn();
 
 function candidate(
   overrides: Partial<LauncherCandidate> & Pick<LauncherCandidate, "id">,
@@ -93,6 +94,28 @@ const SLACK = candidate({
   run: runSlack,
 });
 
+const SESSIONS = candidate({
+  id: "action:sessions",
+  title: "Sessions",
+  group: "Pages",
+  run: runSessions,
+});
+
+/** A settled open judgment that orders the rows as `ids` lists them. */
+function ordering(ids: string[]): JudgeState {
+  const target: Record<string, number> = {};
+  ids.forEach((id, index) => {
+    target[id] = 0.9 / (index + 1);
+  });
+  return {
+    judgment: { target, action: { open: 1 }, ready: 0 },
+    fresh: true,
+    inFlight: false,
+    latencyMs: 10,
+    disabled: false,
+  };
+}
+
 /** A settled judgment that picks the Slack row and the disable verb. */
 const DISABLE_SLACK: JudgeState = {
   judgment: {
@@ -117,6 +140,7 @@ beforeEach(() => {
   palette.close.mockReset();
   runSettings.mockReset();
   runSlack.mockReset().mockResolvedValue(undefined);
+  runSessions.mockReset();
 });
 
 afterEach(cleanup);
@@ -139,6 +163,17 @@ describe("CommandPalette", () => {
 
     expect((input() as HTMLInputElement).value).toBe("");
     expect(palette.close).not.toHaveBeenCalled();
+  });
+
+  // Rendering treats whitespace-only input as no query, so Escape must too:
+  // otherwise the first press is swallowed clearing spaces nobody can see.
+  it("closes on the first Escape when the query is only whitespace", async () => {
+    render(<CommandPalette />);
+
+    await userEvent.type(input(), "   ");
+    await userEvent.keyboard("{Escape}");
+
+    expect(palette.close).toHaveBeenCalled();
   });
 
   it("runs an open row on the first Enter and closes", async () => {
@@ -231,6 +266,142 @@ describe("CommandPalette", () => {
     await userEvent.keyboard("{ArrowDown}");
 
     expect(screen.queryByLabelText("Ready")).toBeNull();
+  });
+
+  // A judgment landing after the user moved the highlight must not yank it
+  // to the new top row: Enter runs the row they were looking at.
+  it("keeps the highlight on the row the user moved to when a judgment reorders", async () => {
+    mocks.candidates = [SETTINGS, SLACK, SESSIONS];
+    mocks.judgeState = ordering([
+      "action:settings",
+      "mcp:slack",
+      "action:sessions",
+    ]);
+    const { rerender } = render(<CommandPalette />);
+
+    await userEvent.type(input(), "s");
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("Settings"),
+        expect.stringContaining("Slack"),
+        expect.stringContaining("Sessions"),
+      ]),
+    );
+    await userEvent.keyboard("{ArrowDown}");
+    expect(
+      screen.getByRole("option", { selected: true }).textContent,
+    ).toContain("Slack");
+
+    mocks.judgeState = ordering([
+      "action:sessions",
+      "action:settings",
+      "mcp:slack",
+    ]);
+    rerender(<CommandPalette />);
+    expect(
+      screen.getAllByRole("option").map((o) => o.textContent)[0],
+    ).toContain("Sessions");
+    expect(
+      screen.getByRole("option", { selected: true }).textContent,
+    ).toContain("Slack");
+
+    await userEvent.keyboard("{Enter}");
+    expect(runSlack).toHaveBeenCalledWith("open");
+    expect(runSessions).not.toHaveBeenCalled();
+  });
+
+  it("snaps the highlight to the new top row when the user had not moved it", async () => {
+    mocks.candidates = [SETTINGS, SLACK, SESSIONS];
+    mocks.judgeState = ordering([
+      "action:settings",
+      "mcp:slack",
+      "action:sessions",
+    ]);
+    const { rerender } = render(<CommandPalette />);
+
+    await userEvent.type(input(), "s");
+    expect(
+      screen.getByRole("option", { selected: true }).textContent,
+    ).toContain("Settings");
+
+    mocks.judgeState = ordering([
+      "action:sessions",
+      "action:settings",
+      "mcp:slack",
+    ]);
+    rerender(<CommandPalette />);
+    expect(
+      screen.getByRole("option", { selected: true }).textContent,
+    ).toContain("Sessions");
+
+    await userEvent.keyboard("{Enter}");
+    expect(runSessions).toHaveBeenCalledWith("open");
+  });
+
+  // A background refetch rebuilds the candidate array with identical content;
+  // re-asking then would abort a good request in flight for nothing.
+  it("does not ask the judge again when the candidates are rebuilt unchanged", async () => {
+    const { rerender } = render(<CommandPalette />);
+
+    await userEvent.type(input(), "sl");
+    const asked = mocks.judge.mock.calls.length;
+    expect(asked).toBeGreaterThan(0);
+
+    mocks.candidates = (mocks.candidates as LauncherCandidate[]).map((c) => ({
+      ...c,
+      keywords: [...c.keywords],
+    }));
+    rerender(<CommandPalette />);
+    expect(mocks.judge.mock.calls.length).toBe(asked);
+
+    // Content that changes what Jev would see does re-ask.
+    mocks.candidates = (mocks.candidates as LauncherCandidate[]).map((c) =>
+      c.id === "mcp:slack" ? { ...c, detail: "MCP server · disabled" } : c,
+    );
+    rerender(<CommandPalette />);
+    expect(mocks.judge.mock.calls.length).toBe(asked + 1);
+  });
+
+  // cmdk walks ↑/↓ through the DOM, so interleaved groups must not pull a
+  // later row of the first group ahead of a better-ranked row.
+  it("renders ranked rows flat, in ranked order, without group headings", async () => {
+    mocks.candidates = [SETTINGS, SLACK, SESSIONS];
+    mocks.judgeState = ordering([
+      "action:settings",
+      "mcp:slack",
+      "action:sessions",
+    ]);
+    render(<CommandPalette />);
+
+    await userEvent.type(input(), "s");
+
+    const titles = screen
+      .getAllByRole("option")
+      .map((o) => o.textContent ?? "")
+      .filter((text) => !text.includes("Ask Project Assistant"));
+    expect(titles[0]).toContain("Settings");
+    expect(titles[1]).toContain("Slack");
+    expect(titles[2]).toContain("Sessions");
+    const headings = Array.from(
+      document.body.querySelectorAll("[cmdk-group-heading]"),
+    ).map((h) => h.textContent);
+    expect(headings).not.toContain("Pages");
+    expect(headings).not.toContain("MCP Servers");
+
+    await userEvent.keyboard("{ArrowDown}");
+    expect(
+      screen.getByRole("option", { selected: true }).textContent,
+    ).toContain("Slack");
+  });
+
+  it("keeps group headings for the idle list", () => {
+    mocks.candidates = [SETTINGS, SLACK, SESSIONS];
+    render(<CommandPalette />);
+
+    const headings = Array.from(
+      document.body.querySelectorAll("[cmdk-group-heading]"),
+    ).map((h) => h.textContent);
+    expect(headings).toContain("Pages");
   });
 
   it("renders the round-trip latency when the judgment is fresh", async () => {

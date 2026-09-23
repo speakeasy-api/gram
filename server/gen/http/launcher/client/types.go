@@ -29,6 +29,7 @@ type JudgeRequestBody struct {
 // HTTP response body.
 type JudgeResponseBody struct {
 	// True when no intent service is configured; the other fields are then absent.
+	// When false, target, action, ready and latency_ms are always present.
 	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
 	// Probability that each candidate id, or 'none', is the item the user means.
 	Target map[string]float64 `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
@@ -688,15 +689,40 @@ func ValidateJudgeGatewayErrorResponseBody(body *JudgeGatewayErrorResponseBody) 
 	return
 }
 
+// ValidateLauncherContextRequestBody runs the validations defined on
+// LauncherContextRequestBody
+func ValidateLauncherContextRequestBody(body *LauncherContextRequestBody) (err error) {
+	if body.Route != nil {
+		if utf8.RuneCountInString(*body.Route) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.route", *body.Route, utf8.RuneCountInString(*body.Route), 512, false))
+		}
+	}
+	return
+}
+
 // ValidateLauncherCandidateRequestBody runs the validations defined on
 // LauncherCandidateRequestBody
 func ValidateLauncherCandidateRequestBody(body *LauncherCandidateRequestBody) (err error) {
+	if utf8.RuneCountInString(body.ID) > 200 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 200, false))
+	}
+	if utf8.RuneCountInString(body.Kind) > 64 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.kind", body.Kind, utf8.RuneCountInString(body.Kind), 64, false))
+	}
 	if utf8.RuneCountInString(body.Title) > 120 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.title", body.Title, utf8.RuneCountInString(body.Title), 120, false))
 	}
 	if body.Detail != nil {
 		if utf8.RuneCountInString(*body.Detail) > 160 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.detail", *body.Detail, utf8.RuneCountInString(*body.Detail), 160, false))
+		}
+	}
+	if len(body.Verbs) > 8 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.verbs", body.Verbs, len(body.Verbs), 8, false))
+	}
+	for _, e := range body.Verbs {
+		if utf8.RuneCountInString(e) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.verbs[*]", e, utf8.RuneCountInString(e), 32, false))
 		}
 	}
 	return

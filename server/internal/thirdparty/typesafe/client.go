@@ -43,6 +43,11 @@ const (
 	// maxErrorBody bounds how much of a rejected response is kept in the
 	// error message.
 	maxErrorBody = 512
+
+	// maxResponseBody bounds how much of a 200 response is read before it is
+	// decoded. A judgement is a few hundred bytes; anything larger is
+	// rejected with ErrDecode rather than buffered.
+	maxResponseBody = 1 << 20
 )
 
 var (
@@ -57,7 +62,8 @@ var (
 	// ErrUpstreamStatus wraps a non-200 response from TypeSafe.
 	ErrUpstreamStatus = errors.New("typesafe: unexpected upstream status")
 
-	// ErrDecode wraps a 200 response whose body is not a valid Response.
+	// ErrDecode wraps a 200 response whose body is not a valid Response or
+	// exceeds maxResponseBody.
 	ErrDecode = errors.New("typesafe: decode response")
 )
 
@@ -223,6 +229,13 @@ func (c *Client) Ask(ctx context.Context, apiKey string, req Request) (*Result, 
 
 	result, err := c.ask(ctx, apiKey, req)
 	if err != nil {
+		// The palette cancels the in-flight judgement on every keystroke, so
+		// a cancellation is routine and neither a warning nor a failed span.
+		if errors.Is(err, context.Canceled) {
+			span.SetStatus(codes.Ok, "canceled by caller")
+			c.logger.DebugContext(ctx, "typesafe judgement canceled", attr.SlogError(err))
+			return nil, err
+		}
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
 		c.logger.WarnContext(ctx, "typesafe judgement failed", attr.SlogError(err))
@@ -265,12 +278,30 @@ func (c *Client) ask(ctx context.Context, apiKey string, req Request) (*Result, 
 	}()
 
 	if httpResp.StatusCode != http.StatusOK {
+		// The snippet is logged and recorded on the span, so it is flattened
+		// to a single printable line before it can forge a log record.
 		snippet, _ := io.ReadAll(io.LimitReader(httpResp.Body, maxErrorBody))
-		return nil, fmt.Errorf("%w: %s: %s", ErrUpstreamStatus, httpResp.Status, bytes.TrimSpace(snippet))
+		return nil, fmt.Errorf("%w: %s: %s", ErrUpstreamStatus, httpResp.Status, guardian.PrintableBodySnippet(bytes.TrimSpace(snippet)))
+	}
+
+	// Read one byte past the cap so an oversized body is distinguishable from
+	// one that is exactly at it.
+	body, err = io.ReadAll(io.LimitReader(httpResp.Body, maxResponseBody+1))
+	if err != nil {
+		// A deadline or cancellation that lands mid-body is still a transport
+		// failure, and callers match on the context error to tell a timeout
+		// from a dropped connection.
+		if ctxErr := ctx.Err(); ctxErr != nil && !errors.Is(err, ctxErr) {
+			err = fmt.Errorf("%w: %w", ctxErr, err)
+		}
+		return nil, fmt.Errorf("%w: read response: %w", ErrTransport, err)
+	}
+	if len(body) > maxResponseBody {
+		return nil, fmt.Errorf("%w: response body exceeds %d bytes", ErrDecode, maxResponseBody)
 	}
 
 	var resp Response
-	if err := json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
+	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrDecode, err)
 	}
 
