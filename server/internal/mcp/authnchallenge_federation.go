@@ -48,8 +48,8 @@ type FederatedConsentBinding struct {
 	Subject  string    `json:"subject"`
 }
 
-func (b *FederatedConsentBinding) matches(issuerID, clientID uuid.UUID) bool {
-	return b != nil && b.IssuerID != uuid.Nil && b.ClientID != uuid.Nil && b.IssuerID == issuerID && b.ClientID == clientID && b.Issuer != "" && b.Subject != ""
+func (b *FederatedConsentBinding) matches(issuerID, clientID uuid.UUID, provider *remotesessions.FederatedProvider) bool {
+	return b != nil && b.IssuerID != uuid.Nil && b.ClientID != uuid.Nil && b.IssuerID == issuerID && b.ClientID == clientID && b.Issuer != "" && b.Subject != "" && provider.ValidateResponseIssuer(b.Issuer) == nil
 }
 
 func (s *Service) federatedProvider(ctx context.Context, endpoint *ResolvedMcpEndpoint) (*remotesessions.FederatedProvider, uuid.UUID, uuid.UUID, string, error) {
@@ -94,7 +94,7 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 	if err != nil || provider == nil {
 		return nil, err
 	}
-	if retryHuman != "" && !state.FederatedBinding.matches(issuerID, clientID) {
+	if retryHuman != "" && !state.FederatedBinding.matches(issuerID, clientID, provider) {
 		return nil, remotesessions.ErrFederatedConfiguration
 	}
 	callback, err := endpoint.IDPCallbackURL(s.serverURL.String())
@@ -406,14 +406,19 @@ func (s *Service) retryFederatedDelegation(w http.ResponseWriter, r *http.Reques
 	if provider == nil {
 		return oops.E(oops.CodeFailedPrecondition, nil, "Trusted login configuration is unavailable")
 	}
-	if !state.FederatedBinding.matches(issuerID, clientID) {
+	if !state.FederatedBinding.matches(issuerID, clientID, provider) {
 		return oops.E(oops.CodeFailedPrecondition, nil, "Trusted login binding changed. Restart login")
+	}
+	// Membership and provider resolution can outlive the action preflight.
+	// Recheck authority before spending the single-use retry challenge.
+	if err := endpoint.ValidateLiveChallenge(ctx, s.db, state.Endpoint); err != nil {
+		return oauthAuthorityError(err)
 	}
 	consumed, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+state.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, nil, "Delegation retry state was already consumed or expired")
 	}
-	if consumed.Subject == nil || consumed.Subject.Kind != urn.SessionSubjectKindUser || consumed.Subject.ID != humanID || consumed.AuthorizerUserID != humanID || consumed.CSRFToken != state.CSRFToken || consumed.Federation != nil || consumed.AuthorizerImpersonated == nil || *consumed.AuthorizerImpersonated || consumed.DelegationRetryUsed || !consumed.FederatedBinding.matches(issuerID, clientID) {
+	if consumed.Subject == nil || consumed.Subject.Kind != urn.SessionSubjectKindUser || consumed.Subject.ID != humanID || consumed.AuthorizerUserID != humanID || consumed.CSRFToken != state.CSRFToken || consumed.Federation != nil || consumed.AuthorizerImpersonated == nil || *consumed.AuthorizerImpersonated || consumed.DelegationRetryUsed || !consumed.FederatedBinding.matches(issuerID, clientID, provider) {
 		return oops.E(oops.CodeUnauthorized, nil, "Delegation retry identity changed")
 	}
 	if err := endpoint.ValidateChallenge(ctx, consumed.Endpoint, consumed.UserSessionIssuerID); err != nil {
