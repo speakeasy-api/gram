@@ -15,6 +15,7 @@ func TestTokenResponseExpiresIn(t *testing.T) {
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	for _, value := range []string{`3600`, `"3600"`, `0`, `"0"`, `null`} {
 		t.Run(value, func(t *testing.T) {
+			t.Parallel()
 			var response tokenResponse
 			require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","scope":"read","expires_in":`+value+`}`), &response))
 			require.Equal(t, "a", response.AccessToken)
@@ -33,6 +34,7 @@ func TestTokenResponseExpiresIn(t *testing.T) {
 	require.Zero(t, omitted.ExpiresIn)
 	for _, value := range []string{`""`, `"never"`, `1.5`, `"1.5"`, `true`, `{}`, `[]`, `"999999999999999999999999"`} {
 		t.Run("invalid_"+value, func(t *testing.T) {
+			t.Parallel()
 			var response tokenResponse
 			require.Error(t, json.Unmarshal([]byte(`{"expires_in":`+value+`}`), &response))
 		})
@@ -46,6 +48,7 @@ func TestTokenResponseWireExpiresIn(t *testing.T) {
 		number := strconv.Itoa(want)
 		for _, raw := range []string{number, strconv.Quote(number)} {
 			t.Run(raw, func(t *testing.T) {
+				t.Parallel()
 				var wire tokenResponseWire
 				require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","expires_in":`+raw+`}`), &wire))
 				require.Equal(t, want, wire.ExpiresIn)
@@ -60,6 +63,7 @@ func TestTokenResponseWireExpiresIn(t *testing.T) {
 	}
 	for _, raw := range []string{`1e3`, `"1e3"`, `999999999999999999999999`, `"999999999999999999999999"`} {
 		t.Run("invalid_"+raw, func(t *testing.T) {
+			t.Parallel()
 			wire := tokenResponseWire{ExpiresIn: 42}
 			require.Error(t, json.Unmarshal([]byte(`{"expires_in":`+raw+`}`), &wire))
 			require.Equal(t, 42, wire.ExpiresIn)
