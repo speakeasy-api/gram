@@ -92,24 +92,19 @@ func TestFederatedRefreshVerificationDependencies(t *testing.T) {
 				// verifier before the exact mapper used by RefreshFederatedIdentity.
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.metadata.TokenEndpoint, nil)
 				require.NoError(t, err)
-				tok, _, err := postFederatedRefresh(doer, req)
+				tok, receivedAt, err := postFederatedRefresh(doer, req)
 				require.NoError(t, err)
 				require.Equal(t, "secret-rotated", tok.RefreshToken)
-				identity, err := manager.verifyFederatedIdentityMode(ctx, p, tok, "", nonce, subject, doer, true)
-				require.Nil(t, identity)
-				require.Error(t, err)
-				if tc.want == FederatedRefreshAmbiguous {
-					require.ErrorIs(t, err, ErrFederatedUnavailable)
-				} else {
-					require.ErrorIs(t, err, ErrFederatedIdentity)
-				}
-				mapped := classifyFederatedRefreshVerificationError(err)
+				result, mapped := manager.verifyFederatedRefresh(ctx, p, tok, receivedAt, subject, nonce, doer)
+				require.NotNil(t, result)
+				require.Nil(t, result.Identity)
+				require.Equal(t, "secret-rotated", result.Credentials.RefreshToken())
 				var failure *FederatedRefreshError
 				require.ErrorAs(t, mapped, &failure)
 				require.Equal(t, tc.want, failure.Kind)
 				require.NoError(t, errors.Unwrap(mapped))
 				require.NotContains(t, fmt.Sprintf("%v %+v %#v", mapped, mapped, mapped), "secret-")
-				return nil, mapped
+				return result, mapped
 			}
 			assertion, err := s.Resolve(t.Context(), b, allow)
 			require.Empty(t, assertion.Value())
@@ -119,7 +114,9 @@ func TestFederatedRefreshVerificationDependencies(t *testing.T) {
 			require.NoError(t, loadErr)
 			if tc.want == FederatedRefreshAmbiguous {
 				require.ErrorIs(t, err, ErrDelegationTemporary)
-				require.Equal(t, before.RefreshTokenEncrypted.String, after.RefreshTokenEncrypted.String)
+				require.NotEqual(t, before.RefreshTokenEncrypted.String, after.RefreshTokenEncrypted.String)
+				require.Equal(t, "secret-rotated", delegationPlain(t, s, after.RefreshTokenEncrypted.String))
+				require.Empty(t, after.IdentityAssertionEncrypted.String)
 				require.Equal(t, before.UpstreamSubjectEncrypted.String, after.UpstreamSubjectEncrypted.String)
 				require.Equal(t, before.NonceEncrypted.String, after.NonceEncrypted.String)
 				require.NotEqual(t, uuid.Nil, after.RefreshClaimID.UUID)

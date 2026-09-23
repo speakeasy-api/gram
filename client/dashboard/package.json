@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.122.0",
+  "version": "0.123.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -25,7 +25,7 @@
     "build:storybook": "storybook build"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "^2.0.48",
+    "@ai-sdk/mcp": "2.0.50",
     "@ai-sdk/react": "catalog:",
     "@assistant-ui/react": "catalog:",
     "@assistant-ui/react-ai-sdk": "~1.4.9",

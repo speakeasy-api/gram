@@ -7,6 +7,7 @@ import type { FilterValue } from "@/components/filters/filter-schema";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
 import { ResourceListPage } from "@/components/page-templates";
+import { MemberWorkflowCTA } from "@/components/platform-mcp/member-workflow-cta";
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -127,6 +128,7 @@ function noResultsMessage(active: boolean, incomplete: boolean): string {
 }
 
 export default function SkillsList(): JSX.Element {
+  const project = useProject();
   const routes = useRoutes();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -536,6 +538,15 @@ export default function SkillsList(): JSX.Element {
       }
     >
       <div className="space-y-4">
+        <MemberWorkflowCTA
+          workflow="skill_create"
+          label="Create with your agent"
+          description="Draft a skill for this project with Platform MCP. Review it before saving."
+          scope="skill:write"
+          resourceId={project.id}
+          projectSlug={project.slug}
+          prompt={`Using Platform MCP, help me draft a new skill for project ${JSON.stringify(project.slug)}. Ask me what the skill should do, show me the proposed SKILL.md and get my approval before creating it. Do not distribute the skill.`}
+        />
         <RequireScope scope="org:admin" level="section">
           <SkillPromptInjectionPolicyCard />
         </RequireScope>

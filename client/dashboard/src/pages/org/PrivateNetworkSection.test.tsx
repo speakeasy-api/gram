@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   ingressPending: false,
   ingressOptions: undefined as
     | {
+        enabled?: boolean;
         refetchInterval?: (query: {
           state: { data?: { ingress?: { status?: string } } };
         }) => number | false;
@@ -166,11 +167,18 @@ describe("PrivateNetworkSection", () => {
     ).toBeNull();
   });
 
-  it("renders no private controls for an organization reader", () => {
-    state.isAdmin = false;
-    const { container } = render(<PrivateNetworkSection />);
-    expect(container.textContent).toBe("");
-  });
+  it.each(["enabled", "disabled", "loading", "error"] as const)(
+    "keeps private controls and queries disabled for an organization reader (%s)",
+    (status) => {
+      state.isAdmin = false;
+      state.entitled = status === "enabled";
+      state.featuresLoading = status === "loading";
+      state.featuresError = status === "error";
+      const { container } = render(<PrivateNetworkSection />);
+      expect(container.textContent).toBe("");
+      expect(state.ingressOptions?.enabled).toBe(false);
+    },
+  );
 
   it.each(["features", "ingress"] as const)(
     "renders the loading panel while %s are loading",

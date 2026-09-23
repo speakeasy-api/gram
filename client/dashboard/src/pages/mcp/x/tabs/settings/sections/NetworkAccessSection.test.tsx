@@ -20,6 +20,8 @@ const testState = vi.hoisted(() => ({
   orgAdmin: true,
   ingressEnabled: true,
   ingressStatus: "online",
+  endpointNamespaceKind: "platform" as "platform" | "custom_domain",
+  ingressCustomDomainId: undefined as string | undefined,
   ingressQueryStatus: "success" as "pending" | "success" | "error",
   ingressFetching: false,
   domainsStatus: "success" as "pending" | "success" | "error",
@@ -135,7 +137,8 @@ vi.mock("@gram/client/react-query/networkIngress.js", () => ({
                 enabled: testState.ingressEnabled,
                 status: testState.ingressStatus,
                 dnsName: "private.example.ts.net",
-                endpointNamespaceKind: "platform",
+                endpointNamespaceKind: testState.endpointNamespaceKind,
+                customDomainId: testState.ingressCustomDomainId,
               },
             }
           : undefined,
@@ -264,6 +267,8 @@ beforeEach(() => {
   testState.orgAdmin = true;
   testState.ingressEnabled = true;
   testState.ingressStatus = "online";
+  testState.endpointNamespaceKind = "platform";
+  testState.ingressCustomDomainId = undefined;
   testState.ingressQueryStatus = "success";
   testState.ingressFetching = false;
   testState.domainsStatus = "success";
@@ -312,6 +317,15 @@ describe("NetworkAccessSection", () => {
       ).toBe("");
     },
   );
+
+  it("hides public-only network access for a non-admin without rollout", () => {
+    testState.orgAdmin = false;
+    testState.entitled = false;
+    const { container } = render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+    );
+    expect(container.innerHTML).toBe("");
+  });
 
   it("shows network access before staff enables Tailscale", () => {
     testState.entitled = false;
@@ -552,7 +566,7 @@ describe("NetworkAccessSection", () => {
 
     expect(
       screen.getByText(
-        /Add an MCP endpoint in the private ingress's pinned namespace/,
+        "In Server URL, add a Hosted Address so clients can reach this server through your private network.",
       ),
     ).toBeTruthy();
     fireEvent.click(
@@ -563,6 +577,20 @@ describe("NetworkAccessSection", () => {
         .getByRole("option", { name: /Private only/ })
         .getAttribute("aria-disabled"),
     ).toBe("true");
+  });
+
+  it("points to the configured custom domain when it has no matching address", () => {
+    testState.endpointNamespaceKind = "custom_domain";
+    testState.ingressCustomDomainId = "domain-2";
+    render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+    );
+
+    expect(
+      screen.getByText(
+        "In Server URL, add a Custom Address on the domain configured for your private network so clients can reach this server through your private network.",
+      ),
+    ).toBeTruthy();
   });
 
   it.each(["pending", "refetching", "error", "missing"] as const)(
@@ -744,7 +772,7 @@ describe("NetworkAccessSection", () => {
     );
     expect(
       screen.getByText(
-        /Add an MCP endpoint in the private ingress's pinned namespace/,
+        "In Gateway URL, add a Hosted Address so clients can reach this gateway through your private network.",
       ),
     ).toBeTruthy();
     fireEvent.click(

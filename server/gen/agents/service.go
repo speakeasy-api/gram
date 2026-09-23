@@ -204,6 +204,10 @@ type ListDelegableGrantsPayload struct {
 	// otherwise the MCP server ID. Narrows discovery to this server and its
 	// project before evaluating exclusions.
 	ToolsetID *string
+	// Optional MCP authorization resource identifiers, discovered in one request.
+	// Each narrows discovery like toolset_id; the result is the union of
+	// candidates across all of them.
+	ToolsetIds []string
 	// First-class agent identifier
 	AgentID string
 }

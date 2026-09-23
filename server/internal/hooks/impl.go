@@ -229,6 +229,9 @@ func (s *Service) signalIdentityMapRefresh(ctx context.Context) {
 // client disconnect must not drop it. Failures are logged and swallowed —
 // no hook decision, response or tool flow depends on a wake landing.
 func (s *Service) signalSkillEfficacy(ctx context.Context, projectID uuid.UUID) {
+	ctx, span := s.tracer.Start(ctx, "hooks.signalSkillEfficacy")
+	defer span.End()
+
 	if s.efficacySignaler == nil || projectID == uuid.Nil {
 		return
 	}

@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
   fireEvent,
@@ -5,8 +6,8 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SkillsList from "./SkillsList";
 
 const testState = vi.hoisted(() => ({
@@ -70,6 +71,9 @@ vi.mock("@/components/filters", () => ({
     clearValue: vi.fn(),
     clearAll: vi.fn(),
   }),
+}));
+vi.mock("@/components/platform-mcp/member-workflow-cta", () => ({
+  MemberWorkflowCTA: () => null,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project_a" }),

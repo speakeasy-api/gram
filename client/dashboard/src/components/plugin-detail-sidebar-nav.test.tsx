@@ -36,6 +36,8 @@ vi.mock("@/pages/plugins/use-plugin-assignments-visible", () => ({
   usePluginAssignmentsVisible: () => true,
 }));
 vi.mock("@/contexts/Auth", () => ({
+  useSession: () => ({ session: "session-a" }),
+  useProject: () => ({ id: "project-a", slug: "project-a" }),
   useOrganization: () => ({ id: "org-a" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
@@ -137,7 +139,7 @@ describe("organization plugin sidebar", () => {
   ])(
     "preserves organization navigation with admin=$canAdmin and plugin write=$canWritePlugin",
     ({ canAdmin, canWritePlugin }) => {
-      state.canRead = true;
+      state.canRead = !canWritePlugin;
       state.canAdmin = canAdmin;
       state.canWritePlugin = canWritePlugin;
       for (const query of queries) query.mockReturnValue({ data: undefined });
@@ -164,15 +166,21 @@ describe("organization plugin sidebar", () => {
           title === "Settings" ? canWritePlugin : canAdmin,
         );
       }
-      expect(state.plugin).toHaveBeenCalledWith({ id: "plugin-a" }, undefined, {
-        throwOnError: false,
-        enabled: true,
+      expect(state.plugin).toHaveBeenCalledWith(
+        { id: "plugin-a", gramProject: "project-a", gramSession: "session-a" },
+        undefined,
+        {
+          throwOnError: false,
+          enabled: true,
+        },
+      );
+      expect(state.publishStatus).toHaveBeenCalledWith({
+        gramProject: "project-a",
+        gramSession: "session-a",
       });
-      expect(state.publishStatus).toHaveBeenCalled();
       for (const query of [state.members, state.roles, state.audiences]) {
-        expect(query).toHaveBeenCalledWith(undefined, undefined, {
-          enabled: canAdmin,
-        });
+        if (canAdmin) expect(query).toHaveBeenCalled();
+        else expect(query).not.toHaveBeenCalled();
       }
     },
   );

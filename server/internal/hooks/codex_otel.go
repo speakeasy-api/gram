@@ -502,7 +502,7 @@ func (s *Service) codexOTELSessionAttribution(ctx context.Context, memo map[stri
 	memo[id.SessionID] = meta
 	// A failed attribution is cached with empty AccountType — the fast path
 	// above rejects it, so the next payload retries.
-	if err := s.cache.Set(ctx, sessionCacheKey(id.SessionID), meta, 24*time.Hour); err != nil {
+	if err := s.cacheSessionMetadata(ctx, meta); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(id.SessionID),

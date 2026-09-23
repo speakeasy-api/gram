@@ -866,12 +866,16 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 	afterView := mv.BuildMcpServerView(updated)
 
-	// A server that was already enabled is already a Default-plugin member, so
-	// renaming it (its display name is generated into the package) or disabling
-	// it (it drops out of the package) has to publish too — not just the
-	// enable transition this block attaches. A server disabled before and
-	// after contributes nothing either way and stays silent.
-	s.triggerPluginPublish(ctx, authCtx, attached || existing.Visibility != VisibilityDisabled, pluginCreated)
+	// A live server's mode, name or visibility can change generated package
+	// bytes; let the existing publisher coalesce and fingerprint unchanged ones.
+	if attached || existing.Visibility != VisibilityDisabled {
+		connected, connectionErr := pluginsrepo.New(s.db).HasPluginGithubConnectionForProject(ctx, *authCtx.ProjectID)
+		if connectionErr != nil {
+			logger.WarnContext(ctx, "check marketplace connection after MCP update", attr.SlogError(connectionErr))
+		} else {
+			s.triggerPluginPublish(ctx, authCtx, attached || connected, pluginCreated)
+		}
+	}
 	if err := s.reconcileMcpServerCustomDomains(ctx, clearedRootDomainIDs); err != nil {
 		return nil, err
 	}
@@ -1237,6 +1241,14 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+	if len(detachedPluginServers) > 0 {
+		connected, connectionErr := pluginsrepo.New(s.db).HasPluginGithubConnectionForProject(ctx, *authCtx.ProjectID)
+		if connectionErr != nil {
+			logger.WarnContext(ctx, "check marketplace connection after MCP deletion", attr.SlogError(connectionErr))
+		} else {
+			s.triggerPluginPublish(ctx, authCtx, connected, false)
+		}
 	}
 
 	// Post-commit, best-effort: RFC 7009 for the orphaned grants.

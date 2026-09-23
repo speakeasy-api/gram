@@ -4,6 +4,7 @@ import {
   AnthropicInferenceHooksStep,
   ConfigurePoliciesStep,
   DistributeServersStep,
+  DomainVerificationStep,
   IdentityProviderStep,
   InstrumentAgentsStep,
   LiteLLMSetupStep,
@@ -26,6 +27,9 @@ export function SetupTaskContent({
 }: SetupTaskContentProps): JSX.Element | null {
   let step: JSX.Element | null;
   switch (taskKey) {
+    case "domain-verification":
+      step = <DomainVerificationStep onComplete={onComplete} />;
+      break;
     case "identity-provider":
       step = <IdentityProviderStep onComplete={onComplete} />;
       break;
