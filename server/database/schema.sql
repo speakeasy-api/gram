@@ -8332,7 +8332,7 @@ CREATE TABLE IF NOT EXISTS admin_mcp_connections (
     OR (reauthorization_required_at IS NOT NULL AND reauthorization_reason IS NOT NULL AND reauthorization_reason <> '')
   ),
   CONSTRAINT admin_mcp_connections_oauth_client_id_fkey
-    FOREIGN KEY (oauth_client_id) REFERENCES admin_mcp_oauth_clients (id) ON DELETE SET NULL
+    FOREIGN KEY (oauth_client_id) REFERENCES admin_mcp_oauth_clients (id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_connections_live_subject_client_key
@@ -8374,7 +8374,7 @@ CREATE TABLE IF NOT EXISTS admin_mcp_authorization_grants (
   CONSTRAINT admin_mcp_authorization_grants_resource_uri_check CHECK (resource_uri <> ''),
   CONSTRAINT admin_mcp_authorization_grants_connection_client_fkey
     FOREIGN KEY (connection_id, oauth_client_id)
-    REFERENCES admin_mcp_connections (id, oauth_client_id) ON DELETE SET NULL
+    REFERENCES admin_mcp_connections (id, oauth_client_id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_authorization_grants_code_hash_key
@@ -8404,13 +8404,16 @@ CREATE TABLE IF NOT EXISTS admin_mcp_sessions (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT admin_mcp_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_sessions_id_lineage_key UNIQUE (id, connection_id, oauth_client_id, connection_generation),
   CONSTRAINT admin_mcp_sessions_jti_check CHECK (jti <> ''),
   CONSTRAINT admin_mcp_sessions_refresh_token_hash_check CHECK (refresh_token_hash <> ''),
   CONSTRAINT admin_mcp_sessions_connection_client_fkey
     FOREIGN KEY (connection_id, oauth_client_id)
-    REFERENCES admin_mcp_connections (id, oauth_client_id) ON DELETE SET NULL,
-  CONSTRAINT admin_mcp_sessions_replaced_by_session_id_fkey
-    FOREIGN KEY (replaced_by_session_id) REFERENCES admin_mcp_sessions (id) ON DELETE SET NULL
+    REFERENCES admin_mcp_connections (id, oauth_client_id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_sessions_replaced_by_session_lineage_fkey
+    FOREIGN KEY (replaced_by_session_id, connection_id, oauth_client_id, connection_generation)
+    REFERENCES admin_mcp_sessions (id, connection_id, oauth_client_id, connection_generation)
+    ON DELETE NO ACTION
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_jti_key
