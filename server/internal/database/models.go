@@ -1716,6 +1716,75 @@ type OktaResourceConnection struct {
 	UpdatedAt                    pgtype.Timestamptz
 }
 
+type OnboardingCapability struct {
+	ID        uuid.UUID
+	Slug      string
+	Name      string
+	UseCase   string
+	SortOrder int32
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+type OnboardingPlan struct {
+	ID         uuid.UUID
+	ProviderID uuid.UUID
+	Slug       string
+	Name       string
+	SortOrder  int32
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+type OnboardingProduct struct {
+	ID         uuid.UUID
+	ProviderID uuid.UUID
+	Slug       string
+	Name       string
+	SourceIds  []string
+	SortOrder  int32
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+type OnboardingProductTechnique struct {
+	ProductID   uuid.UUID
+	TechniqueID uuid.UUID
+	CreatedAt   pgtype.Timestamptz
+}
+
+type OnboardingProductTechniquePlan struct {
+	ProductID   uuid.UUID
+	TechniqueID uuid.UUID
+	PlanID      uuid.UUID
+	CreatedAt   pgtype.Timestamptz
+}
+
+type OnboardingProvider struct {
+	ID        uuid.UUID
+	Slug      string
+	Name      string
+	SortOrder int32
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+type OnboardingTechnique struct {
+	ID          uuid.UUID
+	Slug        string
+	Name        string
+	Description string
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
+type OnboardingTechniqueCapability struct {
+	TechniqueID  uuid.UUID
+	CapabilityID uuid.UUID
+	CreatedAt    pgtype.Timestamptz
+}
+
 type OpenrouterApiKey struct {
 	OrganizationID string
 	KeyType        string
@@ -1828,6 +1897,38 @@ type OrganizationOnboarding struct {
 	ID             uuid.UUID
 	OrganizationID string
 	Preset         pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type OrganizationOnboardingAnswer struct {
+	OrganizationID string
+	MdmVendor      pgtype.Text
+	UseCase        pgtype.Text
+	CompletedAt    pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type OrganizationOnboardingProduct struct {
+	OrganizationID string
+	ProductID      uuid.UUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type OrganizationOnboardingProvider struct {
+	OrganizationID string
+	ProviderID     uuid.UUID
+	PlanID         uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type OrganizationOnboardingStep struct {
+	OrganizationID string
+	StepSlug       string
+	VerifiedAt     pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
