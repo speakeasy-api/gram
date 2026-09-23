@@ -3,6 +3,7 @@ package agentmanagement
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -172,6 +173,49 @@ func TestCreateAgentRejectsDeletedProject(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	stored, err := repo.New(conn).ListManagedAgents(t.Context(), "org-agent-deleted-project")
+	require.NoError(t, err)
+	require.Empty(t, stored)
+}
+
+// A soft delete keeps the foreign-key target alive. Creation must wait for
+// its transaction and then re-check liveness, rather than reading the old row.
+func TestCreateAgentSerializesWithConcurrentProjectDeletion(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	const organizationID = "org-agent-concurrent-delete"
+	seedOrganization(t, conn, organizationID)
+	seedOrganizationUser(t, conn, organizationID, "owner")
+	project := seedProject(t, conn, organizationID, "concurrent-delete")
+	service := newProjectScopedService(t, conn)
+	ctx := validatedHumanContext(t, organizationID, "owner")
+	projectID := project.ID.String()
+
+	deletion, err := conn.Begin(t.Context()) //nolint:glint // notestingrawsql: hold the deletion transaction open to verify concurrent creation blocks
+	require.NoError(t, err)
+	defer func() { _ = deletion.Rollback(t.Context()) }()
+	_, err = projectsrepo.New(deletion).DeleteProject(t.Context(), project.ID)
+	require.NoError(t, err)
+	deletingPID := deletion.Conn().PgConn().PID()
+
+	created := make(chan error, 1)
+	go func() {
+		_, err := service.Create(ctx, &gen.CreatePayload{Name: "Concurrent agent", ProjectID: &projectID})
+		created <- err
+	}()
+	// Observe the actual database wait rather than relying on a scheduling sleep.
+	require.Eventually(t, func() bool {
+		var blocked bool
+		err := conn.QueryRow(t.Context(), `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)))`, deletingPID).Scan(&blocked) //nolint:glint // notestingrawsql: observes concurrent transaction serialization
+		return err == nil && blocked
+	}, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, deletion.Commit(t.Context()))
+	select {
+	case err := <-created:
+		requireOopsCode(t, err, oops.CodeNotFound)
+	case <-time.After(5 * time.Second):
+		t.Fatal("agent creation did not resume after project deletion committed")
+	}
+	stored, err := repo.New(conn).ListManagedAgents(t.Context(), organizationID)
 	require.NoError(t, err)
 	require.Empty(t, stored)
 }
