@@ -1,4 +1,4 @@
-h1:0FQXC4BRwkHgzKdOaKl15IlSZv4LdlfJMA3r6M1efWk=
+h1:GTLIPTiu0ktin5Ys1TxEodIAFi/Vhf8X4N0GvMXbRJQ=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -428,3 +428,4 @@ h1:0FQXC4BRwkHgzKdOaKl15IlSZv4LdlfJMA3r6M1efWk=
 20260922185929_durable_oidc_delegation.sql h1:/Hgy6CFoEoL6aKN+D1fsD+Fc9+m8UfFhQ0sQrUhvPsc=
 20260922192857_organization-metadata-add-creation-source.sql h1:OirX6dlp8fKPW8QIHKfAhdWoYSapi5+ktYowQCowfgA=
 20260923172149_risk-policies-add-mcp-scope.sql h1:ZLQtnDLXrHcas+F6qBCAOkysAPxjDHR0GBPk+Kw7uF8=
+20260923175416_organization-metadata-add-verified-domains.sql h1:gKLrBw8W7Xbr6CS1VpXKkUi1cfjHHz0zo4PB2R7o8EY=
