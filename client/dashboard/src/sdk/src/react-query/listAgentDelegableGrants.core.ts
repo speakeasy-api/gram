@@ -51,6 +51,7 @@ export function buildListAgentDelegableGrantsQuery(
     queryKey: queryKeyListAgentDelegableGrants({
       agentId: request.agentId,
       toolsetId: request.toolsetId,
+      toolsetIds: request.toolsetIds,
       gramSession: request.gramSession,
     }),
     queryFn: async function listAgentDelegableGrantsQueryFn(
@@ -81,6 +82,7 @@ export function queryKeyListAgentDelegableGrants(
   parameters: {
     agentId: string;
     toolsetId?: string | undefined;
+    toolsetIds?: Array<string> | undefined;
     gramSession?: string | undefined;
   },
 ): QueryKey {

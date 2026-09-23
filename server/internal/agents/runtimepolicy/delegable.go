@@ -2,12 +2,19 @@ package runtimepolicy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
+
+// MaxDelegableGrantCandidates bounds the candidates one discovery may return.
+const MaxDelegableGrantCandidates = 4096
+
+// ErrTooManyDelegableGrantCandidates marks a discovery over that bound.
+var ErrTooManyDelegableGrantCandidates = errors.New("too many delegable grant candidates")
 
 // DelegableGrants returns safe representable allow-only candidates, not a full
 // resource inventory. An overlapping exclusion removes the entire candidate:
@@ -59,8 +66,8 @@ func DelegableGrants(agent, owner, caller []authz.Grant, constraints ...authz.Se
 						return nil, fmt.Errorf("encode delegable selector: %w", err)
 					}
 					candidates[string(scope)+"\x00"+string(encoded)] = candidate
-					if len(candidates) > 4096 {
-						return nil, fmt.Errorf("too many delegable grant candidates")
+					if len(candidates) > MaxDelegableGrantCandidates {
+						return nil, ErrTooManyDelegableGrantCandidates
 					}
 				}
 			}
