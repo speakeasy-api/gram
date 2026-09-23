@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -334,25 +332,15 @@ type workosOrganizationDomain struct {
 	State  workos.OrganizationDomainState `json:"state"`
 }
 
-// verifiedDomains returns the verified domains listed on the event, in lower
-// case and without duplicates. The payload carries every domain on the
-// organization, so this is the full list, not a delta.
-func (p workosOrganizationEventPayload) verifiedDomains() []string {
-	verified := make([]string, 0, len(p.Domains))
+// domainPolicy returns the domains listed on the event. The payload carries
+// every domain on the organization, so its verified domains are the full
+// list, not a delta.
+func (p workosOrganizationEventPayload) domainPolicy() *workos.OrganizationDomainPolicy {
+	domains := make([]workos.OrganizationDomain, 0, len(p.Domains))
 	for _, d := range p.Domains {
-		domain := normalizeDomain(d.Domain)
-		if d.State.IsVerified() && domain != "" && !slices.Contains(verified, domain) {
-			verified = append(verified, domain)
-		}
+		domains = append(domains, workos.OrganizationDomain{Domain: d.Domain, State: d.State})
 	}
-	return verified
-}
-
-// normalizeDomain returns the form of a domain name stored in
-// verified_domains. Domain names are case-insensitive, so they are stored in
-// lower case.
-func normalizeDomain(domain string) string {
-	return strings.ToLower(strings.TrimSpace(domain))
+	return &workos.OrganizationDomainPolicy{Domains: domains}
 }
 
 type workosOrgExternalIDUpdate struct {
@@ -502,7 +490,7 @@ func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Querie
 		WorkosID:          conv.ToPGText(payload.ID),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(payload.UpdatedAt),
 		WorkosLastEventID: conv.ToPGText(eventID),
-		VerifiedDomains:   payload.verifiedDomains(),
+		VerifiedDomains:   payload.domainPolicy().VerifiedDomains(),
 	})
 	if err != nil {
 		return fmt.Errorf("create organization %q from workos event: %w", payload.ID, err)
@@ -522,7 +510,7 @@ func updateOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Querie
 		WorkosID:          conv.ToPGText(payload.ID),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(payload.UpdatedAt),
 		WorkosLastEventID: conv.ToPGText(eventID),
-		VerifiedDomains:   payload.verifiedDomains(),
+		VerifiedDomains:   payload.domainPolicy().VerifiedDomains(),
 	})
 	if err != nil {
 		return fmt.Errorf("update organization %q from workos event: %w", payload.ID, err)
@@ -743,7 +731,7 @@ func handleOrganizationDomainEvent(ctx context.Context, logger *slog.Logger, dbt
 		return oops.Permanent(fmt.Errorf("unmarshal organization domain event payload: %w", err))
 	}
 
-	domain := normalizeDomain(conv.Default(payload.OrganizationDomain.Domain, payload.Domain))
+	domain := workos.NormalizeDomain(conv.Default(payload.OrganizationDomain.Domain, payload.Domain))
 	if domain == "" {
 		logger.WarnContext(ctx, "skipping organization domain event without a domain", attr.SlogWorkOSOrganizationID(workosOrgID))
 		return nil

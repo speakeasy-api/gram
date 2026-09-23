@@ -58,7 +58,11 @@ export function DomainVerificationStep({
       },
       {
         onSuccess: (data) => {
-          if (openSafeExternalUrl(data.url)) setPortalOpened(true);
+          if (openSafeExternalUrl(data.url)) {
+            setPortalOpened(true);
+          } else {
+            toast.error("Unable to open the WorkOS portal");
+          }
         },
       },
     );

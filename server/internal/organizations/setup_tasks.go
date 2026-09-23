@@ -76,7 +76,8 @@ func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTask
 		return nil, err
 	}
 
-	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	repo := orgrepo.New(s.db)
+	org, err := repo.GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization for setup tasks").LogError(ctx, s.logger)
 	}
@@ -85,13 +86,13 @@ func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTask
 	// from showing blocked until someone opens the onboarding status. Active
 	// SSO already completes the domain task, so it needs no check.
 	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
-	if workosOrgID != "" && len(org.VerifiedDomains) == 0 && !org.SsoEnabled.Bool {
+	if workosOrgID != "" && !org.SsoEnabled.Bool {
 		if _, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains); err != nil {
 			s.logger.WarnContext(ctx, "setup tasks: check domain verification", attr.SlogError(err), attr.SlogWorkOSOrganizationID(workosOrgID))
 		}
 	}
 
-	tasks, err := s.projectSetupTasks(ctx, orgrepo.New(s.db), ac.ActiveOrganizationID)
+	tasks, err := s.projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, err
 	}

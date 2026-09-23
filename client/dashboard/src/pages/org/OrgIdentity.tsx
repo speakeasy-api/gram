@@ -354,8 +354,11 @@ function SingleSignOnTab(): JSX.Element {
   const domainVerified = onboardingStatus?.domainVerified ?? false;
   const verifiedDomains = onboardingStatus?.verifiedDomains ?? [];
   // WorkOS needs a verified domain before either connection can be set up.
-  const ssoBlocked = !ssoActive && !domainVerified;
-  const scimBlocked = !scimActive && !domainVerified;
+  // Only a status response can say the domain is unverified: while loading or
+  // after an error nothing is blocked, and WorkOS still enforces the rule.
+  const domainUnverified = onboardingStatus?.domainVerified === false;
+  const ssoBlocked = !ssoActive && domainUnverified;
+  const scimBlocked = !scimActive && domainUnverified;
 
   let domainSubtitle = "Add a DNS record to verify your domain.";
   if (verifiedDomains.length > 0)

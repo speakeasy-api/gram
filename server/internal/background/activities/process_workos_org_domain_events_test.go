@@ -60,9 +60,19 @@ func domainDeletedEvent(id string, data []byte) events.Event {
 }
 
 func organizationUpdatedEvent(id, workosOrgID, organizationID, domainsJSON string) events.Event {
+	return organizationEvent("organization.updated", id, workosOrgID, organizationID, domainsJSON)
+}
+
+func organizationCreatedEvent(id, workosOrgID, organizationID, domainsJSON string) events.Event {
+	return organizationEvent("organization.created", id, workosOrgID, organizationID, domainsJSON)
+}
+
+// organizationEvent builds an organization.* event whose payload lists
+// domainsJSON, a comma-separated list of Organization Domain objects.
+func organizationEvent(kind, id, workosOrgID, organizationID, domainsJSON string) events.Event {
 	return events.Event{
 		ID:        id,
-		Event:     "organization.updated",
+		Event:     kind,
 		CreatedAt: time.Now(),
 		Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Domains","external_id":"` + organizationID +
 			`","updated_at":"2026-05-06T12:00:00Z","domains":[` + domainsJSON + `]}`),
@@ -470,4 +480,53 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateAfterDomainEventsReco
 	row := getOrgByWorkOSID(t, conn, workosOrgID)
 	require.Equal(t, []string{"c.example.com", "d.example.com"}, row.VerifiedDomains)
 	require.Equal(t, "event_03", row.WorkosLastEventID.String)
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateStoresOnlyVerifiedDomains(t *testing.T) {
+	t.Parallel()
+
+	conn := newOrgEventsTestConn(t, "workos_org_events_create_verified_domains")
+	const workosOrgID = "org_01HZDOMCREATEMIXED"
+	const organizationID = "gram_org_domains_create_mixed"
+
+	runOrgEvents(t, conn, workosOrgID, organizationCreatedEvent("event_01", workosOrgID, organizationID,
+		`{"object":"organization_domain","domain":"Example.COM","state":"verified"},`+
+			`{"object":"organization_domain","domain":"pending.example.com","state":"pending"},`+
+			`{"object":"organization_domain","domain":"Legacy.Example.com","state":"legacy_verified"},`+
+			`{"object":"organization_domain","domain":"failed.example.com","state":"failed"}`))
+
+	row := getOrgByWorkOSID(t, conn, workosOrgID)
+	require.Equal(t, organizationID, row.ID)
+	require.Equal(t, []string{"example.com", "legacy.example.com"}, row.VerifiedDomains)
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateDropsCaseDuplicates(t *testing.T) {
+	t.Parallel()
+
+	conn := newOrgEventsTestConn(t, "workos_org_events_create_case_dup")
+	const workosOrgID = "org_01HZDOMCREATECASE"
+	const organizationID = "gram_org_domains_create_case"
+
+	runOrgEvents(t, conn, workosOrgID, organizationCreatedEvent("event_01", workosOrgID, organizationID,
+		`{"object":"organization_domain","domain":" Example.com ","state":"verified"},`+
+			`{"object":"organization_domain","domain":"example.COM","state":"legacy_verified"},`+
+			`{"object":"organization_domain","domain":"other.example.com","state":"verified"}`))
+
+	require.Equal(t, []string{"example.com", "other.example.com"}, getOrgByWorkOSID(t, conn, workosOrgID).VerifiedDomains)
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateWithoutVerifiedDomainsStoresEmptyList(t *testing.T) {
+	t.Parallel()
+
+	conn := newOrgEventsTestConn(t, "workos_org_events_create_no_verified")
+	const workosOrgID = "org_01HZDOMCREATENONE"
+	const organizationID = "gram_org_domains_create_none"
+
+	runOrgEvents(t, conn, workosOrgID, organizationCreatedEvent("event_01", workosOrgID, organizationID,
+		`{"object":"organization_domain","domain":"pending.example.com","state":"pending"},`+
+			`{"object":"organization_domain","domain":"failed.example.com","state":"failed"}`))
+
+	row := getOrgByWorkOSID(t, conn, workosOrgID)
+	require.NotNil(t, row.VerifiedDomains)
+	require.Empty(t, row.VerifiedDomains)
 }

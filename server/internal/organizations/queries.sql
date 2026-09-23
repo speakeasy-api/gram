@@ -898,12 +898,14 @@ SET verified_domains = ARRAY(
 WHERE workos_id = @workos_id;
 
 -- name: SetVerifiedDomains :exec
--- Replace the verified domains on an organization with the result of a live
--- WorkOS check.
+-- Fill an empty verified domains list with the result of a live WorkOS check.
+-- A non-empty list is owned by the event sync and may be newer than the live
+-- check, so it is never overwritten here.
 UPDATE organization_metadata
 SET verified_domains = @verified_domains::text[],
     updated_at = clock_timestamp()
-WHERE id = @id;
+WHERE id = @id
+  AND cardinality(COALESCE(verified_domains, '{}'::text[])) = 0;
 
 -- name: ClearWorkosOrgID :exec
 UPDATE organization_metadata

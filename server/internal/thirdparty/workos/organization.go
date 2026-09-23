@@ -45,20 +45,26 @@ type OrganizationDomainPolicy struct {
 	Domains []OrganizationDomain
 }
 
-// VerifiedDomains returns the lowercased domain names WorkOS treats as
-// verified, matching how the event sync stores them.
+// VerifiedDomains returns the normalized domain names WorkOS treats as
+// verified, without duplicates and in the order WorkOS lists them.
 func (p *OrganizationDomainPolicy) VerifiedDomains() []string {
 	verified := make([]string, 0, len(p.Domains))
 	for _, d := range p.Domains {
 		if !d.State.IsVerified() {
 			continue
 		}
-		domain := strings.ToLower(strings.TrimSpace(d.Domain))
+		domain := NormalizeDomain(d.Domain)
 		if domain != "" && !slices.Contains(verified, domain) {
 			verified = append(verified, domain)
 		}
 	}
 	return verified
+}
+
+// NormalizeDomain returns the form of a domain name Gram stores. Domain names
+// are case-insensitive, so they are stored trimmed and in lower case.
+func NormalizeDomain(domain string) string {
+	return strings.ToLower(strings.TrimSpace(domain))
 }
 
 // GetOrganization fetches a WorkOS organization by id.
