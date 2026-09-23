@@ -1,3 +1,5 @@
+import { useOrganization, useProject } from "@/contexts/Auth";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useMemo } from "react";
 import type { LauncherCandidate } from "./types";
@@ -12,6 +14,7 @@ import { useMcpServerCandidates } from "./useMcpServerCandidates";
 import { usePersonCandidates } from "./usePersonCandidates";
 import { usePluginCandidates } from "./usePluginCandidates";
 import { usePolicyCandidates } from "./usePolicyCandidates";
+import { useProjectCandidates } from "./useProjectCandidates";
 import { useRecentCandidates } from "./useRecentCandidates";
 import { useRuleCandidates } from "./useRuleCandidates";
 import { useSourceCandidates } from "./useSourceCandidates";
@@ -40,27 +43,36 @@ export function useLauncherCandidates({
   orgSlug: string | undefined;
   projectSlug: string | undefined;
 }): LauncherCandidate[] {
+  const organization = useOrganization();
+  const project = useProject();
   const { hasAnyScope, hasScope } = useRBAC();
+  // Every org-level check names the organization: without a resource id
+  // hasScope is existential (a grant on any org passes), so a member who is
+  // an admin elsewhere would otherwise fire this tenant's forbidden calls.
+  //
   // Risk resources are org:admin-gated on their own pages; mirror that here so
   // non-admins never fire the (forbidden) list calls.
-  const isAdmin = hasAnyScope(["org:admin"]);
-  // Approval requests are an org-admin surface, matching the queue page.
-  const canReadApprovals = hasScope("org:admin");
-  const canReadPeople = hasAnyScope(["org:read", "org:admin"]);
+  const isAdmin = hasAnyScope(["org:admin"], organization.id);
+  // Approval requests are an org-admin surface, matching the queue page's own
+  // gate.
+  const canReadApprovals = hasScope("org:admin", organization.id);
+  const canReadPeople = hasAnyScope(["org:read", "org:admin"], organization.id);
   // The MCP page's own gate (pages/mcp/MCP.tsx), so a member who cannot open
   // the listing never fires its (forbidden) list calls from the palette.
   // Sources are a tab of that section and their detail page gates on
   // mcp:read, so they share it.
   const canListMcp = hasAnyScope(["mcp:read", "mcp:write"]);
-  // The scopes that reach the Plugins page from the nav
-  // (hooks/useProjectNavRoutes.ts), so the list is only fetched for members
-  // who can open it.
-  const canListPlugins = hasAnyScope(["project:read", "project:write"]);
+  // Plugins list for whoever can edit them (org admins and plugin:write on
+  // this project, per usePluginWriteAccess) or read the organization; the
+  // same gate the Plugins page renders behind.
+  const canWritePlugins = usePluginWriteAccess();
+  const canListPlugins =
+    canWritePlugins || hasAnyScope(["org:read", "org:admin"], organization.id);
   // What listCatalog itself requires (server/internal/externalmcp/impl.go),
   // rather than the looser any-of gate the catalog page renders behind: an
   // mcp:write-only reader would pass that one and then have the request
-  // refused.
-  const canBrowseCatalog = hasScope("project:read");
+  // refused. Named on the project, as the server checks it.
+  const canBrowseCatalog = hasScope("project:read", project.id);
 
   const projectEnabled = enabled && inProject;
 
@@ -95,6 +107,9 @@ export function useLauncherCandidates({
     enabled: projectEnabled && canReadApprovals,
   });
   const people = usePersonCandidates({ enabled: enabled && canReadPeople });
+  // Org-scoped, so offered from both shells: at the org level picking a
+  // project is the palette's main job, inside a project it is a switcher.
+  const projects = useProjectCandidates({ enabled });
 
   return useMemo(() => {
     const projectOnly = (list: LauncherCandidate[]) => (inProject ? list : []);
@@ -117,6 +132,7 @@ export function useLauncherCandidates({
       ...adminOnly(rules),
       ...(inProject && canReadApprovals ? accessRequests : []),
       ...(canReadPeople ? people : []),
+      ...projects,
     ];
   }, [
     inProject,
@@ -140,5 +156,6 @@ export function useLauncherCandidates({
     rules,
     accessRequests,
     people,
+    projects,
   ]);
 }

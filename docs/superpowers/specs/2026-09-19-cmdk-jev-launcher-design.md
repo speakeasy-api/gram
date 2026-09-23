@@ -103,15 +103,16 @@ export interface LauncherCandidate {
 the state Jev needs to disambiguate. Every kind renders a short, stable
 detail string. Examples:
 
-| kind          | detail                                                                          |
-| ------------- | ------------------------------------------------------------------------------- |
-| `mcp_server`  | `MCP server · enabled` / `MCP server · disabled`                                |
-| `marketplace` | `Plugin marketplace · unpublished changes` / `· up to date` / `· not connected` |
-| `plugin`      | `Plugin · 4 servers`                                                            |
-| `catalog`     | `Catalog entry · <registry specifier>` (open-only; requires `project:read`)     |
-| `page`        | `Page` (org pages: `Organization page`)                                         |
-| `recent`      | `Recently visited`                                                              |
-| `person`      | `Member · <role>` (fuzzy only, see below)                                       |
+| kind          | detail                                                                             |
+| ------------- | ---------------------------------------------------------------------------------- |
+| `mcp_server`  | `MCP server · enabled` / `MCP server · disabled`                                   |
+| `marketplace` | `Plugin marketplace · unpublished changes` / `· up to date` / `· not connected`    |
+| `plugin`      | `Plugin · 4 servers`                                                               |
+| `project`     | `Project` / `Project · <slug>` (organization-scoped; listed idle at the org level) |
+| `catalog`     | `Catalog entry · <registry specifier>` (open-only; requires `project:read`)        |
+| `page`        | `Page` (org pages: `Organization page`)                                            |
+| `recent`      | `Recently visited`                                                                 |
+| `person`      | `Member · <role>` (fuzzy only, see below)                                          |
 
 ### Verb attachment rules
 

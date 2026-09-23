@@ -59,6 +59,7 @@ var actionCriteria = map[string]string{
 // criteria. Unknown kinds fall back to the raw kind string.
 var kindLabels = map[string]string{
 	"page":           "Page",
+	"project":        "Project",
 	"recent":         "Recently visited page",
 	"mcp_server":     "MCP server",
 	"catalog":        "Catalog entry",

@@ -11,6 +11,12 @@ const palette = vi.hoisted(() => ({
   contextBadge: null,
 }));
 
+/** Which shell the palette opens in; reset to the project shell per test. */
+const slugs = vi.hoisted(() => ({
+  orgSlug: "acme" as string | undefined,
+  projectSlug: "widgets" as string | undefined,
+}));
+
 const mocks = vi.hoisted(() => ({
   candidates: [] as unknown[],
   judgeState: {
@@ -31,7 +37,7 @@ vi.mock("@/contexts/CommandPalette", () => ({
   useCommandPalette: () => palette,
 }));
 vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ orgSlug: "acme", projectSlug: "widgets" }),
+  useSlugs: () => slugs,
 }));
 vi.mock("./recentlyVisited", () => ({
   useRecentsUserId: () => "user_1",
@@ -101,6 +107,18 @@ const SESSIONS = candidate({
   run: runSessions,
 });
 
+// The candidate hook yields projects in both shells; which shell shows them
+// while idle is the palette's call, so the tests here are about that.
+const WIDGETS = candidate({
+  id: "project:project-widgets",
+  kind: "project",
+  title: "Widgets",
+  detail: "Project",
+  keywords: ["project", "Widgets", "widgets", "project-widgets"],
+  icon: "folder",
+  group: "Projects",
+});
+
 /**
  * A settled open judgment that orders the rows as `ids` lists them. Halving
  * masses (0.5, 0.25, 0.125, …) keep the total under 1, as a distribution the
@@ -137,6 +155,8 @@ const input = () =>
   screen.getByPlaceholderText("Ask AI or search resources and pages…");
 
 beforeEach(() => {
+  slugs.orgSlug = "acme";
+  slugs.projectSlug = "widgets";
   mocks.candidates = [SETTINGS, SLACK];
   mocks.judgeState = IDLE_JUDGE;
   mocks.judge.mockReset();
@@ -157,6 +177,39 @@ describe("CommandPalette", () => {
 
     const row = screen.getByRole("option", { name: /Ask Project Assistant/ });
     expect(row.textContent).toContain("“zzzzznomatch”");
+  });
+
+  // The palette used to fall back to page navigation alone at the org level,
+  // leaving no way to reach a project from it (S-1028).
+  it("offers projects at the organization level", () => {
+    slugs.projectSlug = undefined;
+    mocks.candidates = [SETTINGS, WIDGETS];
+    render(<CommandPalette />);
+
+    // The row's accessible name carries its detail line too ("Widgets Project").
+    expect(screen.getByRole("option", { name: /Widgets/ })).toBeTruthy();
+    expect(
+      screen.getByPlaceholderText("Search projects and pages…"),
+    ).toBeTruthy();
+    const headings = Array.from(
+      document.body.querySelectorAll("[cmdk-group-heading]"),
+    ).map((h) => h.textContent);
+    expect(headings).toEqual(["Projects", "Pages"]);
+  });
+
+  // Inside a project the projects are a switcher, not the palette's main
+  // job: they wait for a query so the idle list isn't headed by the projects
+  // you aren't in. The judge is mocked idle here, so fuzzy order alone has
+  // to surface the row.
+  it("offers projects inside a project only once there is a query", async () => {
+    mocks.candidates = [SETTINGS, WIDGETS];
+    render(<CommandPalette />);
+
+    expect(screen.queryByRole("option", { name: /Widgets/ })).toBeNull();
+
+    await userEvent.type(input(), "widgets");
+
+    expect(screen.getByRole("option", { name: /Widgets/ })).toBeTruthy();
   });
 
   it("clears the query on the first Escape instead of closing", async () => {

@@ -10,6 +10,17 @@ const mocks = vi.hoisted(() => ({
    */
   mcpWriteResourceIds: null as string[] | null,
   inProject: true,
+  /** The org slug in the path; undefined outside any organization route. */
+  orgSlug: "acme" as string | undefined,
+  organizations: [] as unknown[],
+  activeOrganizationId: "org-acme",
+  pluginWriteAccess: false,
+  /** Every RBAC check, with the resource id it was made against. */
+  rbacCalls: [] as Array<{
+    fn: "hasAnyScope" | "hasScope";
+    scopes: string[];
+    resourceId?: string;
+  }>,
   toolsets: [] as unknown[],
   mcpServers: [] as unknown[],
   catalogServers: [] as unknown[],
@@ -21,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   recents: [] as unknown[],
   recentsArgs: [] as unknown[][],
   navigate: vi.fn(),
+  clearQueryCache: vi.fn(),
   goToPlugins: vi.fn(),
   goToToolsetDetails: vi.fn(),
   goToMcpServerOverview: vi.fn(),
@@ -140,6 +152,19 @@ vi.mock("@gram/client/react-query/members.js", () => ({
     return { data: { members: mocks.members } };
   },
 }));
+vi.mock("@gram/client/react-query/sessionInfo.js", () => ({
+  useSessionInfo: (...args: unknown[]) => {
+    record("useSessionInfo", args);
+    return {
+      data: {
+        result: {
+          organizations: mocks.organizations,
+          activeOrganizationId: mocks.activeOrganizationId,
+        },
+      },
+    };
+  },
+}));
 
 // The real form builder and toast copy run here: the update endpoint replaces
 // the whole record, so the tests must see every carried-over field, not a
@@ -149,7 +174,17 @@ vi.mock("@/lib/mcp-server-visibility", async (importOriginal) => ({
   invalidateMcpServerQueries: mocks.invalidateMcpServerQueries,
 }));
 vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({ fetchQuery: mocks.fetchQuery }),
+  useQueryClient: () => ({
+    fetchQuery: mocks.fetchQuery,
+    clear: mocks.clearQueryCache,
+  }),
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-acme", slug: "acme" }),
+  useProject: () => ({ id: "project-default", slug: "default" }),
+}));
+vi.mock("@/hooks/usePluginWriteAccess", () => ({
+  usePluginWriteAccess: () => mocks.pluginWriteAccess,
 }));
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({
@@ -165,7 +200,7 @@ vi.mock("react-router", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({
-    orgSlug: "acme",
+    orgSlug: mocks.orgSlug,
     projectSlug: mocks.inProject ? "default" : undefined,
   }),
   useProjectSlugForRequests: () => "default",
@@ -173,9 +208,12 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasAnyScope: (scopes: string[]) =>
-      scopes.some((scope) => mocks.scopes.includes(scope)),
+    hasAnyScope: (scopes: string[], resourceId?: string) => {
+      mocks.rbacCalls.push({ fn: "hasAnyScope", scopes, resourceId });
+      return scopes.some((scope) => mocks.scopes.includes(scope));
+    },
     hasScope: (scope: string, resourceId?: string) => {
+      mocks.rbacCalls.push({ fn: "hasScope", scopes: [scope], resourceId });
       if (!mocks.scopes.includes(scope)) return false;
       if (scope !== "mcp:write" || !mocks.mcpWriteResourceIds) return true;
       return !resourceId || mocks.mcpWriteResourceIds.includes(resourceId);
@@ -292,10 +330,24 @@ function catalogServer(title: string | undefined, registrySpecifier: string) {
   return { title, registrySpecifier, registryId: "registry-1" };
 }
 
+function project(name: string, slug: string) {
+  return { id: `project-${slug}`, name, slug };
+}
+
+/** The organization the tests run in, holding `projects`. */
+function acme(projects: ReturnType<typeof project>[]) {
+  return { id: "org-acme", slug: "acme", name: "Acme", projects };
+}
+
 beforeEach(() => {
   mocks.scopes = [];
   mocks.mcpWriteResourceIds = null;
   mocks.inProject = true;
+  mocks.orgSlug = "acme";
+  mocks.organizations = [];
+  mocks.activeOrganizationId = "org-acme";
+  mocks.pluginWriteAccess = false;
+  mocks.rbacCalls = [];
   mocks.toolsets = [];
   mocks.mcpServers = [];
   mocks.catalogServers = [];
@@ -839,6 +891,114 @@ describe("usePersonCandidates", () => {
   });
 });
 
+describe("useProjectCandidates", () => {
+  // Read off the session rather than projects.list: the response the app
+  // boots on already carries the caller's projects, so the group costs no
+  // request of its own and offers exactly what the workspace switcher offers.
+  it("lists the organization's projects in slug order", () => {
+    mocks.organizations = [
+      acme([project("Widgets", "widgets"), project("Billing", "billing")]),
+    ];
+    const { result } = renderCandidates();
+    const projects = byKind(result.current, "project");
+
+    expect(projects.map((c) => c.title)).toEqual(["Billing", "Widgets"]);
+    expect(projects.map((c) => c.group)).toEqual(["Projects", "Projects"]);
+    expect(projects.map((c) => c.verbs)).toEqual([["open"], ["open"]]);
+    expect(projects[0]?.id).toBe("project:project-billing");
+  });
+
+  it("yields nothing when the organization has no projects", () => {
+    mocks.organizations = [acme([])];
+    const { result } = renderCandidates();
+    expect(byKind(result.current, "project")).toHaveLength(0);
+  });
+
+  // A renamed project keeps its original slug, so the slug is often the only
+  // thing that still matches what the URL showed; the id is what a support
+  // thread quotes.
+  it("is findable by name, slug and id", () => {
+    mocks.organizations = [acme([project("Payments", "billing-a1b2")])];
+    const { result } = renderCandidates();
+    const [payments] = byKind(result.current, "project");
+
+    expect(payments?.title).toBe("Payments");
+    expect(payments?.detail).toBe("Project · billing-a1b2");
+    expect(payments?.keywords).toEqual(
+      expect.arrayContaining([
+        "Payments",
+        "billing-a1b2",
+        "project-billing-a1b2",
+      ]),
+    );
+  });
+
+  // "Default" / "default" is the same name, so the slug would only repeat
+  // the label.
+  it("omits the slug from the detail when it only repeats the name", () => {
+    mocks.organizations = [acme([project("Default", "default")])];
+    const { result } = renderCandidates();
+    expect(byKind(result.current, "project")[0]?.detail).toBe("Project");
+  });
+
+  it("opens the project and drops the cache when switching projects", () => {
+    mocks.organizations = [acme([project("Billing", "billing")])];
+    const { result } = renderCandidates();
+
+    void byKind(result.current, "project")[0]?.run("open");
+
+    expect(mocks.navigate).toHaveBeenCalledWith("/acme/projects/billing");
+    expect(mocks.clearQueryCache).toHaveBeenCalled();
+  });
+
+  // Selecting the project you are already in is a jump to its overview, not
+  // a switch — dropping the cache there would refetch the whole page for
+  // nothing.
+  it("keeps the cache when opening the project already in the URL", () => {
+    mocks.organizations = [acme([project("Default", "default")])];
+    const { result } = renderCandidates();
+
+    void byKind(result.current, "project")[0]?.run("open");
+
+    expect(mocks.navigate).toHaveBeenCalledWith("/acme/projects/default");
+    expect(mocks.clearQueryCache).not.toHaveBeenCalled();
+  });
+
+  // The hook's whole reason to exist: at the org level there is no project
+  // slug in the path, and without an org slug either the organization has
+  // to come from the session.
+  it("falls back to the active organization when the path carries no org slug", () => {
+    mocks.inProject = false;
+    mocks.orgSlug = undefined;
+    mocks.activeOrganizationId = "org-other";
+    mocks.organizations = [
+      acme([project("Widgets", "widgets")]),
+      {
+        id: "org-other",
+        slug: "other",
+        name: "Other",
+        projects: [project("Ledger", "ledger")],
+      },
+    ];
+    const { result } = renderCandidates({
+      orgSlug: undefined,
+      projectSlug: undefined,
+    });
+    const projects = byKind(result.current, "project");
+
+    expect(projects.map((c) => c.title)).toEqual(["Ledger"]);
+    void projects[0]?.run("open");
+    expect(mocks.navigate).toHaveBeenCalledWith("/other/projects/ledger");
+  });
+
+  it("is offered outside a project too", () => {
+    mocks.inProject = false;
+    mocks.organizations = [acme([project("Widgets", "widgets")])];
+    const { result } = renderCandidates();
+    expect(byKind(result.current, "project")).toHaveLength(1);
+  });
+});
+
 describe("useActionCandidates", () => {
   it("maps the action group to the detail string", () => {
     const onSelect = vi.fn();
@@ -1145,6 +1305,7 @@ describe("useLauncherCandidates", () => {
     mocks.mcpServers = [mcpServer("Slack", "slack-a1", "private")];
     mocks.catalogServers = [catalogServer("Datadog", "com.datadoghq/datadog")];
     mocks.members = [{ id: "m1", name: "Ada", email: "a@x", roleIds: [] }];
+    mocks.organizations = [acme([project("Widgets", "widgets")])];
     const { result } = renderCandidates();
 
     // Built-in detection rules are static, so an admin always has `rule` rows.
@@ -1156,6 +1317,7 @@ describe("useLauncherCandidates", () => {
       "catalog",
       "rule",
       "person",
+      "project",
     ]);
   });
 
@@ -1179,6 +1341,7 @@ describe("useLauncherCandidates", () => {
         "useRiskListCustomDetectionRules",
         "useListMcpApprovalRequests",
         "useMembers",
+        "useSessionInfo",
       ]),
     );
     for (const name of names) {
@@ -1232,22 +1395,57 @@ describe("useLauncherCandidates", () => {
     }
   });
 
-  // The Plugins page is reached through project:read or project:write; a
-  // member with neither never fires its list call from the palette.
+  // The Plugins page opens for org readers and for whoever can edit plugins
+  // (usePluginWriteAccess); a member with neither never fires its list call
+  // from the palette.
   it("does not fetch plugins without a scope that reaches the Plugins page", () => {
-    mocks.scopes = ["mcp:read"];
+    mocks.scopes = ["mcp:read", "project:read", "project:write"];
     renderCandidates();
+    expect(mocks.calls["usePlugins"]?.length).toBeGreaterThan(0);
     for (const args of mocks.calls["usePlugins"] ?? []) {
       expect(optionsOf(args).enabled).toBe(false);
     }
 
     mocks.calls = {};
-    mocks.scopes = ["project:write"];
+    mocks.scopes = ["org:read"];
     renderCandidates();
     expect(mocks.calls["usePlugins"]?.length).toBeGreaterThan(0);
     for (const args of mocks.calls["usePlugins"] ?? []) {
       expect(optionsOf(args).enabled).toBe(true);
     }
+  });
+
+  // plugin:write on the project is enough to edit plugins, so it is enough
+  // to list them — without any org scope.
+  it("fetches plugins for a plugin writer without org:read", () => {
+    mocks.pluginWriteAccess = true;
+    renderCandidates();
+    expect(mocks.calls["usePlugins"]?.length).toBeGreaterThan(0);
+    for (const args of mocks.calls["usePlugins"] ?? []) {
+      expect(optionsOf(args).enabled).toBe(true);
+    }
+  });
+
+  // Without a resource id hasScope is existential, so an admin of some other
+  // organization would pass and fire this tenant's forbidden calls.
+  it("names the organization on every org-scoped check and the project on the catalog check", () => {
+    mocks.scopes = ["org:read", "org:admin", "project:read"];
+    renderCandidates();
+
+    const against = (fn: "hasAnyScope" | "hasScope", scopes: string[]) =>
+      mocks.rbacCalls
+        .filter(
+          (call) => call.fn === fn && call.scopes.join() === scopes.join(),
+        )
+        .map((call) => call.resourceId);
+    expect(against("hasAnyScope", ["org:admin"])).toEqual(["org-acme"]);
+    expect(against("hasScope", ["org:admin"])).toContain("org-acme");
+    // People and plugins both gate on org readership.
+    expect(against("hasAnyScope", ["org:read", "org:admin"])).toEqual([
+      "org-acme",
+      "org-acme",
+    ]);
+    expect(against("hasScope", ["project:read"])).toEqual(["project-default"]);
   });
 
   it("does not fetch admin-only groups for non-admins even when open", () => {

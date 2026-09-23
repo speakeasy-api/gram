@@ -17,7 +17,8 @@ type CandidateKind =
   | "policy"
   | "rule"
   | "access_request"
-  | "person";
+  | "person"
+  | "project";
 
 export interface LauncherCandidate {
   /** Stable across renders: "page:/settings", "mcp:<id>", "marketplace". */

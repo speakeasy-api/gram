@@ -96,19 +96,23 @@ function openRow(candidate: LauncherCandidate): DisplayRow {
 }
 
 /**
- * The zero-state list: recents first, then registered page actions by group.
- * No prefilter and no Jev call while the query is empty.
+ * The zero-state list: recents first, then the organization's projects, then
+ * registered page actions by group. No prefilter and no Jev call while the
+ * query is empty. Projects are listed only at the org level (see
+ * `CommandPalette`); the hook keeps them in their source order (by slug).
  */
 function idleRows(candidates: LauncherCandidate[]): {
   recents: DisplayRow[];
+  projects: DisplayRow[];
   actions: DisplayRow[];
 } {
   const recents = candidates.filter((c) => c.kind === "recent").map(openRow);
+  const projects = candidates.filter((c) => c.kind === "project").map(openRow);
   const actions = candidates
     .filter((c) => c.kind === "page")
     .map(openRow)
     .sort((a, b) => compareGroups(a.candidate.group, b.candidate.group));
-  return { recents, actions };
+  return { recents, projects, actions };
 }
 
 /**
@@ -426,6 +430,14 @@ export function CommandPalette(): JSX.Element {
   // selection change cmdk reports: that change was the user's. Any other
   // change is cmdk reselecting the top row after the list or query changed.
   const userInput = useRef(false);
+  // At the org level, picking a project is the palette's main job, so the
+  // projects head the idle list after recents. Inside a project they are a
+  // switcher: they wait for a query rather than heading an idle palette with
+  // the projects you aren't in, and the ranked list already includes them.
+  const idleProjects = useMemo(
+    () => (inProject ? [] : idle.projects),
+    [inProject, idle.projects],
+  );
   const domOrder = useMemo((): string[] => {
     if (mode.mode !== "list") return [mode.row.candidate.id];
     const ask = inProject ? [ASK_AI_VALUE] : [];
@@ -433,11 +445,12 @@ export function CommandPalette(): JSX.Element {
       return [
         ...idle.recents.map((r) => r.candidate.id),
         ...ask,
+        ...idleProjects.map((r) => r.candidate.id),
         ...idle.actions.map((r) => r.candidate.id),
       ];
     }
     return [...rows.map((r) => r.candidate.id), ...ask];
-  }, [mode, inProject, hasQuery, idle, rows]);
+  }, [mode, inProject, hasQuery, idle, idleProjects, rows]);
   const rowsKey = domOrder.join("\n");
   const selectedValue = resolveSelection(
     selectedFor,
@@ -597,7 +610,7 @@ export function CommandPalette(): JSX.Element {
           placeholder={
             inProject
               ? "Ask AI or search resources and pages…"
-              : "Search pages…"
+              : "Search projects and pages…"
           }
           value={query}
           onValueChange={(value) => {
@@ -642,6 +655,7 @@ export function CommandPalette(): JSX.Element {
                 they compete on their own merits (AGE-2808). */}
             <RowGroups rows={idle.recents} {...rowGroupProps} />
             {askAiGroup}
+            <RowGroups rows={idleProjects} {...rowGroupProps} />
             <RowGroups rows={idle.actions} {...rowGroupProps} />
           </>
         )}
