@@ -14,7 +14,7 @@ packages:
   - e2e
 
 catalog:
-  "@ai-sdk/react": ^4.0.100
+  "@ai-sdk/react": ^4.0.105
   "@cfworker/json-schema": ^4.1.1
   "@modelcontextprotocol/sdk": ^1.30.0
   "@tailwindcss/vite": ^4.3.3
@@ -23,7 +23,7 @@ catalog:
   "@types/react-dom": ^19.3.0
   "@assistant-ui/react": ^0.15.18
   "@vitejs/plugin-react": ^6.1.1
-  ai: ^7.0.97
+  ai: ^7.0.102
   "lucide-react": ^1.28.0
   typescript: 7.0.2
   vite: ^8.3.0
