@@ -127,3 +127,10 @@ WHERE organization_id = @organization_id AND id = @id;
 
 -- name: GetSlackMappingForTest :one
 SELECT * FROM slack_identity_mappings WHERE organization_id = @organization_id AND id = @id;
+
+-- name: CountSlackDirectorySnapshotMembers :one
+SELECT count(*)::bigint
+FROM slack_directory_memberships m
+JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND c.slack_team_id = m.slack_team_id
+WHERE c.organization_id = @organization_id AND c.id = @id
+ AND m.last_seen_at = c.last_full_sync_succeeded_at;

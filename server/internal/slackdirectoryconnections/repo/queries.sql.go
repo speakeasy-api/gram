@@ -90,6 +90,26 @@ func (q *Queries) CountSlackDirectoryMembers(ctx context.Context, arg CountSlack
 	return column_1, err
 }
 
+const countSlackDirectorySnapshotMembers = `-- name: CountSlackDirectorySnapshotMembers :one
+SELECT count(*)::bigint
+FROM slack_directory_memberships m
+JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND c.slack_team_id = m.slack_team_id
+WHERE c.organization_id = $1 AND c.id = $2
+ AND m.last_seen_at = c.last_full_sync_succeeded_at
+`
+
+type CountSlackDirectorySnapshotMembersParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) CountSlackDirectorySnapshotMembers(ctx context.Context, arg CountSlackDirectorySnapshotMembersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSlackDirectorySnapshotMembers, arg.OrganizationID, arg.ID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createSlackDirectoryConnection = `-- name: CreateSlackDirectoryConnection :one
 INSERT INTO slack_directory_connections (organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health)
 VALUES ($1, $2, $3, $4, $5, $6, 'connected')

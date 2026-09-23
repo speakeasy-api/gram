@@ -150,6 +150,10 @@ func (s *DirectorySync) Run(ctx context.Context, input SyncInput, report func(Sy
 		}
 		return s.recordFailure(ctx, queries, input, started, err)
 	}
+	previousCount, err := q.CountSlackDirectorySnapshotMembers(ctx, repo.CountSlackDirectorySnapshotMembersParams{OrganizationID: input.OrganizationID, ID: input.ConnectionID})
+	if err != nil {
+		return fmt.Errorf("count previous Slack snapshot: %w", err)
+	}
 	published := pgtype.Timestamptz{Time: time.Now().UTC().Truncate(time.Microsecond), Valid: true, InfinityModifier: pgtype.Finite}
 	for start := 0; start < len(members); start += 500 {
 		batch := members[start:min(start+500, len(members))]
@@ -178,7 +182,11 @@ func (s *DirectorySync) Run(ctx context.Context, input SyncInput, report func(Sy
 	if err != nil {
 		return fmt.Errorf("record Slack snapshot: %w", err)
 	}
-	if err := s.audit.LogSlackDirectoryConnectionSync(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: input.OrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorID), ActorDisplayName: nil, ConnectionURN: urn.NewSlackDirectoryConnection(current.ID), ConnectionSnapshotBefore: mv.BuildSlackDirectoryConnectionView(current), ConnectionSnapshotAfter: mv.BuildSlackDirectoryConnectionView(after)}, audit.SlackDirectorySyncSummary{Observed: len(members), ExcludedExternal: progress.ExcludedExternal, Bots: progress.Bots}); err != nil {
+	beforeView := mv.BuildSlackDirectoryConnectionView(current)
+	beforeView.MemberCount = previousCount
+	afterView := mv.BuildSlackDirectoryConnectionView(after)
+	afterView.MemberCount = int64(len(members))
+	if err := s.audit.LogSlackDirectoryConnectionSync(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: input.OrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorID), ActorDisplayName: nil, ConnectionURN: urn.NewSlackDirectoryConnection(current.ID), ConnectionSnapshotBefore: beforeView, ConnectionSnapshotAfter: afterView}, audit.SlackDirectorySyncSummary{Observed: len(members), ExcludedExternal: progress.ExcludedExternal, Bots: progress.Bots}); err != nil {
 		return fmt.Errorf("audit Slack snapshot: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

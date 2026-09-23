@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -83,6 +84,13 @@ func TestSyncRetainsAbsentMembersAndMappings(t *testing.T) {
 	var summary audit.SlackDirectorySyncSummary
 	require.NoError(t, json.Unmarshal(latest.Metadata, &summary))
 	require.Equal(t, 2, summary.ExcludedExternal)
+	var previousSnapshot, nextSnapshot struct {
+		MemberCount int64 `json:"MemberCount"`
+	}
+	require.NoError(t, json.Unmarshal(latest.BeforeSnapshot, &previousSnapshot))
+	require.NoError(t, json.Unmarshal(latest.AfterSnapshot, &nextSnapshot))
+	require.Equal(t, int64(2), previousSnapshot.MemberCount)
+	require.Zero(t, nextSnapshot.MemberCount)
 	list, err := f.service.List(ctx, &gen.ListPayload{SessionToken: nil})
 	require.NoError(t, err)
 	require.Zero(t, list.Connections[0].MemberCount)
@@ -117,6 +125,8 @@ func TestSyncSerializesFetchAndReplay(t *testing.T) {
 	input := syncRequest(f, c)
 	started := make(chan struct{})
 	release := make(chan struct{})
+	releaseFetch := sync.OnceFunc(func() { close(release) })
+	t.Cleanup(releaseFetch)
 	result := make(chan error, 1)
 	provider := directoryFunc(func(ctx context.Context, token, team string, report func(slackdirectoryconnections.SyncProgress)) ([]slackdirectoryconnections.DirectoryMember, error) {
 		close(started)
@@ -128,13 +138,22 @@ func TestSyncSerializesFetchAndReplay(t *testing.T) {
 		return snapshot("UEXAMPLE01")(ctx, token, team, report)
 	})
 	go func() { result <- syncer(f, provider).Run(ctx, input, nil) }()
-	<-started
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Fatal("directory fetch did not start")
+	}
 	err := syncer(f, snapshot("UEXAMPLE02")).Run(ctx, input, nil)
 	var syncErr *slackdirectoryconnections.SyncError
 	require.ErrorAs(t, err, &syncErr)
 	require.Equal(t, "sync_busy", syncErr.Code)
-	close(release)
-	require.NoError(t, <-result)
+	releaseFetch()
+	select {
+	case err := <-result:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("directory sync did not finish")
+	}
 	neverFetch := directoryFunc(func(context.Context, string, string, func(slackdirectoryconnections.SyncProgress)) ([]slackdirectoryconnections.DirectoryMember, error) {
 		return nil, errors.New("must not fetch")
 	})

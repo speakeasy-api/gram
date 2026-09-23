@@ -81,10 +81,18 @@ func (a *slackDirectoryActivities) SyncSlackDirectory(ctx context.Context, input
 		}
 	}()
 	err := a.sync.Run(ctx, input, report)
+	return slackDirectoryActivityError(err, input.StartedAt, time.Now())
+}
+
+func slackDirectoryActivityError(err error, started, now time.Time) error {
 	if syncErr, ok := errors.AsType[*slackdirectoryconnections.SyncError](err); ok && !syncErr.Retryable {
 		return temporal.NewNonRetryableApplicationError(syncErr.Code, "SlackDirectorySync", nil)
 	}
 	if syncErr, ok := errors.AsType[*slackdirectoryconnections.SyncError](err); ok && syncErr.RetryAfter > 0 {
+		// Leave room for a full attempt within the workflow's two-hour activity budget.
+		if now.Add(syncErr.RetryAfter + 30*time.Minute).After(started.Add(2 * time.Hour)) {
+			return temporal.NewNonRetryableApplicationError(syncErr.Code, "SlackDirectorySync", nil)
+		}
 		return temporal.NewApplicationErrorWithOptions(syncErr.Code, "SlackDirectorySync", temporal.ApplicationErrorOptions{NextRetryDelay: syncErr.RetryAfter})
 	}
 	if err != nil {
@@ -104,6 +112,9 @@ func slackDirectoryWorkflowID(queue tenv.TaskQueueName, id, generation uuid.UUID
 }
 
 func (s *slackDirectoryScheduler) Start(ctx context.Context, input slackdirectoryconnections.SyncInput) error {
+	if s.env == nil {
+		return errors.New("slack directory sync is not configured")
+	}
 	_, err := s.env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID: slackDirectoryWorkflowID(s.env.Queue(), input.ConnectionID, input.Generation), TaskQueue: string(s.env.Queue()),
 		WorkflowExecutionTimeout: 2*time.Hour + time.Minute,
@@ -118,6 +129,10 @@ func (s *slackDirectoryScheduler) Start(ctx context.Context, input slackdirector
 
 func (s *slackDirectoryScheduler) State(ctx context.Context, id, generation uuid.UUID) (slackdirectoryconnections.SyncState, error) {
 	state := slackdirectoryconnections.SyncState{Status: "idle", Progress: slackdirectoryconnections.SyncProgress{Phase: "", Pages: 0, Members: 0, ExcludedExternal: 0, Bots: 0}}
+	if s.env == nil {
+		state.Status = "unknown"
+		return state, errors.New("slack directory sync is not configured")
+	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	execution, err := s.env.Client().DescribeWorkflowExecution(ctx, slackDirectoryWorkflowID(s.env.Queue(), id, generation), "")

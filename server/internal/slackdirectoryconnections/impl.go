@@ -282,7 +282,16 @@ func (s *Service) saveAuthorization(ctx context.Context, ac *contextvalues.AuthC
 	if err != nil {
 		return fmt.Errorf("save workspace authorization: %w", err)
 	}
-	if err := s.audit.LogSlackDirectoryConnectionAuthorize(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: ac.ActiveOrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ConnectionURN: urn.NewSlackDirectoryConnection(row.ID), ConnectionSnapshotBefore: previous, ConnectionSnapshotAfter: s.connectionView(ctx, row)}); err != nil {
+	memberCount, err := queries.CountSlackDirectorySnapshotMembers(ctx, repo.CountSlackDirectorySnapshotMembersParams{OrganizationID: ac.ActiveOrganizationID, ID: row.ID})
+	if err != nil {
+		return fmt.Errorf("count retained Slack members: %w", err)
+	}
+	if previous != nil {
+		previous.MemberCount = memberCount
+	}
+	after := s.connectionView(ctx, row)
+	after.MemberCount = memberCount
+	if err := s.audit.LogSlackDirectoryConnectionAuthorize(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: ac.ActiveOrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ConnectionURN: urn.NewSlackDirectoryConnection(row.ID), ConnectionSnapshotBefore: previous, ConnectionSnapshotAfter: after}); err != nil {
 		return fmt.Errorf("audit workspace authorization: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -328,8 +337,15 @@ func (s *Service) Disconnect(ctx context.Context, p *gen.DisconnectPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not disconnect Slack workspace").LogError(ctx, s.logger)
 	}
+	memberCount, err := queries.CountSlackDirectorySnapshotMembers(ctx, repo.CountSlackDirectorySnapshotMembersParams{OrganizationID: ac.ActiveOrganizationID, ID: id})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "could not count retained Slack members").LogError(ctx, s.logger)
+	}
 	result := s.connectionView(ctx, row)
-	if err := s.audit.LogSlackDirectoryConnectionDisconnect(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: ac.ActiveOrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ConnectionURN: urn.NewSlackDirectoryConnection(row.ID), ConnectionSnapshotBefore: s.connectionView(ctx, before), ConnectionSnapshotAfter: result}); err != nil {
+	result.MemberCount = memberCount
+	previous := s.connectionView(ctx, before)
+	previous.MemberCount = memberCount
+	if err := s.audit.LogSlackDirectoryConnectionDisconnect(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: ac.ActiveOrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ConnectionURN: urn.NewSlackDirectoryConnection(row.ID), ConnectionSnapshotBefore: previous, ConnectionSnapshotAfter: result}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not audit Slack disconnection").LogError(ctx, s.logger)
 	}
 	if err := tx.Commit(ctx); err != nil {

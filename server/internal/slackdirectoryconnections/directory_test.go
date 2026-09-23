@@ -2,15 +2,20 @@ package slackdirectoryconnections_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/stretchr/testify/require"
 )
 
@@ -126,4 +131,57 @@ func TestSyncInitialManualAndSchedulerFailure(t *testing.T) {
 	require.Equal(t, "unknown", list.Connections[0].SyncStatus)
 	// Reconnect still completes when initial sync cannot be scheduled.
 	authorize(t, ctx, f, begin(t, ctx, f, &c.ID), c.WorkspaceID)
+}
+
+func TestDirectorySearchUsesCharactersAndDistinctFields(t *testing.T) {
+	t.Parallel()
+	ctx, f := newService(t)
+	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
+	name := strings.Repeat("界", 200)
+	provider := directoryFunc(func(context.Context, string, string, func(slackdirectoryconnections.SyncProgress)) ([]slackdirectoryconnections.DirectoryMember, error) {
+		return []slackdirectoryconnections.DirectoryMember{{UserID: "UEXAMPLE01", DisplayName: name, Email: "unique@example.com", Status: "active", MemberType: "person", UpdatedAt: nil}}, nil
+	})
+	require.NoError(t, syncer(f, provider).Run(ctx, syncRequest(f, c), nil))
+	for _, search := range []string{name, "unique@example.com", "UEXAMPLE01"} {
+		p := memberRequest()
+		p.Search = &search
+		result, err := f.service.ListMembers(ctx, p)
+		require.NoError(t, err)
+		require.Len(t, result.Members, 1)
+	}
+	p := memberRequest()
+	tooLong := name + "界"
+	p.Search = &tooLong
+	_, err := f.service.ListMembers(ctx, p)
+	require.Error(t, err)
+}
+
+func TestDirectoryDisconnectRetainsCountAndAudit(t *testing.T) {
+	t.Parallel()
+	ctx, f := newService(t)
+	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
+	require.NoError(t, syncer(f, snapshot("UEXAMPLE01", "UEXAMPLE02")).Run(ctx, syncRequest(f, c), nil))
+	require.NoError(t, syncer(f, snapshot("UEXAMPLE01")).Run(ctx, syncRequest(f, c), nil))
+	require.Len(t, members(t, ctx, f), 2, "absent profiles remain available in history")
+	disconnected, err := f.service.Disconnect(ctx, &gen.DisconnectPayload{SessionToken: nil, ID: c.ID, Generation: c.Generation})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), disconnected.MemberCount)
+	require.Equal(t, "stale", disconnected.DirectoryStatus)
+	entry, err := audittest.LatestAuditLogByAction(ctx, f.db, audit.ActionSlackDirectoryConnectionDisconnect)
+	require.NoError(t, err)
+	var before, after struct {
+		MemberCount int64 `json:"MemberCount"`
+	}
+	require.NoError(t, json.Unmarshal(entry.BeforeSnapshot, &before))
+	require.NoError(t, json.Unmarshal(entry.AfterSnapshot, &after))
+	require.Equal(t, int64(1), before.MemberCount)
+	require.Equal(t, int64(1), after.MemberCount)
+	reconnected := authorize(t, ctx, f, begin(t, ctx, f, &c.ID), "TEXAMPLE01")
+	require.Equal(t, int64(1), reconnected.MemberCount)
+	entry, err = audittest.LatestAuditLogByAction(ctx, f.db, audit.ActionSlackDirectoryConnectionAuthorize)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(entry.BeforeSnapshot, &before))
+	require.NoError(t, json.Unmarshal(entry.AfterSnapshot, &after))
+	require.Equal(t, int64(1), before.MemberCount)
+	require.Equal(t, int64(1), after.MemberCount)
 }

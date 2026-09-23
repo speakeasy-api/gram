@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -77,7 +78,7 @@ func (s *Service) ListMembers(ctx context.Context, p *gen.ListMembersPayload) (*
 	if limit == 0 {
 		limit = 50
 	}
-	if limit < 1 || limit > 100 || len(search) > 200 {
+	if limit < 1 || limit > 100 || utf8.RuneCountInString(search) > 200 {
 		return nil, oops.C(oops.CodeBadRequest)
 	}
 	rows, err := repo.New(s.db).ListSlackDirectoryMembers(ctx, repo.ListSlackDirectoryMembersParams{OrganizationID: ac.ActiveOrganizationID, ConnectionID: connectionID, Cursor: cursor, Search: search, PageSize: int32(limit + 1)})

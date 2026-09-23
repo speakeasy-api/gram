@@ -22,6 +22,12 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   invalidate: vi.fn(),
   begin: vi.fn(),
+  pending: false,
+  error: null as Error | null,
+  refetch: vi.fn(),
+}));
+vi.mock("./SlackDirectory", () => ({
+  SlackDirectory: () => <div>Directory table</div>,
 }));
 vi.mock("nuqs", async (original) => {
   const actual = await original<typeof import("nuqs")>();
@@ -68,26 +74,30 @@ vi.mock("@gram/client/react-query/slackDirectoryConnections.js", () => ({
   useSlackDirectoryConnections: () => {
     mocks.list();
     return {
-      data: {
-        authorizationConfigured: mocks.configured,
-        connections: [
-          {
-            id: "connection-one",
-            workspaceId: "TEXAMPLE01",
-            workspaceName: "Example workspace",
-            status: "connected",
-            generation: mocks.generation,
-            grantedScopes: [],
-            updatedAt: "2026-01-01T00:00:00Z",
-            memberCount: 0,
-            directoryStatus: "never_synced",
-            syncStatus: "idle",
-          },
-        ],
-      },
-      isPending: false,
-      isError: false,
-      error: null,
+      data:
+        mocks.pending || mocks.error
+          ? undefined
+          : {
+              authorizationConfigured: mocks.configured,
+              connections: [
+                {
+                  id: "connection-one",
+                  workspaceId: "TEXAMPLE01",
+                  workspaceName: "Example workspace",
+                  status: "connected",
+                  generation: mocks.generation,
+                  grantedScopes: [],
+                  updatedAt: "2026-01-01T00:00:00Z",
+                  memberCount: 0,
+                  directoryStatus: "never_synced",
+                  syncStatus: "idle",
+                },
+              ],
+            },
+      isPending: mocks.pending,
+      isError: Boolean(mocks.error),
+      error: mocks.error,
+      refetch: mocks.refetch,
     };
   },
 }));
@@ -142,6 +152,8 @@ beforeEach(() => {
   mocks.admin = true;
   mocks.organizationSlug = "example";
   mocks.configured = true;
+  mocks.pending = false;
+  mocks.error = null;
   mocks.generation = "generation-one";
 });
 afterEach(() => {
@@ -292,4 +304,21 @@ it("has no per-workspace Reconnect button", () => {
   show();
   expect(screen.getByText("Example workspace")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
+});
+it("waits for workspace loading before rendering members", () => {
+  mocks.pending = true;
+  show("?tab=slack-workspaces&slack_view=members");
+  expect(screen.getByText("Loading workspaces…")).toBeTruthy();
+  expect(screen.queryByText("Directory table")).toBeNull();
+});
+it("lets the members view retry a failed workspace request", () => {
+  mocks.error = new Error("Could not load workspaces");
+  show("?tab=slack-workspaces&slack_view=members");
+  expect(screen.queryByText("Directory table")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  expect(mocks.refetch).toHaveBeenCalledOnce();
+});
+it("renders members after workspaces load", () => {
+  show("?tab=slack-workspaces&slack_view=members");
+  expect(screen.getByText("Directory table")).toBeTruthy();
 });

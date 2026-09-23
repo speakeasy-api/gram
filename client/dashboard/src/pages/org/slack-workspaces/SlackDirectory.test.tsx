@@ -136,6 +136,7 @@ it("shows an error recovery action and never calls it an empty directory", () =>
   expect(
     screen.getByRole("button", { name: "Try loading members again" }),
   ).toBeTruthy();
+  expect(screen.queryByText("No members to show")).toBeNull();
 });
 it("shows loading while the directory is pending", () => {
   mocks.pending = true;

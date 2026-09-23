@@ -86,3 +86,28 @@ func TestSlackDirectoryWorkflowDoesNotRetryAuthorizationFailure(t *testing.T) {
 	require.Error(t, env.GetWorkflowError())
 	require.Equal(t, 1, attempts)
 }
+
+func TestSlackDirectorySchedulerWithoutTemporal(t *testing.T) {
+	t.Parallel()
+	scheduler := NewSlackDirectorySyncScheduler(nil)
+	input := slackdirectoryconnections.SyncInput{OrganizationID: "org_example", ConnectionID: uuid.New(), Generation: uuid.New(), ActorID: "user_example", StartedAt: time.Time{}}
+	require.ErrorContains(t, scheduler.Start(t.Context(), input), "not configured")
+	state, err := scheduler.State(t.Context(), input.ConnectionID, input.Generation)
+	require.ErrorContains(t, err, "not configured")
+	require.Equal(t, "unknown", state.Status)
+}
+
+func TestSlackDirectoryRetryDelayFitsRemainingBudget(t *testing.T) {
+	t.Parallel()
+	started := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	providerError := &slackdirectoryconnections.SyncError{Code: "rate_limited", Retryable: true, Reconnect: false, RetryAfter: time.Hour}
+	var applicationError *temporal.ApplicationError
+	err := slackDirectoryActivityError(providerError, started, started.Add(10*time.Minute))
+	require.ErrorAs(t, err, &applicationError)
+	require.False(t, applicationError.NonRetryable())
+	require.Equal(t, time.Hour, applicationError.NextRetryDelay())
+	err = slackDirectoryActivityError(providerError, started, started.Add(40*time.Minute))
+	require.ErrorAs(t, err, &applicationError)
+	require.True(t, applicationError.NonRetryable())
+	require.Zero(t, applicationError.NextRetryDelay())
+}

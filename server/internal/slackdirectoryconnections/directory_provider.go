@@ -171,7 +171,7 @@ func (p *directoryProvider) Fetch(ctx context.Context, token, team string, repor
 }
 
 func (p *directoryProvider) page(ctx context.Context, token, team, cursor string, progress SyncProgress, report func(SyncProgress)) (*directoryPage, error) {
-	for attempt := range 4 {
+	for attempt := 0; ; attempt++ {
 		page, delay, err := p.request(ctx, token, team, cursor)
 		if err == nil {
 			return page, nil
@@ -189,7 +189,6 @@ func (p *directoryProvider) page(ctx context.Context, token, team, cursor string
 		case <-timer.C:
 		}
 	}
-	return nil, &SyncError{Code: "provider_unavailable", Retryable: true, Reconnect: false, RetryAfter: 0}
 }
 
 func (p *directoryProvider) request(ctx context.Context, token, team, cursor string) (*directoryPage, time.Duration, error) {

@@ -104,10 +104,10 @@ func TestDirectoryProviderRejectsIncompleteEnvelopeAndCursorLoop(t *testing.T) {
 func TestDirectoryProviderRateLimitHonorsRetryAfter(t *testing.T) {
 	t.Parallel()
 	var requests atomic.Int32
-	var first time.Time
+	first := make(chan time.Time, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if requests.Add(1) == 1 {
-			first = time.Now()
+			first <- time.Now()
 			w.Header().Set("Retry-After", "1")
 			w.WriteHeader(429)
 			return
@@ -120,7 +120,7 @@ func TestDirectoryProviderRateLimitHonorsRetryAfter(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, rows)
 	require.Equal(t, int32(2), requests.Load())
-	require.GreaterOrEqual(t, time.Since(first), time.Second)
+	require.GreaterOrEqual(t, time.Since(<-first), time.Second)
 }
 
 func TestDirectoryProviderRateLimitWaitCancels(t *testing.T) {

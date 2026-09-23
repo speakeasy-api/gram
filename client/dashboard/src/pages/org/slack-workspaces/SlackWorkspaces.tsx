@@ -146,13 +146,8 @@ function SlackWorkspacesContent(): JSX.Element {
     }
   };
   const [params] = useSearchParams();
-  if (params.get("slack_view") === "members")
-    return (
-      <>
-        <ApiErrorAlert error={query.error} />
-        <SlackDirectory connections={connections} />
-      </>
-    );
+  if (params.get("slack_view") === "members" && query.data && !query.isError)
+    return <SlackDirectory connections={connections} />;
   const notice =
     outcome && Object.hasOwn(outcomes, outcome) ? outcomes[outcome] : undefined;
 
