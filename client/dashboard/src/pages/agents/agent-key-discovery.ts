@@ -7,7 +7,7 @@ import {
 } from "./agent-key-server-grants";
 
 /** Matches the server's `toolset_ids` MaxLength. */
-const DISCOVERY_BATCH_SIZE = 100;
+export const DISCOVERY_BATCH_SIZE = 100;
 
 /**
  * Scoped discovery for every inventory resource in as few GETs as possible;

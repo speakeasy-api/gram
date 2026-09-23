@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { Agents } from "@gram/client/sdk/agents.js";
 import { HTTPClient } from "@gram/client/lib/http.js";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
-import { discoverKeyServerGrants } from "./agent-key-discovery";
+import {
+  DISCOVERY_BATCH_SIZE,
+  discoverKeyServerGrants,
+} from "./agent-key-discovery";
 
 const first = {
   resourceId: "toolset_one",
@@ -23,6 +26,12 @@ const pinned = (
   selector: { resourceKind: "mcp", resourceId, projectId },
 });
 const signal = () => new AbortController().signal;
+const hostedInventory = (length: number) =>
+  Array.from({ length }, (_, i) => ({
+    resourceId: `toolset_${i}`,
+    projectId: "project_one",
+    kind: "Hosted",
+  }));
 
 describe("scoped credential discovery", () => {
   it("sends every resource as toolset_ids on one actual generated GET, with no unscoped request", async () => {
@@ -92,12 +101,25 @@ describe("scoped credential discovery", () => {
       },
     ]);
   });
+  it("accumulates pinned candidates from every successful batch in order", async () => {
+    const inventory = hostedInventory(DISCOVERY_BATCH_SIZE + 1);
+    const listDelegableGrants = vi.fn(
+      async ({ toolsetIds }: { toolsetIds?: string[] }) =>
+        (toolsetIds ?? []).map((id) => pinned(id, "project_one")),
+    );
+    const grants = await discoverKeyServerGrants(
+      { listDelegableGrants },
+      "agent_example",
+      inventory,
+      signal(),
+    );
+    expect(listDelegableGrants).toHaveBeenCalledTimes(2);
+    expect(grants.map((grant) => grant.selector.resourceId)).toEqual(
+      inventory.map((server) => server.resourceId),
+    );
+  });
   it("splits large inventories into sequential batches and rejects if one fails", async () => {
-    const inventory = Array.from({ length: 150 }, (_, i) => ({
-      resourceId: `toolset_${i}`,
-      projectId: "project_one",
-      kind: "Hosted",
-    }));
+    const inventory = hostedInventory(DISCOVERY_BATCH_SIZE + 50);
     let inFlight = 0;
     const listDelegableGrants = vi.fn(
       async ({ toolsetIds }: { toolsetIds?: string[] }) => {
@@ -119,7 +141,7 @@ describe("scoped credential discovery", () => {
     ).rejects.toThrow("forbidden");
     expect(
       listDelegableGrants.mock.calls.map(([req]) => req.toolsetIds?.length),
-    ).toEqual([100, 50]);
+    ).toEqual([DISCOVERY_BATCH_SIZE, 50]);
   });
   it("never expands a wildcard candidate onto the batch", async () => {
     const listDelegableGrants = vi

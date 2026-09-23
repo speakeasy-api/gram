@@ -109,6 +109,10 @@ func (s *Service) ListDelegableGrants(ctx context.Context, payload *gen.ListDele
 				}
 				seen[key] = struct{}{}
 				result = append(result, &gen.AgentPolicyGrantForm{Scope: string(grant.Scope), Effect: "allow", Selector: policySelectorView(grant.Selector)})
+				// Each call is capped, but the union across resources must be too.
+				if len(result) > runtimepolicy.MaxDelegableGrantCandidates {
+					return runtimepolicy.ErrTooManyDelegableGrantCandidates
+				}
 			}
 		}
 		return nil
