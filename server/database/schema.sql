@@ -8257,6 +8257,178 @@ CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_sessions_replaced_by_session_id_k
 ON platform_mcp_sessions (replaced_by_session_id)
 WHERE replaced_by_session_id IS NOT NULL;
 
+-- Staff Admin MCP OAuth state is global, not owned by a customer organization or
+-- project. Keep its clients, grants and token families separate from Platform MCP.
+CREATE TABLE IF NOT EXISTS admin_mcp_oauth_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  client_id TEXT NOT NULL,
+  client_secret_hash TEXT,
+  client_name TEXT NOT NULL,
+  redirect_uris TEXT[] NOT NULL,
+  client_id_issued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  client_secret_expires_at timestamptz,
+  revoked_at timestamptz,
+  client_id_metadata_uri TEXT,
+  client_id_metadata_fetched_at timestamptz,
+  client_id_metadata_cache_expires_at timestamptz,
+  client_id_metadata_etag TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT admin_mcp_oauth_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_oauth_clients_client_id_check CHECK (client_id <> ''),
+  CONSTRAINT admin_mcp_oauth_clients_client_name_check CHECK (client_name <> ''),
+  CONSTRAINT admin_mcp_oauth_clients_redirect_uris_check CHECK (
+    cardinality(redirect_uris) > 0
+    AND array_position(redirect_uris, NULL) IS NULL
+    AND array_position(redirect_uris, '') IS NULL
+  ),
+  CONSTRAINT admin_mcp_oauth_clients_metadata_secret_check CHECK (
+    client_id_metadata_uri IS NULL OR client_secret_hash IS NULL
+  ),
+  CONSTRAINT admin_mcp_oauth_clients_metadata_uri_match_check CHECK (
+    client_id_metadata_uri IS NULL
+    OR (client_id_metadata_uri <> '' AND client_id = client_id_metadata_uri)
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_oauth_clients_client_id_key
+ON admin_mcp_oauth_clients (client_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_oauth_clients_secret_expires_at_idx
+ON admin_mcp_oauth_clients (client_secret_expires_at)
+WHERE client_secret_expires_at IS NOT NULL AND revoked_at IS NULL;
+
+-- The linked admin browser session ID is a bearer secret. Only store an
+-- encrypted reference; live staff eligibility and session validity are checked
+-- again when authenticating each MCP request.
+CREATE TABLE IF NOT EXISTS admin_mcp_connections (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  subject_urn TEXT NOT NULL,
+  oauth_client_id uuid NOT NULL,
+  admin_session_id_enc TEXT NOT NULL,
+  scopes TEXT[] NOT NULL,
+  resource_uri TEXT NOT NULL,
+  active_generation uuid NOT NULL DEFAULT generate_uuidv7(),
+  authorized_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  reauthorized_at timestamptz,
+  authorization_expires_at timestamptz NOT NULL,
+  reauthorization_required_at timestamptz,
+  reauthorization_reason TEXT,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT admin_mcp_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_connections_subject_urn_check CHECK (subject_urn <> ''),
+  CONSTRAINT admin_mcp_connections_admin_session_id_enc_check CHECK (admin_session_id_enc <> ''),
+  CONSTRAINT admin_mcp_connections_scopes_check CHECK (
+    cardinality(scopes) > 0 AND array_position(scopes, NULL) IS NULL
+    AND array_position(scopes, '') IS NULL
+  ),
+  CONSTRAINT admin_mcp_connections_resource_uri_check CHECK (resource_uri <> ''),
+  CONSTRAINT admin_mcp_connections_reauthorization_state_check CHECK (
+    (reauthorization_required_at IS NULL AND reauthorization_reason IS NULL)
+    OR (reauthorization_required_at IS NOT NULL AND reauthorization_reason IS NOT NULL AND reauthorization_reason <> '')
+  ),
+  CONSTRAINT admin_mcp_connections_oauth_client_id_fkey
+    FOREIGN KEY (oauth_client_id) REFERENCES admin_mcp_oauth_clients (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_connections_live_subject_client_key
+ON admin_mcp_connections (subject_urn, oauth_client_id)
+WHERE revoked_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_connections_id_oauth_client_id_key
+ON admin_mcp_connections (id, oauth_client_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_connections_oauth_client_id_idx
+ON admin_mcp_connections (oauth_client_id);
+
+-- One-use authorization codes bind the exact client, redirect, PKCE challenge,
+-- resource, scopes and current connection generation. Only hashes are persisted.
+CREATE TABLE IF NOT EXISTS admin_mcp_authorization_grants (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  authorization_code_hash TEXT NOT NULL,
+  oauth_client_id uuid NOT NULL,
+  connection_id uuid NOT NULL,
+  connection_generation uuid NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  code_challenge TEXT NOT NULL,
+  scopes TEXT[] NOT NULL,
+  resource_uri TEXT NOT NULL,
+  expires_at timestamptz NOT NULL,
+  consumed_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT admin_mcp_authorization_grants_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_authorization_grants_code_hash_check CHECK (authorization_code_hash <> ''),
+  CONSTRAINT admin_mcp_authorization_grants_redirect_uri_check CHECK (redirect_uri <> ''),
+  CONSTRAINT admin_mcp_authorization_grants_code_challenge_check CHECK (code_challenge <> ''),
+  CONSTRAINT admin_mcp_authorization_grants_scopes_check CHECK (
+    cardinality(scopes) > 0 AND array_position(scopes, NULL) IS NULL
+    AND array_position(scopes, '') IS NULL
+  ),
+  CONSTRAINT admin_mcp_authorization_grants_resource_uri_check CHECK (resource_uri <> ''),
+  CONSTRAINT admin_mcp_authorization_grants_connection_client_fkey
+    FOREIGN KEY (connection_id, oauth_client_id)
+    REFERENCES admin_mcp_connections (id, oauth_client_id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_authorization_grants_code_hash_key
+ON admin_mcp_authorization_grants (authorization_code_hash);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_authorization_grants_expires_at_idx
+ON admin_mcp_authorization_grants (expires_at);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_authorization_grants_connection_id_idx
+ON admin_mcp_authorization_grants (connection_id);
+
+-- Access token identifiers and hashed refresh tokens are persisted, never raw
+-- bearer tokens. Replacement links retain single-use refresh history.
+CREATE TABLE IF NOT EXISTS admin_mcp_sessions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  connection_id uuid NOT NULL,
+  oauth_client_id uuid NOT NULL,
+  connection_generation uuid NOT NULL,
+  jti TEXT NOT NULL,
+  refresh_token_hash TEXT NOT NULL,
+  expires_at timestamptz NOT NULL,
+  refresh_expires_at timestamptz NOT NULL,
+  rotated_at timestamptz,
+  revoked_at timestamptz,
+  replaced_by_session_id uuid,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT admin_mcp_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_sessions_jti_check CHECK (jti <> ''),
+  CONSTRAINT admin_mcp_sessions_refresh_token_hash_check CHECK (refresh_token_hash <> ''),
+  CONSTRAINT admin_mcp_sessions_connection_client_fkey
+    FOREIGN KEY (connection_id, oauth_client_id)
+    REFERENCES admin_mcp_connections (id, oauth_client_id) ON DELETE SET NULL,
+  CONSTRAINT admin_mcp_sessions_replaced_by_session_id_fkey
+    FOREIGN KEY (replaced_by_session_id) REFERENCES admin_mcp_sessions (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_jti_key
+ON admin_mcp_sessions (jti);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_refresh_token_hash_key
+ON admin_mcp_sessions (refresh_token_hash);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_sessions_connection_generation_idx
+ON admin_mcp_sessions (connection_id, connection_generation);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_sessions_refresh_expires_at_idx
+ON admin_mcp_sessions (refresh_expires_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_replaced_by_session_id_key
+ON admin_mcp_sessions (replaced_by_session_id)
+WHERE replaced_by_session_id IS NOT NULL;
+
 -- Typed milestone rows are durable product evidence. Event names and allowed
 -- target fields are validated by the owning application contract, not SQL enums.
 CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_milestones (
