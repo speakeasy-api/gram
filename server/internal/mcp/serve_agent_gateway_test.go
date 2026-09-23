@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -25,6 +27,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -32,6 +35,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -210,6 +214,64 @@ func TestServeAgentGateway_Initialize(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
 	require.NotEmpty(t, envelope.Result)
+}
+
+func TestServeAgentGateway_PrivateTunnelReceivesAgentAssertion(t *testing.T) {
+	t.Parallel()
+	issuer, publicKey := callerIssuerForTest(t)
+	ctx, ti := newTestMCPServiceWithCallerAssertions(t, issuer)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.Email, "the agent's owner has a human profile")
+	projectID := *authCtx.ProjectID
+	serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
+	tunnel, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: fx.granted,
+		KeyHash: "hash-" + fx.granted, KeyPrefix: "test",
+	})
+	require.NoError(t, err)
+	// Keep the granted wrapper identity and its delegated policy, but serve
+	// this member through a tunnel instead of its remote backend.
+	_, err = mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		ID: serverID, ProjectID: projectID,
+		Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted),
+		TunneledMcpServerID: conv.ToNullUUID(tunnel.ID), Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "test-agent", backendSessionID: "backend-session", mu: sync.Mutex{}}
+	upstream := httptest.NewServer(gateway)
+	t.Cleanup(upstream.Close)
+	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnel.ID.String(), upstream.URL, time.Hour))
+	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": "execute_tool",
+		"arguments": map[string]any{
+			"name": fx.grantedProject + "." + fx.granted + "--ping", "arguments": map[string]any{},
+		},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code)
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
+	require.False(t, isError, text)
+	require.Contains(t, text, "pong through the tunnel")
+	headers, _ := tunnelForwards(gateway)
+	require.GreaterOrEqual(t, len(headers), 3)
+	for _, header := range headers {
+		token, err := jwt.Parse(header.Get(mcpauthz.Header), func(*jwt.Token) (any, error) { return publicKey, nil }, jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer("https://gram.example"), jwt.WithAudience(urn.NewTunneledMcpServer(tunnel.ID).String()), jwt.WithExpirationRequired())
+		require.NoError(t, err)
+		claims, ok := token.Claims.(jwt.MapClaims)
+		require.True(t, ok)
+		require.Equal(t, urn.NewAgentSubject(fx.agent.ID).String(), claims["sub"])
+		require.Equal(t, "agent", claims["principal_type"])
+		require.Equal(t, "mcp_request", claims["purpose"])
+		require.Equal(t, authCtx.ActiveOrganizationID, claims["organization_id"])
+		require.Equal(t, projectID.String(), claims["project_id"])
+		require.Equal(t, serverID.String(), claims["mcp_server_id"])
+		require.Equal(t, tunnel.ID.String(), claims["tunneled_mcp_server_id"])
+		require.NotContains(t, claims, "email")
+		require.NotContains(t, claims, "email_verified")
+		require.NotContains(t, claims, "user_id")
+	}
 }
 
 func TestServeAgentGateway_RejectsMissingAndForeignCredentials(t *testing.T) {
