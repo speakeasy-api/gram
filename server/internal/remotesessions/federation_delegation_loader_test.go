@@ -69,6 +69,16 @@ func TestFederatedDelegationLoaderDatabaseOnly(t *testing.T) {
 	_, err = db.Exec(ctx, `INSERT INTO remote_session_clients (id,organization_id,remote_session_issuer_id,client_id,scope,token_endpoint_auth_method) VALUES ($1,$2,$3,'loader-client',ARRAY['openid','email'],'client_secret_basic'),($4,$5,$6,'other-client',ARRAY['openid','email'],'client_secret_basic')`, client, org, issuer, otherClient, otherOrg, otherIssuer)
 	require.NoError(t, err)
 
+	globalIssuer, globalClient := uuid.New(), uuid.New()
+	_, err = db.Exec(ctx, `INSERT INTO remote_session_issuers (id,slug,issuer) VALUES ($1,'loader-global','https://global.example.test')`, globalIssuer)
+	require.NoError(t, err)
+	_, err = db.Exec(ctx, `INSERT INTO remote_session_clients (id,organization_id,remote_session_issuer_id,client_id,scope,token_endpoint_auth_method) VALUES ($1,$2,$3,'global-client',ARRAY['openid','email'],'client_secret_basic')`, globalClient, org, globalIssuer)
+	require.NoError(t, err)
+	global, err := manager.LoadFederatedDelegationProvider(ctx, org, globalIssuer, globalClient)
+	require.NoError(t, err)
+	require.NotEmpty(t, global.DelegationConfigurationHash())
+	require.Equal(t, globalClient, global.client.ID)
+
 	orgClientForeignIssuer, foreignClientOrgIssuer := uuid.New(), uuid.New()
 	_, err = db.Exec(ctx, `INSERT INTO remote_session_clients (id,organization_id,remote_session_issuer_id,client_id,scope,token_endpoint_auth_method) VALUES ($1,$2,$3,'cross-issuer',ARRAY['openid'],'client_secret_basic'),($4,$5,$6,'cross-client',ARRAY['openid'],'client_secret_basic')`, orgClientForeignIssuer, org, otherIssuer, foreignClientOrgIssuer, otherOrg, issuer)
 	require.NoError(t, err)

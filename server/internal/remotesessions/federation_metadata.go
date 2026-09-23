@@ -5,6 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -63,7 +66,14 @@ func (m *ChallengeManager) validateFederatedHost(ctx context.Context, rawURL str
 		}
 		return nil
 	}
-	if m.policy == nil || m.policy.ValidateHost(ctx, u.Hostname()) != nil {
+	if m.policy == nil {
+		return ErrFederatedConfiguration
+	}
+	if err := m.policy.ValidateHost(ctx, u.Hostname()); err != nil {
+		var networkError net.Error
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &networkError) && networkError.Timeout()) {
+			return fmt.Errorf("%w: %w", ErrFederatedUnavailable, err)
+		}
 		return ErrFederatedConfiguration
 	}
 	return nil
@@ -109,7 +119,10 @@ func (m *ChallengeManager) loadFederatedMetadata(ctx context.Context, organizati
 	}
 	doc, discoveryErr := attemptIssuerProbe(ctx, doer, strings.TrimSuffix(issuer.Issuer, "/")+"/.well-known/openid-configuration")
 	if discoveryErr != nil {
-		return rfc8414Document{}, ErrFederatedConfiguration
+		if discoveryErr.definitive || (discoveryErr.Status >= 400 && discoveryErr.Status < 500 && discoveryErr.Status != 408 && discoveryErr.Status != 429) {
+			return rfc8414Document{}, ErrFederatedConfiguration
+		}
+		return rfc8414Document{}, fmt.Errorf("%w: %w", ErrFederatedUnavailable, discoveryErr)
 	}
 	normalizeFederatedScopePresence(&doc)
 	if err := m.validateFederatedMetadataHosts(ctx, issuer, doc); err != nil {
