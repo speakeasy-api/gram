@@ -175,6 +175,20 @@ func TestProcessWorkOSOrganizationEvents_DomainVerifiedMatchesStoredDomainIgnori
 	require.Equal(t, []string{"Example.com"}, getOrgByWorkOSID(t, conn, workosOrgID).VerifiedDomains)
 }
 
+func TestProcessWorkOSOrganizationEvents_DomainEventsIgnoreTrailingDot(t *testing.T) {
+	t.Parallel()
+
+	conn := newOrgEventsTestConn(t, "workos_domain_trailing_dot")
+	const workosOrgID = "org_01HZDOMDOT"
+	createWorkOSLinkedOrg(t, conn, "gram_org_dom_dot", workosOrgID, []string{"example.com"})
+
+	runOrgEvents(t, conn, workosOrgID, domainVerifiedEvent("event_01", flatDomainPayload(workosOrgID, "Example.com.")))
+	require.Equal(t, []string{"example.com"}, getOrgByWorkOSID(t, conn, workosOrgID).VerifiedDomains)
+
+	runOrgEvents(t, conn, workosOrgID, domainDeletedEvent("event_02", flatDomainPayload(workosOrgID, "example.com.")))
+	require.Empty(t, getOrgByWorkOSID(t, conn, workosOrgID).VerifiedDomains)
+}
+
 func TestProcessWorkOSOrganizationEvents_DomainDeletedRemovesOnlyThatDomain(t *testing.T) {
 	t.Parallel()
 

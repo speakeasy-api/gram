@@ -35,7 +35,11 @@ const onboardingStatus = vi.hoisted(() => ({
     refetch: vi.fn(),
   },
 }));
-const portal = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
+const portal = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  isPending: false,
+  options: undefined as { onError?: (error: unknown) => void } | undefined,
+}));
 const safeUrl = vi.hoisted(() => ({ open: vi.fn(() => true) }));
 const toasts = vi.hoisted(() => ({ error: vi.fn() }));
 
@@ -43,12 +47,23 @@ vi.mock("@gram/client/react-query/onboardingStatus", () => ({
   useOnboardingStatus: () => onboardingStatus.current,
 }));
 vi.mock("@gram/client/react-query/generateWorkOSAdminPortalLink.js", () => ({
-  useGenerateWorkOSAdminPortalLinkMutation: () => portal,
+  useGenerateWorkOSAdminPortalLinkMutation: (
+    options: typeof portal.options,
+  ) => {
+    portal.options = options;
+    return portal;
+  },
 }));
 vi.mock("sonner", () => ({ toast: toasts }));
 vi.mock("@/lib/safe-external-url", () => ({
   openSafeExternalUrl: safeUrl.open,
 }));
+
+function mockPortalOpens() {
+  portal.mutate.mockImplementation((_vars, opts) =>
+    opts.onSuccess({ url: "https://workos.test/portal" }),
+  );
+}
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -94,9 +109,7 @@ describe("DomainVerificationStep", () => {
       return { data: verifiedData };
     });
     onboardingStatus.current = { ...onboardingStatus.current, refetch };
-    portal.mutate.mockImplementation((_vars, opts) =>
-      opts.onSuccess({ url: "https://workos.test/portal" }),
-    );
+    mockPortalOpens();
 
     render(<DomainVerificationStep onComplete={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "Verify domain" }));
@@ -117,9 +130,7 @@ describe("DomainVerificationStep", () => {
 
   it("reports a portal link the browser cannot open", () => {
     safeUrl.open.mockReturnValueOnce(false);
-    portal.mutate.mockImplementation((_vars, opts) =>
-      opts.onSuccess({ url: "javascript:alert(1)" }),
-    );
+    mockPortalOpens();
 
     render(<DomainVerificationStep onComplete={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "Verify domain" }));
@@ -130,6 +141,40 @@ describe("DomainVerificationStep", () => {
     expect(
       screen.queryByRole("button", { name: "Check verification" }),
     ).toBeNull();
+  });
+
+  it("keeps the unverified state when a verification check fails", async () => {
+    const refetch = vi.fn(async () => ({ data: status() }));
+    onboardingStatus.current = { ...onboardingStatus.current, refetch };
+    mockPortalOpens();
+
+    render(<DomainVerificationStep onComplete={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Verify domain" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check verification" }));
+
+    await waitFor(() =>
+      expect(toasts.error).toHaveBeenCalledWith(
+        "Domain not verified yet. Finish setup in the WorkOS tab, then try again.",
+      ),
+    );
+    expect(refetch).toHaveBeenCalledOnce();
+    expect(screen.queryByText("Your domain is verified")).toBeNull();
+    expect(screen.queryByText("Verified")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Check verification" }),
+    ).toBeTruthy();
+  });
+
+  it("reports a portal link request that fails", () => {
+    portal.mutate.mockImplementation(() =>
+      portal.options?.onError?.(new Error("Portal unavailable")),
+    );
+
+    render(<DomainVerificationStep onComplete={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Verify domain" }));
+
+    expect(toasts.error).toHaveBeenCalledWith("Portal unavailable");
+    expect(screen.getByRole("button", { name: "Verify domain" })).toBeTruthy();
   });
 
   it("shows the verified state once the server says so", () => {

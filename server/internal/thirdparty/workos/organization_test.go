@@ -260,6 +260,17 @@ func TestOrganizationDomainPolicyVerifiedDomainsNormalizes(t *testing.T) {
 		{Domain: "example.com", State: workos.OrganizationDomainStateLegacyVerified},
 		{Domain: "", State: workos.OrganizationDomainStateVerified},
 		{Domain: "Other.example.com", State: workos.OrganizationDomainStateVerified},
+		{Domain: "Example.org.", State: workos.OrganizationDomainStateVerified},
+		{Domain: "example.org", State: workos.OrganizationDomainStateVerified},
+		{Domain: ".", State: workos.OrganizationDomainStateVerified},
 	}}
-	require.Equal(t, []string{"example.com", "other.example.com"}, policy.VerifiedDomains())
+	require.Equal(t, []string{"example.com", "other.example.com", "example.org"}, policy.VerifiedDomains())
+}
+
+func TestNormalizeDomainStripsTrailingDot(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "example.org", workos.NormalizeDomain("Example.org."))
+	require.Equal(t, "example.org", workos.NormalizeDomain(" example.org. "))
+	require.Empty(t, workos.NormalizeDomain("."))
 }

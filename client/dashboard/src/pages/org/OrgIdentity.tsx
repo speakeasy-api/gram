@@ -351,12 +351,16 @@ function SingleSignOnTab(): JSX.Element {
   const scimFeatureEnabled = features?.scimEnabled ?? false;
   const ssoActive = organization.ssoEnabled === true;
   const scimActive = organization.scimEnabled === true;
-  const domainVerified = onboardingStatus?.domainVerified ?? false;
+  // Active SSO proves a domain was verified, even for orgs set up before
+  // verified domains were tracked. The server completes the setup task the
+  // same way.
+  const domainVerified =
+    !!onboardingStatus?.domainVerified || !!onboardingStatus?.ssoConfigured;
   const verifiedDomains = onboardingStatus?.verifiedDomains ?? [];
   // WorkOS needs a verified domain before either connection can be set up.
   // Only a status response can say the domain is unverified: while loading or
   // after an error nothing is blocked, and WorkOS still enforces the rule.
-  const domainUnverified = onboardingStatus?.domainVerified === false;
+  const domainUnverified = onboardingStatus !== undefined && !domainVerified;
   const ssoBlocked = !ssoActive && domainUnverified;
   const scimBlocked = !scimActive && domainUnverified;
 

@@ -62,9 +62,10 @@ func (p *OrganizationDomainPolicy) VerifiedDomains() []string {
 }
 
 // NormalizeDomain returns the form of a domain name Gram stores. Domain names
-// are case-insensitive, so they are stored trimmed and in lower case.
+// are case-insensitive and a trailing dot only marks a fully qualified name,
+// so they are stored trimmed, without one trailing dot, and in lower case.
 func NormalizeDomain(domain string) string {
-	return strings.ToLower(strings.TrimSpace(domain))
+	return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(domain), "."))
 }
 
 // GetOrganization fetches a WorkOS organization by id.

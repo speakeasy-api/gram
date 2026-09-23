@@ -16,7 +16,11 @@ const mocks = vi.hoisted(() => ({
   enabled: true,
   ema: vi.fn(),
   features: vi.fn(() => ({ data: {} as Record<string, boolean> })),
-  onboarding: { domainVerified: false, verifiedDomains: [] as string[] },
+  onboarding: {
+    domainVerified: false,
+    ssoConfigured: false,
+    verifiedDomains: [] as string[],
+  },
   onboardingQuery: undefined as
     | { data: undefined; isLoading: boolean; isError: boolean }
     | undefined,
@@ -116,7 +120,11 @@ afterEach(() => {
   vi.clearAllMocks();
   mocks.admin = true;
   mocks.enabled = true;
-  mocks.onboarding = { domainVerified: false, verifiedDomains: [] };
+  mocks.onboarding = {
+    domainVerified: false,
+    ssoConfigured: false,
+    verifiedDomains: [],
+  };
   mocks.onboardingQuery = undefined;
   mocks.ssoActive = false;
   mocks.scimActive = false;
@@ -210,6 +218,7 @@ describe("domain verification gate", () => {
     mocks.features.mockImplementation(() => ({ data: { ssoEnabled: true } }));
     mocks.onboarding = {
       domainVerified: true,
+      ssoConfigured: false,
       verifiedDomains: ["example.com", "example.org"],
     };
     show();
@@ -268,7 +277,28 @@ describe("directory sync domain gate", () => {
     mocks.features.mockImplementation(() => ({ data: { scimEnabled: true } }));
     mocks.onboarding = {
       domainVerified: true,
+      ssoConfigured: false,
       verifiedDomains: ["example.com"],
+    };
+    show();
+    const dsync = directorySyncSection();
+    expect(dsync.queryByText("Verify a domain first.")).toBeNull();
+    expect(
+      dsync.queryByText(
+        "Verify a domain above before setting up Directory Sync.",
+      ),
+    ).toBeNull();
+    expect(configureButton().disabled).toBe(false);
+  });
+
+  // Matches the server: active SSO proves a domain was verified, even when
+  // no verified domain was tracked for the org.
+  it("treats an active SSO connection as a verified domain", () => {
+    mocks.features.mockImplementation(() => ({ data: { scimEnabled: true } }));
+    mocks.onboarding = {
+      domainVerified: false,
+      ssoConfigured: true,
+      verifiedDomains: [],
     };
     show();
     const dsync = directorySyncSection();
