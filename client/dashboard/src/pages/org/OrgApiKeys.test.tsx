@@ -106,7 +106,7 @@ describe("API key project binding", () => {
   it("defaults to organization-wide and preserves permission scope", async () => {
     render(<OrgApiKeys />);
     const user = await openForm();
-    await user.click(screen.getByRole("radio", { name: /^Producer:/ }));
+    await user.click(screen.getByRole("radio", { name: "Producer" }));
     await user.click(screen.getByRole("button", { name: "Create" }));
     expect(
       JSON.parse(
@@ -297,5 +297,75 @@ describe("API key project binding", () => {
     mocks.admin = false;
     render(<OrgApiKeys />);
     expect(screen.queryByRole("button", { name: "New API Key" })).toBeNull();
+  });
+});
+
+describe("API key scope options", () => {
+  it("offers every scope, grouped, with the narrowest one preselected", async () => {
+    render(<OrgApiKeys />);
+    await openForm();
+    expect(
+      screen
+        .getAllByRole("radio", {
+          name: /^(Consumer|Producer|Chat|Hooks|Agent)/,
+        })
+        .map((radio) => radio.getAttribute("value")),
+    ).toEqual(["consumer", "producer", "chat", "hooks", "agent"]);
+    expect(
+      screen.getByRole("radio", { checked: true }).getAttribute("value"),
+    ).toBe("consumer");
+    expect(screen.getByText("Platform access")).toBeTruthy();
+    expect(screen.getByText("Purpose-built keys")).toBeTruthy();
+  });
+
+  it("describes what each scope grants and excludes", async () => {
+    render(<OrgApiKeys />);
+    await openForm();
+    const describedText = (name: RegExp) => {
+      const radio = screen.getByRole("radio", { name });
+      const described = radio.getAttribute("aria-describedby");
+      expect(described).toBeTruthy();
+      return document.getElementById(described!)?.textContent ?? "";
+    };
+    expect(describedText(/^Consumer/)).toContain(
+      "Call MCP servers and the tools they expose",
+    );
+    expect(describedText(/^Consumer/)).toContain(
+      "Deployments, configuration changes, conversation content",
+    );
+    expect(describedText(/^Producer/)).toContain(
+      "Covers everything Consumer and Chat allow",
+    );
+    expect(describedText(/^Hooks/)).toContain(
+      "Send hook events and OpenTelemetry data",
+    );
+    expect(describedText(/^Agent/)).toContain(
+      "Store it in managed.json as org_token",
+    );
+    expect(
+      screen.getByText(
+        "A key's scope is fixed once it is created. Pick the narrowest scope that covers the job.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("sends the scope value of the card the user picks", async () => {
+    render(<OrgApiKeys />);
+    const user = await openForm();
+    await user.click(screen.getByRole("radio", { name: /^Hooks/ }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(
+      mocks.mutate.mock.calls[0]?.[0].request.createKeyForm.scopes,
+    ).toEqual(["hooks"]);
+  });
+
+  it("selects a scope when its card body is clicked, not just the radio", async () => {
+    render(<OrgApiKeys />);
+    const user = await openForm();
+    await user.click(screen.getByText("Model access for chat clients."));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(
+      mocks.mutate.mock.calls[0]?.[0].request.createKeyForm.scopes,
+    ).toEqual(["chat"]);
   });
 });

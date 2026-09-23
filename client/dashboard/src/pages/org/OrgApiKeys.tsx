@@ -2,8 +2,6 @@ import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
-import { Label } from "@/components/ui/Label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert } from "@/lib/utils";
@@ -29,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { RequireScope } from "@/components/require-scope";
+import { ApiKeyScopeField } from "./ApiKeyScopeField";
 
 export default function OrgApiKeys(): JSX.Element {
   const organization = useOrganization();
@@ -354,54 +353,7 @@ function OrgApiKeysInner() {
                 )}
               />
 
-              <AnyField
-                label="Scope"
-                optionality="hidden"
-                render={() => {
-                  return (
-                    <RadioGroup name="scope" defaultValue="consumer">
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="consumer" id="r1" />
-                        <Label className="leading-normal" htmlFor="r1">
-                          Consumer: can query/modify toolsets, read data and
-                          access MCP servers.
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="producer" id="r2" />
-                        <Label className="leading-normal" htmlFor="r2">
-                          Producer: can upload OpenAPI documents, trigger
-                          deployments, query/modify toolsets, read data
-                          (including exporting chat transcripts), and access MCP
-                          servers.
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="chat" id="r3" />
-                        <Label className="leading-normal" htmlFor="r3">
-                          Chat: can use the chat API to interact with models.
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="hooks" id="r4" />
-                        <Label className="leading-normal" htmlFor="r4">
-                          Hooks: can ingest authenticated AI traffic, including
-                          hook events and OpenTelemetry data.
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="agent" id="r5" />
-                        <Label className="leading-normal" htmlFor="r5">
-                          Agent: presents to the Speakeasy device agent endpoint
-                          to fetch the user's assigned plugins. Store it in
-                          managed.json as org_token, or hand it to a dev for
-                          speakeasy enroll.
-                        </Label>
-                      </div>
-                    </RadioGroup>
-                  );
-                }}
-              />
+              <ApiKeyScopeField />
               <div className="flex justify-end space-x-2">
                 <Button
                   type="button"
