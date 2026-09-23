@@ -12,7 +12,14 @@ import { Spinner } from "@/components/ui/Spinner";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useLocation } from "react-router";
 import { requestAskAi } from "./askAiBridge";
 import { useLauncherCandidates } from "./candidates";
@@ -245,14 +252,19 @@ interface Selection {
   /** The DOM order (see `domOrder`) the selection was made in. */
   key: string;
   value: string;
-  /** The top row of that order, to tell a deliberate ↑/↓ move from none. */
-  top: string;
+  /**
+   * Whether the user moved the highlight (↑/↓, pointer) since the query last
+   * changed. Tracked explicitly rather than inferred from the value: a user
+   * who arrows away and back is on the top row by choice, and comparing the
+   * value to the top would read that as "never moved".
+   */
+  navigated: boolean;
 }
 
 /**
  * The value to hand cmdk for the current order. A selection made in this
  * very order stands. When the order changed under it (a judgment landing
- * asynchronously reorders the rows), a row the user had moved to stays
+ * asynchronously reorders the rows), a row the user had navigated to stays
  * highlighted as long as it is still listed and the query has not changed,
  * so an Enter pressed after ↓ runs the row they were looking at; otherwise
  * the highlight snaps to the new top row.
@@ -266,10 +278,29 @@ function resolveSelection(
   const top = order[0] ?? "";
   if (!selection) return top;
   if (selection.key === key) return selection.value;
-  const moved = selection.value !== selection.top;
   const kept =
-    moved && selection.query === query && order.includes(selection.value);
+    selection.navigated &&
+    selection.query === query &&
+    order.includes(selection.value);
   return kept ? selection.value : top;
+}
+
+/** The keys cmdk moves the highlight on: ↑/↓, Home/End and its vim bindings. */
+function isNavigationKey(e: ReactKeyboardEvent): boolean {
+  switch (e.key) {
+    case "ArrowDown":
+    case "ArrowUp":
+    case "Home":
+    case "End":
+      return true;
+    case "n":
+    case "j":
+    case "p":
+    case "k":
+      return e.ctrlKey;
+    default:
+      return false;
+  }
 }
 
 /**
@@ -391,6 +422,10 @@ export function CommandPalette(): JSX.Element {
   // changes — unless the user had moved off the top, in which case their row
   // keeps the highlight (see `resolveSelection`).
   const [selectedFor, setSelectedFor] = useState<Selection | null>(null);
+  // Set by a navigation key or a pointer move over a row, consumed by the next
+  // selection change cmdk reports: that change was the user's. Any other
+  // change is cmdk reselecting the top row after the list or query changed.
+  const userInput = useRef(false);
   const domOrder = useMemo((): string[] => {
     if (mode.mode !== "list") return [mode.row.candidate.id];
     const ask = inProject ? [ASK_AI_VALUE] : [];
@@ -532,14 +567,15 @@ export function CommandPalette(): JSX.Element {
       }}
       shouldFilter={false}
       value={selectedValue}
-      onValueChange={(value) =>
-        setSelectedFor({
-          query: trimmedQuery,
-          key: rowsKey,
-          value,
-          top: domOrder[0] ?? "",
-        })
-      }
+      onValueChange={(value) => {
+        const navigated =
+          userInput.current ||
+          (selectedFor !== null &&
+            selectedFor.query === trimmedQuery &&
+            selectedFor.navigated);
+        userInput.current = false;
+        setSelectedFor({ query: trimmedQuery, key: rowsKey, value, navigated });
+      }}
       onEscapeKeyDown={handleEscape}
     >
       {/* Speakeasy brand hairline */}
@@ -564,7 +600,16 @@ export function CommandPalette(): JSX.Element {
               : "Search pages…"
           }
           value={query}
-          onValueChange={setQuery}
+          onValueChange={(value) => {
+            // A keystroke that changes the query starts over: a navigation
+            // key pressed before it must not mark the next selection as
+            // the user's.
+            userInput.current = false;
+            setQuery(value);
+          }}
+          onKeyDownCapture={(e) => {
+            if (isNavigationKey(e)) userInput.current = true;
+          }}
         />
       ) : (
         <ConfirmBar
@@ -579,6 +624,13 @@ export function CommandPalette(): JSX.Element {
           // A newer request is in flight: keep the last order, but dimmed.
           state.judgment && !state.fresh && "opacity-60",
         )}
+        // Capture phase: cmdk selects the row under the pointer from the
+        // row's own handler, so the flag must be set before it fires.
+        onPointerMoveCapture={(e: ReactPointerEvent<HTMLDivElement>) => {
+          if ((e.target as Element).closest("[cmdk-item]")) {
+            userInput.current = true;
+          }
+        }}
       >
         {mode.mode !== "list" && (
           <RankedRows rows={[mode.row]} {...rowGroupProps} />

@@ -1,7 +1,7 @@
 import type { LauncherJudgment } from "@gram/client/models/components/launcherjudgment.js";
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { LauncherCandidate } from "./candidates/types";
+import type { Judgment, LauncherCandidate } from "./candidates/types";
 import { useLauncherJudge } from "./useLauncherJudge";
 
 const mocks = vi.hoisted(() => ({
@@ -335,6 +335,33 @@ describe("useLauncherJudge", () => {
     expect(result.current.state.judgment).toBeNull();
     act(() => result.current.judge("a", [candidate("a")]));
     expect(mocks.mutateAsync).toHaveBeenCalledTimes(3);
+  });
+
+  // The reset effect runs after paint. The very first render for the new
+  // tenant must already be clean, or the palette ranks its rows and picks
+  // its highlight by the previous tenant's judgment for one frame.
+  it("shows no judgment on the very first render after the scope changes", async () => {
+    const calls = captureCalls();
+    const seen: Array<Judgment | null> = [];
+    const { result, rerender } = renderHook(
+      ({ scope }: { scope: string }) => {
+        const hook = useLauncherJudge(scope);
+        seen.push(hook.state.judgment);
+        return hook;
+      },
+      { initialProps: { scope: "acme/one" } },
+    );
+
+    act(() => result.current.judge("a", [candidate("a")]));
+    calls[0]?.resolve(judgmentFor("a"));
+    await flush();
+    expect(result.current.state.judgment).not.toBeNull();
+
+    const before = seen.length;
+    rerender({ scope: "acme/two" });
+    const after = seen.slice(before);
+    expect(after.length).toBeGreaterThan(0);
+    expect(after.filter((judgment) => judgment !== null)).toEqual([]);
   });
 
   it("keeps the latch while the scope is unchanged across re-renders", async () => {

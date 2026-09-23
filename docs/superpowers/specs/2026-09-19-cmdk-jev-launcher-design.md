@@ -322,8 +322,12 @@ openrouter.KeyTypeInternal)`, the same slot the other internal judges use.
 It never provisions a key: typing into the palette must not mint one for an
 organization that has none. Locally that provisioner is the development one,
 which returns `OPENROUTER_DEV_KEY` from `mise.local.toml`. A missing, empty or
-`unset` key, or a lookup error, makes `judge` return `{disabled: true}` with
-no outbound call. `model` is the constant `typesafe/jev-latest`.
+`unset` key makes `judge` return `{disabled: true}` with no outbound call. A
+lookup _error_ (the key store unreachable, a row that will not decrypt, a
+platform key disabled) is not "no key": it returns a 502-class gateway error,
+also with no outbound call, and the client retries on the next keystroke
+rather than latching the feature off. `model` is the constant
+`typesafe/jev-latest`.
 
 ### Wiring
 
@@ -348,12 +352,14 @@ ids) are never sent. The query text is sent and is not logged server-side.
 | Failure                       | Client behaviour                                       |
 | ----------------------------- | ------------------------------------------------------ |
 | Key unset (`disabled: true`)  | Fuzzy order, no ↵, stop calling for the session        |
+| Key lookup error (502)        | Fuzzy order for that keystroke; next keystroke retries |
 | Timeout / 5xx / transport     | Fuzzy order for that keystroke; next keystroke retries |
 | Stale answer (older sequence) | Dropped, counted                                       |
 | Mutation error                | Toast, return to `list` state with query intact        |
 | RBAC lacking                  | Verb never attached; row is `open` only                |
 
-Server: upstream errors map to a 502-class `oops` error; validation to 400.
+Server: upstream and key-lookup errors map to a 502-class `oops` error;
+validation to 400.
 The client treats any error identically (fallback), so the codes exist for
 observability, not behaviour.
 

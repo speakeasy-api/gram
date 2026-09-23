@@ -533,6 +533,12 @@ func (o *OpenRouter) LookupAPIKey(ctx context.Context, orgID string, keyType Key
 	if err != nil {
 		return "", false, oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
 	}
+	// A row that decrypts to nothing is unusable: ProvisionAPIKey refuses the
+	// same state, so a lookup must not report it as provisioned and hand
+	// callers an empty credential to send upstream.
+	if plaintext == "" {
+		return "", false, nil
+	}
 	return plaintext, true, nil
 }
 

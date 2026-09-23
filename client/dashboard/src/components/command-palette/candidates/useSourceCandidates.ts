@@ -23,11 +23,14 @@ function detailFor(kind: SourceKind): string {
 
 // An external MCP toolset carries `tools:externalmcp:<slug>:<tool>` URNs; the
 // slug is how the deployment names the source (see pages/toolsets/ServerTab).
-function externalMcpSlugOf(toolset: ToolsetRef): string | undefined {
-  const urn = toolset.toolUrns?.find((candidate) =>
-    candidate.includes(":externalmcp:"),
-  );
-  return urn?.split(":")[2] || undefined;
+// A toolset can carry several external MCPs, so every slug is reported.
+function externalMcpSlugsOf(toolset: ToolsetRef): Set<string> {
+  const slugs = new Set<string>();
+  for (const urn of toolset.toolUrns ?? []) {
+    const [, kind, slug] = urn.split(":");
+    if (kind === "externalmcp" && slug) slugs.add(slug);
+  }
+  return slugs;
 }
 
 /**
@@ -37,7 +40,7 @@ function externalMcpSlugOf(toolset: ToolsetRef): string | undefined {
  * (the id the Sources page navigates by), and an external MCP has no page of
  * its own, so it opens the hosted server built from it, resolved through the
  * toolset whose tool URNs carry the source's slug. An external MCP no server
- * uses yet falls back to the sources list.
+ * uses yet, or that several servers carry, falls back to the sources list.
  */
 export function useSourceCandidates({
   enabled,
@@ -60,11 +63,12 @@ export function useSourceCandidates({
 
   return useMemo(() => {
     if (!deployment) return [];
-    const toolsetByExternalMcpSlug = new Map<string, ToolsetRef>();
+    const toolsetsByExternalMcpSlug = new Map<string, ToolsetRef[]>();
     for (const toolset of toolsetsData?.toolsets ?? []) {
-      const slug = externalMcpSlugOf(toolset);
-      if (slug && !toolsetByExternalMcpSlug.has(slug)) {
-        toolsetByExternalMcpSlug.set(slug, toolset);
+      for (const slug of externalMcpSlugsOf(toolset)) {
+        const carriers = toolsetsByExternalMcpSlug.get(slug) ?? [];
+        carriers.push(toolset);
+        toolsetsByExternalMcpSlug.set(slug, carriers);
       }
     }
 
@@ -95,8 +99,13 @@ export function useSourceCandidates({
         slug: asset.slug,
         kind: "externalmcp" as const,
         open: () => {
-          const toolset = toolsetByExternalMcpSlug.get(asset.slug);
-          if (toolset) {
+          // Several servers can carry the same external MCP; opening one of
+          // them would land on an arbitrary server, so only a single carrier
+          // resolves and the list is the honest target otherwise (as
+          // resolveLegacySourceRedirect reasons for the old source routes).
+          const carriers = toolsetsByExternalMcpSlug.get(asset.slug) ?? [];
+          const [toolset] = carriers;
+          if (toolset && carriers.length === 1) {
             routes.mcp.details.goTo(toolset.slug);
             return;
           }

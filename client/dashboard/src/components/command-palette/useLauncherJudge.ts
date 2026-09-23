@@ -30,6 +30,19 @@ const IDLE: JudgeState = {
   disabled: false,
 };
 
+/**
+ * The stored state plus the scope it was written under. Only the initial
+ * state and the scope-change effect write `scope`; every other update keeps
+ * it, so a stored state always names the tenant its judgment was made for.
+ */
+interface ScopedState extends JudgeState {
+  scope: string;
+}
+
+function idleFor(scope: string): ScopedState {
+  return { ...IDLE, scope };
+}
+
 // Length limits the `launcher.judge` design enforces (MaxLength in
 // server/design/launcher/design.go). Goa counts runes, so the clamp counts
 // code points: one overlong field would otherwise fail the whole request at
@@ -78,7 +91,11 @@ export function useLauncherJudge(scopeKey: string): {
   reset: () => void;
 } {
   const { mutateAsync } = useLauncherJudgeMutation();
-  const [state, setState] = useState<JudgeState>(IDLE);
+  const [stored, setState] = useState<ScopedState>(() => idleFor(scopeKey));
+  // Derived, not effect-driven: the reset effect below runs after paint, so
+  // the very first render for a new tenant would otherwise still rank rows
+  // and pick a highlight by the previous tenant's judgment.
+  const state: JudgeState = stored.scope === scopeKey ? stored : IDLE;
 
   // Refs, not state: a re-render must never rewind the sequence.
   const sequence = useRef(0);
@@ -102,7 +119,7 @@ export function useLauncherJudge(scopeKey: string): {
     sequence.current += 1;
     newestApplied.current = sequence.current;
     abortInFlight();
-    setState(IDLE);
+    setState(idleFor(scopeKey));
   }, [scopeKey, abortInFlight]);
 
   const judge = useCallback(
@@ -149,7 +166,7 @@ export function useLauncherJudge(scopeKey: string): {
           if (result.disabled) {
             disabledScope.current = scopeKey;
             abortInFlight();
-            setState({ ...IDLE, disabled: true });
+            setState((prev) => ({ ...idleFor(prev.scope), disabled: true }));
             return;
           }
 
@@ -183,7 +200,7 @@ export function useLauncherJudge(scopeKey: string): {
     sequence.current += 1;
     newestApplied.current = sequence.current;
     abortInFlight();
-    setState((prev) => ({ ...IDLE, disabled: prev.disabled }));
+    setState((prev) => ({ ...idleFor(prev.scope), disabled: prev.disabled }));
   }, [abortInFlight]);
 
   return { state, judge, reset };

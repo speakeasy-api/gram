@@ -1032,6 +1032,35 @@ describe("useSourceCandidates", () => {
     expect(mocks.goToSources).toHaveBeenCalled();
     expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
   });
+
+  // Several servers can carry the same external MCP; opening the first would
+  // land on an arbitrary server, so the list is the honest target (as the
+  // legacy source redirect resolves it).
+  it("falls back to the sources list when several servers carry the same external MCP", () => {
+    mocks.scopes = ["mcp:read"];
+    mocks.toolsets = [
+      {
+        id: "toolset-1",
+        name: "Linear",
+        slug: "linear-srv",
+        toolUrns: ["tools:externalmcp:linear:create_issue"],
+      },
+      {
+        id: "toolset-2",
+        name: "Linear for support",
+        slug: "linear-support",
+        toolUrns: ["tools:externalmcp:linear:list_issues"],
+      },
+    ];
+    const { result } = renderCandidates();
+    const [linear] = byKind(result.current, "source").filter(
+      (c) => c.detail === "Source · external MCP",
+    );
+
+    void linear?.run("open");
+    expect(mocks.goToSources).toHaveBeenCalled();
+    expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
+  });
 });
 
 describe("usePolicyCandidates", () => {

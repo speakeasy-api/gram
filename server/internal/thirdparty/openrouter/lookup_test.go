@@ -113,3 +113,46 @@ func TestLookupAPIKey_ExistingRow(t *testing.T) {
 	require.False(t, ok)
 	require.Empty(t, key)
 }
+
+// TestLookupAPIKey_EmptyKeyReadsAsNotProvisioned pins that a row whose
+// ciphertext decrypts to nothing reports ok=false instead of handing callers
+// an empty credential: ProvisionAPIKey refuses the same state, and a caller
+// trusting ok would otherwise send an unusable key upstream.
+func TestLookupAPIKey_EmptyKeyReadsAsNotProvisioned(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := infra.CloneTestDatabase(t, "orlookupempty")
+	require.NoError(t, err)
+
+	orgID := "org-" + uuid.NewString()[:8]
+	_, err = orgRepo.New(conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        "Lookup Empty Org",
+		Slug:        orgID,
+		WorkosID:    pgtype.Text{String: "", Valid: false},
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+
+	enc := testenv.NewEncryptionClient(t)
+	ciphertext, err := enc.Encrypt([]byte(""))
+	require.NoError(t, err)
+	_, err = repo.New(conn).CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeInternal),
+		KeyEncrypted:   pgtype.Text{String: ciphertext, Valid: true},
+		KeyHash:        "hash-empty",
+		MonthlyCredits: 5,
+	})
+	require.NoError(t, err)
+
+	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, enc)
+
+	key, ok, err := provisioner.LookupAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.Empty(t, key)
+}

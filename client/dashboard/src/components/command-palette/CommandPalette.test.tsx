@@ -101,11 +101,15 @@ const SESSIONS = candidate({
   run: runSessions,
 });
 
-/** A settled open judgment that orders the rows as `ids` lists them. */
+/**
+ * A settled open judgment that orders the rows as `ids` lists them. Halving
+ * masses (0.5, 0.25, 0.125, …) keep the total under 1, as a distribution the
+ * judge can actually return, while keeping the order strict.
+ */
 function ordering(ids: string[]): JudgeState {
   const target: Record<string, number> = {};
   ids.forEach((id, index) => {
-    target[id] = 0.9 / (index + 1);
+    target[id] = 0.5 / 2 ** index;
   });
   return {
     judgment: { target, action: { open: 1 }, ready: 0 },
@@ -307,6 +311,42 @@ describe("CommandPalette", () => {
 
     await userEvent.keyboard("{Enter}");
     expect(runSlack).toHaveBeenCalledWith("open");
+    expect(runSessions).not.toHaveBeenCalled();
+  });
+
+  // Moving away and back leaves the highlight on the top row, but the user
+  // chose that row: a reorder must not take it from under an Enter.
+  it("keeps the highlight where the user returned it when a judgment reorders", async () => {
+    mocks.candidates = [SETTINGS, SLACK, SESSIONS];
+    mocks.judgeState = ordering([
+      "action:settings",
+      "mcp:slack",
+      "action:sessions",
+    ]);
+    const { rerender } = render(<CommandPalette />);
+
+    await userEvent.type(input(), "s");
+    await userEvent.keyboard("{ArrowDown}");
+    await userEvent.keyboard("{ArrowUp}");
+    expect(
+      screen.getByRole("option", { selected: true }).textContent,
+    ).toContain("Settings");
+
+    mocks.judgeState = ordering([
+      "action:sessions",
+      "action:settings",
+      "mcp:slack",
+    ]);
+    rerender(<CommandPalette />);
+    expect(
+      screen.getAllByRole("option").map((o) => o.textContent)[0],
+    ).toContain("Sessions");
+    expect(
+      screen.getByRole("option", { selected: true }).textContent,
+    ).toContain("Settings");
+
+    await userEvent.keyboard("{Enter}");
+    expect(runSettings).toHaveBeenCalledWith("open");
     expect(runSessions).not.toHaveBeenCalled();
   });
 
