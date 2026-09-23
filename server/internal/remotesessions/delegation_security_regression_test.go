@@ -1,4 +1,3 @@
-//nolint:glint // Security regression fixtures deliberately revoke live database authority.
 package remotesessions
 
 import (
@@ -17,19 +16,23 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestDelegationRefreshRechecksLiveAuthorityAndScopesRelease(t *testing.T) {
 	t.Parallel()
-	for _, mutation := range []string{
-		`UPDATE organization_metadata SET disabled_at=clock_timestamp() WHERE id=$1`,
-		`UPDATE user_session_issuers SET deleted_at=clock_timestamp() WHERE organization_id=$1`,
-		`UPDATE organization_user_relationships SET deleted_at=clock_timestamp() WHERE organization_id=$1`,
-		`UPDATE remote_session_clients SET deleted_at=clock_timestamp() WHERE organization_id=$1`,
-		`UPDATE remote_session_issuers SET deleted_at=clock_timestamp() WHERE organization_id=$1`,
+	for _, mutation := range []struct {
+		name  string
+		apply func(*testrepo.Queries, context.Context, string) error
+	}{
+		{"organization_metadata", (*testrepo.Queries).DisableDelegationOrganizationFixture},
+		{"user_session_issuers", (*testrepo.Queries).RevokeDelegationUserIssuersFixture},
+		{"organization_user_relationships", (*testrepo.Queries).ForceSoftDeleteOrganizationUserRelationshipsFixture},
+		{"remote_session_clients", (*testrepo.Queries).RevokeDelegationClientsFixture},
+		{"remote_session_issuers", (*testrepo.Queries).RevokeDelegationIssuersFixture},
 	} {
-		t.Run(strings.Fields(mutation)[1], func(t *testing.T) {
+		t.Run(mutation.name, func(t *testing.T) {
 			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
@@ -43,7 +46,7 @@ func TestDelegationRefreshRechecksLiveAuthorityAndScopesRelease(t *testing.T) {
 				})
 				require.NoError(t, err)
 				require.Zero(t, count, "another issuer must not release this claim")
-				_, err = s.db.Exec(ctx, mutation, b.OrganizationID)
+				err = mutation.apply(testrepo.New(s.db), ctx, b.OrganizationID)
 				require.NoError(t, err)
 				return p, nil
 			}
@@ -55,11 +58,12 @@ func TestDelegationRefreshRechecksLiveAuthorityAndScopesRelease(t *testing.T) {
 			_, err := s.Resolve(t.Context(), b, allow)
 			require.ErrorIs(t, err, ErrDelegationTemporary)
 			require.Zero(t, posts)
-			var claim uuid.NullUUID
-			var attempted *time.Time
-			require.NoError(t, s.db.QueryRow(t.Context(), `SELECT refresh_claim_id,last_refresh_attempt_at FROM trusted_issuer_sessions WHERE organization_id=$1`, b.OrganizationID).Scan(&claim, &attempted))
-			require.False(t, claim.Valid, "correct issuer must release even after revocation")
-			require.Nil(t, attempted)
+			claim, err := testrepo.New(s.db).GetDelegationRefreshClaimFixture(t.Context(), testrepo.GetDelegationRefreshClaimFixtureParams{
+				OrganizationID: b.OrganizationID, ClientID: b.ClientID, Subject: urn.NewUserSubject(b.HumanID).String(),
+			})
+			require.NoError(t, err)
+			require.False(t, claim.RefreshClaimID.Valid, "correct issuer must release even after revocation")
+			require.False(t, claim.LastRefreshAttemptAt.Valid)
 		})
 	}
 }
