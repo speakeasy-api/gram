@@ -27,7 +27,7 @@ export function JourneyLayout({
     <main className="min-h-0 flex-1 overflow-y-auto py-8 md:py-16">
       {/* Same frame as the header, so the rail starts under the logo and the
           content ends under the header actions. */}
-      <div className={cn(SETUP_CONTAINER, "md:grid md:grid-cols-12 md:gap-12")}>
+      <div className={cn(SETUP_CONTAINER, "md:grid md:grid-cols-12 md:gap-14")}>
         <div className="hidden md:col-span-2 md:block">
           {loading ? (
             <Skeleton>
