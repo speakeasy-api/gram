@@ -397,8 +397,8 @@ function DeviceAgentConfigurationForm({
               Shadow AI scan
             </Text>
             <Text muted small>
-              Scan enrolled machines for AI tools and report what is found. Turn
-              off for privacy or performance.
+              Allow scanning unless a device&apos;s local or MDM setting
+              disables it. Turn off to disable scanning across the fleet.
             </Text>
           </div>
           <Switch
