@@ -11,7 +11,7 @@ export type ListAIDetectionUsersSecurity = {
 
 export type ListAIDetectionUsersRequest = {
   /**
-   * Id of the detection target to expand, as agents report it.
+   * Id of the detection target to expand. Accepted exactly as agents report it, under the same length bound the scan-report ingest stores it with, so every id in the inventory can be expanded.
    */
   targetId: string;
   /**

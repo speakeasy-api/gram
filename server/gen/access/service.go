@@ -449,7 +449,9 @@ type GetShadowMCPInventoryServerPayload struct {
 // ListAIDetectionUsersPayload is the payload type of the access service
 // listAIDetectionUsers method.
 type ListAIDetectionUsersPayload struct {
-	// Id of the detection target to expand, as agents report it.
+	// Id of the detection target to expand. Accepted exactly as agents report it,
+	// under the same length bound the scan-report ingest stores it with, so every
+	// id in the inventory can be expanded.
 	TargetID     string
 	SessionToken *string
 }

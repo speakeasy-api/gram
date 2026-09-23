@@ -5175,13 +5175,14 @@ paths:
             operationId: listAIDetectionUsers
             parameters:
                 - allowEmptyValue: true
-                  description: Id of the detection target to expand, as agents report it.
+                  description: Id of the detection target to expand. Accepted exactly as agents report it, under the same length bound the scan-report ingest stores it with, so every id in the inventory can be expanded.
                   in: query
                   name: target_id
                   required: true
                   schema:
-                    description: Id of the detection target to expand, as agents report it.
-                    pattern: ^[a-z0-9][a-z0-9-]{0,63}$
+                    description: Id of the detection target to expand. Accepted exactly as agents report it, under the same length bound the scan-report ingest stores it with, so every id in the inventory can be expanded.
+                    maxLength: 64
+                    minLength: 1
                     type: string
                 - allowEmptyValue: true
                   description: Session header

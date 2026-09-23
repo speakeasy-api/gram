@@ -21,7 +21,6 @@ vi.mock("react-router", () => ({
     pathname: "/org/projects/project/shadow-ai/harnesses/cursor",
     search: "",
   }),
-  useNavigate: () => vi.fn(),
 }));
 
 vi.mock("@/routes", () => ({
@@ -104,7 +103,6 @@ vi.mock("@/components/shadow-ai/AIToolDecisionSheet", () => ({
 
 vi.mock("@gram/client/react-query/aiDetectionUsers.js", () => ({
   useAiDetectionUsers: mocks.useAiDetectionUsers,
-  invalidateAllAiDetectionUsers: vi.fn(),
 }));
 
 function detection(overrides: Partial<AIDetection> = {}): AIDetection {
@@ -213,6 +211,38 @@ describe("ShadowAIToolDetail", () => {
     render(<ShadowAIToolDetail />);
 
     expect(screen.getByRole("heading", { name: "Cursor" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Decide access" })).toBeNull();
+  });
+
+  // The target row still comes back for a tool the inventory knows, so the
+  // page keeps its name; only the list under it is empty.
+  it("says when nobody was detected running the tool", () => {
+    mocks.useAiDetectionUsers.mockReturnValue(loaded(result({ users: [] })));
+
+    render(<ShadowAIToolDetail />);
+
+    expect(screen.getByRole("heading", { name: "Cursor" })).toBeTruthy();
+    expect(screen.getByText("No detected users")).toBeTruthy();
+    expect(screen.queryByRole("columnheader", { name: "User" })).toBeNull();
+  });
+
+  // While the read is in flight there is no row to name the page by, so it
+  // falls back to the id in the URL, and the body is a placeholder table:
+  // skeleton bars under no header, rather than the users table with none.
+  it("shows a placeholder table while the users load", () => {
+    mocks.useAiDetectionUsers.mockReturnValue({
+      data: undefined,
+      error: null,
+      isError: false,
+      isPending: true,
+    });
+
+    const { container } = render(<ShadowAIToolDetail />);
+
+    expect(screen.getByRole("heading", { name: "cursor" })).toBeTruthy();
+    expect(screen.queryByRole("columnheader", { name: "User" })).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(container.querySelector(".skeleton")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Decide access" })).toBeNull();
   });
 

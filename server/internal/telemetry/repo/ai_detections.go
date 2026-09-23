@@ -470,13 +470,13 @@ func (q *Queries) ListAIDetectionSummaries(ctx context.Context, arg ListAIDetect
 	return result, nil
 }
 
-func buildListAIDetectionSummariesQuery(arg ListAIDetectionSummariesParams) (string, []any, error) {
-	canonicalOrgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
-	userEmailExpr := "user_email"
-	if canonicalOrgLit != "" {
-		userEmailExpr = canonicalEmailExpr(canonicalOrgLit, "user_email")
-	}
-
+// resolvedAIDetections is the inner read every aggregation of ai_detections
+// starts from: one row per storage key with that key's ReplacingMergeTree
+// versions resolved, so the outer aggregates count each detection once. The
+// filters sit on this read, where organization_id and target_id lead the
+// sort key, so ClickHouse prunes by key; an empty targetID reads every
+// target.
+func resolvedAIDetections(organizationID, targetID string) squirrel.SelectBuilder {
 	resolved := sq.Select(
 		"organization_id",
 		"target_id",
@@ -489,25 +489,45 @@ func buildListAIDetectionSummariesQuery(arg ListAIDetectionSummariesParams) (str
 		"max(last_seen) AS resolved_last_seen",
 	).
 		From("ai_detections").
-		Where("organization_id = ?", arg.OrganizationID).
+		Where("organization_id = ?", organizationID).
 		GroupBy("organization_id", "target_id", "device_serial", "user_email", "signal") //nolint:glint // resolve ReplacingMergeTree rows by their exact storage key before canonical identity folding
-	if arg.TargetID != "" {
-		// On the inner read, where target_id is the second sort-key column,
-		// rather than on the aggregate, so ClickHouse prunes by key.
-		resolved = resolved.Where("target_id = ?", arg.TargetID)
+	if targetID != "" {
+		resolved = resolved.Where("target_id = ?", targetID)
 	}
+	return resolved
+}
+
+// aiDetectionEvidenceAggregates are the evidence columns every aggregation
+// over resolvedAIDetections reports, whether it buckets by target or by
+// person, so the inventory row and its per-user rows are computed alike.
+var aiDetectionEvidenceAggregates = []string{
+	"uniqExactIf(device_serial, device_serial != '') AS device_count",
+	"arraySort(groupUniqArray(signal)) AS signals",
+	"arraySort(groupUniqArrayIf(resolved_version, resolved_version != '')) AS versions",
+	"min(resolved_first_seen) AS first_seen",
+	"max(resolved_last_seen) AS last_seen",
+}
+
+// foldedUserEmailExpr is the user_email column folded through the identity
+// map where the fold is rolled out to the org, and the bare column otherwise.
+func foldedUserEmailExpr(canonicalOrgLit string) string {
+	if canonicalOrgLit == "" {
+		return "user_email"
+	}
+	return canonicalEmailExpr(canonicalOrgLit, "user_email")
+}
+
+func buildListAIDetectionSummariesQuery(arg ListAIDetectionSummariesParams) (string, []any, error) {
+	canonicalOrgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+	userEmailExpr := foldedUserEmailExpr(canonicalOrgLit)
 
 	sb := sq.Select(
 		"target_id",
 		"argMax(resolved_category, resolved_last_seen) AS detected_category",
 		"uniqExact("+userEmailExpr+") AS user_count",
-		"uniqExactIf(device_serial, device_serial != '') AS device_count",
-		"arraySort(groupUniqArray(signal)) AS signals",
-		"arraySort(groupUniqArrayIf(resolved_version, resolved_version != '')) AS versions",
-		"min(resolved_first_seen) AS first_seen",
-		"max(resolved_last_seen) AS last_seen",
 	).
-		FromSelect(resolved, "resolved_ai_detections")
+		Columns(aiDetectionEvidenceAggregates...).
+		FromSelect(resolvedAIDetections(arg.OrganizationID, arg.TargetID), "resolved_ai_detections")
 
 	if len(arg.Categories) > 0 {
 		sb = sb.Where(squirrel.Eq{"resolved_category": arg.Categories})
@@ -603,35 +623,10 @@ func buildListAIDetectionUsersQuery(arg ListAIDetectionUsersParams) (string, []a
 	}
 
 	canonicalOrgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
-	userEmailExpr := "user_email"
-	if canonicalOrgLit != "" {
-		userEmailExpr = canonicalEmailExpr(canonicalOrgLit, "user_email")
-	}
 
-	resolved := sq.Select(
-		"organization_id",
-		"target_id",
-		"device_serial",
-		"user_email",
-		"signal",
-		"argMaxIf(version, updated_at, version != '') AS resolved_version",
-		"min(first_seen) AS resolved_first_seen",
-		"max(last_seen) AS resolved_last_seen",
-	).
-		From("ai_detections").
-		Where("organization_id = ?", arg.OrganizationID).
-		Where("target_id = ?", arg.TargetID).
-		GroupBy("organization_id", "target_id", "device_serial", "user_email", "signal") //nolint:glint // resolve ReplacingMergeTree rows by their exact storage key before canonical identity folding
-
-	sb := sq.Select(
-		userEmailExpr+" AS person_email",
-		"uniqExactIf(device_serial, device_serial != '') AS device_count",
-		"arraySort(groupUniqArray(signal)) AS signals",
-		"arraySort(groupUniqArrayIf(resolved_version, resolved_version != '')) AS versions",
-		"min(resolved_first_seen) AS first_seen",
-		"max(resolved_last_seen) AS last_seen",
-	).
-		FromSelect(resolved, "resolved_ai_detections").
+	sb := sq.Select(foldedUserEmailExpr(canonicalOrgLit)+" AS person_email").
+		Columns(aiDetectionEvidenceAggregates...).
+		FromSelect(resolvedAIDetections(arg.OrganizationID, arg.TargetID), "resolved_ai_detections").
 		GroupBy("person_email").
 		OrderBy("last_seen DESC", "person_email ASC")
 

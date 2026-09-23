@@ -92,20 +92,69 @@ describe("AIToolsTable", () => {
 
   // Opening a row answers "who runs this?" on the tool's own page, nested
   // under the tab. That holds on the Local Models tab too, where nothing can
-  // be decided; the decision stays on the row's context menu elsewhere.
-  it("opens a row onto the tool's users on every tab", () => {
+  // be decided; on the other tabs the row sits inside the context-menu
+  // wrapper, and the click has to reach through it.
+  it.each([
+    {
+      category: "harness",
+      canDecide: true,
+      tab: "harnesses",
+    },
+    {
+      category: "assistant",
+      canDecide: true,
+      tab: "assistants",
+    },
+    {
+      category: "local_model",
+      canDecide: false,
+      tab: "models",
+    },
+  ] as const)(
+    "opens a row onto the tool's users on the $tab tab",
+    ({ category, canDecide, tab }) => {
+      renderTable(
+        <>
+          <AIToolsTable category={category} canDecide={canDecide} />
+          <LocationPath />
+        </>,
+        `/org/projects/project/shadow-ai/${tab}`,
+      );
+
+      fireEvent.click(screen.getByText("Cursor"));
+
+      expect(screen.getByTestId("location").textContent).toBe(
+        `/org/projects/project/shadow-ai/${tab}/cursor`,
+      );
+    },
+  );
+
+  // Ids are stored as agents report them, so one may carry a URL delimiter.
+  // Encoded, it stays a single path segment instead of nesting the page one
+  // level deeper than the route knows.
+  it("keeps an id with a slash in it to one path segment", () => {
+    mocks.useAiDetections.mockReturnValue({
+      data: {
+        detections: [
+          detection({ targetId: "acme/agent", displayName: "Acme" }),
+        ],
+      },
+      isLoading: false,
+      error: null,
+    });
+
     renderTable(
       <>
-        <AIToolsTable category="local_model" canDecide={false} />
+        <AIToolsTable category="harness" canDecide />
         <LocationPath />
       </>,
-      "/org/projects/project/shadow-ai/models",
+      "/org/projects/project/shadow-ai/harnesses",
     );
 
-    fireEvent.click(screen.getByText("Cursor"));
+    fireEvent.click(screen.getByText("Acme"));
 
     expect(screen.getByTestId("location").textContent).toBe(
-      "/org/projects/project/shadow-ai/models/cursor",
+      "/org/projects/project/shadow-ai/harnesses/acme%2Fagent",
     );
   });
 

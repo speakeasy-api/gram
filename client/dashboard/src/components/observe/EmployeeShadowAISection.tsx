@@ -1,5 +1,5 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
-import { detectionEvidenceColumns } from "@/components/shadow-ai/detectionColumns";
+import { DETECTION_EVIDENCE_COLUMNS } from "@/components/shadow-ai/detectionColumns";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
@@ -38,7 +38,7 @@ const COLUMNS: Column<AIDetection>[] = [
   // Devices, signals, versions and first and last seen: shared with the
   // Shadow AI tool page, which shows the same evidence per person for one
   // tool, so the two tables never drift apart.
-  ...detectionEvidenceColumns<AIDetection>(),
+  ...DETECTION_EVIDENCE_COLUMNS,
 ];
 
 export function EmployeeShadowAISection({

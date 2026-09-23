@@ -3,7 +3,7 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { AIToolDecisionSheet } from "@/components/shadow-ai/AIToolDecisionSheet";
-import { detectionEvidenceColumns } from "@/components/shadow-ai/detectionColumns";
+import { DETECTION_EVIDENCE_COLUMNS } from "@/components/shadow-ai/detectionColumns";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { SkeletonTable } from "@/components/ui/Skeleton";
@@ -31,7 +31,7 @@ const COLUMNS: Column<AIDetectionUser>[] = [
       </Text>
     ),
   },
-  ...detectionEvidenceColumns<AIDetectionUser>(),
+  ...DETECTION_EVIDENCE_COLUMNS,
 ];
 
 // Organization admin to view, gated outside the component that reads: the
@@ -53,6 +53,12 @@ function ShadowAIToolDetailPage(): JSX.Element {
   });
   const detection = usersQuery.data?.detection;
   const users = usersQuery.data?.users ?? [];
+  // Until the row is back, or when it never comes, the page goes by the id.
+  const title = detection?.displayName ?? targetId;
+  // The breadcrumb instead leaves its segment unresolved while the row
+  // loads, which the header renders as a placeholder rather than the raw id
+  // that the name then replaces; only a failed read settles on the id.
+  const crumb = usersQuery.isError ? targetId : detection?.displayName;
   const [deciding, setDeciding] = useState(false);
   // A local model never connects to the gateway, so there is nothing to
   // decide about it, the same reason the Local Models tab records no decision.
@@ -98,15 +104,13 @@ function ShadowAIToolDetailPage(): JSX.Element {
         <Page.Header.Breadcrumbs
           substitutions={{
             ...shadowAIBreadcrumbSubstitutions,
-            [targetId]: detection?.displayName ?? targetId,
+            [targetId]: crumb,
           }}
         />
       </Page.Header>
       <Page.Body fullHeight className="pb-8">
         <Page.Section>
-          <Page.Section.Title area="">
-            {detection?.displayName ?? targetId}
-          </Page.Section.Title>
+          <Page.Section.Title area="">{title}</Page.Section.Title>
           <Page.Section.Description>
             Enrolled users this tool was detected for, from device-agent scans
             across the organization.

@@ -503,8 +503,9 @@ var _ = Service("access", func() {
 		Security(security.Session)
 
 		Payload(func() {
-			Attribute("target_id", String, "Id of the detection target to expand, as agents report it.", func() {
-				Pattern(`^[a-z0-9][a-z0-9-]{0,63}$`)
+			Attribute("target_id", String, "Id of the detection target to expand. Accepted exactly as agents report it, under the same length bound the scan-report ingest stores it with, so every id in the inventory can be expanded.", func() {
+				MinLength(1)
+				MaxLength(64)
 			})
 			Required("target_id")
 			security.SessionPayload()

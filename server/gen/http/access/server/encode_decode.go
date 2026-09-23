@@ -3746,7 +3746,12 @@ func DecodeListAIDetectionUsersRequest(mux goahttp.Muxer, decoder func(*http.Req
 		if targetID == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("target_id", "query string"))
 		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("target_id", targetID, "^[a-z0-9][a-z0-9-]{0,63}$"))
+		if utf8.RuneCountInString(targetID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("target_id", targetID, utf8.RuneCountInString(targetID), 1, true))
+		}
+		if utf8.RuneCountInString(targetID) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("target_id", targetID, utf8.RuneCountInString(targetID), 64, false))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw

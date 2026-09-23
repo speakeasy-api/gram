@@ -295,7 +295,11 @@ export function AIToolsTable({
           columns={columns}
           data={sorted}
           noResultsMessage={noResultsMessage}
-          onRowClick={(row) => tabRoute.detail.goTo(row.targetId)}
+          // Ids are stored as agents report them, so one may carry a URL
+          // delimiter; encoded, it stays one path segment.
+          onRowClick={(row) =>
+            tabRoute.detail.goTo(encodeURIComponent(row.targetId))
+          }
           rowKey={(row) => row.targetId}
           className="min-h-0 content-start overflow-y-auto"
           renderRow={(row, rowElement) =>

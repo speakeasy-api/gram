@@ -755,7 +755,12 @@ func BuildListAIDetectionUsersPayload(accessListAIDetectionUsersTargetID string,
 	var targetID string
 	{
 		targetID = accessListAIDetectionUsersTargetID
-		err = goa.MergeErrors(err, goa.ValidatePattern("target_id", targetID, "^[a-z0-9][a-z0-9-]{0,63}$"))
+		if utf8.RuneCountInString(targetID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("target_id", targetID, utf8.RuneCountInString(targetID), 1, true))
+		}
+		if utf8.RuneCountInString(targetID) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("target_id", targetID, utf8.RuneCountInString(targetID), 64, false))
+		}
 		if err != nil {
 			return nil, err
 		}

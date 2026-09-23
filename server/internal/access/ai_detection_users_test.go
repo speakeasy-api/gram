@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,6 +75,21 @@ func TestService_ListAIDetectionUsers_UnknownTargetIsNotFound(t *testing.T) {
 	require.Equal(t, oops.CodeNotFound, shareableErr.Code)
 }
 
+// The ingest lowercases an id before storing it, so the read derives its key
+// the same way: a link typed in another case still opens the tool.
+func TestService_ListAIDetectionUsers_FoldsCaseLikeTheIngest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+	seedAIDetection(t, ctx, ti, orgID, "cursor", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
+
+	result, err := ti.service.ListAIDetectionUsers(ctx, &gen.ListAIDetectionUsersPayload{TargetID: " Cursor ", SessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "cursor", result.Detection.TargetID)
+	require.Len(t, result.Users, 1)
+}
+
 func TestService_ListAIDetectionUsers_RejectsInsufficientScope(t *testing.T) {
 	t.Parallel()
 
@@ -100,20 +116,57 @@ func TestService_ListAIDetectionUsers_RejectsUnauthenticatedCaller(t *testing.T)
 	require.Equal(t, oops.CodeUnauthorized, shareableErr.Code)
 }
 
-// The target id is validated at the HTTP boundary against the same pattern
-// the scan-report ingest enforces, so a malformed id never reaches ClickHouse.
-func TestListAIDetectionUsers_HTTPRejectsMalformedTargetID(t *testing.T) {
+// The target id is bounded at the HTTP boundary by the same length the
+// scan-report ingest enforces, and by nothing narrower: ids are stored exactly
+// as agents report them, so any id the inventory lists must be accepted here,
+// while one the ingest would never have stored is refused before it reaches
+// the service.
+func TestListAIDetectionUsers_HTTPRejectsTargetIDLongerThanIngestStores(t *testing.T) {
 	t.Parallel()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "/rpc/access.listAIDetectionUsers?target_id=Not%20A%20Target", nil)
+	status, payload := serveListAIDetectionUsers(t, "?target_id="+strings.Repeat("a", 65))
+	require.Equal(t, http.StatusBadRequest, status)
+	require.Nil(t, payload, "a target id the ingest could not have stored must not reach the service")
+}
+
+func TestListAIDetectionUsers_HTTPRejectsMissingTargetID(t *testing.T) {
+	t.Parallel()
+
+	status, payload := serveListAIDetectionUsers(t, "")
+	require.Equal(t, http.StatusBadRequest, status)
+	require.Nil(t, payload, "a missing target id must not reach the service")
+}
+
+// An id outside the catalog's slug shape, mixed case and delimiters included,
+// is what an agent may report and the ingest stores verbatim; the boundary
+// passes it to the service as reported.
+func TestListAIDetectionUsers_HTTPAcceptsTargetIDAsReported(t *testing.T) {
+	t.Parallel()
+
+	status, payload := serveListAIDetectionUsers(t, "?target_id=Acme%2FAgent_1")
+	require.Equal(t, http.StatusOK, status)
+	require.NotNil(t, payload)
+	require.Equal(t, "Acme/Agent_1", payload.TargetID)
+}
+
+// serveListAIDetectionUsers drives the generated handler with only its
+// request decoder wired, so what is under test is the boundary validation and
+// nothing behind it. It returns the response status and the payload the
+// service saw, nil when the request never reached it.
+func serveListAIDetectionUsers(t *testing.T, query string) (int, *gen.ListAIDetectionUsersPayload) {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "/rpc/access.listAIDetectionUsers"+query, nil)
 	require.NoError(t, err)
 	req.Header.Set("Gram-Session", "test-session")
 
-	called := false
+	var seen *gen.ListAIDetectionUsersPayload
 	handler := accessserver.NewListAIDetectionUsersHandler(
-		func(_ context.Context, _ any) (any, error) {
-			called = true
-			return nil, nil
+		func(_ context.Context, payload any) (any, error) {
+			p, ok := payload.(*gen.ListAIDetectionUsersPayload)
+			require.True(t, ok, "payload of type %T", payload)
+			seen = p
+			return &gen.ListAIDetectionUsersResult{Detection: nil, Users: nil}, nil
 		},
 		nil,
 		goahttp.RequestDecoder,
@@ -124,8 +177,7 @@ func TestListAIDetectionUsers_HTTPRejectsMalformedTargetID(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, req)
 
-	require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
-	require.False(t, called, "a malformed target id must not reach the service")
+	return response.Code, seen
 }
 
 // One person's linked alias emails fold into one row, as the inventory's user
