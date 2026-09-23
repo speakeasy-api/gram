@@ -1992,6 +1992,7 @@ func newStartCommand() *cli.Command {
 						PluginPublisher:              pluginPublisher,
 						Publishers:                   publishers,
 						TrialEmailsService:           trialEmailsService,
+						TrialFixtureHandler:          newTrialFixtureHandler(c.String("environment"), db, productFeatures),
 						RiskFingerprinter:            riskFingerprinter,
 						DisableRiskRetroReconcile:    c.Bool("disable-clickhouse-risk-retro-reconcile"),
 						LLMAnalyzerEnabled:           llmAnalyzerConfigFromCLI(c).Enabled(),

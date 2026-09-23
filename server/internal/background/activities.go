@@ -112,6 +112,7 @@ type expiredTrialDemoter interface {
 }
 
 type Activities struct {
+	trialFixtureHandler              activities.TrialFixtureHandler
 	db                               *pgxpool.Pool
 	temporalEnv                      *tenv.Environment
 	collectOpenRouterCreditsMetrics  *activities.CollectOpenRouterCreditsMetrics
@@ -241,6 +242,7 @@ func NewActivities(
 	judgeRateLimiter *ratelimit.Limiter,
 	builtinPresets *presetlib.Library,
 	trialEmailsService *trialemails.Service,
+	trialFixtureHandler activities.TrialFixtureHandler,
 	githubEvidenceToken string,
 	riskFingerprinter risk.Fingerprinter,
 	disableRiskRetroReconcile bool,
@@ -484,6 +486,7 @@ func NewActivities(
 			auditLogger,
 			&TemporalTrialEmailNotifier{TemporalEnv: temporalEnv},
 			productFeatures,
+			trialFixtureHandler,
 		),
 		evaluateOrgSpendRules: spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
@@ -500,6 +503,7 @@ func NewActivities(
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
 		remoteSessionRefresh:    remoteSessionRefresh,
 		trialEmails:             trialEmailsService,
+		trialFixtureHandler:     trialFixtureHandler,
 		mcpResearch:             mcpResearch,
 		mcpApprovalRecheck:      mcpApprovalRecheck,
 		billingNotifications:    billingnotifications.NewService(logger, db, emailService, features, siteURL),
@@ -516,6 +520,12 @@ func NewActivities(
 }
 
 func (a *Activities) SendTrialLifecycleEmail(ctx context.Context, input TrialLifecycleEmailInput) error {
+	if a.trialFixtureHandler != nil {
+		handled, err := a.trialFixtureHandler(ctx, input.OrganizationID)
+		if err != nil || handled {
+			return err
+		}
+	}
 	if a.trialEmails == nil {
 		return fmt.Errorf("trial email service is not configured")
 	}
@@ -542,6 +552,12 @@ func (a *Activities) SendTrialLifecycleEmail(ctx context.Context, input TrialLif
 }
 
 func (a *Activities) ResolveTrialEndingReminder(ctx context.Context, organizationID string) (billingnotifications.TrialReminderState, error) {
+	if a.trialFixtureHandler != nil {
+		handled, err := a.trialFixtureHandler(ctx, organizationID)
+		if err != nil || handled {
+			return billingnotifications.TrialReminderState{}, err
+		}
+	}
 	if a.billingNotifications == nil {
 		return billingnotifications.TrialReminderState{}, fmt.Errorf("billing notification service is not configured")
 	}
@@ -553,6 +569,12 @@ func (a *Activities) ResolveTrialEndingReminder(ctx context.Context, organizatio
 }
 
 func (a *Activities) SendTrialEndingSoonEmail(ctx context.Context, input billingnotifications.SendTrialEndingSoonInput) (billingnotifications.SendTrialEndingSoonResult, error) {
+	if a.trialFixtureHandler != nil {
+		handled, err := a.trialFixtureHandler(ctx, input.OrganizationID)
+		if err != nil || handled {
+			return billingnotifications.SendTrialEndingSoonResult{}, err
+		}
+	}
 	if a.billingNotifications == nil {
 		return billingnotifications.SendTrialEndingSoonResult{}, fmt.Errorf("billing notification service is not configured")
 	}
