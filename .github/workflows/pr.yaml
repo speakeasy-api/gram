@@ -896,7 +896,7 @@ jobs:
 
       # Mise supplies atlas; the SHA-pinned actions download a separate atlas-action wrapper.
       - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
+        uses: ariga/atlas-action/migrate/lint@05f7ad5116e82a38748bcbf506bab53425e20278 # v1.17.1
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -908,7 +908,7 @@ jobs:
           ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
+        uses: ariga/atlas-action/migrate/lint@05f7ad5116e82a38748bcbf506bab53425e20278 # v1.17.1
         with:
           working-directory: server
           dir: file://clickhouse/migrations
