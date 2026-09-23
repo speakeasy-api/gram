@@ -158,9 +158,9 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		}
 		// The composite key proves tenancy but not liveness — projects are soft
 		// deleted, so the foreign key still matches one that is gone. Check it
-		// here so an agent cannot be born pointing at a deleted project.
+		// under a row lock so creation serializes with concurrent soft deletion.
 		if projectID.Valid {
-			if _, err := projectsrepo.New(tx).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
+			if _, err := projectsrepo.New(tx).GetProjectByIDAndOrganizationIDForUpdate(ctx, projectsrepo.GetProjectByIDAndOrganizationIDForUpdateParams{
 				ID:             projectID.UUID,
 				OrganizationID: human.Auth.ActiveOrganizationID,
 			}); err != nil {

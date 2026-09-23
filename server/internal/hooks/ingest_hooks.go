@@ -875,15 +875,16 @@ func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evide
 // resolve a later tool call's target to a configured server. Best-effort: a
 // cache miss downgrades a deny's detail, it never changes the decision.
 func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead bool) {
-	if sessionID == "" {
+	projectID := s.mcpListProjectID(ctx, sessionID)
+	if sessionID == "" || projectID == "" {
 		return
 	}
 
 	// Extend both keys on every event, as the legacy endpoints do for the
 	// snapshot: a session outliving its TTL loses the inventory, and losing the
 	// read status silently disables the guard for the rest of that session.
-	s.refreshMCPListTTL(ctx, sessionID)
-	if err := s.cache.Expire(ctx, sessionMCPInventoryReadCacheKey(sessionID), sessionMCPInventoryReadTTL); err != nil {
+	s.refreshMCPListTTL(ctx, projectID, sessionID)
+	if err := s.cache.Expire(ctx, sessionMCPInventoryReadCacheKey(projectID, sessionID), sessionMCPInventoryReadTTL); err != nil {
 		s.logger.DebugContext(ctx, "failed to extend MCP inventory read status",
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(sessionID),
@@ -898,10 +899,10 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 	// it while the entries write failed would leave the session claiming a read
 	// it cannot back up — and under block_all every later meta-tool call denies
 	// for the rest of the session.
-	if !inventoryRead || !s.claimMCPListSnapshot(ctx, sessionID) {
+	if !inventoryRead || !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
 		return
 	}
-	if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
+	if err := s.cache.Set(ctx, sessionMCPListCacheKey(projectID, sessionID), entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
 			attr.SlogEvent("hook_mcp_list_cache_set_failed"),
 			attr.SlogError(err),
@@ -912,7 +913,7 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 
 	// Meta-tool calls arrive later carrying no inventory status, so the
 	// authoritative read status has to be held per session.
-	if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(sessionID), true, sessionMCPInventoryReadTTL); err != nil {
+	if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(projectID, sessionID), true, sessionMCPInventoryReadTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP inventory read status",
 			attr.SlogEvent("hook_mcp_list_read_cache_set_failed"),
 			attr.SlogError(err),
@@ -967,11 +968,12 @@ func (s *Service) canonicalClientReportsMCPInventory(ctx context.Context, payloa
 		return true
 	}
 	sessionID := canonicalSessionID(payload)
-	if sessionID == "" {
+	projectID := s.mcpListProjectID(ctx, sessionID)
+	if sessionID == "" || projectID == "" {
 		return false
 	}
 	var read bool
-	if err := s.cache.Get(ctx, sessionMCPInventoryReadCacheKey(sessionID), &read); err != nil {
+	if err := s.cache.Get(ctx, sessionMCPInventoryReadCacheKey(projectID, sessionID), &read); err != nil {
 		return false
 	}
 	return read
@@ -1030,7 +1032,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	if (strings.TrimSpace(payload.Event.Type) == "session.started" || metadata.ServiceName == "claude-tag") &&
 		metadata.SessionID != "" && !isAgentActor(ctx) && (metadata.ServiceName == "claude-tag" || metadata.UserID != "" || metadata.UserEmail != "" || metadata.Hostname != "") {
 		cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
-		err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
+		err := s.cacheSessionMetadata(cacheCtx, metadata)
 		cancel()
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to cache canonical hook session identity",
@@ -1192,7 +1194,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 				// event; this write-back exists for sessions whose started
 				// event was never seen.
 				cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
-				err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
+				err := s.cacheSessionMetadata(cacheCtx, metadata)
 				cancel()
 				if err != nil {
 					s.logger.WarnContext(ctx, "failed to cache Codex session metadata",

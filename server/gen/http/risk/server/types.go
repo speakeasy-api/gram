@@ -10868,6 +10868,28 @@ type RiskResultResponseBody struct {
 	PolicyID string `form:"policy_id" json:"policy_id" xml:"policy_id"`
 	// Policy version when this result was produced.
 	PolicyVersion int64 `form:"policy_version" json:"policy_version" xml:"policy_version"`
+	// Identity of the concrete mediated execution.
+	ExecutionID *string `form:"execution_id,omitempty" json:"execution_id,omitempty" xml:"execution_id,omitempty"`
+	// Concrete MCP server that executed the operation.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Outer gateway that routed the execution, when present.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// Toolset serving the execution, when present.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Name of the concrete tool, when applicable.
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Execution phase inspected by risk.
+	Phase *string `form:"phase,omitempty" json:"phase,omitempty" xml:"phase,omitempty"`
+	// Concrete mediation surface where the execution was observed.
+	MediationSurface *string `form:"mediation_surface,omitempty" json:"mediation_surface,omitempty" xml:"mediation_surface,omitempty"`
+	// MCP method or equivalent mediated operation.
+	McpMethod *string `form:"mcp_method,omitempty" json:"mcp_method,omitempty" xml:"mcp_method,omitempty"`
+	// Credential provenance class resolved by MCP identity.
+	PrincipalKind *string `form:"principal_kind,omitempty" json:"principal_kind,omitempty" xml:"principal_kind,omitempty"`
+	// Whether MCP identity stamped validated principal provenance.
+	IdentityStamped *bool `form:"identity_stamped,omitempty" json:"identity_stamped,omitempty" xml:"identity_stamped,omitempty"`
+	// Recorded enforcement outcome, independent of policy configuration.
+	EnforcementOutcome *string `form:"enforcement_outcome,omitempty" json:"enforcement_outcome,omitempty" xml:"enforcement_outcome,omitempty"`
 	// ID of the durable tool call block recorded for this finding's message, when
 	// one exists. Links to the block page at /blocks/:id.
 	BlockID *string `form:"block_id,omitempty" json:"block_id,omitempty" xml:"block_id,omitempty"`
@@ -10956,6 +10978,28 @@ type RiskResultRedactedResponseBody struct {
 	PolicyID string `form:"policy_id" json:"policy_id" xml:"policy_id"`
 	// Policy version when this result was produced.
 	PolicyVersion int64 `form:"policy_version" json:"policy_version" xml:"policy_version"`
+	// Identity of the concrete mediated execution.
+	ExecutionID *string `form:"execution_id,omitempty" json:"execution_id,omitempty" xml:"execution_id,omitempty"`
+	// Concrete MCP server that executed the operation.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Outer gateway that routed the execution, when present.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// Toolset serving the execution, when present.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Name of the concrete tool, when applicable.
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Execution phase inspected by risk.
+	Phase *string `form:"phase,omitempty" json:"phase,omitempty" xml:"phase,omitempty"`
+	// Concrete mediation surface where the execution was observed.
+	MediationSurface *string `form:"mediation_surface,omitempty" json:"mediation_surface,omitempty" xml:"mediation_surface,omitempty"`
+	// MCP method or equivalent mediated operation.
+	McpMethod *string `form:"mcp_method,omitempty" json:"mcp_method,omitempty" xml:"mcp_method,omitempty"`
+	// Credential provenance class resolved by MCP identity.
+	PrincipalKind *string `form:"principal_kind,omitempty" json:"principal_kind,omitempty" xml:"principal_kind,omitempty"`
+	// Whether MCP identity stamped validated principal provenance.
+	IdentityStamped *bool `form:"identity_stamped,omitempty" json:"identity_stamped,omitempty" xml:"identity_stamped,omitempty"`
+	// Recorded enforcement outcome, independent of policy configuration.
+	EnforcementOutcome *string `form:"enforcement_outcome,omitempty" json:"enforcement_outcome,omitempty" xml:"enforcement_outcome,omitempty"`
 	// The chat message that was scanned, when the finding is anchored to a message.
 	ChatMessageID *string `form:"chat_message_id,omitempty" json:"chat_message_id,omitempty" xml:"chat_message_id,omitempty"`
 	// The chat content part that was scanned, when the finding is anchored to a
@@ -20021,10 +20065,11 @@ func NewReleaseSessionQuarantinePayload(body *ReleaseSessionQuarantineRequestBod
 
 // NewListRiskResultsPayload builds a risk service listRiskResults endpoint
 // payload.
-func NewListRiskResultsPayload(policyID *string, chatID *string, category *string, ruleID *string, userID *string, externalUserIds []string, uniqueMatch *bool, nonAssistant *bool, assistantID *string, from *string, to *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
+func NewListRiskResultsPayload(policyID *string, chatID *string, mcpServerID *string, category *string, ruleID *string, userID *string, externalUserIds []string, uniqueMatch *bool, nonAssistant *bool, assistantID *string, from *string, to *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
 	v := &risk.ListRiskResultsPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
+	v.McpServerID = mcpServerID
 	v.Category = category
 	v.RuleID = ruleID
 	v.UserID = userID
@@ -20045,10 +20090,11 @@ func NewListRiskResultsPayload(policyID *string, chatID *string, category *strin
 
 // NewListRiskResultsForAgentPayload builds a risk service
 // listRiskResultsForAgent endpoint payload.
-func NewListRiskResultsForAgentPayload(policyID *string, chatID *string, category *string, ruleID *string, userID *string, uniqueMatch *bool, nonAssistant *bool, assistantID *string, from *string, to *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsForAgentPayload {
+func NewListRiskResultsForAgentPayload(policyID *string, chatID *string, mcpServerID *string, category *string, ruleID *string, userID *string, uniqueMatch *bool, nonAssistant *bool, assistantID *string, from *string, to *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsForAgentPayload {
 	v := &risk.ListRiskResultsForAgentPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
+	v.McpServerID = mcpServerID
 	v.Category = category
 	v.RuleID = ruleID
 	v.UserID = userID

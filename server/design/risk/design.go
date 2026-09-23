@@ -329,6 +329,9 @@ var _ = Service("risk", func() {
 			Attribute("chat_id", String, "Optional chat ID to filter by.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("mcp_server_id", String, "Optional concrete MCP server ID to match exactly.", func() {
+				Format(FormatUUID)
+			})
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
 			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
 			Attribute("user_id", String, "Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).")
@@ -360,6 +363,7 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("policy_id")
 			Param("chat_id")
+			Param("mcp_server_id")
 			Param("category")
 			Param("rule_id")
 			Param("user_id")
@@ -393,6 +397,9 @@ var _ = Service("risk", func() {
 			Attribute("chat_id", String, "Optional chat ID to filter by.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("mcp_server_id", String, "Optional concrete MCP server ID to match exactly.", func() {
+				Format(FormatUUID)
+			})
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
 			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
 			Attribute("user_id", String, "Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).")
@@ -423,6 +430,7 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("policy_id")
 			Param("chat_id")
+			Param("mcp_server_id")
 			Param("category")
 			Param("rule_id")
 			Param("user_id")

@@ -313,6 +313,15 @@ describe("NetworkAccessSection", () => {
     },
   );
 
+  it("hides public-only network access for a non-admin without rollout", () => {
+    testState.orgAdmin = false;
+    testState.entitled = false;
+    const { container } = render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+    );
+    expect(container.innerHTML).toBe("");
+  });
+
   it("shows network access before staff enables Tailscale", () => {
     testState.entitled = false;
     render(

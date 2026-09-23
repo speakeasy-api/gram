@@ -80,6 +80,9 @@ type webhookEventData struct {
 	OrganizationID string                 `json:"organization_id"`
 	User           webhookDirectoryEntity `json:"user"`
 	Group          webhookDirectoryEntity `json:"group"`
+	// OrganizationDomain is set on organization_domain.* events, which nest
+	// the domain object instead of carrying organization_id at the top level.
+	OrganizationDomain webhookDirectoryEntity `json:"organization_domain"`
 }
 
 type webhookDirectoryEntity struct {
@@ -130,6 +133,8 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 	case string(workos.EventKindOrganizationCreated),
 		string(workos.EventKindOrganizationUpdated),
 		string(workos.EventKindOrganizationDeleted),
+		string(workos.EventKindOrganizationDomainVerified),
+		string(workos.EventKindOrganizationDomainDeleted),
 		string(workos.EventKindOrganizationRoleCreated),
 		string(workos.EventKindOrganizationRoleUpdated),
 		string(workos.EventKindOrganizationRoleDeleted),
@@ -197,6 +202,9 @@ func parseOrganizationID(event webhookEvent) string {
 	}
 	if event.Data.Group.OrganizationID != "" {
 		return event.Data.Group.OrganizationID
+	}
+	if event.Data.OrganizationDomain.OrganizationID != "" {
+		return event.Data.OrganizationDomain.OrganizationID
 	}
 	return event.Data.User.OrganizationID
 }

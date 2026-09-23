@@ -35,6 +35,10 @@ const (
 	setupTaskStatusDone            = "done"
 )
 
+// setupDomainCheckTimeout bounds the live WorkOS domain check that
+// ListSetupTasks runs for orgs with no stored verified domains.
+const setupDomainCheckTimeout = 3 * time.Second
+
 type setupTaskDefinition struct {
 	Key           string
 	Title         string
@@ -48,7 +52,8 @@ type setupTaskDefinition struct {
 }
 
 var setupTaskCatalog = []setupTaskDefinition{
-	{Key: "identity-provider", Title: "Set up identity provider", Description: "Connect single sign-on and sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "domain-verification", Title: "Verify your domain", Description: "Prove the organization owns its email domain. Single sign-on cannot be set up until a domain is verified.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "identity-provider", Title: "Set up identity provider", Description: "Connect single sign-on and sync people and groups from the identity provider.", Prerequisites: []string{"domain-verification"}, HiddenByDefault: false},
 	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Turn on Anthropic inference hooks in Claude.ai so Claude conversations reach Speakeasy, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
 	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Connect Cursor, Codex, and other coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
@@ -75,7 +80,27 @@ func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTask
 		return nil, err
 	}
 
-	tasks, err := s.projectSetupTasks(ctx, orgrepo.New(s.db), ac.ActiveOrganizationID)
+	repo := orgrepo.New(s.db)
+	org, err := repo.GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization for setup tasks").LogError(ctx, s.logger)
+	}
+	// Orgs verified in WorkOS before the event sync tracked domains have an
+	// empty stored list. Filling it here keeps the identity provider card
+	// from showing blocked until someone opens the onboarding status. Active
+	// SSO already completes the domain task, so it needs no check.
+	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
+	// The check is best effort, so a slow WorkOS cannot hold up the board.
+	if workosOrgID != "" && !org.SsoEnabled.Bool {
+		refreshCtx, cancel := context.WithTimeout(ctx, setupDomainCheckTimeout)
+		_, err := s.refreshVerifiedDomains(refreshCtx, org.ID, workosOrgID, org.VerifiedDomains)
+		cancel()
+		if err != nil {
+			s.logger.WarnContext(ctx, "setup tasks: check domain verification", attr.SlogError(err), attr.SlogWorkOSOrganizationID(workosOrgID))
+		}
+	}
+
+	tasks, err := s.projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +363,15 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 		// The identity provider card covers both single sign-on and directory
 		// sync, so it only completes by fact once both are configured; an admin
 		// who skips directory sync marks the card done by hand.
-		completedByFact := definition.Key == "identity-provider" && facts.SsoConfigured && facts.DsyncConfigured
+		var completedByFact bool
+		switch definition.Key {
+		case "domain-verification":
+			// An active SSO connection proves a domain was verified, even for
+			// orgs set up before verified_domains was tracked.
+			completedByFact = facts.DomainVerified || facts.SsoConfigured
+		case "identity-provider":
+			completedByFact = facts.SsoConfigured && facts.DsyncConfigured
+		}
 		if completedByFact {
 			status = setupTaskStatusDone
 		}

@@ -735,14 +735,16 @@ INSERT INTO organization_metadata (
     slug,
     workos_id,
     workos_updated_at,
-    workos_last_event_id
+    workos_last_event_id,
+    verified_domains
 ) VALUES (
     @id,
     @name,
     @slug,
     @workos_id,
     @workos_updated_at,
-    @workos_last_event_id
+    @workos_last_event_id,
+    @verified_domains::text[]
 )
 RETURNING *;
 
@@ -784,6 +786,7 @@ SET name = @name,
     workos_id = @workos_id,
     workos_updated_at = @workos_updated_at,
     workos_last_event_id = @workos_last_event_id,
+    verified_domains = @verified_domains::text[],
     updated_at = clock_timestamp()
 WHERE id = @id
 RETURNING *;
@@ -859,6 +862,50 @@ SET scim_enabled = @enabled,
     workos_last_event_id = @workos_last_event_id,
     updated_at = clock_timestamp()
 WHERE workos_id = @workos_id;
+
+-- name: AddVerifiedDomainByWorkosID :exec
+-- Add one domain to an organization's verified domains after a WorkOS
+-- organization_domain.verified event. The match ignores case, so a domain
+-- already in the list is not added twice. The event cursor is recorded even
+-- when the list does not change.
+UPDATE organization_metadata
+SET verified_domains = CASE
+        WHEN EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(organization_metadata.verified_domains, '{}'::text[])) AS existing (domain)
+            WHERE lower(existing.domain) = lower(@domain::text)
+        ) THEN COALESCE(organization_metadata.verified_domains, '{}'::text[])
+        ELSE array_append(COALESCE(organization_metadata.verified_domains, '{}'::text[]), @domain::text)
+    END,
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE workos_id = @workos_id;
+
+-- name: RemoveVerifiedDomainByWorkosID :exec
+-- Remove one domain from an organization's verified domains after a WorkOS
+-- organization_domain.deleted event. The match ignores case and keeps the
+-- order of the remaining domains. The event cursor is recorded even when the
+-- domain was not in the list.
+UPDATE organization_metadata
+SET verified_domains = ARRAY(
+        SELECT existing.domain
+        FROM unnest(COALESCE(organization_metadata.verified_domains, '{}'::text[])) WITH ORDINALITY AS existing (domain, position)
+        WHERE lower(existing.domain) <> lower(@domain::text)
+        ORDER BY existing.position
+    ),
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE workos_id = @workos_id;
+
+-- name: SetVerifiedDomains :exec
+-- Fill an empty verified domains list with the result of a live WorkOS check.
+-- A non-empty list is owned by the event sync and may be newer than the live
+-- check, so it is never overwritten here.
+UPDATE organization_metadata
+SET verified_domains = @verified_domains::text[],
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND cardinality(COALESCE(verified_domains, '{}'::text[])) = 0;
 
 -- name: ClearWorkosOrgID :exec
 UPDATE organization_metadata
@@ -936,6 +983,7 @@ WITH default_project AS (
 SELECT
     COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_configured,
     COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
+    (COALESCE(cardinality(organization_metadata.verified_domains), 0) > 0)::boolean AS domain_verified,
     EXISTS (
         SELECT 1
         FROM plugin_github_connections

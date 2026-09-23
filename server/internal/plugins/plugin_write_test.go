@@ -40,6 +40,15 @@ func TestPluginWriteAuthorization(t *testing.T) {
 			allowed := name == "plugin_write" || name == "org_admin"
 			restricted := authztest.WithExactGrants(t, ctx, grants...)
 
+			if allowed {
+				// Exercise the real writer grant set, without adding org:read.
+				listed, err := ti.service.ListPlugins(restricted, &gen.ListPluginsPayload{})
+				require.NoError(t, err)
+				require.Len(t, listed.Plugins, 1)
+				_, err = ti.service.GetPlugin(restricted, &gen.GetPluginPayload{ID: listed.Plugins[0].ID})
+				require.NoError(t, err)
+			}
+
 			// Read permission must not let a denied writer provision the default plugin.
 			readCtx := authztest.WithExactGrants(t, ctx, append(grants, authz.NewGrant(authz.ScopeOrgRead, ac.ActiveOrganizationID))...)
 			listed, err := ti.service.ListPlugins(readCtx, &gen.ListPluginsPayload{})

@@ -292,7 +292,6 @@ function OrgHomeInner() {
   return (
     <>
       <OrgWelcomeBanner />
-
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-8 pb-24">
         {/* `items-start` so each column is only as tall as its content — the
             default stretch left the Projects card padded with dead space

@@ -42217,7 +42217,7 @@ paths:
                 name: Organization
     /rpc/organizations.getOnboardingStatus:
         get:
-            description: Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
+            description: Get the onboarding status for the active organization by checking WorkOS domain verification, SSO connections, and directory sync state.
             operationId: getOnboardingStatus
             parameters:
                 - allowEmptyValue: true
@@ -55704,6 +55704,14 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
+                  description: Optional concrete MCP server ID to match exactly.
+                  in: query
+                  name: mcp_server_id
+                  schema:
+                    description: Optional concrete MCP server ID to match exactly.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Optional rule category key to filter by (e.g. secrets, pii, financial).
                   in: query
                   name: category
@@ -56017,6 +56025,14 @@ paths:
                   name: chat_id
                   schema:
                     description: Optional chat ID to filter by.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional concrete MCP server ID to match exactly.
+                  in: query
+                  name: mcp_server_id
+                  schema:
+                    description: Optional concrete MCP server ID to match exactly.
                     format: uuid
                     type: string
                 - allowEmptyValue: true
@@ -90864,15 +90880,25 @@ components:
         OnboardingStatusResult:
             type: object
             properties:
+                domain_verified:
+                    type: boolean
+                    description: Whether the organization has at least one verified domain in WorkOS. Single sign-on cannot be set up until one is verified.
                 dsync_configured:
                     type: boolean
                     description: Whether the organization has at least one linked directory sync in WorkOS.
                 sso_configured:
                     type: boolean
                     description: Whether the organization has at least one active SSO connection in WorkOS.
+                verified_domains:
+                    type: array
+                    items:
+                        type: string
+                    description: Domains WorkOS has verified for the organization. Single sign-on only works for users on these domains.
             required:
                 - sso_configured
                 - dsync_configured
+                - domain_verified
+                - verified_domains
         OpenAPIv3DeploymentAsset:
             type: object
             properties:
@@ -95315,10 +95341,24 @@ components:
                     type: integer
                     description: End byte position within the message content.
                     format: int64
+                enforcement_outcome:
+                    type: string
+                    description: Recorded enforcement outcome, independent of policy configuration.
+                    enum:
+                        - logged
+                        - denied
+                        - withheld
+                        - warned_pending
+                        - warned_acknowledged
+                        - warned_abandoned
+                        - quarantined
                 exclusion_id:
                     type: string
                     description: The exclusion rule that suppressed this result. Only set when suppressed_reason is 'rule'.
                     format: uuid
+                execution_id:
+                    type: string
+                    description: Identity of the concrete mediated execution.
                 false_positive_at:
                     type: string
                     description: 'Deprecated: mirror of suppressed_at, kept while clients migrate to the suppressed_* fields. Null when not suppressed.'
@@ -95327,12 +95367,30 @@ components:
                     type: string
                     description: The result ID.
                     format: uuid
+                identity_stamped:
+                    type: boolean
+                    description: Whether MCP identity stamped validated principal provenance.
                 match:
                     type: string
                     description: The matched secret or sensitive data. Null when the caller isn't authorized to see raw match content for this result's chat (see match_redacted).
                 match_redacted:
                     type: string
                     description: Opaque fingerprint of match, in the same `<redacted len=N sha=XXXXXXXX>` form as RiskResultRedacted.match_redacted. Populated whenever match is null so callers without raw access still get a stable, non-reversible correlation token. For shadow_mcp findings this is the original match value passed through verbatim (a non-sensitive server URL or command identifier).
+                mcp_method:
+                    type: string
+                    description: MCP method or equivalent mediated operation.
+                mcp_server_id:
+                    type: string
+                    description: Concrete MCP server that executed the operation.
+                mediation_surface:
+                    type: string
+                    description: Concrete mediation surface where the execution was observed.
+                meta_mcp_server_id:
+                    type: string
+                    description: Outer gateway that routed the execution, when present.
+                phase:
+                    type: string
+                    description: Execution phase inspected by risk.
                 policy_id:
                     type: string
                     description: The risk policy ID.
@@ -95341,6 +95399,9 @@ components:
                     type: integer
                     description: Policy version when this result was produced.
                     format: int64
+                principal_kind:
+                    type: string
+                    description: Credential provenance class resolved by MCP identity.
                 rule_id:
                     type: string
                     description: The matched rule identifier.
@@ -95375,6 +95436,12 @@ components:
                     items:
                         type: string
                     description: Tags from the detection rule.
+                tool_name:
+                    type: string
+                    description: Name of the concrete tool, when applicable.
+                toolset_id:
+                    type: string
+                    description: Toolset serving the execution, when present.
                 user_id:
                     type: string
                     description: The user who owns the chat session.
@@ -95413,13 +95480,45 @@ components:
                 description:
                     type: string
                     description: Human-readable description of the finding.
+                enforcement_outcome:
+                    type: string
+                    description: Recorded enforcement outcome, independent of policy configuration.
+                    enum:
+                        - logged
+                        - denied
+                        - withheld
+                        - warned_pending
+                        - warned_acknowledged
+                        - warned_abandoned
+                        - quarantined
+                execution_id:
+                    type: string
+                    description: Identity of the concrete mediated execution.
                 id:
                     type: string
                     description: The result ID.
                     format: uuid
+                identity_stamped:
+                    type: boolean
+                    description: Whether MCP identity stamped validated principal provenance.
                 match_redacted:
                     type: string
                     description: Opaque fingerprint of the original match in the form `<redacted len=N sha=XXXXXXXX>` where N is the byte length of the original match and XXXXXXXX is the first 8 hex characters of sha256(match). For shadow_mcp findings the original match value (a non-sensitive server URL or command identifier) is passed through verbatim.
+                mcp_method:
+                    type: string
+                    description: MCP method or equivalent mediated operation.
+                mcp_server_id:
+                    type: string
+                    description: Concrete MCP server that executed the operation.
+                mediation_surface:
+                    type: string
+                    description: Concrete mediation surface where the execution was observed.
+                meta_mcp_server_id:
+                    type: string
+                    description: Outer gateway that routed the execution, when present.
+                phase:
+                    type: string
+                    description: Execution phase inspected by risk.
                 policy_id:
                     type: string
                     description: The risk policy ID.
@@ -95431,6 +95530,9 @@ components:
                 position_known:
                     type: boolean
                     description: Whether the original finding carried byte-position information within the source message. Exact positions are intentionally not exposed to avoid reconstruction attacks.
+                principal_kind:
+                    type: string
+                    description: Credential provenance class resolved by MCP identity.
                 rule_id:
                     type: string
                     description: The matched rule identifier.
@@ -95447,6 +95549,12 @@ components:
                     items:
                         type: string
                     description: Tags from the detection rule.
+                tool_name:
+                    type: string
+                    description: Name of the concrete tool, when applicable.
+                toolset_id:
+                    type: string
+                    description: Toolset serving the execution, when present.
                 user_id:
                     type: string
                     description: The user who owns the chat session.

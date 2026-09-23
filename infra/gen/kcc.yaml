@@ -890,6 +890,38 @@ pubsub:
       definition: |
         edition = "2024";
         message Finding {
+          enum EnforcementOutcome {
+            ENFORCEMENT_OUTCOME_UNSPECIFIED = 0;
+            ENFORCEMENT_OUTCOME_LOGGED = 1;
+            ENFORCEMENT_OUTCOME_DENIED = 2;
+            ENFORCEMENT_OUTCOME_WITHHELD = 3;
+            ENFORCEMENT_OUTCOME_WARNED_PENDING = 4;
+            ENFORCEMENT_OUTCOME_WARNED_ACKNOWLEDGED = 5;
+            ENFORCEMENT_OUTCOME_WARNED_ABANDONED = 6;
+            ENFORCEMENT_OUTCOME_QUARANTINED = 7;
+          }
+          message Attribution {
+            string chat_id = 1;
+            string user_id = 2;
+            string external_user_id = 3;
+            string assistant_id = 4;
+            string message_created_at = 5;
+            string chat_source = 6;
+            string team = 7;
+            string user_email = 8;
+          }
+          message Execution {
+            string execution_id = 1;
+            string mcp_server_id = 2;
+            string meta_mcp_server_id = 3;
+            string toolset_id = 4;
+            string tool_name = 5;
+            string phase = 6;
+            string mediation_surface = 7;
+            string method = 8;
+            string principal_kind = 9;
+            bool identity_stamped = 10;
+          }
           string id = 1;
           string request_id = 2;
           string chat_message_id = 3;
@@ -918,6 +950,9 @@ pubsub:
           string excluded_detail = 26;
           string event_kind = 27;
           bool shadow = 28;
+          Attribution attribution = 29;
+          Execution execution = 30;
+          EnforcementOutcome enforcement_outcome = 31;
         }
       type: PROTOCOL_BUFFER
   - labels:

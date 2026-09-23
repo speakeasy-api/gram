@@ -45,7 +45,6 @@ describe("setup interaction fixes", () => {
     render(
       <StepSupportProvider onSupport={() => void onSupport()}>
         <StepContainer
-          icon={null}
           title="Task"
           description="Description"
           onContinue={() => {}}
