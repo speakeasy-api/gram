@@ -460,9 +460,6 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 	if !ok {
 		return
 	}
-	if !s.cacheMCPListSnapshot(ctx, *payload.SessionID, entries, variant) {
-		return
-	}
 	orgID := ""
 	projectID := ""
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
@@ -472,9 +469,25 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 		orgID = metadata.GramOrgID
 		projectID = metadata.ProjectID
 	}
-	if projectID != "" {
-		s.upsertShadowMCPInventoryURLs(ctx, orgID, projectID, *payload.SessionID, entries)
+	if projectID == "" {
+		// An unauthenticated SessionStart can beat the OTEL export that
+		// attributes its session. Hold the inventory aside for that export
+		// instead of dropping it; the guard's keys need a project.
+		if isAgentActor(ctx) {
+			return
+		}
+		if err := s.cache.Set(ctx, sessionUnscopedMCPListCacheKey(*payload.SessionID), entries, sessionMCPListTTL); err != nil {
+			s.logger.WarnContext(ctx, "failed to cache unscoped MCP list snapshot",
+				attr.SlogEvent("claude_hook_mcp_list_cache_set_failed"),
+				attr.SlogError(err),
+			)
+		}
+		return
 	}
+	if !s.cacheMCPListSnapshot(ctx, projectID, *payload.SessionID, entries, variant) {
+		return
+	}
+	s.upsertShadowMCPInventoryURLs(ctx, orgID, projectID, *payload.SessionID, entries)
 }
 
 // parseMCPInventoryFromPayload extracts the MCP inventory carried in the hook
@@ -537,20 +550,20 @@ func (s *Service) parseMCPInventoryFromPayload(ctx context.Context, payload *gen
 }
 
 // cacheMCPListSnapshot stores the parsed inventory and agent variant under the
-// session's cache keys and reports whether the caller owns this session's
-// snapshot. Shared by the SessionStart/ConfigChange capture path and the
-// PreToolUse enforcement resolver, so a payload-carried inventory self-heals
-// the cache that the best-effort telemetry path later reads.
+// session's cache keys in projectID and reports whether the caller owns this
+// session's snapshot. Shared by the SessionStart/ConfigChange capture path and
+// the PreToolUse enforcement resolver, so a payload-carried inventory
+// self-heals the cache that the best-effort telemetry path later reads.
 //
 // A cache write failure is logged but still reports ownership: the shadow-MCP
 // inventory row the caller persists next is independent security evidence and
-// must survive a transient Redis error. Only an ownership or authentication
+// must survive a transient Redis error. Only a missing project or an ownership
 // mismatch refuses.
-func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, entries []MCPServerEntry, variant string) bool {
-	if !s.claimMCPListSnapshot(ctx, sessionID) {
+func (s *Service) cacheMCPListSnapshot(ctx context.Context, projectID, sessionID string, entries []MCPServerEntry, variant string) bool {
+	if !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
 		return false
 	}
-	key := sessionMCPListCacheKey(sessionID)
+	key := sessionMCPListCacheKey(projectID, sessionID)
 	if err := s.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
 			attr.SlogEvent("claude_hook_mcp_list_cache_set_failed"),
@@ -558,7 +571,7 @@ func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, en
 		)
 	}
 
-	variantKey := sessionAgentVariantCacheKey(sessionID)
+	variantKey := sessionAgentVariantCacheKey(projectID, sessionID)
 	if err := s.cache.Set(ctx, variantKey, variant, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache session agent variant",
 			attr.SlogEvent("claude_hook_agent_variant_cache_set_failed"),
@@ -610,9 +623,10 @@ func payloadInventoryIsFresh(payload *gen.ClaudePayload) bool {
 // Callers treat a returned error as fail-closed.
 func (s *Service) resolveMCPListForEnforcement(ctx context.Context, payload *gen.ClaudePayload, sessionID string) ([]MCPServerEntry, error) {
 	entries, variant, ok := s.parseMCPInventoryFromPayload(ctx, payload)
+	projectID := s.mcpListProjectID(ctx, sessionID)
 
 	if ok && payloadInventoryIsFresh(payload) {
-		s.cacheMCPListSnapshot(ctx, sessionID, entries, variant)
+		s.cacheMCPListSnapshot(ctx, projectID, sessionID, entries, variant)
 		return entries, nil
 	}
 
@@ -628,30 +642,30 @@ func (s *Service) resolveMCPListForEnforcement(ctx context.Context, payload *gen
 	// we fail closed exactly as the no-payload path does rather than enforce
 	// against a possibly-stale replay.
 	if ok && errors.Is(err, redisCache.ErrCacheMiss) {
-		s.cacheMCPListSnapshot(ctx, sessionID, entries, variant)
+		s.cacheMCPListSnapshot(ctx, projectID, sessionID, entries, variant)
 		return entries, nil
 	}
 
 	return nil, err
 }
 
-// refreshMCPListTTL extends the MCP list cache TTL for the session if the
-// key exists. Called from recordHook on every Claude hook event so the
-// snapshot survives as long as the session is active.
-func (s *Service) refreshMCPListTTL(ctx context.Context, sessionID string) {
-	if sessionID == "" {
+// refreshMCPListTTL extends the MCP list cache TTL for the session in
+// projectID if the key exists. Called on every hook event so the snapshot
+// survives as long as the session is active.
+func (s *Service) refreshMCPListTTL(ctx context.Context, projectID, sessionID string) {
+	if projectID == "" || sessionID == "" {
 		return
 	}
-	if err := s.cache.Expire(ctx, sessionMCPListCacheKey(sessionID), sessionMCPListTTL); err != nil {
+	if err := s.cache.Expire(ctx, sessionMCPListCacheKey(projectID, sessionID), sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to refresh MCP list TTL",
 			attr.SlogEvent("claude_hook_mcp_list_ttl_refresh_failed"),
 			attr.SlogError(err),
 		)
 	}
-	if err := s.cache.Expire(ctx, mcpListOwnerCacheKey(sessionID), sessionMCPListTTL); err != nil {
+	if err := s.cache.Expire(ctx, mcpListOwnerCacheKey(projectID, sessionID), sessionMCPListTTL); err != nil {
 		s.logger.DebugContext(ctx, "failed to refresh MCP list owner TTL", attr.SlogError(err))
 	}
-	if err := s.cache.Expire(ctx, sessionAgentVariantCacheKey(sessionID), sessionMCPListTTL); err != nil {
+	if err := s.cache.Expire(ctx, sessionAgentVariantCacheKey(projectID, sessionID), sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to refresh session agent variant TTL",
 			attr.SlogEvent("claude_hook_agent_variant_ttl_refresh_failed"),
 			attr.SlogError(err),
@@ -733,7 +747,7 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	// Every hook event for this session is a heartbeat — extend the MCP
 	// list snapshot TTL so it survives long-running sessions and only
 	// expires after ~12h of true inactivity.
-	s.refreshMCPListTTL(ctx, sessionID)
+	s.refreshMCPListTTL(ctx, s.mcpListProjectID(ctx, sessionID), sessionID)
 
 	// An agent actor persists on its auth identity at once; buffering would
 	// let a later OTEL export re-attribute the event to a human.

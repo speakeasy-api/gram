@@ -114,24 +114,42 @@ var selfReportedIdentityKeys = []attr.Key{
 	attr.BillingModeKey,
 }
 
-// mcpListOwner binds a session's MCP-list snapshot to the scope that wrote it;
-// the snapshot key is the client-reported session id alone.
-type mcpListOwner struct {
-	OrgID     string `json:"org_id"`
-	ProjectID string `json:"project_id"`
-	Actor     string `json:"actor"`
+// mcpListProjectID returns the project a session's MCP inventory keys are
+// scoped to, or "" when none can be established. The session id is
+// client-reported, so without this scope any tenant holding a hooks key could
+// write the snapshot or read status that another tenant's guard reads back.
+//
+// An authenticated request uses its own project. An unauthenticated Claude
+// hook — the optional-auth path that OTEL attributes later — uses the project
+// its cached session metadata names. Before that metadata lands it has no
+// scope, and callers neither read nor write the guard's keys.
+func (s *Service) mcpListProjectID(ctx context.Context, sessionID string) string {
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+		return authCtx.ProjectID.String()
+	}
+	if sessionID == "" || isAgentActor(ctx) {
+		return ""
+	}
+	metadata, err := s.getSessionMetadata(ctx, sessionID)
+	if err != nil {
+		return ""
+	}
+	return metadata.ProjectID
 }
 
-func mcpListOwnerCacheKey(sessionID string) string {
-	return "session:mcp-list-owner:" + sessionID
+// mcpListOwner binds a session's MCP-list snapshot to the actor that wrote it.
+// The keys are already scoped by project; the owner keeps an agent's snapshot
+// its own within that project.
+type mcpListOwner struct {
+	Actor string `json:"actor"`
+}
+
+func mcpListOwnerCacheKey(projectID, sessionID string) string {
+	return fmt.Sprintf("session:mcp-list-owner:v2:%s:%s", projectID, sessionID)
 }
 
 func mcpListOwnerFromContext(ctx context.Context) mcpListOwner {
-	owner := mcpListOwner{OrgID: "", ProjectID: "", Actor: ""}
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
-		owner.OrgID = authCtx.ActiveOrganizationID
-		owner.ProjectID = authCtx.ProjectID.String()
-	}
+	owner := mcpListOwner{Actor: ""}
 	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok {
 		owner.Actor = actor.String()
 	}
@@ -144,33 +162,25 @@ func (o mcpListOwner) isAgent() bool {
 }
 
 // shares reports whether o and other may use one session's snapshot, where o
-// is always the recorded owner: known scopes must agree, and an agent-owned
-// snapshot belongs to that agent alone.
-//
-// The comparison is deliberately asymmetric. A caller with no tenant scope may
-// seed a session no tenant owns — Claude's SessionStart capture runs before
-// project auth resolves, and that inventory would otherwise be lost — but it
-// may never take over a session a tenant already owns, which is how one tenant
-// could otherwise overwrite or consume another's inventory.
+// is always the recorded owner: an agent-owned snapshot belongs to that agent
+// alone, and an agent never shares a human's.
 func (o mcpListOwner) shares(other mcpListOwner) bool {
-	if o.ProjectID != "" && other.ProjectID != "" && (o.OrgID != other.OrgID || o.ProjectID != other.ProjectID) {
-		return false
-	}
-	if o.ProjectID != "" && other.ProjectID == "" {
-		return false
-	}
 	if o.isAgent() || other.isAgent() {
 		return o.Actor == other.Actor
 	}
 	return true
 }
 
-// claimMCPListSnapshot records ctx as the session snapshot's owner and reports
-// whether ctx may write it. An agent may not take over an unowned snapshot.
-func (s *Service) claimMCPListSnapshot(ctx context.Context, sessionID string) bool {
+// claimMCPListSnapshot records ctx as the owner of the session's snapshot in
+// projectID and reports whether ctx may write it. Nothing is written without a
+// project. An agent may not take over an unowned snapshot.
+func (s *Service) claimMCPListSnapshot(ctx context.Context, projectID, sessionID string) bool {
+	if projectID == "" {
+		return false
+	}
 	writer := mcpListOwnerFromContext(ctx)
 	var existing mcpListOwner
-	err := s.cache.Get(ctx, mcpListOwnerCacheKey(sessionID), &existing)
+	err := s.cache.Get(ctx, mcpListOwnerCacheKey(projectID, sessionID), &existing)
 	switch {
 	case err != nil && !errors.Is(err, redisCache.ErrCacheMiss):
 		s.logger.WarnContext(ctx, "failed to read MCP list snapshot owner; skipping write",
@@ -185,15 +195,12 @@ func (s *Service) claimMCPListSnapshot(ctx context.Context, sessionID string) bo
 		)
 		return false
 	case err == nil:
-		if writer.ProjectID == "" {
-			writer.OrgID, writer.ProjectID = existing.OrgID, existing.ProjectID
-		}
 		if writer.Actor == "" {
 			writer.Actor = existing.Actor
 		}
 	case writer.isAgent():
 		var entries []MCPServerEntry
-		if getErr := s.cache.Get(ctx, sessionMCPListCacheKey(sessionID), &entries); !errors.Is(getErr, redisCache.ErrCacheMiss) {
+		if getErr := s.cache.Get(ctx, sessionMCPListCacheKey(projectID, sessionID), &entries); !errors.Is(getErr, redisCache.ErrCacheMiss) {
 			s.logger.WarnContext(ctx, "refusing agent takeover of an unowned MCP list snapshot",
 				attr.SlogEvent("mcp_list_snapshot_owner_mismatch"),
 				attr.SlogGenAIConversationID(sessionID),
@@ -202,7 +209,7 @@ func (s *Service) claimMCPListSnapshot(ctx context.Context, sessionID string) bo
 		}
 	}
 	// A snapshot without its owner binding would reopen cross-actor reuse.
-	if err := s.cache.Set(ctx, mcpListOwnerCacheKey(sessionID), writer, sessionMCPListTTL); err != nil {
+	if err := s.cache.Set(ctx, mcpListOwnerCacheKey(projectID, sessionID), writer, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to record MCP list snapshot owner; skipping write",
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(sessionID),

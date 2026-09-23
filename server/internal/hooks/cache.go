@@ -27,8 +27,21 @@ func hookPendingCacheKey(sessionID string) string {
 // snapshot of a session. Stored on SessionStart, TTL refreshed on every
 // subsequent hook for the same session so we don't lose the mapping while
 // the user is actively working but garbage-collect dead sessions.
-func sessionMCPListCacheKey(sessionID string) string {
-	return fmt.Sprintf("session:mcp-list:%s", sessionID)
+//
+// The session id is client-reported, so this key, the read status, the agent
+// variant and the snapshot owner are all scoped by the project
+// mcpListProjectID resolves. Otherwise any tenant's hooks key could write what
+// another tenant's shadow-MCP guard reads back for the same session id.
+func sessionMCPListCacheKey(projectID, sessionID string) string {
+	return fmt.Sprintf("session:mcp-list:v2:%s:%s", projectID, sessionID)
+}
+
+// sessionUnscopedMCPListCacheKey holds the inventory from a Claude
+// SessionStart that arrived before any project could be resolved for its
+// session. The shadow-MCP guard never reads it. It only lets OTEL attribution
+// record the session's configured servers once the project is known.
+func sessionUnscopedMCPListCacheKey(sessionID string) string {
+	return fmt.Sprintf("session:mcp-list-unscoped:%s", sessionID)
 }
 
 // sessionMCPInventoryReadCacheKey returns the Redis key recording whether a
@@ -36,8 +49,8 @@ func sessionMCPListCacheKey(sessionID string) string {
 // snapshot rather than inside it because an empty-but-read list has no entries
 // to carry the fact, and that is exactly the case the guard has to tell apart
 // from an unread one.
-func sessionMCPInventoryReadCacheKey(sessionID string) string {
-	return fmt.Sprintf("session:mcp-list-read:%s", sessionID)
+func sessionMCPInventoryReadCacheKey(projectID, sessionID string) string {
+	return fmt.Sprintf("session:mcp-list-read:v2:%s:%s", projectID, sessionID)
 }
 
 // hookIdempotencyCacheKey returns the Redis key marking a hook invocation as
@@ -62,8 +75,8 @@ func blockedPromptTelemetryCacheKey(provider, sessionID, prompt string) string {
 // TTL. Absence means SessionStart hasn't been processed for this session
 // yet — callers should treat that as an ambiguous Claude session rather
 // than assuming claude-code.
-func sessionAgentVariantCacheKey(sessionID string) string {
-	return fmt.Sprintf("session:agent-variant:%s", sessionID)
+func sessionAgentVariantCacheKey(projectID, sessionID string) string {
+	return fmt.Sprintf("session:agent-variant:v2:%s:%s", projectID, sessionID)
 }
 
 const (

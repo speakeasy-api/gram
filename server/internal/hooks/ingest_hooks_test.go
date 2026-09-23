@@ -2141,7 +2141,7 @@ func TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory(t *testing.T) {
 
 			sessionID := "codex-meta-inventory-" + tc.name
 			require.NoError(t, ti.service.cache.Set(ctx,
-				sessionMCPListCacheKey(sessionID), []MCPServerEntry{tc.entry}, sessionMCPListTTL))
+				sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), []MCPServerEntry{tc.entry}, sessionMCPListTTL))
 
 			toolName := "read_mcp_resource"
 			callID := "call-1"
@@ -2202,7 +2202,7 @@ func TestIngestStoresExplicitEmptyMCPInventory(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	sessionID := uuid.NewString()
 	stale := []MCPServerEntry{{Name: "stale-server", URL: "https://stale.example.test/mcp"}}
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), stale, sessionMCPListTTL))
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), stale, sessionMCPListTTL))
 
 	payload := canonicalIngestPayload("claude", "mcp.inventory", sessionID)
 	payload.Data = &gen.HookIngestData{
@@ -2300,7 +2300,7 @@ func TestIngestStoresCollectedEmptyMCPInventory(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	sessionID := uuid.NewString()
 	stale := []MCPServerEntry{{Name: "stale-server", URL: "https://stale.example.test/mcp"}}
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), stale, sessionMCPListTTL))
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), stale, sessionMCPListTTL))
 
 	payload := canonicalIngestPayload("claude", "session.updated", sessionID)
 	payload.Data = &gen.HookIngestData{McpInventoryCollected: new(true)}

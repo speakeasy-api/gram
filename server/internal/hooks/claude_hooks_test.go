@@ -290,7 +290,7 @@ func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 
 	// Seed the cache with an entry that resolves the tool's server prefix
 	// but points at a non-Gram host.
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "plugin", PluginName: "slack", Name: "slack", URL: "https://mcp.slack.com/mcp"}},
 		sessionMCPListTTL,
 	))
@@ -328,7 +328,7 @@ func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
 	toolUseID := "toolu_local_stdio"
 	userEmail := "claude-local-stdio@example.com"
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
 		sessionMCPListTTL,
 	))
@@ -368,7 +368,7 @@ func TestClaude_PreToolUse_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testin
 	toolName := "mcp__mise__install_tool"
 	toolUseID := "toolu_claude_specific_user_policy"
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
 		sessionMCPListTTL,
 	))
@@ -403,7 +403,7 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	toolUseID := "toolu_gram_hosted_ok"
 	userEmail := "claude-gram-hosted@example.com"
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
 		sessionMCPListTTL,
 	))
@@ -528,7 +528,7 @@ func TestClaude_PreToolUse_FreshPayloadInventorySupersedesCache(t *testing.T) {
 	userEmail := "claude-fresh-supersedes@example.com"
 
 	// Cache holds a Gram-hosted entry that would allow on its own.
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
 		sessionMCPListTTL,
 	))
@@ -578,7 +578,7 @@ func TestClaude_PreToolUse_StaleReplayDoesNotOverrideCache(t *testing.T) {
 	toolUseID := "toolu_stale_replay"
 	userEmail := "claude-stale-replay@example.com"
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
 		sessionMCPListTTL,
 	))
@@ -649,7 +649,7 @@ func TestClaude_PreToolUse_CacheTransportErrorFailsClosedDespiteReplay(t *testin
 	// (session metadata, auth) still resolves through the real cache.
 	ti.service.cache = mcpGetErrorCache{
 		Cache:   ti.service.cache,
-		failKey: sessionMCPListCacheKey(sessionID),
+		failKey: sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		err:     errors.New("redis: connection refused"),
 	}
 

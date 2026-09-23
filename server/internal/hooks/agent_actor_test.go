@@ -522,46 +522,94 @@ func TestMCPListSnapshot_BoundToOwner(t *testing.T) {
 	require.Equal(t, "agent", agentEntries[0].Name)
 	_, err = ti.service.getCachedMCPList(ctx, agentSession)
 	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "an agent-owned snapshot is not shared")
-
-	otherOrgSession := "other-org-snapshot-" + uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(otherOrgSession), []MCPServerEntry{testMCPEntry("other")}, time.Hour))
-	require.NoError(t, ti.service.cache.Set(ctx, mcpListOwnerCacheKey(otherOrgSession), mcpListOwner{
-		OrgID: "org-other-" + uuid.NewString(), ProjectID: uuid.NewString(), Actor: "",
-	}, time.Hour))
-	_, err = ti.service.getCachedMCPList(ctx, otherOrgSession)
-	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "another org's snapshot is ignored")
 }
 
-// A caller with no tenant scope may seed a session no tenant owns, but never
-// take over one a tenant already owns — otherwise it could overwrite another
-// organization's session inventory.
-func TestMCPListSnapshot_UnscopedWriterCannotTakeOverOwnedSnapshot(t *testing.T) {
+// testProjectID returns the project the test's auth context is scoped to.
+func testProjectID(t *testing.T, ctx context.Context) string {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	return authCtx.ProjectID.String()
+}
+
+// otherProjectContext makes ctx look like a hooks key for a different
+// organization and project, sending the same client-reported session ids.
+func otherProjectContext(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	other := *authCtx
+	projectID := uuid.New()
+	other.ActiveOrganizationID = "org-other-" + uuid.NewString()
+	other.ProjectID = &projectID
+	return contextvalues.SetAuthContext(ctx, &other)
+}
+
+// Another project writing the same session id must not change what this
+// project's guard reads: not the snapshot, and not by squatting first.
+func TestMCPListSnapshot_OtherProjectCannotAlterSnapshot(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
+	otherCtx := otherProjectContext(t, ctx)
 
-	sessionID := "owned-snapshot-" + uuid.NewString()
-	ti.service.cacheCanonicalMCPList(ctx, sessionID, []MCPServerEntry{testMCPEntry("human")}, true)
+	squatted := "squatted-snapshot-" + uuid.NewString()
+	ti.service.cacheCanonicalMCPList(otherCtx, squatted, []MCPServerEntry{testMCPEntry("intruder")}, true)
+	_, err := ti.service.getCachedMCPList(ctx, squatted)
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "another project's snapshot is invisible")
+	ti.service.cacheCanonicalMCPList(ctx, squatted, []MCPServerEntry{testMCPEntry("human")}, true)
+	entries, err := ti.service.getCachedMCPList(ctx, squatted)
+	require.NoError(t, err, "writing first in another project does not lock this one out")
+	require.Equal(t, "human", entries[0].Name)
 
-	// The shape Claude's SessionStart capture has before project auth resolves.
-	ti.service.cacheCanonicalMCPList(t.Context(), sessionID, []MCPServerEntry{testMCPEntry("intruder")}, true)
-
-	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	owned := "owned-snapshot-" + uuid.NewString()
+	ti.service.cacheCanonicalMCPList(ctx, owned, []MCPServerEntry{testMCPEntry("human")}, true)
+	ti.service.cacheCanonicalMCPList(otherCtx, owned, []MCPServerEntry{testMCPEntry("intruder")}, true)
+	entries, err = ti.service.getCachedMCPList(ctx, owned)
 	require.NoError(t, err)
-	require.Equal(t, "human", entries[0].Name, "an unscoped writer never takes over an owned snapshot")
+	require.Equal(t, "human", entries[0].Name, "another project never overwrites this project's snapshot")
+	otherEntries, err := ti.service.getCachedMCPList(otherCtx, owned)
+	require.NoError(t, err)
+	require.Equal(t, "intruder", otherEntries[0].Name, "each project keeps its own snapshot")
 }
 
-// The other half of that rule: an unowned session may still be seeded without
-// tenant scope, and a scoped reader can consume it.
-func TestMCPListSnapshot_UnscopedWriterSeedsUnownedSnapshot(t *testing.T) {
+// An authoritative read status from another project must not make this
+// project's empty inventory look complete, which under block_all would deny
+// every later meta-tool call in the session.
+func TestMCPInventoryReadStatus_OtherProjectCannotSetIt(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
-	sessionID := "unowned-seed-" + uuid.NewString()
+	sessionID := uuid.NewString()
+	ti.service.cacheCanonicalMCPList(otherProjectContext(t, ctx), sessionID, nil, true)
+
+	payload := canonicalIngestPayload("codex", "tool.pre", sessionID)
+	require.False(t, ti.service.canonicalClientReportsMCPInventory(ctx, payload))
+}
+
+func TestSessionAgentVariant_OtherProjectCannotSetIt(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	otherCtx := otherProjectContext(t, ctx)
+
+	sessionID := uuid.NewString()
+	require.True(t, ti.service.cacheMCPListSnapshot(otherCtx, testProjectID(t, otherCtx), sessionID, nil, agentVariantCowork))
+
+	require.Empty(t, ti.service.sessionAgentVariant(ctx, sessionID))
+	require.Equal(t, agentVariantCowork, ti.service.sessionAgentVariant(otherCtx, sessionID))
+}
+
+// A writer with no project scope writes nothing any guard reads.
+func TestMCPListSnapshot_UnscopedWriterWritesNothing(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := "unscoped-seed-" + uuid.NewString()
 	ti.service.cacheCanonicalMCPList(t.Context(), sessionID, []MCPServerEntry{testMCPEntry("seeded")}, true)
 
-	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
-	require.NoError(t, err)
-	require.Equal(t, "seeded", entries[0].Name, "an unowned session can still be seeded")
+	_, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss)
+	require.False(t, ti.service.canonicalClientReportsMCPInventory(ctx, canonicalIngestPayload("codex", "tool.pre", sessionID)))
 }
 
 func TestGetCachedMCPList_OwnerNotFoundIsMiss(t *testing.T) {
@@ -569,7 +617,7 @@ func TestGetCachedMCPList_OwnerNotFoundIsMiss(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 
 	sessionID := "unowned-snapshot-" + uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{testMCPEntry("legacy")}, time.Hour))
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), []MCPServerEntry{testMCPEntry("legacy")}, time.Hour))
 
 	_, err := ti.service.getCachedMCPList(agentKeyContext(t, ctx, ti), sessionID)
 	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "an unowned snapshot is a miss for an agent")
@@ -584,8 +632,8 @@ func TestGetCachedMCPList_OwnerReadErrorFailsClosed(t *testing.T) {
 	agentCtx := agentKeyContext(t, ctx, ti)
 
 	sessionID := "corrupt-owner-" + uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{testMCPEntry("human")}, time.Hour))
-	require.NoError(t, ti.service.cache.Set(ctx, mcpListOwnerCacheKey(sessionID), "not-an-owner", time.Hour))
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), []MCPServerEntry{testMCPEntry("human")}, time.Hour))
+	require.NoError(t, ti.service.cache.Set(ctx, mcpListOwnerCacheKey(testProjectID(t, ctx), sessionID), "not-an-owner", time.Hour))
 
 	_, err := ti.service.getCachedMCPList(agentCtx, sessionID)
 	require.Error(t, err)
@@ -620,7 +668,7 @@ func TestMCPListSnapshot_OwnerWriteFailureSkipsSnapshot(t *testing.T) {
 	ti.service.cacheCanonicalMCPList(ctx, sessionID, []MCPServerEntry{testMCPEntry("human")}, true)
 
 	var entries []MCPServerEntry
-	require.ErrorIs(t, base.Get(ctx, sessionMCPListCacheKey(sessionID), &entries), redisCache.ErrCacheMiss,
+	require.ErrorIs(t, base.Get(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), &entries), redisCache.ErrCacheMiss,
 		"no snapshot is written without its owner binding")
 }
 

@@ -188,8 +188,12 @@ func (s *Service) sessionAgentVariant(ctx context.Context, sessionID string) str
 	if sessionID == "" {
 		return ""
 	}
+	projectID := s.mcpListProjectID(ctx, sessionID)
+	if projectID == "" {
+		return ""
+	}
 	var variant string
-	if err := s.cache.Get(ctx, sessionAgentVariantCacheKey(sessionID), &variant); err != nil {
+	if err := s.cache.Get(ctx, sessionAgentVariantCacheKey(projectID, sessionID), &variant); err != nil {
 		return ""
 	}
 	return variant

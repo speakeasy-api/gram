@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 
@@ -247,11 +248,20 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 				)
 			}
 		}
-		if metadataErr != nil {
-			entries, err := s.getCachedMCPList(ctx, completeMetadata.SessionID)
-			if err == nil {
+		// A SessionStart that beat this attribution had no project to cache its
+		// inventory under, so it was held aside. Record it as inventory evidence
+		// now; it never becomes the guard's snapshot, which only a scoped
+		// writer can set.
+		if metadataErr != nil && !agent {
+			var entries []MCPServerEntry
+			unscopedKey := sessionUnscopedMCPListCacheKey(completeMetadata.SessionID)
+			switch err := s.cache.Get(ctx, unscopedKey, &entries); {
+			case err == nil:
 				s.upsertShadowMCPInventoryURLs(ctx, completeMetadata.GramOrgID, completeMetadata.ProjectID, completeMetadata.SessionID, entries)
-			} else {
+				if err := s.cache.Delete(ctx, unscopedKey); err != nil {
+					sessionLogger.DebugContext(ctx, "failed to delete unscoped MCP list snapshot", attr.SlogError(err))
+				}
+			case !errors.Is(err, redisCache.ErrCacheMiss):
 				sessionLogger.WarnContext(ctx, "failed to read cached MCP list for shadow inventory capture",
 					attr.SlogEvent("claude_otel_mcp_list_cache_miss"),
 					attr.SlogError(err),

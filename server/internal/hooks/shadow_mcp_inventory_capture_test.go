@@ -5,10 +5,10 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"strings"
 	"testing"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -179,9 +179,8 @@ func TestClaudeSessionStartUpsertsShadowMCPInventoryURLsWhenOTELMetadataArrives(
 	})
 	require.NoError(t, err)
 
-	cached, err := ti.service.getCachedMCPList(ctx, sessionID)
-	require.NoError(t, err)
-	require.Len(t, cached, 2)
+	_, err = ti.service.getCachedMCPList(ctx, sessionID)
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "an unscoped SessionStart never becomes a guard snapshot")
 
 	err = ti.service.Logs(ctx, claudeLogsPayload(
 		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
@@ -360,7 +359,7 @@ func TestCodexSessionStartSkipsShadowMCPInventoryWhenSnapshotCacheFails(t *testi
 	sessionID := uuid.NewString()
 	ti.service.cache = mcpSetErrorCache{
 		Cache:   ti.service.cache,
-		failKey: sessionMCPListCacheKey(sessionID),
+		failKey: sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		err:     errors.New("redis: connection refused"),
 	}
 
@@ -393,7 +392,9 @@ func TestCodexSessionStartSkipsShadowMCPInventoryWhenSnapshotCacheFails(t *testi
 	require.Empty(t, rows)
 }
 
-func TestClaudeOTELLogsWarnsWhenMCPInventorySnapshotMissing(t *testing.T) {
+// Most sessions authenticate their SessionStart and hold no unscoped
+// inventory, so its absence at attribution is not worth a warning.
+func TestClaudeOTELLogsQuietWhenNoUnscopedMCPInventoryHeld(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
@@ -415,9 +416,8 @@ func TestClaudeOTELLogsWarnsWhenMCPInventorySnapshotMissing(t *testing.T) {
 		},
 	))
 	require.NoError(t, err)
-	require.Contains(t, logBuffer.String(), "claude_otel_mcp_list_cache_miss")
 	require.Contains(t, logBuffer.String(), sessionID)
-	require.True(t, strings.Contains(logBuffer.String(), "cache miss") || strings.Contains(logBuffer.String(), "cache"))
+	require.NotContains(t, logBuffer.String(), "claude_otel_mcp_list_cache_miss")
 }
 
 func requireShadowMCPInventoryURLsFromHooks(
