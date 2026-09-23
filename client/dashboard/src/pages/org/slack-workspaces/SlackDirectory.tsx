@@ -11,7 +11,10 @@ import { Heading } from "@/components/ui/Heading";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
-import { HumanizeDateTime } from "@/lib/dates";
+import { useRBAC } from "@/hooks/useRBAC";
+import { SlackMappingDialog } from "./SlackMappingDialog";
+import { MappingStatus, PersonnelAvatar } from "./MappingStatus";
+import { stateLabels, typeLabels } from "./memberLabels";
 import type { SlackDirectoryConnection } from "@gram/client/models/components/slackdirectoryconnection.js";
 import type { SlackDirectoryMember } from "@gram/client/models/components/slackdirectorymember.js";
 import { useSlackDirectoryMembers } from "@gram/client/react-query/slackDirectoryMembers.js";
@@ -20,90 +23,102 @@ import { SlackSyncButton, SlackSyncStatus } from "./SlackSyncStatus";
 
 const FILTERS = defineFilters([
   { id: "slack_workspace", label: "Workspace", kind: "select", pinned: true },
+  {
+    id: "slack_mapping",
+    label: "Mapping status",
+    kind: "select",
+    pinned: true,
+  },
 ]);
-const typeLabels: Record<SlackDirectoryMember["memberType"], string> = {
-  person: "Member",
-  guest: "Guest",
-  single_channel_guest: "Single-channel guest",
-  bot: "Bot / app",
-  unknown: "Unknown",
-};
-const stateLabels: Record<SlackDirectoryMember["status"], string> = {
-  active: "Active",
-  deactivated: "Deactivated",
-  invited: "Invited",
-  unknown: "Unknown",
-};
-const columns: Column<SlackDirectoryMember>[] = [
-  {
-    key: "displayName",
-    header: "Slack member",
-    width: "2fr",
-    render: (member) => (
-      <div className="min-w-0">
-        <Text className="break-words font-medium">
-          {member.displayName || member.slackUserId}
-        </Text>
-        <Text muted small className="font-mono">
-          {member.slackUserId}
-        </Text>
-      </div>
-    ),
-  },
-  {
-    key: "email",
-    header: "Email",
-    width: "2fr",
-    render: (member) => (
-      <Text small className="break-all">
-        {member.email || "Not provided"}
-      </Text>
-    ),
-  },
-  {
-    key: "workspaceName",
-    header: "Workspace",
-    width: "1.5fr",
-    render: (member) => (
-      <Text small className="break-words">
-        {member.workspaceName || member.workspaceId}
-      </Text>
-    ),
-  },
-  {
-    key: "memberType",
-    header: "Type",
-    width: "1fr",
-    render: (member) => <Text small>{typeLabels[member.memberType]}</Text>,
-  },
-  {
-    key: "status",
-    header: "Status",
-    width: "1.5fr",
-    render: (member) => (
-      <div className="space-y-1">
-        <Badge variant={member.status === "active" ? "success" : "neutral"}>
-          {stateLabels[member.status]}
-        </Badge>
-        {!member.observedInLastSync && (
-          <Text muted small>
-            Not seen in last sync
+function memberColumns(
+  onEdit: (id: string) => void,
+  canEdit: boolean,
+): Column<SlackDirectoryMember>[] {
+  return [
+    {
+      key: "displayName",
+      header: "Slack identity",
+      width: "2fr",
+      render: (member) => (
+        <div className="min-w-0 space-y-1">
+          <Text className="break-words font-medium">
+            {member.displayName || member.slackUserId}
           </Text>
-        )}
-      </div>
-    ),
-  },
-  {
-    key: "lastSeenAt",
-    header: "Last seen",
-    width: "1fr",
-    render: (member) => (
-      <Text muted small>
-        <HumanizeDateTime date={member.lastSeenAt} />
-      </Text>
-    ),
-  },
-];
+          <Text muted small className="break-all">
+            {member.email || "Not provided"}
+          </Text>
+        </div>
+      ),
+    },
+    {
+      key: "workspaceName",
+      header: "Workspace",
+      width: "1.3fr",
+      render: (member) => (
+        <Text small className="break-words">
+          {member.workspaceName || member.workspaceId}
+        </Text>
+      ),
+    },
+    {
+      key: "status",
+      header: "Directory state",
+      width: "1.4fr",
+      render: (member) => (
+        <div className="space-y-1">
+          <Badge variant={member.status === "active" ? "success" : "neutral"}>
+            {stateLabels[member.status]}
+          </Badge>
+          <Text muted small>
+            {typeLabels[member.memberType]}
+          </Text>
+          {!member.observedInLastSync && (
+            <Text muted small>
+              Not seen in last sync
+            </Text>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "mapping",
+      header: "Personnel",
+      width: "1.6fr",
+      render: (member) => {
+        const mapping = member.mapping;
+        return (
+          <Button
+            variant="tertiary"
+            size="sm"
+            className="h-auto max-w-full justify-start whitespace-normal text-left"
+            disabled={!canEdit || (member.memberType === "bot" && !mapping)}
+            aria-label={`Change mapping for ${member.displayName || member.slackUserId} in ${member.workspaceName || member.workspaceId}`}
+            onClick={() => onEdit(member.id)}
+          >
+            {mapping && (
+              <Button.LeftIcon>
+                <PersonnelAvatar
+                  name={mapping.displayName}
+                  email={mapping.email}
+                  photoUrl={mapping.photoUrl}
+                />
+              </Button.LeftIcon>
+            )}
+            <Button.Text>
+              {mapping ? mapping.displayName || mapping.email : "Not mapped"}
+            </Button.Text>
+          </Button>
+        );
+      },
+    },
+    {
+      key: "mappingStatus",
+      header: "Mapping status",
+      width: "1.6fr",
+      render: (member) => <MappingStatus member={member} />,
+    },
+  ];
+}
 
 export function SlackDirectory({
   connections,
@@ -113,6 +128,9 @@ export function SlackDirectory({
   const { values, setValue, clearValue, clearAll } = useFilterState(FILTERS);
   const [search, setSearch] = useState("");
   const connectionId = values.slack_workspace ?? undefined;
+  const mappingStatus = values.slack_mapping as
+    | SlackDirectoryMember["mappingStatus"]
+    | null;
   // Remount pagination when the directory scope changes, including browser navigation.
   return (
     <section className="space-y-5" aria-label="Slack member directory">
@@ -122,8 +140,8 @@ export function SlackDirectory({
       <div className="space-y-2">
         <Heading variant="h3">Slack members</Heading>
         <Text muted small>
-          Workspace profiles only. Email addresses do not confirm a person’s
-          identity. External Slack Connect users are excluded.
+          Map Slack accounts to existing personnel. Email addresses do not
+          confirm a person’s identity. Mappings grant no new permissions.
         </Text>
       </div>
       <Page.Toolbar>
@@ -138,6 +156,11 @@ export function SlackDirectory({
           schema={FILTERS}
           values={values}
           optionsById={{
+            slack_mapping: [
+              { value: "unmapped", label: "Not mapped" },
+              { value: "mapped", label: "Mapped" },
+              { value: "needs_review", label: "Needs review" },
+            ],
             slack_workspace: connections.map((c) => ({
               label: c.workspaceName || c.workspaceId,
               value: c.id,
@@ -145,12 +168,15 @@ export function SlackDirectory({
           }}
           onChange={(id, value) => {
             if (
-              id === "slack_workspace" &&
+              (id === "slack_workspace" || id === "slack_mapping") &&
               (typeof value === "string" || value === null)
             )
-              setValue("slack_workspace", value);
+              setValue(id, value);
           }}
-          onClear={() => clearValue("slack_workspace")}
+          onClear={(id) => {
+            if (id === "slack_workspace" || id === "slack_mapping")
+              clearValue(id);
+          }}
           onClearAll={clearAll}
         />
       </Page.Toolbar>
@@ -173,8 +199,9 @@ export function SlackDirectory({
           ))}
       </div>
       <MemberTable
-        key={`${connectionId ?? "all"}:${search}`}
+        key={`${connectionId ?? "all"}:${mappingStatus ?? "all"}:${search}`}
         connectionId={connectionId}
+        mappingStatus={mappingStatus ?? undefined}
         search={search}
         syncing={connections.some(syncInProgress)}
       />
@@ -184,19 +211,24 @@ export function SlackDirectory({
 
 function MemberTable({
   connectionId,
+  mappingStatus,
   search,
   syncing,
 }: {
   connectionId?: string;
+  mappingStatus?: SlackDirectoryMember["mappingStatus"];
   search: string;
   syncing: boolean;
 }): JSX.Element {
+  const { hasScope } = useRBAC();
+  const [editing, setEditing] = useState<string | null>(null);
+  const columns = memberColumns(setEditing, hasScope("org:admin"));
   const [cursors, setCursors] = useState<Array<string | undefined>>([
     undefined,
   ]);
   const cursor = cursors[cursors.length - 1];
   const query = useSlackDirectoryMembers(
-    { connectionId, search, cursor, limit: 50 },
+    { connectionId, mappingStatus, search, cursor, limit: 50 },
     SESSION_SECURITY,
     {
       retry: false,
@@ -207,6 +239,9 @@ function MemberTable({
   const rows = query.data?.members ?? [];
   return (
     <div className="space-y-4" aria-busy={query.isFetching}>
+      {editing && (
+        <SlackMappingDialog id={editing} onClose={() => setEditing(null)} />
+      )}
       <ApiErrorAlert error={query.error} />
       {query.isError && (
         <Button

@@ -22,7 +22,7 @@ import (
 )
 
 func memberRequest() *gen.ListMembersPayload {
-	return &gen.ListMembersPayload{SessionToken: nil, ConnectionID: nil, Search: nil, Cursor: nil, Limit: 50}
+	return &gen.ListMembersPayload{SessionToken: nil, ConnectionID: nil, MappingStatus: nil, Search: nil, Cursor: nil, Limit: 50}
 }
 
 func TestDirectoryEndpointsRequireAdminSession(t *testing.T) {

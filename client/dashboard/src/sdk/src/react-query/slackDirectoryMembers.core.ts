@@ -15,6 +15,7 @@ import { ListMembersResponseBody } from "../models/components/listmembersrespons
 import {
   ListSlackDirectoryMembersRequest,
   ListSlackDirectoryMembersSecurity,
+  MappingStatus,
 } from "../models/operations/listslackdirectorymembers.js";
 import { unwrapAsync } from "../types/fp.js";
 export type SlackDirectoryMembersQueryData = ListMembersResponseBody;
@@ -51,6 +52,7 @@ export function buildSlackDirectoryMembersQuery(
     queryKey: queryKeySlackDirectoryMembers({
       connectionId: request?.connectionId,
       search: request?.search,
+      mappingStatus: request?.mappingStatus,
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
@@ -83,6 +85,7 @@ export function queryKeySlackDirectoryMembers(
   parameters: {
     connectionId?: string | undefined;
     search?: string | undefined;
+    mappingStatus?: MappingStatus | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;

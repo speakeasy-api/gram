@@ -4,10 +4,24 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
 
 export type ListSlackDirectoryMembersSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
+
+/**
+ * Filter mapping state.
+ */
+export const MappingStatus = {
+  Unmapped: "unmapped",
+  Mapped: "mapped",
+  NeedsReview: "needs_review",
+} as const;
+/**
+ * Filter mapping state.
+ */
+export type MappingStatus = ClosedEnum<typeof MappingStatus>;
 
 export type ListSlackDirectoryMembersRequest = {
   /**
@@ -18,6 +32,10 @@ export type ListSlackDirectoryMembersRequest = {
    * Literal case-insensitive name, email or Slack ID search.
    */
   search?: string | undefined;
+  /**
+   * Filter mapping state.
+   */
+  mappingStatus?: MappingStatus | undefined;
   /**
    * Continue after the last membership ID.
    */
@@ -63,9 +81,14 @@ export function listSlackDirectoryMembersSecurityToJSON(
 }
 
 /** @internal */
+export const MappingStatus$outboundSchema: z.ZodMiniEnum<typeof MappingStatus> =
+  z.enum(MappingStatus);
+
+/** @internal */
 export type ListSlackDirectoryMembersRequest$Outbound = {
   connection_id?: string | undefined;
   search?: string | undefined;
+  mapping_status?: string | undefined;
   cursor?: string | undefined;
   limit: number;
   "Gram-Session"?: string | undefined;
@@ -79,6 +102,7 @@ export const ListSlackDirectoryMembersRequest$outboundSchema: z.ZodMiniType<
   z.object({
     connectionId: z.optional(z.string()),
     search: z.optional(z.string()),
+    mappingStatus: z.optional(MappingStatus$outboundSchema),
     cursor: z.optional(z.string()),
     limit: z._default(z.int(), 50),
     gramSession: z.optional(z.string()),
@@ -86,6 +110,7 @@ export const ListSlackDirectoryMembersRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       connectionId: "connection_id",
+      mappingStatus: "mapping_status",
       gramSession: "Gram-Session",
     });
   }),

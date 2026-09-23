@@ -65,6 +65,7 @@ const (
 	subjectTypeSkill                       subjectType = "skill"
 	subjectTypeSkillEfficacySettings       subjectType = "skill_efficacy_settings"
 	subjectTypeSlackDirectoryConnection    subjectType = "slack_directory_connection"
+	subjectTypeSlackDirectoryMembership    subjectType = "slack_directory_membership"
 	subjectTypeSpendRule                   subjectType = "spend_rule"
 	subjectTypeTemplate                    subjectType = "template"
 	subjectTypeToolset                     subjectType = "toolset"

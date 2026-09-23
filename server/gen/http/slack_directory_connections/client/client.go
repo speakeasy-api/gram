@@ -27,6 +27,14 @@ type Client struct {
 	// endpoint.
 	ListMembersDoer goahttp.Doer
 
+	// GetMember Doer is the HTTP client used to make requests to the getMember
+	// endpoint.
+	GetMemberDoer goahttp.Doer
+
+	// SetMapping Doer is the HTTP client used to make requests to the setMapping
+	// endpoint.
+	SetMappingDoer goahttp.Doer
+
 	// Begin Doer is the HTTP client used to make requests to the begin endpoint.
 	BeginDoer goahttp.Doer
 
@@ -58,6 +66,8 @@ func NewClient(
 		ListDoer:            doer,
 		SyncDoer:            doer,
 		ListMembersDoer:     doer,
+		GetMemberDoer:       doer,
+		SetMappingDoer:      doer,
 		BeginDoer:           doer,
 		DisconnectDoer:      doer,
 		RestoreResponseBody: restoreBody,
@@ -135,6 +145,54 @@ func (c *Client) ListMembers() goa.Endpoint {
 		resp, err := c.ListMembersDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("slackDirectoryConnections", "listMembers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMember returns an endpoint that makes HTTP requests to the
+// slackDirectoryConnections service getMember server.
+func (c *Client) GetMember() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMemberRequest(c.encoder)
+		decodeResponse = DecodeGetMemberResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMemberRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMemberDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("slackDirectoryConnections", "getMember", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetMapping returns an endpoint that makes HTTP requests to the
+// slackDirectoryConnections service setMapping server.
+func (c *Client) SetMapping() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetMappingRequest(c.encoder)
+		decodeResponse = DecodeSetMappingResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetMappingRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetMappingDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("slackDirectoryConnections", "setMapping", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -42,7 +42,7 @@ func syncer(f *fixture, provider slackdirectoryconnections.DirectoryProvider) *s
 }
 func members(t *testing.T, ctx context.Context, f *fixture) []repo.ListSlackDirectoryMembersRow {
 	t.Helper()
-	rows, err := repo.New(f.db).ListSlackDirectoryMembers(ctx, repo.ListSlackDirectoryMembersParams{OrganizationID: f.auth.ActiveOrganizationID, ConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Search: "", PageSize: 100})
+	rows, err := repo.New(f.db).ListSlackDirectoryMembers(ctx, repo.ListSlackDirectoryMembersParams{OrganizationID: f.auth.ActiveOrganizationID, ConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, MemberID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, MappingStatus: "", Search: "", PageSize: 100})
 	require.NoError(t, err)
 	return rows
 }

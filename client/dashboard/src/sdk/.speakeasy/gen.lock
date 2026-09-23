@@ -35,7 +35,6 @@ trackedFiles:
   REACT_QUERY.md: {}
   src/core.ts: {}
   src/funcs/accessCreateRole.ts: {}
-  src/funcs/accessDeleteDirectoryRoleMapping.ts: {}
   src/funcs/accessDeleteRole.ts: {}
   src/funcs/accessGetRole.ts: {}
   src/funcs/accessGetShadowMCPInventoryServer.ts: {}
@@ -44,7 +43,6 @@ trackedFiles:
   src/funcs/accessListAudienceOptions.ts: {}
   src/funcs/accessListChallengeBuckets.ts: {}
   src/funcs/accessListChallenges.ts: {}
-  src/funcs/accessListDirectoryRoleMappings.ts: {}
   src/funcs/accessListEmployeeAIDetections.ts: {}
   src/funcs/accessListGrants.ts: {}
   src/funcs/accessListIdentityAccess.ts: {}
@@ -59,9 +57,7 @@ trackedFiles:
   src/funcs/accessResolveChallenge.ts: {}
   src/funcs/accessResolveShadowMCPInventoryRequest.ts: {}
   src/funcs/accessSetAIToolDecision.ts: {}
-  src/funcs/accessSetDirectoryRoleMapping.ts: {}
   src/funcs/accessSetResourceAudience.ts: {}
-  src/funcs/accessSyncDirectoryGroups.ts: {}
   src/funcs/accessUpdateMemberRoles.ts: {}
   src/funcs/accessUpdateRole.ts: {}
   src/funcs/accessUpdateShadowMCPInventoryServerName.ts: {}
@@ -437,7 +433,6 @@ trackedFiles:
   src/funcs/organizationsRevokeInvite.ts: {}
   src/funcs/organizationsSendEnterpriseAdminOnboardingEmail.ts: {}
   src/funcs/organizationsSendInvite.ts: {}
-  src/funcs/organizationsSubmitOnboardingSurvey.ts: {}
   src/funcs/organizationsUpdateInviteRole.ts: {}
   src/funcs/organizationsUpdateSetupTask.ts: {}
   src/funcs/organizationsVerifyOnboardingHooksSetup.ts: {}
@@ -618,8 +613,10 @@ trackedFiles:
   src/funcs/skillsUpdate.ts: {}
   src/funcs/slackDirectoryConnectionsBegin.ts: {}
   src/funcs/slackDirectoryConnectionsDisconnect.ts: {}
+  src/funcs/slackDirectoryConnectionsGetMember.ts: {}
   src/funcs/slackDirectoryConnectionsList.ts: {}
   src/funcs/slackDirectoryConnectionsListMembers.ts: {}
+  src/funcs/slackDirectoryConnectionsSetMapping.ts: {}
   src/funcs/slackDirectoryConnectionsSync.ts: {}
   src/funcs/spendRulesActorAttributesList.ts: {}
   src/funcs/spendRulesEventsList.ts: {}
@@ -994,9 +991,6 @@ trackedFiles:
   src/models/components/deviceintegrationschedulestate.ts: {}
   src/models/components/deviceintegrationtestconnectionresult.ts: {}
   src/models/components/dimensionvaluesrequestbody.ts: {}
-  src/models/components/directoryattributeoption.ts: {}
-  src/models/components/directorygroupoption.ts: {}
-  src/models/components/directoryrolemapping.ts: {}
   src/models/components/disableopenrouterkeyrequestbody.ts: {}
   src/models/components/disconnectslackdirectoryconnectionrequestbody.ts: {}
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
@@ -1225,7 +1219,6 @@ trackedFiles:
   src/models/components/listdestinationsresult.ts: {}
   src/models/components/listdeviceintegrationprovidersresult.ts: {}
   src/models/components/listdeviceintegrationschedulesresult.ts: {}
-  src/models/components/listdirectoryrolemappingsresult.ts: {}
   src/models/components/listdistributionpluginsresult.ts: {}
   src/models/components/listenvironmentsresult.ts: {}
   src/models/components/listeventlogpayload.ts: {}
@@ -1592,7 +1585,6 @@ trackedFiles:
   src/models/components/setaitooldecisionrequestbody.ts: {}
   src/models/components/setaitooldecisionresult.ts: {}
   src/models/components/setbillingmetadatarequestbody.ts: {}
-  src/models/components/setdirectoryrolemappingform.ts: {}
   src/models/components/setkeyenabledrequestbody.ts: {}
   src/models/components/setmcpmetadatarequestbody.ts: {}
   src/models/components/setorganizationwhitelistrequestbody.ts: {}
@@ -1606,6 +1598,7 @@ trackedFiles:
   src/models/components/setresourceaudienceform.ts: {}
   src/models/components/setrootmcpendpointrequestbody.ts: {}
   src/models/components/setscheduleenabledrequestbody.ts: {}
+  src/models/components/setslackidentitymappingrequestbody.ts: {}
   src/models/components/setsourceenvironmentlinkrequestbody.ts: {}
   src/models/components/setspendcaprequestbody.ts: {}
   src/models/components/settoolmetadatabatchrequestbody.ts: {}
@@ -1657,6 +1650,7 @@ trackedFiles:
   src/models/components/skillversioninsight.ts: {}
   src/models/components/slackdirectoryconnection.ts: {}
   src/models/components/slackdirectorymember.ts: {}
+  src/models/components/slackidentitymapping.ts: {}
   src/models/components/sourceenvironmentlink.ts: {}
   src/models/components/spendbreakdownresponse.ts: {}
   src/models/components/spendbucket.ts: {}
@@ -1672,7 +1666,6 @@ trackedFiles:
   src/models/components/stripesubscription.ts: {}
   src/models/components/submitfeedbackrequestbody.ts: {}
   src/models/components/submitidentityproviderconnectionclientidrequestbody.ts: {}
-  src/models/components/submitonboardingsurveyrequestbody.ts: {}
   src/models/components/submitriskblockfeedbackrequestbody.ts: {}
   src/models/components/suggestcustomdetectionrulerequestbody.ts: {}
   src/models/components/suggestcustomdetectionruleresult.ts: {}
@@ -1682,7 +1675,6 @@ trackedFiles:
   src/models/components/summarizerequestbody.ts: {}
   src/models/components/summarizetoolcallrequestbody.ts: {}
   src/models/components/summarizetoolcallresult.ts: {}
-  src/models/components/syncdirectorygroupsresult.ts: {}
   src/models/components/syncedagentuser.ts: {}
   src/models/components/syncidentityproviderconnectionapplicationsrequestbody.ts: {}
   src/models/components/syncresponsebody.ts: {}
@@ -1991,7 +1983,6 @@ trackedFiles:
   src/models/operations/deletedataexportdestination.ts: {}
   src/models/operations/deletedataexportroute.ts: {}
   src/models/operations/deletedeviceintegrationconfig.ts: {}
-  src/models/operations/deletedirectoryrolemapping.ts: {}
   src/models/operations/deletedomain.ts: {}
   src/models/operations/deleteenvironment.ts: {}
   src/models/operations/deleteexplorequery.ts: {}
@@ -2159,6 +2150,7 @@ trackedFiles:
   src/models/operations/getsharedskill.ts: {}
   src/models/operations/getskill.ts: {}
   src/models/operations/getskillefficacysettings.ts: {}
+  src/models/operations/getslackdirectorymember.ts: {}
   src/models/operations/getsourceenvironment.ts: {}
   src/models/operations/getspendbreakdown.ts: {}
   src/models/operations/getspendrule.ts: {}
@@ -2249,7 +2241,6 @@ trackedFiles:
   src/models/operations/listdeployments.ts: {}
   src/models/operations/listdeviceintegrationproviders.ts: {}
   src/models/operations/listdeviceintegrationschedules.ts: {}
-  src/models/operations/listdirectoryrolemappings.ts: {}
   src/models/operations/listdismissedriskresults.ts: {}
   src/models/operations/listdistributionplugins.ts: {}
   src/models/operations/listdomains.ts: {}
@@ -2474,7 +2465,6 @@ trackedFiles:
   src/models/operations/setbillingmetadata.ts: {}
   src/models/operations/setchatpinned.ts: {}
   src/models/operations/setdeviceintegrationscheduleenabled.ts: {}
-  src/models/operations/setdirectoryrolemapping.ts: {}
   src/models/operations/setmcpmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadatabatch.ts: {}
@@ -2486,6 +2476,7 @@ trackedFiles:
   src/models/operations/setremotesessionautorefreshpolicy.ts: {}
   src/models/operations/setresourceaudience.ts: {}
   src/models/operations/setrootmcpendpoint.ts: {}
+  src/models/operations/setslackidentitymapping.ts: {}
   src/models/operations/setsourceenvironmentlink.ts: {}
   src/models/operations/setspendcap.ts: {}
   src/models/operations/settoolsetenvironmentlink.ts: {}
@@ -2498,7 +2489,6 @@ trackedFiles:
   src/models/operations/startplatformmcponboardingsetup.ts: {}
   src/models/operations/submitfeedback.ts: {}
   src/models/operations/submitidentityproviderconnectionclientid.ts: {}
-  src/models/operations/submitonboardingsurvey.ts: {}
   src/models/operations/submitriskblockfeedback.ts: {}
   src/models/operations/suggestcustomdetectionrule.ts: {}
   src/models/operations/suggestexclusion.ts: {}
@@ -2506,7 +2496,6 @@ trackedFiles:
   src/models/operations/summarizetoolcall.ts: {}
   src/models/operations/suspendagent.ts: {}
   src/models/operations/switchauthscopes.ts: {}
-  src/models/operations/syncdirectorygroups.ts: {}
   src/models/operations/syncidentityproviderconnectionapplications.ts: {}
   src/models/operations/syncslackdirectory.ts: {}
   src/models/operations/testdetectionrule.ts: {}
@@ -2777,7 +2766,6 @@ trackedFiles:
   src/react-query/deleteDataExportDestination.ts: {}
   src/react-query/deleteDataExportRoute.ts: {}
   src/react-query/deleteDeviceIntegrationConfig.ts: {}
-  src/react-query/deleteDirectoryRoleMapping.ts: {}
   src/react-query/deleteDomain.ts: {}
   src/react-query/deleteEnvironment.ts: {}
   src/react-query/deleteExploreQuery.ts: {}
@@ -2830,8 +2818,6 @@ trackedFiles:
   src/react-query/deviceIntegrationProviders.ts: {}
   src/react-query/deviceIntegrationSchedules.core.ts: {}
   src/react-query/deviceIntegrationSchedules.ts: {}
-  src/react-query/directoryRoleMappings.core.ts: {}
-  src/react-query/directoryRoleMappings.ts: {}
   src/react-query/disableAdminOpenRouterKey.ts: {}
   src/react-query/disableWebhooks.ts: {}
   src/react-query/disconnectSlackDirectoryConnection.ts: {}
@@ -3437,7 +3423,6 @@ trackedFiles:
   src/react-query/setBillingEmail.ts: {}
   src/react-query/setBillingMetadata.ts: {}
   src/react-query/setDeviceIntegrationScheduleEnabled.ts: {}
-  src/react-query/setDirectoryRoleMapping.ts: {}
   src/react-query/setMcpServerToolMetadata.ts: {}
   src/react-query/setMcpServerToolMetadataBatch.ts: {}
   src/react-query/setModelProviderKeyEnabled.ts: {}
@@ -3446,6 +3431,7 @@ trackedFiles:
   src/react-query/setRemoteSessionAutoRefreshPolicy.ts: {}
   src/react-query/setResourceAudience.ts: {}
   src/react-query/setRootMcpEndpoint.ts: {}
+  src/react-query/setSlackIdentityMapping.ts: {}
   src/react-query/setSourceEnvironmentLink.ts: {}
   src/react-query/setSpendCap.ts: {}
   src/react-query/setToolsetEnvironmentLink.ts: {}
@@ -3484,6 +3470,8 @@ trackedFiles:
   src/react-query/skills.ts: {}
   src/react-query/slackDirectoryConnections.core.ts: {}
   src/react-query/slackDirectoryConnections.ts: {}
+  src/react-query/slackDirectoryMember.core.ts: {}
+  src/react-query/slackDirectoryMember.ts: {}
   src/react-query/slackDirectoryMembers.core.ts: {}
   src/react-query/slackDirectoryMembers.ts: {}
   src/react-query/spendRulesActorAttributes.core.ts: {}
@@ -3504,11 +3492,9 @@ trackedFiles:
   src/react-query/startPlatformMCPOnboarding.ts: {}
   src/react-query/startPlatformMCPOnboardingSetup.ts: {}
   src/react-query/submitIdentityProviderConnectionClientId.ts: {}
-  src/react-query/submitOnboardingSurvey.ts: {}
   src/react-query/summarizeChat.ts: {}
   src/react-query/summarizeToolCall.ts: {}
   src/react-query/switchScopes.ts: {}
-  src/react-query/syncDirectoryGroups.ts: {}
   src/react-query/syncIdentityProviderConnectionApplications.ts: {}
   src/react-query/syncSlackDirectory.ts: {}
   src/react-query/syncedAgentUsers.core.ts: {}
@@ -5194,16 +5180,6 @@ examples:
     speakeasy-default-delete-device-integration-config:
       requestBody:
         application/json: {"provider": "<value>"}
-      responses:
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  deleteDirectoryRoleMapping:
-    speakeasy-default-delete-directory-role-mapping:
-      parameters:
-        query:
-          id: "c9ca5633-07f3-459d-ab93-fc02fb76d300"
       responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
@@ -7249,6 +7225,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getSlackDirectoryMember:
+    speakeasy-default-get-slack-directory-member:
+      parameters:
+        query:
+          id: "aa1a7782-297f-499e-8987-d3d9c1efd080"
+      responses:
+        "200":
+          application/json: {"connection_id": "117fcdf7-70b5-4768-b9a3-2e57b8d35d29", "id": "1307eb37-9285-42b0-ac99-18990572d2a2", "last_seen_at": "2024-03-07T16:27:38.701Z", "mapping_revision": 674599, "mapping_status": "unmapped", "member_type": "person", "observation_token": "<value>", "observed_in_last_sync": false, "slack_user_id": "<id>", "status": "active", "workspace_id": "<id>", "workspace_name": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getSourceEnvironment:
     speakeasy-default-get-source-environment:
       parameters:
@@ -8396,15 +8384,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  listDirectoryRoleMappings:
-    speakeasy-default-list-directory-role-mappings:
-      responses:
-        "200":
-          application/json: {"attributes": [], "groups": [], "mappings": [{"created_at": "2026-06-08T20:39:17.479Z", "id": "beeb6442-b41b-4e3a-b4c4-ec7a9ac9bc83", "role_urn": "<value>", "source_kind": "group", "updated_at": "2024-12-11T16:06:03.477Z"}]}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listDismissedRiskResults:
     speakeasy-default-list-dismissed-risk-results:
       responses:
@@ -9371,7 +9350,7 @@ examples:
           limit: 50
       responses:
         "200":
-          application/json: {"members": [{"connection_id": "1fb1542a-a487-4baf-9477-ed76bdc31044", "id": "b1aecbce-45c3-4ac3-80ca-67ae2988b697", "last_seen_at": "2025-10-25T00:20:34.182Z", "member_type": "unknown", "observed_in_last_sync": true, "slack_user_id": "<id>", "status": "unknown", "workspace_id": "<id>", "workspace_name": "<value>"}], "total": 944149}
+          application/json: {"members": [{"connection_id": "1fb1542a-a487-4baf-9477-ed76bdc31044", "id": "b1aecbce-45c3-4ac3-80ca-67ae2988b697", "last_seen_at": "2025-10-25T00:20:34.182Z", "mapping_revision": 934320, "mapping_status": "unmapped", "member_type": "unknown", "observation_token": "<value>", "observed_in_last_sync": true, "slack_user_id": "<id>", "status": "unknown", "workspace_id": "<id>", "workspace_name": "<value>"}], "total": 944149}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -10992,17 +10971,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  setDirectoryRoleMapping:
-    speakeasy-default-set-directory-role-mapping:
-      requestBody:
-        application/json: {"role_urn": "<value>", "source_kind": "attribute"}
-      responses:
-        "200":
-          application/json: {"created_at": "2025-08-11T22:28:12.750Z", "id": "4c513423-169b-47f4-bc81-6ab3385821ed", "role_urn": "<value>", "source_kind": "group", "updated_at": "2026-12-16T06:37:24.346Z"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   setMcpMetadata:
     speakeasy-default-set-mcp-metadata:
       requestBody:
@@ -11129,17 +11097,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  setSetupTaskSelection:
-    speakeasy-default-set-setup-task-selection:
+  setSlackIdentityMapping:
+    speakeasy-default-set-slack-identity-mapping:
       requestBody:
-        application/json: {"visible_task_keys": ["<value 1>", "<value 2>", "<value 3>"]}
+        application/json: {"id": "aad1faeb-ca51-4100-b51b-c7253fe7e493", "mapping_revision": 890302, "observation_token": "<value>"}
       responses:
         "200":
-          application/json: {"tasks": []}
+          application/json: {"connection_id": "64da5c57-2f2a-4028-b9f8-990beaa62e81", "id": "770eee30-7b23-4146-9ed7-84dd06bd7113", "last_seen_at": "2024-11-09T01:44:44.675Z", "mapping_revision": 694153, "mapping_status": "needs_review", "member_type": "guest", "observation_token": "<value>", "observed_in_last_sync": false, "slack_user_id": "<id>", "status": "active", "workspace_id": "<id>", "workspace_name": "<value>"}
         "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   setSourceEnvironmentLink:
     speakeasy-default-set-source-environment-link:
       requestBody:
@@ -11275,17 +11243,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  submitOnboardingSurvey:
-    speakeasy-default-submit-onboarding-survey:
-      requestBody:
-        application/json: {"use_case": "<value>"}
-      responses:
-        "200":
-          application/json: {"tasks": [{"blocked_by": [], "completed_by_fact": true, "description": "and hence the", "hidden": false, "key": "<key>", "status": "todo", "title": "<value>"}]}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   submitRiskBlockFeedback:
     speakeasy-default-submit-risk-block-feedback:
       requestBody:
@@ -11359,15 +11316,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  syncDirectoryGroups:
-    speakeasy-default-sync-directory-groups:
-      responses:
-        "200":
-          application/json: {"group_count": 379971}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   syncIdentityProviderConnectionApplications:
     speakeasy-default-sync-identity-provider-connection-applications:
       requestBody:

@@ -18,11 +18,20 @@ const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   mutate: vi.fn(),
   pending: false,
+  canEdit: true,
   error: null as Error | null,
   rows: [] as unknown[],
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ slug: mocks.orgSlug }),
+}));
+vi.mock("./SlackMappingDialog", () => ({
+  SlackMappingDialog: ({ id }: { id: string }) => (
+    <div role="dialog">Review {id}</div>
+  ),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasScope: () => mocks.canEdit }),
 }));
 vi.mock("@gram/client/react-query/slackDirectoryMembers.js", () => ({
   invalidateAllSlackDirectoryMembers: vi.fn(),
@@ -82,6 +91,7 @@ function show(children: React.ReactNode, search = "") {
 }
 beforeEach(() => {
   mocks.pending = false;
+  mocks.canEdit = true;
   mocks.error = null;
   mocks.rows = [];
 });
@@ -90,7 +100,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it("shows the all-workspaces directory and search without mapping controls", async () => {
+it("shows the all-workspaces directory and search", async () => {
   show(<SlackDirectory connections={[connection]} />);
   expect(screen.getByRole("heading", { name: "Slack members" })).toBeTruthy();
   expect(screen.getByText(/Email addresses do not confirm/)).toBeTruthy();
@@ -231,4 +241,81 @@ it("prevents shared demo sync even with a connected workspace", () => {
   } finally {
     mocks.orgSlug = "example";
   }
+});
+
+const unmappedMember = {
+  id: "member-synthetic",
+  connectionId: connection.id,
+  workspaceId: connection.workspaceId,
+  workspaceName: connection.workspaceName,
+  slackUserId: "UEXAMPLE01",
+  displayName: "Synthetic Account",
+  status: "active",
+  memberType: "person",
+  lastSeenAt: new Date(),
+  observedInLastSync: true,
+  mappingStatus: "unmapped",
+  mappingRevision: 0,
+  observationToken: "example-evidence",
+};
+it("opens Personnel for the exact unmapped membership", () => {
+  mocks.rows = [unmappedMember];
+  show(<SlackDirectory connections={[connection]} />);
+  const button = screen.getByRole("button", {
+    name: /Change mapping for Synthetic Account/,
+  });
+  expect(button.textContent).toBe("Not mapped");
+  fireEvent.click(button);
+  expect(screen.getByRole("dialog").textContent).toBe(
+    "Review member-synthetic",
+  );
+});
+it("shows the mapped person's avatar and name in Personnel", () => {
+  mocks.rows = [
+    {
+      ...unmappedMember,
+      mappingStatus: "mapped",
+      mapping: {
+        id: "mapping-synthetic",
+        userId: "user_synthetic",
+        displayName: "Synthetic Person",
+        email: "synthetic@demo.getgram.ai",
+        active: true,
+      },
+    },
+  ];
+  show(<SlackDirectory connections={[connection]} />);
+  const button = screen.getByRole("button", {
+    name: /Change mapping for Synthetic Account/,
+  });
+  expect(button.textContent).toContain("Synthetic Person");
+  expect(button.querySelector('[data-slot="avatar"]')).toBeTruthy();
+});
+it("disables assignment for unmapped bots", () => {
+  mocks.rows = [{ ...unmappedMember, memberType: "bot" }];
+  show(<SlackDirectory connections={[connection]} />);
+  expect(
+    screen
+      .getByRole("button", { name: /Change mapping for Synthetic Account/ })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+});
+it("disables mapping changes for employees", () => {
+  mocks.canEdit = false;
+  mocks.rows = [unmappedMember];
+  show(<SlackDirectory connections={[connection]} />);
+  expect(
+    screen
+      .getByRole("button", { name: /Change mapping for Synthetic Account/ })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+});
+it("passes the mapping-status toolbar filter to the paginated query", () => {
+  show(
+    <SlackDirectory connections={[connection]} />,
+    "&slack_mapping=needs_review",
+  );
+  expect(mocks.query).toHaveBeenCalledWith(
+    expect.objectContaining({ mappingStatus: "needs_review" }),
+  );
 });

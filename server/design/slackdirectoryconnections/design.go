@@ -30,6 +30,16 @@ var Connection = Type("SlackDirectoryConnection", func() {
 	Required("id", "workspace_id", "workspace_name", "status", "generation", "granted_scopes", "updated_at", "member_count", "directory_status", "sync_status")
 })
 
+var Mapping = Type("SlackIdentityMapping", func() {
+	Attribute("id", String, "Immutable confirmation ID.", func() { Format(FormatUUID) })
+	Attribute("user_id", String, "Existing organization person ID.")
+	Attribute("display_name", String, "Person's current display name.")
+	Attribute("email", String, "Person's current email.")
+	Attribute("photo_url", String, "Person's avatar URL.")
+	Attribute("active", Boolean, "Whether the person and organization membership are active.")
+	Required("id", "user_id", "display_name", "email", "active")
+})
+
 var Member = Type("SlackDirectoryMember", func() {
 	Attribute("id", String, "Durable membership ID.", func() { Format(FormatUUID) })
 	Attribute("connection_id", String, "Connection that observed this workspace member.", func() { Format(FormatUUID) })
@@ -42,6 +52,13 @@ var Member = Type("SlackDirectoryMember", func() {
 	Attribute("member_type", String, "Observed account type.", func() { Enum("person", "guest", "single_channel_guest", "bot", "unknown") })
 	Attribute("last_seen_at", String, "Latest published observation.", func() { Format(FormatDateTime) })
 	Attribute("observed_in_last_sync", Boolean, "Whether this row was present in its workspace's last complete snapshot.")
+	Attribute("mapping", Mapping, "Current admin-confirmed association; grants no permissions.")
+	Attribute("mapping_revision", Int64, "Version of admin mapping decisions, independent of directory sync.")
+	Attribute("observation_token", String, "Opaque token for the directory evidence reviewed by the administrator.")
+	Attribute("mapping_status", String, "Mapping state, separate from source state and freshness.", func() { Enum("unmapped", "mapped", "needs_review") })
+	Attribute("mapping_conflict_reason", String, "Sticky directory review finding, cleared only by an admin decision.")
+	Attribute("mapping_conflict_detected_at", String, "When the finding was first recorded.", func() { Format(FormatDateTime) })
+	Required("mapping_revision", "observation_token", "mapping_status")
 	Required("id", "connection_id", "workspace_id", "workspace_name", "slack_user_id", "status", "member_type", "last_seen_at", "observed_in_last_sync")
 })
 
@@ -93,6 +110,7 @@ var _ = Service("slackDirectoryConnections", func() {
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("connection_id", String, "Filter to a workspace connection.", func() { Format(FormatUUID) })
+			Attribute("mapping_status", String, "Filter mapping state.", func() { Enum("unmapped", "mapped", "needs_review") })
 			Attribute("search", String, "Literal case-insensitive name, email or Slack ID search.", func() { MaxLength(200) })
 			Attribute("cursor", String, "Continue after the last membership ID.", func() { Format(FormatUUID) })
 			Attribute("limit", Int, "Maximum returned rows.", func() { Default(50); Minimum(1); Maximum(100) })
@@ -108,6 +126,7 @@ var _ = Service("slackDirectoryConnections", func() {
 			security.SessionHeader()
 			Param("connection_id")
 			Param("search")
+			Param("mapping_status")
 			Param("cursor")
 			Param("limit")
 			Response(StatusOK)
@@ -115,6 +134,45 @@ var _ = Service("slackDirectoryConnections", func() {
 		Meta("openapi:operationId", "listSlackDirectoryMembers")
 		Meta("openapi:extension:x-speakeasy-name-override", "listMembers")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SlackDirectoryMembers"}`)
+	})
+	Method("getMember", func() {
+		Description("Read current Slack profile and mapping before an administrator confirms a selection.")
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("id", String, func() { Format(FormatUUID) })
+			Required("id")
+		})
+		Result(Member)
+		HTTP(func() {
+			GET("/rpc/slackDirectoryConnections.getMember")
+			security.SessionHeader()
+			Param("id")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getSlackDirectoryMember")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMember")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SlackDirectoryMember"}`)
+	})
+	Method("setMapping", func() {
+		Description("Explicitly confirm, reassign or remove a Slack association. This grants no permissions and does not establish runtime eligibility.")
+		Payload(func() {
+			security.SessionPayload()
+			Meta("openapi:typename", "SetSlackIdentityMappingRequestBody")
+			Attribute("id", String, "Membership to change.", func() { Format(FormatUUID) })
+			Attribute("mapping_revision", Int64, "Mapping revision shown in the review dialog.", func() { Minimum(0) })
+			Attribute("observation_token", String, "Directory evidence shown in the review dialog.")
+			Attribute("user_id", String, "Active same-organization person to confirm. Omit to unmap.", func() { MinLength(1) })
+			Required("id", "mapping_revision", "observation_token")
+		})
+		Result(Member)
+		HTTP(func() {
+			POST("/rpc/slackDirectoryConnections.setMapping")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "setSlackIdentityMapping")
+		Meta("openapi:extension:x-speakeasy-name-override", "setMapping")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SetSlackIdentityMapping"}`)
 	})
 	Method("begin", func() {
 		Payload(func() {

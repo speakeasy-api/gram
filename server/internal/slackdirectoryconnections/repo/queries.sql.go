@@ -12,6 +12,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const advanceSlackMappingRevision = `-- name: AdvanceSlackMappingRevision :exec
+UPDATE slack_directory_memberships SET mapping_revision = mapping_revision + 1,
+ mapping_conflict_reason = NULL, mapping_conflict_detected_at = NULL, updated_at = clock_timestamp()
+WHERE organization_id = $1 AND id = $2
+`
+
+type AdvanceSlackMappingRevisionParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) AdvanceSlackMappingRevision(ctx context.Context, arg AdvanceSlackMappingRevisionParams) error {
+	_, err := q.db.Exec(ctx, advanceSlackMappingRevision, arg.OrganizationID, arg.ID)
+	return err
+}
+
 const authorizeSlackDirectoryConnection = `-- name: AuthorizeSlackDirectoryConnection :one
 UPDATE slack_directory_connections SET
 slack_team_name = $1,
@@ -68,23 +84,55 @@ func (q *Queries) AuthorizeSlackDirectoryConnection(ctx context.Context, arg Aut
 	return i, err
 }
 
+const confirmSlackIdentityMapping = `-- name: ConfirmSlackIdentityMapping :exec
+INSERT INTO slack_identity_mappings (organization_id, slack_team_id, slack_user_id, user_id)
+VALUES ($1, $2, $3, $4)
+`
+
+type ConfirmSlackIdentityMappingParams struct {
+	OrganizationID string
+	SlackTeamID    string
+	SlackUserID    string
+	UserID         string
+}
+
+func (q *Queries) ConfirmSlackIdentityMapping(ctx context.Context, arg ConfirmSlackIdentityMappingParams) error {
+	_, err := q.db.Exec(ctx, confirmSlackIdentityMapping,
+		arg.OrganizationID,
+		arg.SlackTeamID,
+		arg.SlackUserID,
+		arg.UserID,
+	)
+	return err
+}
+
 const countSlackDirectoryMembers = `-- name: CountSlackDirectoryMembers :one
 SELECT count(*)::bigint FROM slack_directory_memberships m
 JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND c.slack_team_id = m.slack_team_id
+LEFT JOIN slack_identity_mappings im ON im.organization_id = m.organization_id AND im.slack_team_id = m.slack_team_id AND im.slack_user_id = m.slack_user_id AND im.revoked_at IS NULL
+LEFT JOIN users u ON u.id = im.user_id
+LEFT JOIN organization_user_relationships our ON our.organization_id = m.organization_id AND our.user_id = im.user_id
 WHERE m.organization_id = $1 AND c.disconnected_at IS NULL
-  AND ($2::uuid IS NULL OR c.id = $2)
-  AND ($3::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower($3)) > 0
-    OR strpos(lower(coalesce(m.email, '')), lower($3)) > 0 OR strpos(lower(m.slack_user_id), lower($3)) > 0)
+ AND ($2::text = '' OR CASE WHEN im.id IS NULL THEN 'unmapped' WHEN m.mapping_conflict_reason IS NOT NULL OR u.deleted_at IS NOT NULL OR our.deleted_at IS NOT NULL THEN 'needs_review' ELSE 'mapped' END = $2)
+  AND ($3::uuid IS NULL OR c.id = $3)
+  AND ($4::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower($4)) > 0
+    OR strpos(lower(coalesce(m.email, '')), lower($4)) > 0 OR strpos(lower(m.slack_user_id), lower($4)) > 0)
 `
 
 type CountSlackDirectoryMembersParams struct {
 	OrganizationID string
+	MappingStatus  string
 	ConnectionID   uuid.NullUUID
 	Search         string
 }
 
 func (q *Queries) CountSlackDirectoryMembers(ctx context.Context, arg CountSlackDirectoryMembersParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countSlackDirectoryMembers, arg.OrganizationID, arg.ConnectionID, arg.Search)
+	row := q.db.QueryRow(ctx, countSlackDirectoryMembers,
+		arg.OrganizationID,
+		arg.MappingStatus,
+		arg.ConnectionID,
+		arg.Search,
+	)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -191,6 +239,39 @@ func (q *Queries) CreateSlackMappingForTest(ctx context.Context, arg CreateSlack
 	return i, err
 }
 
+const createSlackMappingPersonForTest = `-- name: CreateSlackMappingPersonForTest :exec
+WITH person AS (
+ INSERT INTO users (id, email, display_name) VALUES ($2, $2::text || '@demo.getgram.ai', 'Synthetic Person') RETURNING id
+)
+INSERT INTO organization_user_relationships (organization_id, user_id)
+SELECT $1, id FROM person
+`
+
+type CreateSlackMappingPersonForTestParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) CreateSlackMappingPersonForTest(ctx context.Context, arg CreateSlackMappingPersonForTestParams) error {
+	_, err := q.db.Exec(ctx, createSlackMappingPersonForTest, arg.OrganizationID, arg.UserID)
+	return err
+}
+
+const deactivateSlackMappingPersonForTest = `-- name: DeactivateSlackMappingPersonForTest :exec
+UPDATE organization_user_relationships SET deleted_at = clock_timestamp()
+WHERE organization_id = $1 AND user_id = $2
+`
+
+type DeactivateSlackMappingPersonForTestParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+func (q *Queries) DeactivateSlackMappingPersonForTest(ctx context.Context, arg DeactivateSlackMappingPersonForTestParams) error {
+	_, err := q.db.Exec(ctx, deactivateSlackMappingPersonForTest, arg.OrganizationID, arg.UserID)
+	return err
+}
+
 const deleteSlackDirectoryMemberships = `-- name: DeleteSlackDirectoryMemberships :exec
 DELETE FROM slack_directory_memberships WHERE organization_id = $1 AND slack_team_id = $2
 `
@@ -203,6 +284,15 @@ type DeleteSlackDirectoryMembershipsParams struct {
 // Disconnect forgets the workspace directory; connecting again starts a fresh sync.
 func (q *Queries) DeleteSlackDirectoryMemberships(ctx context.Context, arg DeleteSlackDirectoryMembershipsParams) error {
 	_, err := q.db.Exec(ctx, deleteSlackDirectoryMemberships, arg.OrganizationID, arg.SlackTeamID)
+	return err
+}
+
+const deleteSlackMappingUserForTest = `-- name: DeleteSlackMappingUserForTest :exec
+UPDATE users SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) DeleteSlackMappingUserForTest(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, deleteSlackMappingUserForTest, userID)
 	return err
 }
 
@@ -488,23 +578,33 @@ func (q *Queries) ListSlackDirectoryConnections(ctx context.Context, organizatio
 }
 
 const listSlackDirectoryMembers = `-- name: ListSlackDirectoryMembers :many
-SELECT m.id, m.organization_id, m.slack_team_id, m.slack_user_id, m.display_name, m.email, m.status, m.member_type, m.provider_updated_at, m.last_seen_at, m.mapping_revision, m.mapping_conflict_reason, m.mapping_conflict_detected_at, m.created_at, m.updated_at, c.id AS connection_id, c.slack_team_name AS workspace_name,
+SELECT m.id, m.organization_id, m.slack_team_id, m.slack_user_id, m.display_name, m.email, m.status, m.member_type, m.provider_updated_at, m.last_seen_at, m.mapping_revision, m.mapping_conflict_reason, m.mapping_conflict_detected_at, m.created_at, m.updated_at, coalesce(im.id::text, '')::text AS mapping_id, coalesce(im.user_id, '')::text AS mapped_user_id,
+ coalesce(u.display_name, '')::text AS mapped_display_name, coalesce(u.email, '')::text AS mapped_email,
+ u.photo_url AS mapped_photo_url, (im.id IS NOT NULL AND u.deleted_at IS NULL AND our.deleted_at IS NULL)::boolean AS mapped_user_active,
+ c.id AS connection_id, c.slack_team_name AS workspace_name,
     (m.last_seen_at = c.last_full_sync_succeeded_at)::boolean AS observed_in_last_sync
 FROM slack_directory_memberships m
 JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND c.slack_team_id = m.slack_team_id
+LEFT JOIN slack_identity_mappings im ON im.organization_id = m.organization_id AND im.slack_team_id = m.slack_team_id AND im.slack_user_id = m.slack_user_id AND im.revoked_at IS NULL
+LEFT JOIN users u ON u.id = im.user_id
+LEFT JOIN organization_user_relationships our ON our.organization_id = m.organization_id AND our.user_id = im.user_id
 WHERE m.organization_id = $1 AND c.disconnected_at IS NULL
-  AND ($2::uuid IS NULL OR c.id = $2)
-  AND ($3::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower($3)) > 0
-    OR strpos(lower(coalesce(m.email, '')), lower($3)) > 0 OR strpos(lower(m.slack_user_id), lower($3)) > 0)
-  AND ($4::uuid IS NULL OR m.id > $4)
+ AND ($2::text = '' OR CASE WHEN im.id IS NULL THEN 'unmapped' WHEN m.mapping_conflict_reason IS NOT NULL OR u.deleted_at IS NOT NULL OR our.deleted_at IS NOT NULL THEN 'needs_review' ELSE 'mapped' END = $2)
+  AND ($3::uuid IS NULL OR c.id = $3)
+  AND ($4::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower($4)) > 0
+    OR strpos(lower(coalesce(m.email, '')), lower($4)) > 0 OR strpos(lower(m.slack_user_id), lower($4)) > 0)
+  AND ($5::uuid IS NULL OR m.id = $5)
+  AND ($6::uuid IS NULL OR m.id > $6)
 ORDER BY m.id
-LIMIT $5
+LIMIT $7
 `
 
 type ListSlackDirectoryMembersParams struct {
 	OrganizationID string
+	MappingStatus  string
 	ConnectionID   uuid.NullUUID
 	Search         string
+	MemberID       uuid.NullUUID
 	Cursor         uuid.NullUUID
 	PageSize       int32
 }
@@ -525,6 +625,12 @@ type ListSlackDirectoryMembersRow struct {
 	MappingConflictDetectedAt pgtype.Timestamptz
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
+	MappingID                 string
+	MappedUserID              string
+	MappedDisplayName         string
+	MappedEmail               string
+	MappedPhotoUrl            pgtype.Text
+	MappedUserActive          bool
 	ConnectionID              uuid.UUID
 	WorkspaceName             pgtype.Text
 	ObservedInLastSync        bool
@@ -533,8 +639,10 @@ type ListSlackDirectoryMembersRow struct {
 func (q *Queries) ListSlackDirectoryMembers(ctx context.Context, arg ListSlackDirectoryMembersParams) ([]ListSlackDirectoryMembersRow, error) {
 	rows, err := q.db.Query(ctx, listSlackDirectoryMembers,
 		arg.OrganizationID,
+		arg.MappingStatus,
 		arg.ConnectionID,
 		arg.Search,
+		arg.MemberID,
 		arg.Cursor,
 		arg.PageSize,
 	)
@@ -561,6 +669,12 @@ func (q *Queries) ListSlackDirectoryMembers(ctx context.Context, arg ListSlackDi
 			&i.MappingConflictDetectedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.MappingID,
+			&i.MappedUserID,
+			&i.MappedDisplayName,
+			&i.MappedEmail,
+			&i.MappedPhotoUrl,
+			&i.MappedUserActive,
 			&i.ConnectionID,
 			&i.WorkspaceName,
 			&i.ObservedInLastSync,
@@ -645,20 +759,95 @@ func (q *Queries) LockSlackDirectoryConnectionByTeam(ctx context.Context, arg Lo
 	return i, err
 }
 
-const markAbsentSlackDirectoryMembershipsUnknown = `-- name: MarkAbsentSlackDirectoryMembershipsUnknown :exec
-UPDATE slack_directory_memberships SET status = 'unknown', updated_at = clock_timestamp()
+const lockSlackDirectoryMembership = `-- name: LockSlackDirectoryMembership :one
+SELECT id, organization_id, slack_team_id, slack_user_id, display_name, email, status, member_type, provider_updated_at, last_seen_at, mapping_revision, mapping_conflict_reason, mapping_conflict_detected_at, created_at, updated_at FROM slack_directory_memberships WHERE organization_id = $1 AND id = $2 FOR UPDATE
+`
+
+type LockSlackDirectoryMembershipParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) LockSlackDirectoryMembership(ctx context.Context, arg LockSlackDirectoryMembershipParams) (SlackDirectoryMembership, error) {
+	row := q.db.QueryRow(ctx, lockSlackDirectoryMembership, arg.OrganizationID, arg.ID)
+	var i SlackDirectoryMembership
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.SlackTeamID,
+		&i.SlackUserID,
+		&i.DisplayName,
+		&i.Email,
+		&i.Status,
+		&i.MemberType,
+		&i.ProviderUpdatedAt,
+		&i.LastSeenAt,
+		&i.MappingRevision,
+		&i.MappingConflictReason,
+		&i.MappingConflictDetectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const lockSlackDirectoryMembershipsForPublication = `-- name: LockSlackDirectoryMembershipsForPublication :many
+SELECT id FROM slack_directory_memberships
 WHERE organization_id = $1 AND slack_team_id = $2
-  AND last_seen_at <> $3 AND status <> 'unknown'
+ORDER BY id FOR UPDATE
+`
+
+type LockSlackDirectoryMembershipsForPublicationParams struct {
+	OrganizationID string
+	SlackTeamID    string
+}
+
+// Acquire locks in a separate statement so later mapping reads use a fresh snapshot.
+func (q *Queries) LockSlackDirectoryMembershipsForPublication(ctx context.Context, arg LockSlackDirectoryMembershipsForPublicationParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockSlackDirectoryMembershipsForPublication, arg.OrganizationID, arg.SlackTeamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markAbsentSlackDirectoryMembershipsUnknown = `-- name: MarkAbsentSlackDirectoryMembershipsUnknown :exec
+UPDATE slack_directory_memberships m SET status = 'unknown', updated_at = clock_timestamp(),
+ mapping_conflict_reason = CASE WHEN EXISTS (SELECT 1 FROM slack_identity_mappings im WHERE im.organization_id = m.organization_id AND im.slack_team_id = m.slack_team_id AND im.slack_user_id = m.slack_user_id AND im.revoked_at IS NULL)
+ THEN coalesce(m.mapping_conflict_reason, 'member_absent') ELSE m.mapping_conflict_reason END,
+ mapping_conflict_detected_at = CASE WHEN EXISTS (SELECT 1 FROM slack_identity_mappings im WHERE im.organization_id = m.organization_id AND im.slack_team_id = m.slack_team_id AND im.slack_user_id = m.slack_user_id AND im.revoked_at IS NULL)
+ THEN coalesce(m.mapping_conflict_detected_at, clock_timestamp()) ELSE m.mapping_conflict_detected_at END
+WHERE m.organization_id = $1 AND m.slack_team_id = $2
+ AND m.last_seen_at <> $3
+ AND (m.status <> 'unknown' OR m.last_seen_at = $4)
 `
 
 type MarkAbsentSlackDirectoryMembershipsUnknownParams struct {
-	OrganizationID string
-	SlackTeamID    string
-	PublishedAt    pgtype.Timestamptz
+	OrganizationID      string
+	SlackTeamID         string
+	PublishedAt         pgtype.Timestamptz
+	PreviousPublishedAt pgtype.Timestamptz
 }
 
 func (q *Queries) MarkAbsentSlackDirectoryMembershipsUnknown(ctx context.Context, arg MarkAbsentSlackDirectoryMembershipsUnknownParams) error {
-	_, err := q.db.Exec(ctx, markAbsentSlackDirectoryMembershipsUnknown, arg.OrganizationID, arg.SlackTeamID, arg.PublishedAt)
+	_, err := q.db.Exec(ctx, markAbsentSlackDirectoryMembershipsUnknown,
+		arg.OrganizationID,
+		arg.SlackTeamID,
+		arg.PublishedAt,
+		arg.PreviousPublishedAt,
+	)
 	return err
 }
 
@@ -718,6 +907,22 @@ type ResetSlackDirectorySnapshotParams struct {
 
 func (q *Queries) ResetSlackDirectorySnapshot(ctx context.Context, arg ResetSlackDirectorySnapshotParams) error {
 	_, err := q.db.Exec(ctx, resetSlackDirectorySnapshot, arg.OrganizationID, arg.ID)
+	return err
+}
+
+const revokeSlackIdentityMapping = `-- name: RevokeSlackIdentityMapping :exec
+UPDATE slack_identity_mappings SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1 AND slack_team_id = $2 AND slack_user_id = $3 AND revoked_at IS NULL
+`
+
+type RevokeSlackIdentityMappingParams struct {
+	OrganizationID string
+	SlackTeamID    string
+	SlackUserID    string
+}
+
+func (q *Queries) RevokeSlackIdentityMapping(ctx context.Context, arg RevokeSlackIdentityMappingParams) error {
+	_, err := q.db.Exec(ctx, revokeSlackIdentityMapping, arg.OrganizationID, arg.SlackTeamID, arg.SlackUserID)
 	return err
 }
 
@@ -813,17 +1018,34 @@ func (q *Queries) UpdateSlackDirectoryCredentials(ctx context.Context, arg Updat
 }
 
 const upsertSlackDirectoryMembershipBatch = `-- name: UpsertSlackDirectoryMembershipBatch :exec
-INSERT INTO slack_directory_memberships
-(organization_id, slack_team_id, slack_user_id, display_name, email, status, member_type, provider_updated_at, last_seen_at)
-SELECT $1, $2, u.user_id, nullif(u.display_name, ''), nullif(u.email, ''), u.status, u.member_type, u.provider_updated_at, $3
-FROM (SELECT unnest($4::text[]) AS user_id,
+WITH observations AS (
+ SELECT unnest($4::text[]) AS user_id,
  unnest($5::text[]) AS display_name, unnest($6::text[]) AS email,
  unnest($7::text[]) AS status, unnest($8::text[]) AS member_type,
- unnest($9::timestamptz[]) AS provider_updated_at) u
+ unnest($9::timestamptz[]) AS provider_updated_at
+), findings AS (
+ SELECT u.user_id, u.display_name, u.email, u.status, u.member_type, u.provider_updated_at, CASE WHEN im.id IS NULL THEN NULL
+ WHEN m.member_type IS DISTINCT FROM u.member_type AND u.member_type = 'bot' THEN 'member_became_bot'
+ WHEN m.member_type IS DISTINCT FROM u.member_type AND u.member_type = 'unknown' THEN 'member_type_unknown'
+ WHEN m.status IS DISTINCT FROM u.status AND u.status = 'deactivated' THEN 'member_deactivated'
+ WHEN m.status IS DISTINCT FROM u.status AND u.status = 'unknown' THEN 'member_unknown'
+ WHEN nullif(trim(m.email), '') IS NOT NULL AND nullif(trim(u.email), '') IS NOT NULL
+  AND lower(trim(m.email)) <> lower(trim(u.email)) THEN 'email_changed'
+ ELSE NULL END AS reason
+ FROM observations u
+ LEFT JOIN slack_directory_memberships m ON m.organization_id = $1 AND m.slack_team_id = $2 AND m.slack_user_id = u.user_id
+ LEFT JOIN slack_identity_mappings im ON im.organization_id = m.organization_id AND im.slack_team_id = m.slack_team_id AND im.slack_user_id = m.slack_user_id AND im.revoked_at IS NULL
+)
+INSERT INTO slack_directory_memberships
+(organization_id, slack_team_id, slack_user_id, display_name, email, status, member_type, provider_updated_at, last_seen_at, mapping_conflict_reason, mapping_conflict_detected_at)
+SELECT $1, $2, user_id, nullif(display_name, ''), nullif(email, ''), status, member_type, provider_updated_at, $3, reason,
+ CASE WHEN reason IS NOT NULL THEN clock_timestamp() ELSE NULL END FROM findings
 ON CONFLICT (organization_id, slack_team_id, slack_user_id) DO UPDATE SET
-    display_name = EXCLUDED.display_name, email = EXCLUDED.email, status = EXCLUDED.status,
-    member_type = EXCLUDED.member_type, provider_updated_at = EXCLUDED.provider_updated_at,
-    last_seen_at = EXCLUDED.last_seen_at, updated_at = clock_timestamp()
+ display_name = EXCLUDED.display_name, email = EXCLUDED.email, status = EXCLUDED.status,
+ member_type = EXCLUDED.member_type, provider_updated_at = EXCLUDED.provider_updated_at,
+ last_seen_at = EXCLUDED.last_seen_at, updated_at = clock_timestamp(),
+ mapping_conflict_reason = coalesce(slack_directory_memberships.mapping_conflict_reason, EXCLUDED.mapping_conflict_reason),
+ mapping_conflict_detected_at = coalesce(slack_directory_memberships.mapping_conflict_detected_at, EXCLUDED.mapping_conflict_detected_at)
 `
 
 type UpsertSlackDirectoryMembershipBatchParams struct {

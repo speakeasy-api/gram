@@ -240,6 +240,11 @@ func (s *DirectorySync) Run(ctx context.Context, input SyncInput, report func(Sy
 	if err != nil {
 		return fmt.Errorf("count previous Slack snapshot: %w", err)
 	}
+	// Mapping mutations lock individual memberships. Lock all retained rows before
+	// publication so subsequent statements see their committed mapping decisions.
+	if _, err := q.LockSlackDirectoryMembershipsForPublication(ctx, repo.LockSlackDirectoryMembershipsForPublicationParams{OrganizationID: input.OrganizationID, SlackTeamID: current.SlackTeamID}); err != nil {
+		return fmt.Errorf("lock Slack directory memberships: %w", err)
+	}
 	published := pgtype.Timestamptz{Time: time.Now().UTC().Truncate(time.Microsecond), Valid: true, InfinityModifier: pgtype.Finite}
 	for start := 0; start < len(members); start += 500 {
 		batch := members[start:min(start+500, len(members))]
@@ -261,7 +266,7 @@ func (s *DirectorySync) Run(ctx context.Context, input SyncInput, report func(Sy
 			return fmt.Errorf("publish Slack directory members: %w", err)
 		}
 	}
-	if err := q.MarkAbsentSlackDirectoryMembershipsUnknown(ctx, repo.MarkAbsentSlackDirectoryMembershipsUnknownParams{OrganizationID: input.OrganizationID, SlackTeamID: current.SlackTeamID, PublishedAt: published}); err != nil {
+	if err := q.MarkAbsentSlackDirectoryMembershipsUnknown(ctx, repo.MarkAbsentSlackDirectoryMembershipsUnknownParams{OrganizationID: input.OrganizationID, SlackTeamID: current.SlackTeamID, PublishedAt: published, PreviousPublishedAt: current.LastFullSyncSucceededAt}); err != nil {
 		return fmt.Errorf("retain absent Slack members: %w", err)
 	}
 	after, err := q.PublishSlackDirectorySync(ctx, repo.PublishSlackDirectorySyncParams{OrganizationID: input.OrganizationID, ID: input.ConnectionID, Generation: input.Generation, PublishedAt: published})

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 )
@@ -73,6 +74,10 @@ func (s *Service) ListMembers(ctx context.Context, p *gen.ListMembersPayload) (*
 		}
 		cursor = uuid.NullUUID{UUID: id, Valid: true}
 	}
+	mappingStatus := conv.PtrValOr(p.MappingStatus, "")
+	if mappingStatus != "" && mappingStatus != "mapped" && mappingStatus != "unmapped" && mappingStatus != "needs_review" {
+		return nil, oops.C(oops.CodeBadRequest)
+	}
 	search := strings.TrimSpace(conv.PtrValOr(p.Search, ""))
 	limit := p.Limit
 	if limit == 0 {
@@ -81,11 +86,11 @@ func (s *Service) ListMembers(ctx context.Context, p *gen.ListMembersPayload) (*
 	if limit < 1 || limit > 100 || utf8.RuneCountInString(search) > 200 {
 		return nil, oops.C(oops.CodeBadRequest)
 	}
-	rows, err := repo.New(s.db).ListSlackDirectoryMembers(ctx, repo.ListSlackDirectoryMembersParams{OrganizationID: ac.ActiveOrganizationID, ConnectionID: connectionID, Cursor: cursor, Search: search, PageSize: int32(limit + 1)})
+	rows, err := repo.New(s.db).ListSlackDirectoryMembers(ctx, repo.ListSlackDirectoryMembersParams{OrganizationID: ac.ActiveOrganizationID, ConnectionID: connectionID, Cursor: cursor, MemberID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, MappingStatus: mappingStatus, Search: search, PageSize: int32(limit + 1)})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not list Slack members").LogError(ctx, s.logger)
 	}
-	total, err := repo.New(s.db).CountSlackDirectoryMembers(ctx, repo.CountSlackDirectoryMembersParams{OrganizationID: ac.ActiveOrganizationID, ConnectionID: connectionID, Search: search})
+	total, err := repo.New(s.db).CountSlackDirectoryMembers(ctx, repo.CountSlackDirectoryMembersParams{OrganizationID: ac.ActiveOrganizationID, ConnectionID: connectionID, Search: search, MappingStatus: mappingStatus})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not count Slack members").LogError(ctx, s.logger)
 	}
@@ -95,7 +100,7 @@ func (s *Service) ListMembers(ctx context.Context, p *gen.ListMembersPayload) (*
 		rows = rows[:limit]
 	}
 	for _, row := range rows {
-		result.Members = append(result.Members, &gen.SlackDirectoryMember{ID: row.ID.String(), ConnectionID: row.ConnectionID.String(), WorkspaceID: row.SlackTeamID, WorkspaceName: row.WorkspaceName.String, SlackUserID: row.SlackUserID, DisplayName: conv.FromPGText[string](row.DisplayName), Email: conv.FromPGText[string](row.Email), Status: row.Status, MemberType: row.MemberType, LastSeenAt: row.LastSeenAt.Time.Format(time.RFC3339), ObservedInLastSync: row.ObservedInLastSync})
+		result.Members = append(result.Members, mv.BuildSlackDirectoryMemberView(row))
 	}
 	return result, nil
 }

@@ -78,6 +78,7 @@ var All = []outbox.EventRegistration{
 	SkillEfficacySettingsV1,
 	SkillV1,
 	SlackDirectoryConnectionV1,
+	SlackIdentityMappingV1,
 	SpendRuleV1,
 	TemplateV1,
 	ToolsetV1,
