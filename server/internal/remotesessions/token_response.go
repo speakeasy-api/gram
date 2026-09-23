@@ -48,7 +48,7 @@ func (w *tokenResponseWire) UnmarshalJSON(data []byte) error {
 		ExpiresIn json.Number `json:"expires_in"`
 	}{plain: &decoded, ExpiresIn: ""}
 	if err := json.Unmarshal(data, &response); err != nil {
-		return fmt.Errorf("decode token response: %w", err)
+		return err
 	}
 	// Some providers encode expires_in as a string. Both forms must be integers
 	// within int range; missing and null values retain the zero default.
