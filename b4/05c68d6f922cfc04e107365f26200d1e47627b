@@ -1,0 +1,36 @@
+client/dashboard/src/pages/security/watchdog/SignalDrawer.tsx
+  h_e404c1a6a54184 250,297,305
+server/internal/risk/chrepo/false_positive.go
+  h_e404c1a6a54184 31,51
+server/internal/risk/chrepo/list.go
+  h_e404c1a6a54184 161,262
+server/internal/risk/chrepo/overview.go
+  h_e404c1a6a54184 24
+server/internal/risk/chrepo/retro_exclusion.go
+  h_e404c1a6a54184 26,219,254
+server/internal/risk/false_positive.go
+  h_e404c1a6a54184 101,166
+server/internal/risk/false_positive_test.go
+  h_e404c1a6a54184 23,378
+server/internal/risk/finding_ch.go
+  h_e404c1a6a54184 342
+server/internal/risk/list_ch_test.go
+  h_e404c1a6a54184 77
+server/internal/risk/overview_ch_test.go
+  h_e404c1a6a54184 249
+server/internal/risk/queries.sql
+  h_e404c1a6a54184 1725
+server/internal/risk/repo/queries.sql.go
+  h_e404c1a6a54184 5074
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b405c68d6f922cfc04e107365f26200d1e47627b",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
