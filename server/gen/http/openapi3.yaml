@@ -96089,6 +96089,7 @@ components:
                         - environment:blocked_write
                         - skill:blocked_read
                         - skill:blocked_write
+                        - plugin:blocked_write
                         - risk_policy:bypass
                 resource_type:
                     type: string

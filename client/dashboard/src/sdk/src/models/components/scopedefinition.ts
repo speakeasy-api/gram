@@ -24,6 +24,7 @@ export const ExclusionScope = {
   EnvironmentBlockedWrite: "environment:blocked_write",
   SkillBlockedRead: "skill:blocked_read",
   SkillBlockedWrite: "skill:blocked_write",
+  PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyBypass: "risk_policy:bypass",
 } as const;
 /**
