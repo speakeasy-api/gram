@@ -298,6 +298,16 @@ func TestServeAgentGateway_CustomDomainLockdownBlocksPlatformHost(t *testing.T) 
 	w, err := serveAgentGatewayHTTPOn(t, domainCtx, ti, fx.agent.ID.String(), fx.token, makeInitializeBody())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	// Another organization's domain proves only that organization's allowlist
+	// was applied, so it is not an exemption from this one's lockdown.
+	foreignCtx := customdomains.WithContext(t.Context(), &customdomains.Context{
+		OrganizationID: "org_" + uuid.NewString(),
+		Domain:         "foreign-" + uuid.NewString()[:8] + ".example.com",
+		DomainID:       uuid.New(),
+	})
+	_, err = serveAgentGatewayHTTPOn(t, foreignCtx, ti, fx.agent.ID.String(), fx.token, makeInitializeBody())
+	requireAgentGatewayCode(t, err, oops.CodeForbidden)
 }
 
 // A custom domain with no allowlist is the ordinary dual-serve case and must

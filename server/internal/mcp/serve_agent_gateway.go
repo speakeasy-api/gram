@@ -114,11 +114,15 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 // request that arrived through the private ingress is governed by that
 // surface's own admission, and one that arrived on the custom domain already
 // passed the allowlist at the edge.
+//
+// The custom-domain exemption is bound to the owning organization. A domain
+// only proves its own organization's allowlist was applied, so another
+// organization's domain must not excuse this one's lockdown.
 func (s *Service) enforceAgentGatewayCustomDomainLockdown(ctx context.Context, logger *slog.Logger, organizationID string) error {
 	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
 		return nil
 	}
-	if customdomains.FromContext(ctx) != nil {
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil && domainCtx.OrganizationID == organizationID {
 		return nil
 	}
 
