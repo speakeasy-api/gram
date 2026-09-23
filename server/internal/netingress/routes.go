@@ -89,6 +89,10 @@ var privateRoutes = []RouteSpec{
 	// install page, and it authenticates with an agent key rather than OAuth,
 	// so it has no authorization-server routes either.
 	{Surface: RouteSurfaceAgentMCP, ID: RouteRuntime, Method: http.MethodPost, Path: "/agent-mcp/{agentID}"},
+	// Minting is authenticated by the agent key; spending the code is not,
+	// because the code is itself the credential — single-use and short-lived.
+	{Surface: RouteSurfaceAgentMCP, ID: RouteInstall, Method: http.MethodPost, Path: "/agent-mcp/{agentID}/install-code"},
+	{Surface: RouteSurfaceAgentMCP, ID: RouteInstallScript, Method: http.MethodGet, Path: "/agent-mcp/install/{code}"},
 }
 
 var privateRouteMatcher = newPrivateRouteMatcher()

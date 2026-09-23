@@ -139,6 +139,29 @@ function recipes(url: string, key: string, secret: string | null): Recipe[] {
   ];
 }
 
+/**
+ * Exchanges the key for a single-use install code. The key never goes into the
+ * command that way: a one-liner ends up in shell history and pasted into
+ * threads, and a code that dies on first use is worthless there.
+ */
+async function mintInstallCommand(
+  gatewayURL: string,
+  secret: string,
+): Promise<string> {
+  const response = await fetch(`${gatewayURL}/install-code`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${secret}` },
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Could not prepare an install command (${response.status})`,
+    );
+  }
+  const { code } = (await response.json()) as { code: string };
+  const base = new URL(gatewayURL);
+  return `curl -fsSL ${base.origin}/agent-mcp/install/${code} | sh`;
+}
+
 export function AgentGatewayInstall({
   agentID,
   secret,
@@ -148,6 +171,9 @@ export function AgentGatewayInstall({
 }): JSX.Element {
   const [tab, setTab] = useState("url");
   const [copied, setCopied] = useState<string | null>(null);
+  const [command, setCommand] = useState<string | null>(null);
+  const [commandError, setCommandError] = useState<string | null>(null);
+  const [minting, setMinting] = useState(false);
   // The secret is shown once. When it is gone the snippets still teach the
   // shape, with a placeholder where the key goes.
   const key = secret ?? `<your ${KEY_ENV}>`;
@@ -180,6 +206,53 @@ export function AgentGatewayInstall({
       </Text>
       {secret && (
         <div className="space-y-2 pt-2 pb-2">
+          <Text small className="font-medium">
+            One command
+          </Text>
+          {command ? (
+            <div className="border-border flex items-center gap-2 border p-3">
+              <code className="min-w-0 flex-1 break-all text-xs">
+                {command}
+              </code>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  void navigator.clipboard
+                    .writeText(command)
+                    .then(() => setCopied("command"));
+                }}
+              >
+                {copied === "command" ? "Copied" : "Copy"}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={minting}
+              onClick={() => {
+                setMinting(true);
+                setCommandError(null);
+                mintInstallCommand(url, secret)
+                  .then(setCommand)
+                  .catch((error: Error) => setCommandError(error.message))
+                  .finally(() => setMinting(false));
+              }}
+            >
+              {minting ? "Preparing…" : "Generate install command"}
+            </Button>
+          )}
+          <Text muted small>
+            Configures the MCP clients on a machine in one step. The command
+            carries a single-use code, not the key, and the code expires in 15
+            minutes.
+          </Text>
+          {commandError && (
+            <Text role="alert" small>
+              {commandError}
+            </Text>
+          )}
           <Text small className="font-medium">
             API key — shown once
           </Text>
