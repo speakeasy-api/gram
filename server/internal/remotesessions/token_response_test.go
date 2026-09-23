@@ -19,7 +19,7 @@ func TestTokenResponseExpiresIn(t *testing.T) {
 			require.Equal(t, "a", response.AccessToken)
 			require.True(t, response.ScopeReported())
 			if value == `3600` || value == `"3600"` {
-				require.Equal(t, 3600, response.ExpiresIn)
+				require.Equal(t, jsonInt(3600), response.ExpiresIn)
 				require.Equal(t, now.Add(time.Hour), *response.AccessExpiresAt(now))
 			} else {
 				require.Zero(t, response.ExpiresIn)

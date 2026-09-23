@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,15 +15,15 @@ import (
 // RFC 6749 fields, draft-ietf-oauth-refresh-token-expiration fields, and two
 // common non-standard refresh lifetime aliases.
 type tokenResponse struct {
-	AccessToken            string `json:"access_token"`
-	RefreshToken           string `json:"refresh_token"`
-	TokenType              string `json:"token_type"`
-	ExpiresIn              int    `json:"expires_in"`
-	RefreshTokenTimeout    *int64 `json:"refresh_token_timeout"`
-	AuthorizationExpiresIn *int64 `json:"authorization_expires_in"`
-	RefreshExpiresIn       int64  `json:"refresh_expires_in"`
-	RefreshTokenExpiresIn  int64  `json:"refresh_token_expires_in"`
-	Scope                  string `json:"scope"`
+	AccessToken            string  `json:"access_token"`
+	RefreshToken           string  `json:"refresh_token"`
+	TokenType              string  `json:"token_type"`
+	ExpiresIn              jsonInt `json:"expires_in"`
+	RefreshTokenTimeout    *int64  `json:"refresh_token_timeout"`
+	AuthorizationExpiresIn *int64  `json:"authorization_expires_in"`
+	RefreshExpiresIn       int64   `json:"refresh_expires_in"`
+	RefreshTokenExpiresIn  int64   `json:"refresh_token_expires_in"`
+	Scope                  string  `json:"scope"`
 	scopePresent           bool
 
 	// IDToken is verified and reduced to claims at the exchange; never persisted or logged.
@@ -53,21 +52,8 @@ func (t *tokenResponse) UnmarshalJSON(data []byte) error {
 		}
 	}
 	var decoded wire
-	// Some providers return expires_in as a quoted number. Accept either form,
-	// but still require an integer that fits the field rather than truncating it.
-	response := struct {
-		*wire
-		ExpiresIn json.Number `json:"expires_in"`
-	}{wire: &decoded}
-	if err := json.Unmarshal(data, &response); err != nil {
+	if err := json.Unmarshal(data, &decoded); err != nil {
 		return fmt.Errorf("decode token response: %w", err)
-	}
-	if response.ExpiresIn != "" {
-		seconds, err := strconv.Atoi(string(response.ExpiresIn))
-		if err != nil {
-			return errors.New("token response expires_in must be an integer within range")
-		}
-		decoded.ExpiresIn = seconds
 	}
 	*t = tokenResponse(decoded)
 	t.scopePresent = scopePresent
