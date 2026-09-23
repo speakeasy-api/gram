@@ -425,3 +425,53 @@ WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
 -- name: DeleteAssistantMCPServersByMCPServer :exec
 DELETE FROM assistant_mcp_servers
 WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;
+
+-- name: ListServableMCPServersByOrganizationID :many
+-- Candidate members for a gateway whose membership is derived rather than
+-- stored: an agent gateway has no meta_mcp_server_members rows, so it
+-- enumerates here and lets the caller's own grants do the narrowing.
+--
+-- Organization-wide on purpose. Agent grants are organization-scoped and a
+-- selector's project is optional, so an agent may legitimately reach servers
+-- in several projects; scoping this to one project would serve less than the
+-- agent was granted. The caller's mcp:connect check is what narrows the
+-- result, so enumerating widely here exposes nothing extra.
+--
+-- Filtered exactly as ListServableMetaMCPMembers — disabled servers and
+-- slugless legacy rows are excluded — so a server invisible to the stored
+-- serving path is invisible to a derived one too. Carries the same backend
+-- and dispatch columns that path needs, plus each member's project, since
+-- members no longer share one, and each member's network access mode, which
+-- the caller matches against the request's ingress surface so a private_only
+-- server stays invisible on the public one. Ordered by project then slug: a derived
+-- gateway has no operator-authored order, and slugs are unique only within a
+-- project, so the pair is what makes the listing stable.
+SELECT
+    s.id AS mcp_server_id,
+    s.project_id AS mcp_server_project_id,
+    p.slug AS mcp_server_project_slug,
+    s.name AS mcp_server_name,
+    s.slug AS mcp_server_slug,
+    s.visibility AS mcp_server_visibility,
+    s.network_access_mode AS mcp_server_network_access_mode,
+    s.toolset_id AS mcp_server_toolset_id,
+    s.remote_mcp_server_id AS mcp_server_remote_mcp_server_id,
+    s.tunneled_mcp_server_id AS mcp_server_tunneled_mcp_server_id,
+    s.unproxied_mcp_server_id AS mcp_server_unproxied_mcp_server_id,
+    s.environment_id AS mcp_server_environment_id,
+    s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
+    s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
+FROM mcp_servers s
+JOIN projects p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = s.project_id
+ AND t.deleted IS FALSE
+WHERE p.organization_id = @organization_id
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND s.slug IS NOT NULL
+ORDER BY s.project_id, s.slug;

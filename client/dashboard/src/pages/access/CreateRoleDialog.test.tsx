@@ -141,6 +141,11 @@ beforeEach(() => {
   mocks.status = "ready";
   mocks.enabled = false;
 });
+it("labels the permissions section as a section rather than an action", () => {
+  renderEditor();
+  expect(screen.getByText("Permissions", { exact: true })).toBeTruthy();
+});
+
 describe("role assignment confirmation", () => {
   function confirmAssignment() {
     const confirmation = screen.getByRole("checkbox", {

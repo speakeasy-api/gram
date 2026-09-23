@@ -219,7 +219,7 @@ beforeEach(() => {
   mocks.sdkClient.mockReturnValue({
     agents: { list: mocks.list, get: mocks.detail },
   });
-  mocks.list.mockResolvedValue(mocks.agents);
+  mocks.list.mockImplementation(async () => mocks.agents);
   mocks.detail.mockResolvedValue(mocks.agents[0]);
 });
 
@@ -485,8 +485,9 @@ describe("Agent scope without an active project", () => {
     fireEvent.click(projectOption);
     fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
 
-    const form = mocks.createMutate.mock.calls[0]?.[0].request.createAgentForm;
-    expect(form?.projectId).toBeUndefined();
+    expect(mocks.createMutate).toHaveBeenCalledTimes(1);
+    const form = mocks.createMutate.mock.calls[0]![0].request.createAgentForm;
+    expect(form).not.toHaveProperty("projectId");
   });
 });
 
@@ -496,7 +497,23 @@ describe("Agent list scope filtering", () => {
     mocks.agents = [...inventory];
   });
 
-  it("hides agents bound to another project and keeps organization-wide ones", () => {
+  it("shows the create empty state when only other projects have agents", () => {
+    mocks.agents = [{ ...mocks.agents[0]!, projectId: "other-project" }];
+    setup();
+    expect(screen.getByText("No agents yet")).toBeTruthy();
+    expect(screen.queryByText("No matching agents")).toBeNull();
+  });
+
+  it("shows no matches for a search of project-visible agents", () => {
+    setup();
+    fireEvent.change(screen.getByPlaceholderText("Search agents"), {
+      target: { value: "missing agent" },
+    });
+    expect(screen.getByText("No matching agents")).toBeTruthy();
+    expect(screen.queryByText("No agents yet")).toBeNull();
+  });
+
+  it("hides agents bound to another project and keeps organization-wide ones after refetch", async () => {
     mocks.agents = [
       {
         ...mocks.agents[0]!,
@@ -517,7 +534,17 @@ describe("Agent list scope filtering", () => {
         projectId: undefined,
       },
     ];
-    setup();
+    const { client } = setup();
+    await client.invalidateQueries({ queryKey: ["managed-agents"] });
+    expect(mocks.list).toHaveBeenCalled();
+    expect(
+      client.getQueryData([
+        "managed-agents",
+        mocks.organizationId,
+        "list",
+        mocks.user.id,
+      ]),
+    ).toEqual(mocks.agents);
 
     expect(
       screen.getByRole("button", { name: "This project agent" }),

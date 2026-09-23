@@ -1,3 +1,6 @@
+import { useOrganization } from "@/contexts/Auth";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import {
   DetailSidebarInfoLabel,
   DetailSidebarNav,
@@ -81,7 +84,12 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
-  const { hasScope } = useRBAC();
+  const { hasScope, hasAnyScope } = useRBAC();
+  const organization = useOrganization();
+  const pluginScope = usePluginQueryScope();
+  const canWritePlugins = usePluginWriteAccess();
+  const canReadPlugins =
+    canWritePlugins || hasAnyScope(["org:read", "org:admin"], organization.id);
 
   const idOrSlug = mcpServerSlug ?? "";
   const { data: mcpServer } = useGetMcpServer(
@@ -149,8 +157,12 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   // Mirrors PluginStatusBanner's isTrulyPublished: server membership in a
   // plugin alone isn't "included" if the marketplace repo was never
   // published, since a teammate can't actually install it yet.
-  const { data: pluginsData } = usePlugins();
-  const { data: publishStatus } = usePublishStatus();
+  const { data: pluginsData } = usePlugins(pluginScope, undefined, {
+    enabled: canReadPlugins,
+  });
+  const { data: publishStatus } = usePublishStatus(pluginScope, undefined, {
+    enabled: canReadPlugins,
+  });
   const memberPlugins = (pluginsData?.plugins ?? []).filter((plugin) =>
     plugin.servers?.some((s) => s.mcpServerId === mcpServer?.id),
   );
@@ -168,7 +180,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const isUnproxied = !!mcpServer?.unproxiedMcpServerId;
   const isSourceBacked = isRemoteBacked || isTunneledBacked || isUnproxied;
   const canViewTeamAccess =
-    !!mcpServer && hasScope("org:read") && hasScope("mcp:read", mcpServer.id);
+    !!mcpServer &&
+    hasScope("org:read", organization.id) &&
+    hasScope("mcp:read", mcpServer.id);
 
   let authenticationDescription =
     "Attach a remote identity provider so users can access the upstream service.";
@@ -236,17 +250,21 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           description: sourceDescription,
           ready: isSourceBacked,
         },
-        {
-          key: "plugin",
-          label: "Included in Plugin",
-          description: isTrulyIncluded
-            ? `Published to ${memberPlugins.length} plugin${memberPlugins.length > 1 ? "s" : ""}.`
-            : isPluginMember
-              ? "Marketplace needs publishing before this plugin is installable."
-              : "Add this server to a plugin so your team can install it.",
-          ready: isTrulyIncluded,
-          href: routes.plugins.href(),
-        },
+        ...(canReadPlugins
+          ? [
+              {
+                key: "plugin",
+                label: "Included in Plugin",
+                description: isTrulyIncluded
+                  ? `Published to ${memberPlugins.length} plugin${memberPlugins.length > 1 ? "s" : ""}.`
+                  : isPluginMember
+                    ? "Marketplace needs publishing before this plugin is installable."
+                    : "Add this server to a plugin so your team can install it.",
+                ready: isTrulyIncluded,
+                href: routes.plugins.href(),
+              },
+            ]
+          : []),
       ]
     : [];
 

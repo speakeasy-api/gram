@@ -36,6 +36,8 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeAgentWrite),
 	string(authz.ScopeAgentAuthorize),
 	string(authz.ScopeAgentTransfer),
+	string(authz.ScopeWorkloadRead),
+	string(authz.ScopeWorkloadWrite),
 	string(authz.ScopeOrgDeviceAgentSync),
 	string(authz.ScopeOrgHooksIngest),
 }

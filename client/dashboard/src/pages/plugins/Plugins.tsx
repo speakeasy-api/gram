@@ -1,3 +1,5 @@
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
+import { useOrganization } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { CreateResourceCard } from "@/components/create-resource-card";
 import { type FilterValue, useFilterState } from "@/components/filters";
@@ -6,7 +8,6 @@ import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
 import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
-import { RequireScope } from "@/components/require-scope";
 import { useFetcher } from "@/contexts/Fetcher";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
@@ -64,7 +65,36 @@ export function PluginsRoot(): JSX.Element {
   return <Outlet />;
 }
 
-export default function Plugins(): JSX.Element {
+export default function Plugins(): JSX.Element | null {
+  const { hasScope, isLoading } = useRBAC();
+  const organization = useOrganization();
+  const canWritePlugin = usePluginWriteAccess();
+  if (isLoading) return null;
+  if (!canWritePlugin && !hasScope("org:read", organization.id)) return null;
+  return hasScope("org:admin", organization.id) ? (
+    <PluginsWithMarketplaceSettings />
+  ) : (
+    <PluginsContent />
+  );
+}
+
+function PluginsWithMarketplaceSettings(): JSX.Element {
+  const scope = usePluginQueryScope();
+  const { data } = useMarketplaceSettingsSuspense(scope);
+  return <PluginsContent marketplaceSettings={data} />;
+}
+
+function PluginsContent({
+  marketplaceSettings = {
+    defaultName: "",
+    effectiveName: "",
+    observabilityEnabled: false,
+  },
+}: {
+  marketplaceSettings?: ReturnType<
+    typeof useMarketplaceSettingsSuspense
+  >["data"];
+}): JSX.Element {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isManageCollaboratorsOpen, setIsManageCollaboratorsOpen] =
@@ -74,18 +104,17 @@ export default function Plugins(): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
 
-  const { data } = usePluginsSuspense();
+  const scope = usePluginQueryScope();
+  const { data } = usePluginsSuspense(scope);
   // Polled so the marketplace card and per-plugin sync badges pick up the
   // Temporal generator-rollout schedule's auto-sync without a manual refresh.
-  const { data: publishStatus } = usePublishStatusSuspense(
-    undefined,
-    undefined,
-    { refetchInterval: 5_000 },
-  );
-  const { data: marketplaceSettings } = useMarketplaceSettingsSuspense();
+  const { data: publishStatus } = usePublishStatusSuspense(scope, undefined, {
+    refetchInterval: 5_000,
+  });
   const { hasScope } = useRBAC();
   const canWritePlugin = usePluginWriteAccess();
-  const canManageMarketplace = hasScope("org:admin");
+  const organization = useOrganization();
+  const canManageMarketplace = hasScope("org:admin", organization.id);
   const { fetch: authFetch } = useFetcher();
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
@@ -376,7 +405,8 @@ export default function Plugins(): JSX.Element {
         }}
       >
         <Stack direction="vertical" gap={8}>
-          {publishStatus?.configured &&
+          {canManageMarketplace &&
+            publishStatus?.configured &&
             (publishStatus.connected && publishStatus.repoUrl ? (
               publishStatus.hasCollaborators === false ? (
                 <>
@@ -452,41 +482,53 @@ export default function Plugins(): JSX.Element {
             in your coding agent, then any new MCP servers will become instantly
             available for installation.
           </Text>
+          {!canManageMarketplace &&
+            canWritePlugin &&
+            publishStatus?.connected && (
+              <Button
+                onClick={() => handlePublish([])}
+                disabled={publishMutation.isPending}
+              >
+                Sync plugins
+              </Button>
+            )}
           <PluginGrid
             plugins={filteredPlugins}
-            publishStatus={publishStatus}
+            publishStatus={canManageMarketplace ? publishStatus : undefined}
             searchQuery={hasPlugins ? search : ""}
             createCard={createCard}
           />
-          <div className="flex items-center gap-3">
-            <div className="border-border flex-1 border-t" />
-            <Text
-              small
-              muted
-              className="shrink-0 font-mono text-xs tracking-wide uppercase"
-            >
-              Platform Plugins
-            </Text>
-            <div className="border-border flex-1 border-t" />
-          </div>
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <ObservabilityPluginCard
-              publishStatus={publishStatus}
-              enabled={marketplaceSettings.observabilityEnabled}
-              canToggle={canManageMarketplace}
-              isToggling={updateMarketplaceSettingsMutation.isPending}
-              onEnabledChange={handleObservabilityEnabledChange}
-              isDownloadMenuOpen={isObservabilityDownloadMenuOpen}
-              onDownloadMenuOpenChange={setIsObservabilityDownloadMenuOpen}
-              isDownloading={isDownloadingObservability !== null}
-              onDownload={(platform) => {
-                void handleObservabilityDownload(platform);
-              }}
-            />
-            <RequireScope scope="org:admin" level="section">
-              <PlatformMCPPluginCard />
-            </RequireScope>
-          </div>
+          {canManageMarketplace && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="border-border flex-1 border-t" />
+                <Text
+                  small
+                  muted
+                  className="shrink-0 font-mono text-xs tracking-wide uppercase"
+                >
+                  Platform Plugins
+                </Text>
+                <div className="border-border flex-1 border-t" />
+              </div>
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <ObservabilityPluginCard
+                  publishStatus={publishStatus}
+                  enabled={marketplaceSettings.observabilityEnabled}
+                  canToggle={canManageMarketplace}
+                  isToggling={updateMarketplaceSettingsMutation.isPending}
+                  onEnabledChange={handleObservabilityEnabledChange}
+                  isDownloadMenuOpen={isObservabilityDownloadMenuOpen}
+                  onDownloadMenuOpenChange={setIsObservabilityDownloadMenuOpen}
+                  isDownloading={isDownloadingObservability !== null}
+                  onDownload={(platform) => {
+                    void handleObservabilityDownload(platform);
+                  }}
+                />
+                <PlatformMCPPluginCard />
+              </div>
+            </>
+          )}
         </Stack>
       </ResourceListPage>
 
@@ -797,8 +839,10 @@ function observabilityInstallHint(
   return "Available as a direct download";
 }
 
-function PlatformMCPPluginCard(): JSX.Element {
+function PlatformMCPPluginCard(): JSX.Element | null {
   const [installOpen, setInstallOpen] = useState(false);
+  const { hasScope } = useRBAC();
+  if (!hasScope("org:admin")) return null;
 
   return (
     <Card.Entity

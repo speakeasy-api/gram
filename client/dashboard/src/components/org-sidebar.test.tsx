@@ -5,6 +5,7 @@ import { OrgSidebar } from "./org-sidebar";
 import type { ReactNode } from "react";
 
 const mocks = vi.hoisted(() => ({
+  features: vi.fn(() => ({})),
   active: "agents",
   isPlatformAdmin: false,
 }));
@@ -25,14 +26,16 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example" }),
   useIsPlatformAdmin: () => mocks.isPlatformAdmin,
 }));
-vi.mock("@/hooks/useRBAC", () => ({ useRBAC: () => ({ isLoading: false }) }));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ isLoading: false, hasScope: () => false }),
+}));
 vi.mock("@/hooks/useCanSetUpOrg", () => ({ useCanSetUpOrg: () => false }));
 
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => false }),
 }));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => ({}),
+  useProductFeatures: mocks.features,
 }));
 vi.mock("react-router", () => ({
   Link: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -150,3 +153,12 @@ it.each([false, true])(
       ).toBeTruthy();
   },
 );
+
+it("does not request organization features for baseline project users", () => {
+  render(<OrgSidebar />);
+  expect(mocks.features).toHaveBeenLastCalledWith(
+    expect.anything(),
+    undefined,
+    expect.objectContaining({ enabled: false }),
+  );
+});

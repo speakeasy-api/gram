@@ -222,14 +222,19 @@ func resolvedMCPMatch(matched *MCPServerEntry, serverPrefix string) string {
 // at SessionStart. Returns an error when the cache has no entry for the
 // session — callers decide whether that means "fall back to allow",
 // "buffer", or in the shadow-MCP guard's case, "deny with retry message".
+// Only the caller's own project's snapshot is visible.
 func (s *Service) getCachedMCPList(ctx context.Context, sessionID string) ([]MCPServerEntry, error) {
+	projectID := s.mcpListProjectID(ctx, sessionID)
+	if projectID == "" {
+		return nil, fmt.Errorf("get cached mcp list: no project scope: %w", redisCache.ErrCacheMiss)
+	}
 	var entries []MCPServerEntry
-	if err := s.cache.Get(ctx, sessionMCPListCacheKey(sessionID), &entries); err != nil {
+	if err := s.cache.Get(ctx, sessionMCPListCacheKey(projectID, sessionID), &entries); err != nil {
 		return nil, fmt.Errorf("get cached mcp list: %w", err)
 	}
 	reader := mcpListOwnerFromContext(ctx)
 	var owner mcpListOwner
-	switch err := s.cache.Get(ctx, mcpListOwnerCacheKey(sessionID), &owner); {
+	switch err := s.cache.Get(ctx, mcpListOwnerCacheKey(projectID, sessionID), &owner); {
 	case err == nil:
 		// Another scope's snapshot is no snapshot.
 		if !owner.shares(reader) {
