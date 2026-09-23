@@ -27,7 +27,7 @@ func (s *Service) publishForMCPMembership(ctx context.Context, authCtx *contextv
 			continue
 		}
 		attached, err := pluginsrepo.New(s.db).HasPluginMembershipForMCPServer(ctx, pluginsrepo.HasPluginMembershipForMCPServerParams{
-			ProjectID: *authCtx.ProjectID, McpServerID: id,
+			ProjectID: *authCtx.ProjectID, McpServerID: id.UUID,
 		})
 		if err != nil {
 			s.logger.ErrorContext(ctx, "check plugin membership after endpoint mutation", attr.SlogError(err))

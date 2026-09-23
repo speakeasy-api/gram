@@ -2,6 +2,7 @@ package plugins_test
 
 import (
 	"encoding/json"
+	"errors"
 	"net/url"
 	"testing"
 
@@ -60,5 +61,5 @@ func TestPluginsService_PublishPlugins_PrivateOnlyUsesIngressEndpoint(t *testing
 	})
 	require.NoError(t, err)
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
-	require.Error(t, err, "a missing private endpoint must block publication rather than publish a public address")
+	require.ErrorContains(t, errors.Unwrap(err), "no endpoint in the private ingress namespace")
 }

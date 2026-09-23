@@ -687,15 +687,27 @@ const hasPluginMembershipForMCPServer = `-- name: HasPluginMembershipForMCPServe
 SELECT EXISTS (
   SELECT 1 FROM plugin_servers ps
   JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = $1 AND p.deleted IS FALSE
-  WHERE ps.mcp_server_id = $2 AND ps.deleted IS FALSE
+  JOIN mcp_servers s ON s.id = $2 AND s.project_id = p.project_id AND s.deleted IS FALSE
+  WHERE ps.deleted IS FALSE
+    AND (
+      ps.mcp_server_id = s.id
+      OR (
+        ps.toolset_id = s.toolset_id
+        AND s.visibility <> 'disabled'
+        AND (SELECT count(*) FROM mcp_servers wrapper
+             WHERE wrapper.toolset_id = s.toolset_id AND wrapper.project_id = p.project_id
+               AND wrapper.deleted IS FALSE AND wrapper.visibility <> 'disabled') = 1
+      )
+    )
 )::bool
 `
 
 type HasPluginMembershipForMCPServerParams struct {
 	ProjectID   uuid.UUID
-	McpServerID uuid.NullUUID
+	McpServerID uuid.UUID
 }
 
+// Include legacy toolset-backed plugins only when this server is their sole active wrapper.
 func (q *Queries) HasPluginMembershipForMCPServer(ctx context.Context, arg HasPluginMembershipForMCPServerParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasPluginMembershipForMCPServer, arg.ProjectID, arg.McpServerID)
 	var column_1 bool
@@ -821,7 +833,7 @@ WITH intended AS (
         SELECT 1 FROM mcp_servers ms
         WHERE ms.toolset_id = t.id AND ms.project_id = p.project_id AND ms.deleted IS FALSE
           AND ms.visibility <> 'disabled' AND ms.network_access_mode IS NOT NULL
-          AND ms.network_access_mode NOT IN ('public_only', 'dual', 'private_only')
+          AND ms.network_access_mode NOT IN ('', 'public_only', 'dual', 'private_only')
       ) THEN 'toolset_wrapper_network_mode_invalid'
 	  WHEN ps.toolset_id IS NOT NULL AND EXISTS (
 		SELECT 1
@@ -833,7 +845,7 @@ WITH intended AS (
       WHEN ps.mcp_server_id IS NOT NULL AND s.project_id <> p.project_id THEN 'mcp_server_wrong_project'
       WHEN ps.mcp_server_id IS NOT NULL AND s.deleted IS TRUE THEN 'mcp_server_deleted'
       WHEN ps.mcp_server_id IS NOT NULL AND s.visibility = 'disabled' THEN 'mcp_server_disabled'
-      WHEN ps.mcp_server_id IS NOT NULL AND s.network_access_mode IS NOT NULL AND s.network_access_mode NOT IN ('public_only', 'dual', 'private_only') THEN 'mcp_server_network_mode_invalid'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.network_access_mode IS NOT NULL AND s.network_access_mode NOT IN ('', 'public_only', 'dual', 'private_only') THEN 'mcp_server_network_mode_invalid'
       WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND (rms.id IS NULL OR rms.project_id <> p.project_id OR rms.deleted IS TRUE) THEN 'remote_backing_unresolved'
 	  WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND rms.transport_type NOT IN ('streamable-http', 'sse') THEN 'remote_transport_unsupported'
 	  WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND EXISTS (
