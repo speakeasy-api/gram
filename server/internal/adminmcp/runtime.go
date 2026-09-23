@@ -61,7 +61,7 @@ type ProjectReader interface {
 
 // ConfigurationReader exposes the dashboard's organization configuration reads.
 type ConfigurationReader interface {
-	GetOrganizationFeatures(context.Context, *gen.GetOrganizationFeaturesPayload) (*gen.ProductFeatures, error)
+	GetOrganizationFeaturesStrict(context.Context, string) (*gen.ProductFeatures, error)
 	GetOrganizationChatAnalysisSettings(context.Context, *gen.GetOrganizationChatAnalysisSettingsPayload) (*gen.AdminChatAnalysisSettings, error)
 }
 

@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/assets"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"io"
 	"log/slog"
 	"math"
@@ -29,6 +27,7 @@ import (
 	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
@@ -48,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -265,6 +265,20 @@ func (s *Service) GetOrganizationFeatures(ctx context.Context, payload *gen.GetO
 		return nil, err
 	}
 	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
+}
+
+// GetOrganizationFeaturesStrict is the staff MCP read path. An incomplete flag
+// lookup must not be reported as a set of disabled entitlements.
+func (s *Service) GetOrganizationFeaturesStrict(ctx context.Context, organizationID string) (*gen.ProductFeatures, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := s.productFeatures.SnapshotStrict(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("read organization features: %w", err)
+	}
+	return productFeaturesResult(snapshot), nil
 }
 
 func (s *Service) SetOrganizationFeature(ctx context.Context, payload *gen.SetOrganizationFeaturePayload) (*gen.ProductFeatures, error) {

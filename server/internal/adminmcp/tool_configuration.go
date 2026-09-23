@@ -33,7 +33,6 @@ type OrganizationFeatures struct {
 	ConsentToolFilteringEnabled          bool   `json:"consent_tool_filtering_enabled"`
 	SessionPortabilityEnabled            bool   `json:"session_portability_enabled"`
 	NetworkIngressEnabled                bool   `json:"network_ingress_enabled"`
-	DeviceAgent                          bool   `json:"device_agent"`
 }
 
 type OrganizationChatAnalysisSettings struct {
@@ -59,7 +58,7 @@ func registerConfigurationTools(server *mcp.Server, organizations OrganizationRe
 		if configuration == nil {
 			return nil, OrganizationFeatures{}, errConfigurationUnavailable
 		}
-		features, err := configuration.GetOrganizationFeatures(ctx, &gen.GetOrganizationFeaturesPayload{OrganizationID: org.ID})
+		features, err := configuration.GetOrganizationFeaturesStrict(ctx, org.ID)
 		if err != nil || features == nil {
 			return nil, OrganizationFeatures{}, errConfigurationUnavailable
 		}
@@ -74,7 +73,7 @@ func registerConfigurationTools(server *mcp.Server, organizations OrganizationRe
 			RemoteSessionAutoRefreshEnabled:      features.RemoteSessionAutoRefreshEnabled,
 			RemoteSessionAutoRefreshEnforced:     features.RemoteSessionAutoRefreshEnforcedEnabled,
 			ConsentToolFilteringEnabled:          features.ConsentToolFilteringEnabled, SessionPortabilityEnabled: features.SessionPortabilityEnabled,
-			NetworkIngressEnabled: features.NetworkIngressEnabled, DeviceAgent: features.DeviceAgent,
+			NetworkIngressEnabled: features.NetworkIngressEnabled,
 		}, nil
 	})
 

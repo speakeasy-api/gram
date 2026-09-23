@@ -23,8 +23,8 @@ type recordingConfigurationReader struct {
 	err           error
 }
 
-func (r *recordingConfigurationReader) GetOrganizationFeatures(_ context.Context, input *gen.GetOrganizationFeaturesPayload) (*gen.ProductFeatures, error) {
-	r.featuresInput = input
+func (r *recordingConfigurationReader) GetOrganizationFeaturesStrict(_ context.Context, organizationID string) (*gen.ProductFeatures, error) {
+	r.featuresInput = &gen.GetOrganizationFeaturesPayload{OrganizationID: organizationID}
 	return r.features, r.err
 }
 
@@ -56,7 +56,7 @@ func TestOrganizationConfigurationReadsExactTargetAndSafeProjection(t *testing.T
 	require.Equal(t, "org-a", features.OrganizationID)
 	require.True(t, features.SSOEnabled)
 	require.True(t, features.PlatformMCPEnabled)
-	require.True(t, features.DeviceAgent)
+	require.NotContains(t, body, `"device_agent"`)
 	require.NotContains(t, body, "admin_session_token")
 
 	status, body, data = callStaffReadTool(t, reads, "get_organization_chat_analysis_settings", `{"organization_id":"org-a"}`)
@@ -83,6 +83,13 @@ func TestOrganizationConfigurationReadsFailClosed(t *testing.T) {
 		_, body, _ = callStaffReadTool(t, reads, name, `{"organization_id":"org-a"}`)
 		require.Contains(t, body, `"isError":true`)
 		require.NotContains(t, body, "private database failure")
+
+		if name == "get_organization_features" {
+			reads = testConfigurationReads()
+			reads.features = nil
+			_, body, _ = callStaffReadTool(t, reads, name, `{"organization_id":"org-a"}`)
+			require.Contains(t, body, `"isError":true`)
+		}
 
 		_, body, _ = callStaffReadTool(t, &recordingOrganizationReader{org: &gen.AdminOrganization{ID: "org-a"}}, name, `{"organization_id":"org-a"}`)
 		require.Contains(t, body, `"isError":true`)
