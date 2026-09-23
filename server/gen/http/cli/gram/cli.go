@@ -64,6 +64,7 @@ import (
 	modelkeysc "github.com/speakeasy-api/gram/server/gen/http/model_keys/client"
 	networkingressc "github.com/speakeasy-api/gram/server/gen/http/network_ingress/client"
 	oktaresourceconnectionsc "github.com/speakeasy-api/gram/server/gen/http/okta_resource_connections/client"
+	onboardingc "github.com/speakeasy-api/gram/server/gen/http/onboarding/client"
 	organizationassetsc "github.com/speakeasy-api/gram/server/gen/http/organization_assets/client"
 	organizationremotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/client"
 	organizationremotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/client"
@@ -154,6 +155,7 @@ func UsageCommands() []string {
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"network-ingress (get-ingress|create-ingress|update-ingress|rotate-credentials|get-delete-impact|delete-ingress|check-health)",
 		"okta-resource-connections (list|confirm|reset)",
+		"onboarding (list-reference-data|get-onboarding|save-stack|select-use-case|verify-step|get-use-case-status)",
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task)",
 		"otel (logs|metrics|traces|list-event-log|get-event-volume|get-event-facets)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
@@ -1903,6 +1905,29 @@ func ParseEndpoint(
 		oktaResourceConnectionsResetFlags            = flag.NewFlagSet("reset", flag.ExitOnError)
 		oktaResourceConnectionsResetBodyFlag         = oktaResourceConnectionsResetFlags.String("body", "REQUIRED", "")
 		oktaResourceConnectionsResetSessionTokenFlag = oktaResourceConnectionsResetFlags.String("session-token", "", "")
+
+		onboardingFlags = flag.NewFlagSet("onboarding", flag.ContinueOnError)
+
+		onboardingListReferenceDataFlags            = flag.NewFlagSet("list-reference-data", flag.ExitOnError)
+		onboardingListReferenceDataSessionTokenFlag = onboardingListReferenceDataFlags.String("session-token", "", "")
+
+		onboardingGetOnboardingFlags            = flag.NewFlagSet("get-onboarding", flag.ExitOnError)
+		onboardingGetOnboardingSessionTokenFlag = onboardingGetOnboardingFlags.String("session-token", "", "")
+
+		onboardingSaveStackFlags            = flag.NewFlagSet("save-stack", flag.ExitOnError)
+		onboardingSaveStackBodyFlag         = onboardingSaveStackFlags.String("body", "REQUIRED", "")
+		onboardingSaveStackSessionTokenFlag = onboardingSaveStackFlags.String("session-token", "", "")
+
+		onboardingSelectUseCaseFlags            = flag.NewFlagSet("select-use-case", flag.ExitOnError)
+		onboardingSelectUseCaseBodyFlag         = onboardingSelectUseCaseFlags.String("body", "REQUIRED", "")
+		onboardingSelectUseCaseSessionTokenFlag = onboardingSelectUseCaseFlags.String("session-token", "", "")
+
+		onboardingVerifyStepFlags            = flag.NewFlagSet("verify-step", flag.ExitOnError)
+		onboardingVerifyStepBodyFlag         = onboardingVerifyStepFlags.String("body", "REQUIRED", "")
+		onboardingVerifyStepSessionTokenFlag = onboardingVerifyStepFlags.String("session-token", "", "")
+
+		onboardingGetUseCaseStatusFlags            = flag.NewFlagSet("get-use-case-status", flag.ExitOnError)
+		onboardingGetUseCaseStatusSessionTokenFlag = onboardingGetUseCaseStatusFlags.String("session-token", "", "")
 
 		organizationsFlags = flag.NewFlagSet("organizations", flag.ContinueOnError)
 
@@ -4778,6 +4803,14 @@ func ParseEndpoint(
 	oktaResourceConnectionsConfirmFlags.Usage = oktaResourceConnectionsConfirmUsage
 	oktaResourceConnectionsResetFlags.Usage = oktaResourceConnectionsResetUsage
 
+	onboardingFlags.Usage = onboardingUsage
+	onboardingListReferenceDataFlags.Usage = onboardingListReferenceDataUsage
+	onboardingGetOnboardingFlags.Usage = onboardingGetOnboardingUsage
+	onboardingSaveStackFlags.Usage = onboardingSaveStackUsage
+	onboardingSelectUseCaseFlags.Usage = onboardingSelectUseCaseUsage
+	onboardingVerifyStepFlags.Usage = onboardingVerifyStepUsage
+	onboardingGetUseCaseStatusFlags.Usage = onboardingGetUseCaseStatusUsage
+
 	organizationsFlags.Usage = organizationsUsage
 	organizationsGetFlags.Usage = organizationsGetUsage
 	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
@@ -5416,6 +5449,8 @@ func ParseEndpoint(
 			svcf = networkIngressFlags
 		case "okta-resource-connections":
 			svcf = oktaResourceConnectionsFlags
+		case "onboarding":
+			svcf = onboardingFlags
 		case "organizations":
 			svcf = organizationsFlags
 		case "otel":
@@ -6625,6 +6660,28 @@ func ParseEndpoint(
 
 			case "reset":
 				epf = oktaResourceConnectionsResetFlags
+
+			}
+
+		case "onboarding":
+			switch epn {
+			case "list-reference-data":
+				epf = onboardingListReferenceDataFlags
+
+			case "get-onboarding":
+				epf = onboardingGetOnboardingFlags
+
+			case "save-stack":
+				epf = onboardingSaveStackFlags
+
+			case "select-use-case":
+				epf = onboardingSelectUseCaseFlags
+
+			case "verify-step":
+				epf = onboardingVerifyStepFlags
+
+			case "get-use-case-status":
+				epf = onboardingGetUseCaseStatusFlags
 
 			}
 
@@ -9292,6 +9349,28 @@ func ParseEndpoint(
 			case "reset":
 				endpoint = c.Reset()
 				data, err = oktaresourceconnectionsc.BuildResetPayload(*oktaResourceConnectionsResetBodyFlag, *oktaResourceConnectionsResetSessionTokenFlag)
+			}
+		case "onboarding":
+			c := onboardingc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-reference-data":
+				endpoint = c.ListReferenceData()
+				data, err = onboardingc.BuildListReferenceDataPayload(*onboardingListReferenceDataSessionTokenFlag)
+			case "get-onboarding":
+				endpoint = c.GetOnboarding()
+				data, err = onboardingc.BuildGetOnboardingPayload(*onboardingGetOnboardingSessionTokenFlag)
+			case "save-stack":
+				endpoint = c.SaveStack()
+				data, err = onboardingc.BuildSaveStackPayload(*onboardingSaveStackBodyFlag, *onboardingSaveStackSessionTokenFlag)
+			case "select-use-case":
+				endpoint = c.SelectUseCase()
+				data, err = onboardingc.BuildSelectUseCasePayload(*onboardingSelectUseCaseBodyFlag, *onboardingSelectUseCaseSessionTokenFlag)
+			case "verify-step":
+				endpoint = c.VerifyStep()
+				data, err = onboardingc.BuildVerifyStepPayload(*onboardingVerifyStepBodyFlag, *onboardingVerifyStepSessionTokenFlag)
+			case "get-use-case-status":
+				endpoint = c.GetUseCaseStatus()
+				data, err = onboardingc.BuildGetUseCaseStatusPayload(*onboardingGetUseCaseStatusSessionTokenFlag)
 			}
 		case "organizations":
 			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -18496,6 +18575,136 @@ func oktaResourceConnectionsResetUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "okta-resource-connections reset --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+// onboardingUsage displays the usage of the onboarding command and its
+// subcommands.
+func onboardingUsage() {
+	fmt.Fprintln(os.Stderr, `Organization onboarding: the organization's stack, the one use case to reach first, the one next step to get there, and verification against real evidence.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] onboarding COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-reference-data: List the providers with their plans and products, the use cases and the MDM vendors the wizard offers.`)
+	fmt.Fprintln(os.Stderr, `    get-onboarding: Get the organization's onboarding answers, stage, planned steps and next step.`)
+	fmt.Fprintln(os.Stderr, `    save-stack: Save the organization's stack: the providers it uses with their plans, its products and its MDM vendor. Keeps a previously picked use case and recomputes the next step. Organization admins only.`)
+	fmt.Fprintln(os.Stderr, `    select-use-case: Pick the one use case to reach first. Requires a saved stack. Changing the use case starts a new plan. Organization admins only.`)
+	fmt.Fprintln(os.Stderr, `    verify-step: Check a planned step against the last 30 days of evidence. A passing check records the step as verified and moves to the next one. Organization admins only.`)
+	fmt.Fprintln(os.Stderr, `    get-use-case-status: Report, for every use case, whether the organization has evidence for it in the last 30 days. Product pages use this to decide whether their surface is set up.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s onboarding COMMAND --help\n", os.Args[0])
+}
+func onboardingListReferenceDataUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] onboarding list-reference-data", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the providers with their plans and products, the use cases and the MDM vendors the wizard offers.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "onboarding list-reference-data --session-token \"abc123\"")
+}
+
+func onboardingGetOnboardingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] onboarding get-onboarding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the organization's onboarding answers, stage, planned steps and next step.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "onboarding get-onboarding --session-token \"abc123\"")
+}
+
+func onboardingSaveStackUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] onboarding save-stack", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Save the organization's stack: the providers it uses with their plans, its products and its MDM vendor. Keeps a previously picked use case and recomputes the next step. Organization admins only.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "onboarding save-stack --body '{\n      \"mdm_vendor\": \"intune\",\n      \"product_slugs\": [\n         \"abc123\"\n      ],\n      \"providers\": [\n         {\n            \"plan_slug\": \"abc123\",\n            \"provider_slug\": \"abc123\"\n         }\n      ]\n   }' --session-token \"abc123\"")
+}
+
+func onboardingSelectUseCaseUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] onboarding select-use-case", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Pick the one use case to reach first. Requires a saved stack. Changing the use case starts a new plan. Organization admins only.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "onboarding select-use-case --body '{\n      \"use_case\": \"cost-tracking\"\n   }' --session-token \"abc123\"")
+}
+
+func onboardingVerifyStepUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] onboarding verify-step", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Check a planned step against the last 30 days of evidence. A passing check records the step as verified and moves to the next one. Organization admins only.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "onboarding verify-step --body '{\n      \"step_slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func onboardingGetUseCaseStatusUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] onboarding get-use-case-status", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Report, for every use case, whether the organization has evidence for it in the last 30 days. Product pages use this to decide whether their surface is set up.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "onboarding get-use-case-status --session-token \"abc123\"")
 }
 
 // organizationsUsage displays the usage of the organizations command and its

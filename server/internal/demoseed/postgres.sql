@@ -468,6 +468,8 @@ BEGIN
   DELETE FROM litellm_instances WHERE organization_id = demo_org;
   DELETE FROM api_keys WHERE organization_id = demo_org;
   DELETE FROM organization_setup_tasks WHERE organization_id = demo_org;
+  -- Selected products and step progress hang off the answers row and go with it.
+  DELETE FROM organization_onboarding_answers WHERE organization_id = demo_org;
   DELETE FROM business_memories WHERE organization_id = demo_org;
   DELETE FROM principal_grants
   WHERE organization_id = demo_org
@@ -513,6 +515,26 @@ BEGIN
      'security-owner@demo.getgram.ai', NULL),
     (demo_org, 'configure-policies', 'done', NULL, NULL, now()),
     (demo_org, 'platform-mcp', 'todo', NULL, NULL, now());
+
+  -- Onboarding: answers for the guided flow, with one step already verified
+  -- so the wizard shows progress and a next step (Anthropic inference hooks).
+  -- Provider and product rows resolve reference ids by slug. The server syncs
+  -- the catalog at startup, so a seed against a fresh database records neither
+  -- until the next reseed; the answers row itself never depends on the catalog.
+  INSERT INTO organization_onboarding_answers (organization_id, mdm_vendor, use_case)
+  VALUES (demo_org, 'jamf', 'observability');
+  INSERT INTO organization_onboarding_providers (organization_id, provider_id, plan_id)
+  SELECT demo_org, pr.id, pl.id
+  FROM (VALUES ('anthropic', 'anthropic-enterprise'), ('cursor', 'cursor-teams'))
+    AS sel (provider_slug, plan_slug)
+  JOIN onboarding_providers pr ON pr.slug = sel.provider_slug
+  LEFT JOIN onboarding_plans pl ON pl.slug = sel.plan_slug;
+  INSERT INTO organization_onboarding_products (organization_id, product_id)
+  SELECT demo_org, p.id
+  FROM onboarding_products p
+  WHERE p.slug IN ('claude-code-cli', 'cursor');
+  INSERT INTO organization_onboarding_steps (organization_id, step_slug, verified_at)
+  VALUES (demo_org, 'plugin-distribution:cursor', now());
 
   -- Memberships: fake, credential-less members so team/enrollment/facepile
   -- surfaces render. Real users still never join the demo org — access is by
@@ -2360,6 +2382,11 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE organization_id = demo_org;
   IF stray <> 4 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 4 setup task overrides, found %', stray;
+  END IF;
+  SELECT count(*) INTO stray FROM organization_onboarding_answers
+  WHERE organization_id = demo_org;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 onboarding answers row, found %', stray;
   END IF;
   SELECT count(*) INTO stray FROM organization_features
   WHERE organization_id = demo_org AND feature_name = 'network_ingress';
