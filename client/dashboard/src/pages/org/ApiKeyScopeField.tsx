@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/Badge";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
 import { Check, X } from "lucide-react";
+import { useId } from "react";
 
 export const DEFAULT_API_KEY_SCOPE = "consumer";
 
@@ -140,27 +141,36 @@ function ScopeGroupHeading({ children }: { children: string }): JSX.Element {
  * as the `scope` field, so the values here are the API scope names verbatim.
  */
 export function ApiKeyScopeField(): JSX.Element {
+  // The guidance sits above the cards rather than in AnyField's `hint` slot:
+  // the option list is tall enough that a trailing hint lands offscreen.
+  const hintId = useId();
+
   return (
     <AnyField
       label="Scope"
       optionality="hidden"
-      hint="A key's scope is fixed once it is created. Pick the narrowest scope that covers the job."
-      render={({ "aria-describedby": describedBy }) => (
-        <RadioCardGroup
-          name="scope"
-          defaultValue={DEFAULT_API_KEY_SCOPE}
-          aria-label="Scope"
-          aria-describedby={describedBy}
-        >
-          <ScopeGroupHeading>Platform access</ScopeGroupHeading>
-          {GENERAL_SCOPE_OPTIONS.map((option) => (
-            <ScopeOptionCard key={option.value} option={option} />
-          ))}
-          <ScopeGroupHeading>Purpose-built keys</ScopeGroupHeading>
-          {PURPOSE_BUILT_SCOPE_OPTIONS.map((option) => (
-            <ScopeOptionCard key={option.value} option={option} />
-          ))}
-        </RadioCardGroup>
+      render={() => (
+        <>
+          <Text small muted id={hintId}>
+            A key's scope is fixed once it is created. Pick the narrowest scope
+            that covers the job.
+          </Text>
+          <RadioCardGroup
+            name="scope"
+            defaultValue={DEFAULT_API_KEY_SCOPE}
+            aria-label="Scope"
+            aria-describedby={hintId}
+          >
+            <ScopeGroupHeading>Platform access</ScopeGroupHeading>
+            {GENERAL_SCOPE_OPTIONS.map((option) => (
+              <ScopeOptionCard key={option.value} option={option} />
+            ))}
+            <ScopeGroupHeading>Purpose-built keys</ScopeGroupHeading>
+            {PURPOSE_BUILT_SCOPE_OPTIONS.map((option) => (
+              <ScopeOptionCard key={option.value} option={option} />
+            ))}
+          </RadioCardGroup>
+        </>
       )}
     />
   );
