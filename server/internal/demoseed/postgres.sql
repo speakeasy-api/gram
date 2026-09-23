@@ -600,7 +600,7 @@ BEGIN
   -- own-sessions-only, hiding every seeded chat (owned by user_demo_*).
   INSERT INTO organization_features (organization_id, feature_name)
   SELECT demo_org, f
-  FROM unnest(ARRAY['logs', 'tool_io_logs', 'session_capture', 'skills', 'rbac']) AS f
+  FROM unnest(ARRAY['logs', 'tool_io_logs', 'session_capture', 'skills', 'rbac', 'signals_intelligence']) AS f
   ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
   FOR i IN 1 .. array_length(demo_user_ids, 1) LOOP

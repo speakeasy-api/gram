@@ -9,6 +9,10 @@ const testState = vi.hoisted(() => ({
   projectId: "project_a",
   orgMemoryEnabled: false,
   featureFlags: {} as Record<string, FeatureFlagResult>,
+  productFeatures: {
+    isSuccess: true,
+    data: { signalsIntelligenceEnabled: false },
+  },
 }));
 
 function route(title: string, url: string): AppRoute {
@@ -44,6 +48,7 @@ const routes = {
   home: route("Home", ""),
   insights: route("Insights", "insights"),
   logs: route("Logs", "logs"),
+  signalsIntelligence: route("Signals intelligence", "signals-intelligence"),
   mcp: route("MCP", "mcp"),
   orgMemory: route("Org Memory", "org-memory"),
   playground: route("Playground", "playground"),
@@ -70,10 +75,15 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: testState.projectId }),
+  useOrganization: () => ({ id: "organization_a" }),
 }));
 
 vi.mock("./useOrgMemoryDeveloperToggle", () => ({
   useOrgMemoryDeveloperToggle: () => [testState.orgMemoryEnabled, vi.fn()],
+}));
+
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  useProductFeatures: () => testState.productFeatures,
 }));
 
 function unavailableFeatureFlag(
@@ -85,6 +95,10 @@ function unavailableFeatureFlag(
 beforeEach(() => {
   testState.projectId = "project_a";
   testState.orgMemoryEnabled = false;
+  testState.productFeatures = {
+    isSuccess: true,
+    data: { signalsIntelligenceEnabled: false },
+  };
   testState.featureFlags = {
     [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
     [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
@@ -96,6 +110,26 @@ beforeEach(() => {
 });
 
 describe("useProjectNavRoutes", () => {
+  it("removes Signals intelligence when entitlement is disabled or a refresh fails", () => {
+    testState.productFeatures.data.signalsIntelligenceEnabled = true;
+    const { result, rerender } = renderHook(() => useProjectNavRoutes());
+    const visible = () =>
+      result.current.some(
+        (entry) => entry.route === routes.signalsIntelligence,
+      );
+    expect(visible()).toBe(true);
+
+    // Cached enabled data must not keep navigation open after a failed check.
+    testState.productFeatures.isSuccess = false;
+    rerender();
+    expect(visible()).toBe(false);
+
+    testState.productFeatures.isSuccess = true;
+    testState.productFeatures.data.signalsIntelligenceEnabled = false;
+    rerender();
+    expect(visible()).toBe(false);
+  });
+
   it.each(["loading", "disabled", "missing", "error"] as const)(
     "hides agent management when its rollout is %s",
     (status) => {

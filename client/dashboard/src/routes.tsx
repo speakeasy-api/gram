@@ -59,6 +59,7 @@ import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
 import Explore from "./pages/explore/Explore";
+import SignalsIntelligenceRoute from "./components/signals-intelligence-route";
 import IdentitiesIndex, {
   IdentityDetailIndexRedirect,
   IdentitiesRoot,
@@ -358,6 +359,13 @@ const ROUTE_STRUCTURE = {
         component: AssistantPage,
       },
     },
+  },
+  signalsIntelligence: {
+    title: "Signals intelligence",
+    url: "signals-intelligence",
+    icon: "radio",
+    stage: "preview",
+    component: SignalsIntelligenceRoute,
   },
   skills: {
     title: "Skills",
