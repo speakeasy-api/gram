@@ -1,10 +1,11 @@
 import { useMemo } from "react";
-import { useProject } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { AppRoute, useRoutes } from "@/routes";
 import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
 /** A project nav page plus the scopes that grant access to it. */
 export interface ProjectNavRoute {
@@ -37,6 +38,15 @@ export interface ProjectNavRoute {
 export function useProjectNavRoutes(): ProjectNavRoute[] {
   const routes = useRoutes();
   const { id: projectId } = useProject();
+  const organization = useOrganization();
+  const productFeatures = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
+  const isSignalsIntelligenceEnabled =
+    productFeatures.isSuccess &&
+    productFeatures.data.signalsIntelligenceEnabled === true;
   const agentManagementFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
   const userSessionsFlag = useFeatureFlag(FEATURE_FLAGS.userSessionsDashboard);
   const assistantsFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
@@ -115,6 +125,15 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       ...(isExploreEnabled ? [{ route: routes.explore, scope: observe }] : []),
       { route: routes.insights, scope: observe },
       { route: routes.agentSessions, scope: observe },
+      ...(isSignalsIntelligenceEnabled
+        ? [
+            {
+              route: routes.signalsIntelligence,
+              scope: read,
+              resourceId: projectId,
+            },
+          ]
+        : []),
       ...(isOrgMemoryEnabled
         ? [{ route: routes.orgMemory, scope: observe }]
         : []),
@@ -131,5 +150,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     isExploreEnabled,
     isOrgMemoryEnabled,
     isRiskWatchdogEnabled,
+    isSignalsIntelligenceEnabled,
   ]);
 }
