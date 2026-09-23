@@ -5,7 +5,7 @@ import { Text } from "@/components/ui/Text";
 import { Check, X } from "lucide-react";
 import { useId } from "react";
 
-export const DEFAULT_API_KEY_SCOPE = "consumer";
+const DEFAULT_API_KEY_SCOPE = "consumer";
 
 type ApiKeyScopeOption = {
   /** Scope value sent to the API — also the label shown in the key list. */
