@@ -28,9 +28,11 @@ func keyPEM(t *testing.T, bits int) (string, string) {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, bits)
 	require.NoError(t, err)
+	private, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
 	pub, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
 	require.NoError(t, err)
-	return string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pub}))
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pub}))
 }
 
 func issuerForTest(t *testing.T) *Issuer {
@@ -47,7 +49,7 @@ func targetForTest() Target {
 
 func tenantContext(t *testing.T, target Target) context.Context {
 	t.Helper()
-	return contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: target.OrganizationID, ProjectID: &target.ProjectID, UserID: "creator-must-not-appear"})
+	return contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: target.OrganizationID, ProjectID: &target.ProjectID, UserID: "creator-must-not-appear", Email: new("creator@example.invalid")})
 }
 
 type notRevoked struct{}
@@ -145,6 +147,7 @@ func TestAPIKeyAssertionNeverPromotesCreator(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "creator-must-not-appear")
 	require.NotContains(t, claims, "user_id")
+	require.NotContains(t, claims, "email")
 }
 
 func TestSessionAPIKeyAndAgentRetainVerifiedSubject(t *testing.T) {
@@ -158,6 +161,7 @@ func TestSessionAPIKeyAndAgentRetainVerifiedSubject(t *testing.T) {
 		require.NoError(t, err)
 		standard, claims := verifiedClaims(t, raw, keys)
 		require.Contains(t, claims["sub"], subject.ID)
+		require.NotContains(t, claims, "email")
 		require.LessOrEqual(t, standard.Expiry.Time().Sub(standard.IssuedAt.Time()), 20*time.Second)
 	}
 }
@@ -173,6 +177,37 @@ func TestUnsupportedProvenanceOmitsAssertion(t *testing.T) {
 		raw, err := issuer.Mint(c, target)
 		require.NoError(t, err)
 		require.Empty(t, raw)
+	}
+}
+
+func TestHumanAssertionIncludesOnlyMatchingUserEmail(t *testing.T) {
+	t.Parallel()
+	issuer := issuerForTest(t)
+	target := targetForTest()
+	keys := servedKeys(t, issuer)
+	for _, discovery := range []bool{false, true} {
+		for _, matchingUser := range []bool{false, true} {
+			auth := &contextvalues.AuthContext{ActiveOrganizationID: target.OrganizationID, ProjectID: &target.ProjectID, UserID: "another_user", Email: new("user@example.invalid")}
+			if matchingUser {
+				auth.UserID = "user_test"
+			}
+			ctx := contextvalues.SetAuthContext(t.Context(), auth)
+			if discovery {
+				ctx = mcpidentity.NewValidatorBoundary().StampConsentDiscovery(ctx, "user_test", time.Now().Add(time.Minute))
+			} else {
+				ctx = sessionContext(t, ctx, urn.NewUserSubject("user_test"), time.Hour)
+			}
+			raw, err := issuer.Mint(ctx, target)
+			require.NoError(t, err)
+			_, claims := verifiedClaims(t, raw, keys)
+			require.Equal(t, "user:user_test", claims["sub"])
+			if matchingUser {
+				require.Equal(t, "user@example.invalid", claims["email"])
+			} else {
+				require.NotContains(t, claims, "email")
+			}
+			require.NotContains(t, claims, "email_verified")
+		}
 	}
 }
 
@@ -217,8 +252,7 @@ func TestRotationPrepublishOverlapAndRetirement(t *testing.T) {
 	require.NoError(t, err)
 	require.Error(t, token.Claims(servedKeys(t, retired), &josejwt.Claims{}))
 	// PKCS#1 public encoding and whitespace leave the RFC 7638 kid unchanged.
-	pkcs1 := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PUBLIC KEY", Bytes: x509.MarshalPKCS1PublicKey(&a.key.PublicKey)}))
-	same, err := New(privateA, "\n"+pkcs1, "https://gram.example", false)
+	same, err := New(privateA, "\n"+publicB+publicA+publicA, "https://gram.example", false)
 	require.NoError(t, err)
 	require.Equal(t, a.kid, same.kid)
 }
@@ -245,6 +279,22 @@ func TestStartupRejectsPartialOrUnsafeConfiguration(t *testing.T) {
 	raw, err := disabled.Mint(t.Context(), targetForTest())
 	require.NoError(t, err)
 	require.Empty(t, raw)
+}
+
+func TestStartupRequiresPKCS8PrivateAndSPKIPublicKeys(t *testing.T) {
+	t.Parallel()
+	issuer := issuerForTest(t)
+	private, public := keyPEM(t, 2048)
+	legacyPrivate := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(issuer.key)}))
+	legacyPublic := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PUBLIC KEY", Bytes: x509.MarshalPKCS1PublicKey(&issuer.key.PublicKey)}))
+	_, err := New(legacyPrivate, public, "https://tunnel.example", false)
+	require.ErrorContains(t, err, "PKCS#8")
+	_, err = New(private, legacyPublic, "https://tunnel.example", false)
+	require.ErrorContains(t, err, "SubjectPublicKeyInfo")
+	_, err = New(private, public, "", false)
+	require.ErrorContains(t, err, "GRAM_AUTHZ_ISSUER_URL")
+	_, err = New("", "", "https://tunnel.example", false)
+	require.ErrorContains(t, err, "GRAM_AUTHZ_PRIVATE_KEY")
 }
 
 func TestJWKSCacheAndInboundStripping(t *testing.T) {

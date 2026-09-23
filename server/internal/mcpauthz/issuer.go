@@ -64,15 +64,15 @@ type Target struct {
 }
 
 // New validates the complete configuration before serving traffic. Both key
-// settings empty disables issuance; partial configuration is always an error.
-func New(privatePEM, publicPEM, serverURL string, allowHTTP bool) (*Issuer, error) {
-	if strings.TrimSpace(privatePEM) == "" && strings.TrimSpace(publicPEM) == "" {
+// settings and issuer empty disables issuance; partial configuration is an error.
+func New(privatePEM, publicPEM, issuerURL string, allowHTTP bool) (*Issuer, error) {
+	if strings.TrimSpace(privatePEM) == "" && strings.TrimSpace(publicPEM) == "" && strings.TrimSpace(issuerURL) == "" {
 		return &Issuer{key: nil, kid: "", issuer: "", jwks: nil, etag: ""}, nil
 	}
-	if strings.TrimSpace(privatePEM) == "" || strings.TrimSpace(publicPEM) == "" {
-		return nil, errors.New("both GRAM_AUTHZ_PRIVATE_KEY and GRAM_AUTHZ_PUBLIC_KEYS are required")
+	if strings.TrimSpace(privatePEM) == "" || strings.TrimSpace(publicPEM) == "" || strings.TrimSpace(issuerURL) == "" {
+		return nil, errors.New("GRAM_AUTHZ_PRIVATE_KEY, GRAM_AUTHZ_PUBLIC_KEYS and GRAM_AUTHZ_ISSUER_URL are required")
 	}
-	u, err := url.Parse(serverURL)
+	u, err := url.Parse(issuerURL)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" ||
 		(u.Scheme != "https" && (!allowHTTP || u.Scheme != "http")) || (u.Path != "" && u.Path != "/") || u.RawPath != "" {
 		return nil, errors.New("caller assertion issuer must be an HTTPS origin (HTTP allowed only locally)")
@@ -81,15 +81,10 @@ func New(privatePEM, publicPEM, serverURL string, allowHTTP bool) (*Issuer, erro
 	if err != nil || len(bytes.TrimSpace(rest)) != 0 {
 		return nil, errors.New("GRAM_AUTHZ_PRIVATE_KEY must contain exactly one private PEM key")
 	}
-	var parsed any
-	switch block.Type {
-	case "RSA PRIVATE KEY":
-		parsed, err = x509.ParsePKCS1PrivateKey(block.Bytes)
-	case "PRIVATE KEY":
-		parsed, err = x509.ParsePKCS8PrivateKey(block.Bytes)
-	default:
-		return nil, errors.New("unsupported caller assertion private key format")
+	if block.Type != "PRIVATE KEY" {
+		return nil, errors.New("GRAM_AUTHZ_PRIVATE_KEY must be a PKCS#8 PEM key")
 	}
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	key, ok := parsed.(*rsa.PrivateKey)
 	if err != nil || !ok || key.N.BitLen() < 2048 {
 		return nil, errors.New("caller assertion private key must be RSA with at least 2048 bits")
@@ -109,15 +104,10 @@ func New(privatePEM, publicPEM, serverURL string, allowHTTP bool) (*Issuer, erro
 			return nil, errors.New("invalid GRAM_AUTHZ_PUBLIC_KEYS PEM bundle")
 		}
 		remaining = rest
-		var parsed any
-		switch block.Type {
-		case "PUBLIC KEY":
-			parsed, err = x509.ParsePKIXPublicKey(block.Bytes)
-		case "RSA PUBLIC KEY":
-			parsed, err = x509.ParsePKCS1PublicKey(block.Bytes)
-		default:
-			return nil, errors.New("GRAM_AUTHZ_PUBLIC_KEYS must contain only public RSA keys")
+		if block.Type != "PUBLIC KEY" {
+			return nil, errors.New("GRAM_AUTHZ_PUBLIC_KEYS must contain only SubjectPublicKeyInfo PEM keys")
 		}
+		parsed, err := x509.ParsePKIXPublicKey(block.Bytes)
 		pub, ok := parsed.(*rsa.PublicKey)
 		if err != nil || !ok || pub.N.BitLen() < 2048 || pub.E < 3 || pub.E%2 == 0 {
 			return nil, errors.New("caller assertion public keys must be RSA with at least 2048 bits")
@@ -140,7 +130,7 @@ func New(privatePEM, publicPEM, serverURL string, allowHTTP bool) (*Issuer, erro
 		return nil, fmt.Errorf("encode caller assertion JWKS: %w", err)
 	}
 	digest := sha256.Sum256(document)
-	return &Issuer{key: key, kid: active.KeyID, issuer: strings.TrimRight(serverURL, "/"), jwks: document,
+	return &Issuer{key: key, kid: active.KeyID, issuer: strings.TrimRight(issuerURL, "/"), jwks: document,
 		etag: `"` + base64.RawURLEncoding.EncodeToString(digest[:]) + `"`}, nil
 }
 
@@ -263,6 +253,9 @@ func (s *Issuer) Mint(ctx context.Context, target Target) (string, error) {
 		"organization_id": target.OrganizationID, "project_id": target.ProjectID.String(),
 		"mcp_server_id": target.MCPServerID, "tunneled_mcp_server_id": target.TunnelID.String(),
 		"version": 1, "purpose": "mcp_request",
+	}
+	if principalType == "user" && auth.UserID == subject && auth.Email != nil && *auth.Email != "" {
+		claims["email"] = *auth.Email
 	}
 	if identity.Kind() == mcpidentity.KindConsentDiscovery {
 		claims["purpose"] = "mcp_discovery"

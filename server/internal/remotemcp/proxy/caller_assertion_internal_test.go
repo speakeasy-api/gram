@@ -30,9 +30,11 @@ func assertionProxy(t *testing.T, remoteURL string) (*Proxy, context.Context, *r
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
+	private, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
 	pub, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
 	require.NoError(t, err)
-	issuer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pub})), "https://gram.example", false)
+	issuer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pub})), "https://gram.example", false)
 	require.NoError(t, err)
 	target := mcpauthz.Target{OrganizationID: "org_test", ProjectID: uuid.New(), MCPServerID: uuid.NewString(), TunnelID: uuid.New()}
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: target.OrganizationID, ProjectID: &target.ProjectID})

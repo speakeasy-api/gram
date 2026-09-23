@@ -17,23 +17,33 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
 func callerIssuerForTest(t *testing.T) (*mcpauthz.Issuer, *rsa.PublicKey) {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
+	private, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
 	public, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
 	require.NoError(t, err)
-	issuer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), "https://gram.example", false)
+	issuer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), "https://gram.example", false)
 	require.NoError(t, err)
 	return issuer, &key.PublicKey
 }
@@ -51,6 +61,15 @@ func TestPrivateTunnelConsentWorksWithStrictDiscoveryAssertion(t *testing.T) {
 	stateID, csrf := seedModernConsentChallenge(t, ctx, ti, sessionIssuer.ID, client, serverID, slug)
 	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	require.NoError(t, err)
+	profile, err := usersrepo.New(ti.conn).GetUser(ctx, state.Subject.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, profile.Email)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	inheritedAuth := *auth
+	inheritedAuth.Email = new("untrusted-context@example.test")
+	require.NotEqual(t, profile.Email, *inheritedAuth.Email)
+	ctx = contextvalues.SetAuthContext(ctx, &inheritedAuth)
 	// These fields are written only by the successful IDP callback.
 	state.AuthorizerUserID = state.Subject.ID
 	state.AuthorizerImpersonated = new(false)
@@ -75,6 +94,14 @@ func TestPrivateTunnelConsentWorksWithStrictDiscoveryAssertion(t *testing.T) {
 		}
 		if claims["purpose"] != "mcp_discovery" || claims["sub"] != "user:"+state.Subject.ID || claims["organization_id"] != endpoint.OrganizationID || claims["project_id"] != projectID.String() {
 			http.Error(w, "wrong binding", http.StatusForbidden)
+			return
+		}
+		if claims["email"] != profile.Email {
+			http.Error(w, "trusted profile email required", http.StatusForbidden)
+			return
+		}
+		if _, present := claims["email_verified"]; present {
+			http.Error(w, "email verification is not established", http.StatusForbidden)
 			return
 		}
 		// The destination enforces discovery's signed allowlist; tools/call cannot
@@ -199,11 +226,14 @@ func TestMetaDispatchAssertionBindsPrivateTunnelMember(t *testing.T) {
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	projectID, orgID := *auth.ProjectID, auth.ActiveOrganizationID
+	profile, err := usersrepo.New(ti.conn).GetUser(ctx, auth.UserID)
+	require.NoError(t, err)
+	require.NotEmpty(t, profile.Email)
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	slug := "assertion-meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, shared)
 	memberID, tunnelID := createPrivateTunneledServer(t, ctx, ti, projectID, shared, "assertion-member", "")
-	_, err := metamcprepo.New(ti.conn).CreateMetaMCPMember(ctx, metamcprepo.CreateMetaMCPMemberParams{ProjectID: projectID, MetaMcpServerID: meta.ID, McpServerID: memberID})
+	_, err = metamcprepo.New(ti.conn).CreateMetaMCPMember(ctx, metamcprepo.CreateMetaMCPMemberParams{ProjectID: projectID, MetaMcpServerID: meta.ID, McpServerID: memberID})
 	require.NoError(t, err)
 	seedMetaMemberConnectGrant(t, ctx, ti.conn, orgID, memberID)
 	gateway := &fakeTunnelGateway{t: t, agentSessionID: "test-agent", backendSessionID: "backend-session", mu: sync.Mutex{}}
@@ -226,5 +256,46 @@ func TestMetaDispatchAssertionBindsPrivateTunnelMember(t *testing.T) {
 		require.Equal(t, memberID.String(), claims["mcp_server_id"])
 		require.Equal(t, subject.String(), claims["sub"])
 		require.Equal(t, "mcp_request", claims["purpose"])
+		require.Equal(t, profile.Email, claims["email"])
+		require.NotContains(t, claims, "email_verified")
 	}
+}
+
+func TestCallerProfileLookupFailureIsOperational(t *testing.T) {
+	t.Parallel()
+	issuer, _ := callerIssuerForTest(t)
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	shared := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	slug := "assertion-profile-" + uuid.NewString()
+	createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, shared)
+	// The bearer is valid, but its human profile cannot be loaded.
+	bearer := mintMetaIssuerBearer(t, ti, slug, shared, urn.NewUserSubject("missing-profile"))
+	response, err := servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), bearer, nil)
+	require.Error(t, err)
+	require.NotContains(t, response.Header().Get("WWW-Authenticate"), "invalid_token")
+	var metrics metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &metrics))
+	points := map[attribute.Set]int64{}
+	for _, scope := range metrics.ScopeMetrics {
+		for _, metric := range scope.Metrics {
+			if metric.Name != mcpmetrics.InstrumentMCPRequestRejected {
+				continue
+			}
+			sum, ok := metric.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, point := range sum.DataPoints {
+				points[point.Attributes] = point.Value
+			}
+		}
+	}
+	require.Len(t, points, 1)
+	require.Equal(t, int64(1), points[attribute.NewSet(
+		attr.OAuthFailureReason("caller_profile_unavailable"),
+		attr.McpURL("/mcp/"+slug),
+		attr.McpSurface(string(mcpmetrics.SurfaceMeta)),
+		attr.NetworkSurface(mcpmetrics.NetworkSurfacePublic),
+	)])
 }

@@ -96,7 +96,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
-	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -442,8 +441,10 @@ func mcpRuntimeFlags() []cli.Flag {
 			Required: true,
 			EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
 		},
-		&cli.StringFlag{Name: "authz-private-key", Usage: "RSA private PEM for private-tunnel caller assertions", EnvVars: []string{"GRAM_AUTHZ_PRIVATE_KEY"}},
-		&cli.StringFlag{Name: "authz-public-keys", Usage: "Public RSA PEM bundle for caller assertion verification and rotation", EnvVars: []string{"GRAM_AUTHZ_PUBLIC_KEYS"}},
+		&cli.BoolFlag{Name: "tunnel-gateway-enabled", Usage: "Require caller identity signing configuration for tunnel gateways", EnvVars: []string{"GRAM_TUNNEL_GATEWAY_ENABLED"}},
+		&cli.StringFlag{Name: "authz-private-key", Usage: "PKCS#8 RSA private PEM for private-tunnel caller assertions", EnvVars: []string{"GRAM_AUTHZ_PRIVATE_KEY"}},
+		&cli.StringFlag{Name: "authz-public-keys", Usage: "SubjectPublicKeyInfo RSA PEM bundle for caller assertion verification and rotation", EnvVars: []string{"GRAM_AUTHZ_PUBLIC_KEYS"}},
+		&cli.StringFlag{Name: "authz-issuer-url", Usage: "AICP issuer origin for this deployment", EnvVars: []string{"GRAM_AUTHZ_ISSUER_URL"}},
 		&cli.StringFlag{
 			Name:     usersessions.JWTSigningKeyFlag,
 			Usage:    "Key for JWT signing",
@@ -851,7 +852,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("invalid server url: %w", err)
 			}
 
-			callerAssertions, err := mcpauthz.New(c.String("authz-private-key"), c.String("authz-public-keys"), serverURL.String(), c.String("environment") == "local")
+			callerAssertions, err := newCallerAssertions(c)
 			if err != nil {
 				return fmt.Errorf("configure caller assertions: %w", err)
 			}
@@ -1320,8 +1321,8 @@ func newStartCommand() *cli.Command {
 			// Stamp the serving-policy contract and strip private-ingress authority
 			// at the outermost public-listener boundary, before short-circuit
 			// handlers, tracing, or logging.
-			mux.Use(callerAssertions.Middleware)
 			mux.Use(middleware.NetworkServingPolicyVersion)
+			mux.Use(callerAssertions.Middleware)
 			mux.Use(middleware.StripPrivateIngressHeaders)
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

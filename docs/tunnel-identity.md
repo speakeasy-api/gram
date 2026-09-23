@@ -6,25 +6,14 @@ and uses the verified principal in its own access policy. The assertion does
 not contain the user's Gram credentials or replace the receiving server's
 authorization rules.
 
-## Configuration
+AICP is the issuer:
 
-Configure the same values on every Gram MCP serving replica (`gram start`,
-`gram mcp`, and `gram network-ingress-server` when used):
+- **Issuer (`iss`):** `https://tunnel.speakeasy.com`
+- **Public JWKS:** `https://tunnel.speakeasy.com/.well-known/jwks.json`
 
-| Environment variable     | Value                                                                                                                                                     |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GRAM_AUTHZ_PRIVATE_KEY` | One RSA private key, PKCS#8 or PKCS#1 PEM, at least 2048 bits.                                                                                            |
-| `GRAM_AUTHZ_PUBLIC_KEYS` | PEM bundle of public RSA keys in SubjectPublicKeyInfo or PKCS#1 format. Must include the signing key's public half; may include future and retiring keys. |
-| `GRAM_SERVER_URL`        | Canonical HTTPS origin used as the JWT issuer, with the trailing slash removed.                                                                           |
-
-Both key variables absent disables issuance. Partial configuration, invalid
-keys, or an active private key without a matching public key prevents startup.
-No database migration is needed. These keys are separate from
-`GRAM_JWT_SIGNING_KEY`, which protects Gram sessions.
-
-Terraform and Helm wiring lives in the separate `gram-infra` repository. The
-private key belongs in Secret Manager and is injected into the serving tiers;
-the tunnel gateway and customer agent do not need it.
+These are AICP's endpoints, independent of your server's OAuth provider or custom
+domain. No issuer configuration is needed in Gram for your server. Pin these
+values in your verifier.
 
 ## Wire contract
 
@@ -44,9 +33,10 @@ seconds, capped by the source credential's expiry where available.
 | Claim                           | Meaning                                                                                                                                  |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `version`                       | Contract version, currently `1`.                                                                                                         |
-| `iss`                           | Canonical configured Gram origin. Never derived from an incoming Host header.                                                            |
+| `iss`                           | `https://tunnel.speakeasy.com` (AICP).                                                                                                   |
 | `aud`                           | `tunneled-mcp-server:<TUNNELED_MCP_SERVER_ID>`. Identifies the destination, independently of gateway address, MCP slug or custom domain. |
 | `sub`                           | Typed principal identifier, for example `user:<USER_ID>`.                                                                                |
+| `email`                         | Human user's email from their Gram profile; absent for agents and API keys.                                                              |
 | `principal_type`                | Authenticated principal class; a machine credential is never represented as its owner's human identity.                                  |
 | `organization_id`, `project_id` | Destination tenant and project.                                                                                                          |
 | `mcp_server_id`                 | MCP wrapper serving this request.                                                                                                        |
@@ -60,7 +50,9 @@ Runtime requests use `purpose=mcp_request`. Supported subjects are `user:<USER_I
 `api_key:<API_KEY_ID>` and `agent:<AGENT_ID>`, with matching `principal_type`
 values `user`, `api_key` and `agent`. These are Gram identifiers, not email
 addresses or upstream account IDs. API keys and agents are never identified as
-their human creator or owner.
+their human creator or owner. Human assertions also carry `email`; use the
+stable `sub` as the identity key because an email can change. The assertion does
+not make an `email_verified` claim.
 
 A human authenticated into a live OAuth consent challenge can receive a
 discovery assertion before granting tool access. It has `purpose=mcp_discovery`
@@ -84,27 +76,25 @@ Synthetic OAuth keepalive probes are skipped for private tunnels while signing
 is enabled, preserving their prior connection verdict. Interactive consent
 validation uses the authenticated discovery assertion.
 
-When issuance is enabled, a caller whose authenticated organization or bound
-project differs from the destination is rejected before forwarding. In
-particular, use an API key scoped to the destination project.
+A caller whose authenticated organization or bound project differs from the
+destination is rejected before forwarding. Use an API key scoped to the
+destination project.
 
 ## Verification
 
-Fetch keys from the configured issuer's `/.well-known/jwks.json` endpoint over
-HTTPS. The route is public and supports GET, HEAD, ETag and conditional GET. It
-advertises a five-minute cache lifetime. When issuance is disabled it returns
-`{"keys":[]}`. The route may also be reachable on a custom domain, but verifiers
-must use the configured canonical issuer and its JWKS URL. On an unknown `kid`,
-refresh that configured JWKS once before rejecting the assertion.
+Fetch public keys from `https://tunnel.speakeasy.com/.well-known/jwks.json`.
+Cache them for up to five minutes. On an unknown `kid`, refresh from that URL
+once before rejecting the assertion. The endpoint supports GET, HEAD, ETag and
+conditional GET.
 
 The receiving server must:
 
-1. Read exactly one assertion and select an RSA signing key by `kid` from its
-   configured Gram JWKS. Do not follow a token-provided key URL or issuer.
+1. Read exactly one assertion and select an RSA signing key by `kid` from the
+   AICP JWKS above. Do not follow a token-provided key URL or issuer.
 2. Verify the signature with an explicit RS256 allowlist and require
    `typ=speakeasy-authz+jwt` and `version=1`.
-3. Require the expected issuer and destination audience. Check organization,
-   project and MCP server bindings against its own configuration.
+3. Require `iss=https://tunnel.speakeasy.com` and the destination audience. Check
+   organization, project and MCP server bindings against its own configuration.
 4. Require `iat` and `exp`, reject expired/future-dated tokens, and enforce a
    maximum 60-second lifetime with at most five seconds of clock tolerance.
 5. Check the principal type and purpose before applying the customer's access
