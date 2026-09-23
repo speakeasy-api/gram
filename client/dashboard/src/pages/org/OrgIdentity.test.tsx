@@ -237,7 +237,9 @@ describe("domain verification gate", () => {
       ["Single Sign-On", features.ssoEnabled],
       ["Directory Sync", features.scimEnabled],
     ] as const) {
-      const configure = section(name).getByRole("button", { name: "Configure" });
+      const configure = section(name).getByRole("button", {
+        name: "Configure",
+      });
       const setupHref = configure.closest("a")?.getAttribute("href");
       expect(setupHref).toBe(enabled ? "/example/setup/idp" : undefined);
     }
