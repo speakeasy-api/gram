@@ -1,5 +1,11 @@
 # admin
 
+## 0.5.1
+
+### Patch Changes
+
+- aa2f201: Records the flow that created an organization and shows it as "Created via" on the admin organization record, marking organizations created through the platform-admin prospect flow. Organizations with no recorded source read as "Not recorded".
+
 ## 0.5.0
 
 ### Minor Changes
