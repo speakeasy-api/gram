@@ -46,7 +46,7 @@ func (w *tokenResponseWire) UnmarshalJSON(data []byte) error {
 	response := struct {
 		*plain
 		ExpiresIn json.RawMessage `json:"expires_in"`
-	}{plain: &decoded}
+	}{plain: &decoded, ExpiresIn: nil}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return fmt.Errorf("decode token response fields: %w", err)
 	}
