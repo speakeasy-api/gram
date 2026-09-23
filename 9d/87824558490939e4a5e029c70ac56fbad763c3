@@ -1,0 +1,36 @@
+client/dashboard/src/pages/security/watchdog/SignalDrawer.tsx
+  h_e404c1a6a54184 215,219,252-253,259-266,305-307,313,315-317,321,334
+client/dashboard/src/pages/security/watchdog/Watchdog.signals-error.test.tsx
+  h_e404c1a6a54184 2-8,10-11,14-19,46-64,89,93-107,122-129,133-146,165-201
+client/dashboard/src/pages/security/watchdog/Watchdog.tsx
+  h_e404c1a6a54184 8-12,26,33,74-77,133,161-178,181-185,242-246,327-333,335-336,338-351,372-373,402,522
+client/dashboard/src/pages/security/watchdog/collect-findings.ts
+  h_e404c1a6a54184 64,72-77
+client/dashboard/src/sdk/src/funcs/riskOverviewGet.ts
+  h_e404c1a6a54184 112
+client/dashboard/src/sdk/src/funcs/riskSignalsGet.ts
+  h_e404c1a6a54184 111
+client/dashboard/src/sdk/src/models/operations/getriskoverview.ts
+  h_e404c1a6a54184 32-35,155,169,176
+client/dashboard/src/sdk/src/models/operations/getrisksignals.ts
+  h_e404c1a6a54184 32-35,155,169,176
+client/dashboard/src/sdk/src/react-query/riskOverview.core.ts
+  h_e404c1a6a54184 52,85
+client/dashboard/src/sdk/src/react-query/riskOverview.ts
+  h_e404c1a6a54184 113,132
+client/dashboard/src/sdk/src/react-query/riskSignals.core.ts
+  h_e404c1a6a54184 52,85
+client/dashboard/src/sdk/src/react-query/riskSignals.ts
+  h_e404c1a6a54184 113,132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9d87824558490939e4a5e029c70ac56fbad763c3",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
