@@ -92,23 +92,26 @@ func (c *Core) ListEnabledForMCPServer(
 	projectID, serverID uuid.UUID,
 	toolName string,
 ) ([]Policy, error) {
-	ownedIDs, err := c.queries.ListRiskPolicyMCPScopeServerIDs(ctx, repo.ListRiskPolicyMCPScopeServerIDsParams{
-		ProjectID:    projectID,
-		McpServerIds: []uuid.UUID{serverID},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("validate MCP server project: %w", err)
-	}
-	if len(ownedIDs) == 0 {
-		return []Policy{}, nil
-	}
+	var gatewayIDs []uuid.UUID
+	if serverID != uuid.Nil {
+		ownedIDs, err := c.queries.ListRiskPolicyMCPScopeServerIDs(ctx, repo.ListRiskPolicyMCPScopeServerIDsParams{
+			ProjectID:    projectID,
+			McpServerIds: []uuid.UUID{serverID},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("validate MCP server project: %w", err)
+		}
+		if len(ownedIDs) == 0 {
+			return []Policy{}, nil
+		}
 
-	gatewayIDs, err := c.queries.ListMetaMCPServerIDsContainingMCPServer(ctx, repo.ListMetaMCPServerIDsContainingMCPServerParams{
-		ProjectID:   projectID,
-		McpServerID: serverID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list MCP server gateways: %w", err)
+		gatewayIDs, err = c.queries.ListMetaMCPServerIDsContainingMCPServer(ctx, repo.ListMetaMCPServerIDsContainingMCPServerParams{
+			ProjectID:   projectID,
+			McpServerID: serverID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list MCP server gateways: %w", err)
+		}
 	}
 	rows, err := c.queries.ListEnabledRiskPoliciesByProject(ctx, projectID)
 	if err != nil {

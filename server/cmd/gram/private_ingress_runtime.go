@@ -199,6 +199,14 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	chatWriter.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
 	chatWriter.AddObserver(analysis.NewObserver(logger, analysisSignaler))
 	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, enc, openRouter), chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: r.Temporal}, telemLogger)
+	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
+	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
+		c, logger, tracerProvider, meterProvider, db, redisClient, featureFlags, completions, publishers, shadowMCPClient,
+	)
+	if err != nil {
+		return nil, err
+	}
+	r.cleanup = append(r.cleanup, mcpRiskScanner.Shutdown)
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	slackClient := slackclient.NewSlackClient(guardianPolicy)
@@ -244,7 +252,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		Encryption: enc, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 		BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,
 		RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager,
-		ShadowMCP: shadowmcp.NewClient(logger, db, cacheImpl, serverURL), Audit: auditLogger,
+		ShadowMCP: shadowMCPClient, MCPRisk: mcpRiskEvaluator, Audit: auditLogger,
 		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck,
 		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: challengeManager,
 	})

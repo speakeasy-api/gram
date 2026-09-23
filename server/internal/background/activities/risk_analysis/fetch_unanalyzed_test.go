@@ -76,6 +76,25 @@ func TestFetchUnanalyzed_DisabledPolicyReturnsEmpty(t *testing.T) {
 	require.Empty(t, result.Policies)
 }
 
+func TestFetchUnanalyzed_SkipsMCPScopedPolicies(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	scope := []byte(`{"servers":[{"mcp_server_id":"` + uuid.NewString() + `"}]}`)
+	td := seedTestDataWithScope(t, conn, true, scope)
+	seedMessages(t, conn, td, 1)
+
+	activity := risk_analysis.NewFetchUnanalyzed(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn)
+	result, err := activity.Do(t.Context(), risk_analysis.FetchUnanalyzedArgs{
+		ProjectID:    td.projectID,
+		IDLowerBound: zeroLowerBound,
+		BatchLimit:   100,
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.MessageIDs)
+	require.Empty(t, result.ContentPartIDs)
+	require.Empty(t, result.Policies)
+}
+
 func TestFetchUnanalyzed_RespectsBatchLimit(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)

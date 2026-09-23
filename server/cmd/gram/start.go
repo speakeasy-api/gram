@@ -97,6 +97,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/metamcp"
@@ -137,6 +138,7 @@ import (
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
+	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
@@ -1099,6 +1101,46 @@ func newStartCommand() *cli.Command {
 			remoteSessionEnricher := remoteSessionDeps.Enricher
 			remoteChallengeManager := remoteSessionDeps.Challenges
 
+			// Reuse the same Presidio client the worker uses for offline analysis
+			// so the runtime hook scanner can flag/redact PII inputs too.
+			var hookPIIScanner risk_analysis.PIIScanner
+			if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
+				hookPIIScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
+			}
+
+			// L1 prompt-injection engine is the LLM judge (POC-193). A completions
+			// client is always constructed, so the judge is always available.
+			hookJudgeLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
+			hookPIScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Classify)
+
+			hookPromptJudge := ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Evaluate
+			hookPromptPolicyScanner := promptpolicy.NewScanner(logger, hookPromptJudge)
+			celEngine, err := celenv.New()
+			if err != nil {
+				return fmt.Errorf("create cel engine: %w", err)
+			}
+			builtinPresets, err := presetlib.New()
+			if err != nil {
+				return fmt.Errorf("load built-in exclusion library: %w", err)
+			}
+			customRulesScanner, err := customruleanalyzer.NewScanner(db)
+			if err != nil {
+				return fmt.Errorf("create custom rules scanner: %w", err)
+			}
+			riskScanner, err := risk.NewScannerWithEnforcementDispatcher(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine, enforcementDispatcher, metering.NewRiskRecorder(publishers.MeterReadings))
+			if err != nil {
+				return fmt.Errorf("create risk scanner: %w", err)
+			}
+			policyBypass := risk.NewPolicyBypassEvaluator(logger, db)
+			mcpPolicyEvaluator := mcpriskscan.NewPolicyEvaluator(
+				logger,
+				tracerProvider,
+				meterProvider,
+				policycore.New(db),
+				risk.NewMCPPolicyScanner(riskScanner, shadowMCPClient),
+				publishers.RiskFindings,
+				mcpriskscan.DefaultPolicyConfig,
+			)
 			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))
 			mcpService, err := newMCPService(c, mcpServiceDependencies{
 				Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
@@ -1107,7 +1149,7 @@ func newStartCommand() *cli.Command {
 				Encryption: encryptionClient, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 				BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,
 				RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager,
-				ShadowMCP: shadowMCPClient, Audit: auditLogger, PlatformExtras: assistantPlatformExtras,
+				ShadowMCP: shadowMCPClient, MCPRisk: mcpPolicyEvaluator, Audit: auditLogger, PlatformExtras: assistantPlatformExtras,
 				PlatformFeatureChecker: platformFeatureChecker, PlatformToolsets: platformToolsets,
 				Identity: identityResolver, Challenges: remoteChallengeManager,
 			})
@@ -1341,38 +1383,6 @@ func newStartCommand() *cli.Command {
 			// LiteLLM dispatch must run before canonical OTLP ingest because
 			// the metrics path is shared with harness telemetry.
 			mux.Use(litellm.OTLPMetricsDispatch(func() *litellm.Service { return litellmService }))
-
-			// Reuse the same Presidio client the worker uses for offline analysis
-			// so the runtime hook scanner can flag/redact PII inputs too.
-			var hookPIIScanner risk_analysis.PIIScanner
-			if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
-				hookPIIScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
-			}
-
-			// L1 prompt-injection engine is the LLM judge (POC-193). A completions
-			// client is always constructed, so the judge is always available.
-			hookJudgeLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
-			hookPIScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Classify)
-
-			hookPromptJudge := ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Evaluate
-			hookPromptPolicyScanner := promptpolicy.NewScanner(logger, hookPromptJudge)
-			celEngine, err := celenv.New()
-			if err != nil {
-				return fmt.Errorf("create cel engine: %w", err)
-			}
-			builtinPresets, err := presetlib.New()
-			if err != nil {
-				return fmt.Errorf("load built-in exclusion library: %w", err)
-			}
-			customRulesScanner, err := customruleanalyzer.NewScanner(db)
-			if err != nil {
-				return fmt.Errorf("create custom rules scanner: %w", err)
-			}
-			riskScanner, err := risk.NewScannerWithEnforcementDispatcher(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine, enforcementDispatcher, metering.NewRiskRecorder(publishers.MeterReadings))
-			if err != nil {
-				return fmt.Errorf("create risk scanner: %w", err)
-			}
-			policyBypass := risk.NewPolicyBypassEvaluator(logger, db)
 
 			spendCelEngine, err := spendcelenv.New()
 			if err != nil {
@@ -1685,7 +1695,7 @@ func newStartCommand() *cli.Command {
 					return nil
 				})
 			mcpapproval.Attach(mux, mcpApprovalService)
-			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
+			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine, mcpPolicyEvaluator))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, nil)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, serverURL))
