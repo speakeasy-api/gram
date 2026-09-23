@@ -67,14 +67,18 @@ const OpenRouterModel = "typesafe/jev-1.13"
 // and authenticated by an OpenRouter API key. Same request/response shape as
 // Client, so it satisfies the same Evaluator interface.
 //
-// Not production-ready as of 2026-09-23: benchmarked against the direct
-// Client with server/cmd/risk-pi-report -jev -jev-openrouter and found a
-// reproducible ~9% failure rate, all a Cloudflare "Attention Required" block
-// on typesafe.ai itself when OpenRouter's backend proxies the request there
-// (not a rate limit or content filter on our side). Client had 0 errors
-// across 1,190 calls in the same benchmark. Kept for re-evaluation once
-// OpenRouter's integration leaves alpha; do not wire into judgeshadow until
-// then.
+// Observed but unresolved as of 2026-09-23: benchmarked against the direct
+// Client with server/cmd/risk-pi-report -jev -jev-openrouter. During one
+// investigation window, ~9% of calls failed with a Cloudflare "Attention
+// Required" block on typesafe.ai itself, arriving when OpenRouter's backend
+// proxied the request there (not a rate limit or content filter on our
+// side); a later re-check under the same and higher concurrency saw 0/260
+// failures. Client (the direct path) had 0 errors throughout, in both
+// windows. So this isn't "TypeSafe is down" or "OpenRouter's integration is
+// broken" so much as an unexplained transient failure mode on infrastructure
+// between the two that we can't inspect or control. Kept for re-evaluation;
+// do not wire into judgeshadow until it's understood or the direct API shows
+// a reason to move off it.
 type OpenRouterClient struct {
 	httpClient *http.Client
 	apiKey     string
