@@ -665,6 +665,9 @@ export class Gram<
   }
 }
 
+const LINE_BREAKS = /[\r\n]+/g;
+const BARE_IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+
 /**
  * Renders validation issues as one line, each issue prefixed by the input path
  * it concerns, e.g. `org_id: Invalid input: expected string, received
@@ -678,7 +681,11 @@ export class Gram<
 function summarizeIssues(issues: readonly z.core.$ZodIssue[]): string {
   const lines = issues.map((issue) => {
     const path = formatIssuePath(issue.path ?? []);
-    return path === "" ? issue.message : `${path}: ${issue.message}`;
+    const line = path === "" ? issue.message : `${path}: ${issue.message}`;
+
+    // A schema is free to carry a multi-line custom message. Flatten it so one
+    // issue stays one line; `issues` still carries the message verbatim.
+    return line.replace(LINE_BREAKS, " ").trim();
   });
 
   return lines.join("; ") || "invalid input";
@@ -693,8 +700,16 @@ function formatIssuePath(path: readonly PropertyKey[]): string {
   for (const segment of path) {
     if (typeof segment === "number") {
       out += `[${segment}]`;
+      continue;
+    }
+
+    // A key that is not a bare identifier — `a.b`, `0`, the empty string —
+    // would be ambiguous or invisible joined with a dot.
+    const key = String(segment);
+    if (BARE_IDENTIFIER.test(key)) {
+      out += out === "" ? key : `.${key}`;
     } else {
-      out += out === "" ? String(segment) : `.${String(segment)}`;
+      out += `[${JSON.stringify(key)}]`;
     }
   }
 

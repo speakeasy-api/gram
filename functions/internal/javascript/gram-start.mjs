@@ -316,8 +316,9 @@ async function callResource(func, uri, input) {
  */
 async function writeFunctionsError(pipeFile, error) {
   // The response body carries no stack trace, so this is the only place the
-  // function's author gets to see one.
-  console.error(error.cause instanceof Error ? error.cause.stack : error.stack);
+  // function's author gets to see one. Logging the error whole keeps whatever
+  // detail the cause holds — another error's stack, or a plain string.
+  console.error(error);
 
   const text = JSON.stringify(error.toJSON());
 
