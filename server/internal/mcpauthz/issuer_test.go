@@ -44,7 +44,7 @@ func issuerForTest(t *testing.T) *Issuer {
 }
 
 func targetForTest() Target {
-	return Target{OrganizationID: "org_test", ProjectID: uuid.New(), MCPServerID: uuid.NewString(), TunnelID: uuid.New()}
+	return Target{OrganizationID: "org_test", ProjectID: uuid.New(), MCPServerID: uuid.NewString(), TunnelID: uuid.New(), ResourceIdentifier: ""}
 }
 
 func tenantContext(t *testing.T, target Target) context.Context {
@@ -130,6 +130,31 @@ func TestAssertionVerifiesWithPublicJWKSAndBindsDestination(t *testing.T) {
 	other.ProjectID = uuid.New()
 	_, err = issuer.Mint(ctx, other)
 	require.Error(t, err)
+}
+
+func TestAssertionUsesExactConfiguredResourceAudience(t *testing.T) {
+	t.Parallel()
+	issuer := issuerForTest(t)
+	target := targetForTest()
+	target.ResourceIdentifier = "https://mcp.internal.example.com/a%2Fb/?tenant=example/"
+	ctx := sessionContext(t, tenantContext(t, target), urn.NewUserSubject("user_test"), time.Hour)
+	raw, err := issuer.Mint(ctx, target)
+	require.NoError(t, err)
+	standard, claims := verifiedClaims(t, raw, servedKeys(t, issuer))
+	expected := josejwt.Expected{Issuer: "https://gram.example", Subject: "user:user_test", AnyAudience: josejwt.Audience{target.ResourceIdentifier}, Time: time.Now()}
+	require.NoError(t, standard.ValidateWithLeeway(expected, 0))
+	require.Equal(t, target.ResourceIdentifier, claims["aud"])
+	require.Equal(t, target.TunnelID.String(), claims["tunneled_mcp_server_id"])
+	require.Equal(t, target.OrganizationID, claims["organization_id"])
+	require.Equal(t, target.ProjectID.String(), claims["project_id"])
+	for _, wrongAudience := range []string{
+		urn.NewTunneledMcpServer(target.TunnelID).String(),
+		"https://mcp.internal.example.com/a%2Fb?tenant=example/",
+		"https://mcp.internal.example.com/a/b/?tenant=example/",
+	} {
+		expected.AnyAudience = josejwt.Audience{wrongAudience}
+		require.Error(t, standard.ValidateWithLeeway(expected, 0))
+	}
 }
 
 func TestAPIKeyAssertionNeverPromotesCreator(t *testing.T) {

@@ -61,6 +61,9 @@ type Target struct {
 
 	// TunnelID is the immutable tunneled server ID, including on meta dispatch.
 	TunnelID uuid.UUID
+
+	// ResourceIdentifier is the destination's saved audience. Empty uses TunnelID.
+	ResourceIdentifier string
 }
 
 // New validates configuration before serving traffic. Leaving both key settings
@@ -246,9 +249,13 @@ func (s *Issuer) Mint(ctx context.Context, target Target) (string, error) {
 	if expires.Unix() <= now.Unix() {
 		return "", errors.New("caller assertion source credential expired")
 	}
+	audience := target.ResourceIdentifier
+	if audience == "" {
+		audience = urn.NewTunneledMcpServer(target.TunnelID).String()
+	}
 	claims := jwt.MapClaims{
 		"iss": s.issuer, "sub": principalType + ":" + subject, "principal_type": principalType,
-		"aud": urn.NewTunneledMcpServer(target.TunnelID).String(),
+		"aud": audience,
 		"iat": now.Unix(), "exp": expires.Unix(), "jti": uuid.NewString(),
 		"organization_id": target.OrganizationID, "project_id": target.ProjectID.String(),
 		"mcp_server_id": target.MCPServerID, "tunneled_mcp_server_id": target.TunnelID.String(),
