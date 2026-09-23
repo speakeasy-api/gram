@@ -187,9 +187,7 @@ func TestSetEMABindingSQL(t *testing.T) {
 					require.NoError(t, err)
 					params = repo.SetEMABindingParams{ID: row.ID, ProjectID: projectID, OrganizationID: org, ExpectedGeneration: row.Generation, Generation: row.Generation + 1, State: text("ready"), GrantSource: text("manual"), RemoteSessionClientID: uuid.NullUUID{UUID: globalClient, Valid: true}, RequestedScopes: []string{}}
 				}
-				deletion, err := conn.Begin(ctx)
-				require.NoError(t, err)
-				defer func() { _ = deletion.Rollback(context.Background()) }()
+				deletion := testenv.BeginTx(t, ctx, conn)
 				// Match the project lifecycle lock, then soft-delete before commit.
 				_, err = projectsrepo.New(deletion).LockProjectForEMADeletion(ctx, projectsrepo.LockProjectForEMADeletionParams{ProjectID: projectID, OrganizationID: org})
 				require.NoError(t, err)
