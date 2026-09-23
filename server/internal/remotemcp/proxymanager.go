@@ -1,8 +1,11 @@
 package remotemcp
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -14,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
@@ -62,13 +66,14 @@ func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
 }
 
 type ProxyManager struct {
-	logger         *slog.Logger
-	tracer         trace.Tracer
-	guardianPolicy *guardian.Policy
-	authz          *authz.Engine
-	posthog        *posthog.Posthog
-	telemLogger    *tm.Logger
-	scanEvaluator  *mcpriskscan.Evaluator
+	logger           *slog.Logger
+	tracer           trace.Tracer
+	guardianPolicy   *guardian.Policy
+	authz            *authz.Engine
+	posthog          *posthog.Posthog
+	telemLogger      *tm.Logger
+	scanEvaluator    *mcpriskscan.Evaluator
+	callerAssertions *mcpauthz.Issuer
 
 	proxyMetrics         *proxy.Metrics
 	mcpMetrics           *ProxyMetrics
@@ -115,6 +120,7 @@ func NewProxyManager(
 	witnessStore *toolfilter.SessionToolWitnessStore,
 	killswitchCheckpoint *mcptoolexecution.Checkpoint,
 	scanEvaluator *mcpriskscan.Evaluator,
+	callerAssertions *mcpauthz.Issuer,
 ) *ProxyManager {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotemcp")
@@ -122,6 +128,7 @@ func NewProxyManager(
 
 	return &ProxyManager{
 		logger:                                logger,
+		callerAssertions:                      callerAssertions,
 		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
 		guardianPolicy:                        guardianPolicy,
 		authz:                                 authzEngine,
@@ -333,6 +340,20 @@ func (f *ProxyManager) BuildTarget(
 		toolsCallResponseInterceptors = append(toolsCallResponseInterceptors, NewPlatformMCPSelectedUseInterceptor(f.platformMCPSelectedUseRecorder, identity))
 	}
 
+	var callerAssertion func(context.Context) (string, error)
+	if f.IssuesCallerAssertions(visibility, identity.TunneledMCPServerID != "") {
+		callerAssertion = func(ctx context.Context) (string, error) {
+			tunnelID, err := uuid.Parse(identity.TunneledMCPServerID)
+			if err != nil {
+				return "", fmt.Errorf("parse caller assertion destination: %w", err)
+			}
+			projectUUID, err := uuid.Parse(projectID)
+			if err != nil {
+				return "", fmt.Errorf("parse caller assertion destination: %w", err)
+			}
+			return f.callerAssertions.Mint(ctx, mcpauthz.Target{OrganizationID: organizationID, ProjectID: projectUUID, MCPServerID: identity.McpServerID, TunnelID: tunnelID})
+		}
+	}
 	return &proxy.Proxy{
 		GuardianPolicy:              f.guardianPolicy,
 		GuardianClientOptions:       nil,
@@ -346,6 +367,7 @@ func (f *ProxyManager) BuildTarget(
 		RemoteURL:                   upstreamURL,
 		Headers:                     headers,
 		AuthorizationOverride:       upstreamAuth,
+		CallerAssertion:             callerAssertion,
 		UpstreamResponseRetryer:     nil,
 		UpstreamResponseInterceptor: nil,
 		DisableRedirects:            false,
@@ -376,4 +398,10 @@ func (f *ProxyManager) BuildTarget(
 		ResourcesListRequestInterceptors:  nil,
 		ResourcesListResponseInterceptors: nil,
 	}
+}
+
+// IssuesCallerAssertions is the shared scope boundary for forwarding and
+// background probes. Only configured issuers and private tunnels are eligible.
+func (f *ProxyManager) IssuesCallerAssertions(visibility string, tunneled bool) bool {
+	return f != nil && f.callerAssertions.Enabled() && visibility == mcpservers.VisibilityPrivate && tunneled
 }

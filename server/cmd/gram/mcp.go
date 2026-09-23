@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/memory"
@@ -197,6 +198,11 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err := validateServerURL(serverURL, serviceEnv); err != nil {
 		return fmt.Errorf("invalid server url: %w", err)
 	}
+	callerAssertions, err := mcpauthz.New(c.String("authz-private-key"), c.String("authz-public-keys"), serverURL.String(), c.String("environment") == "local")
+	if err != nil {
+		return fmt.Errorf("configure caller assertions: %w", err)
+	}
+
 	authenticationHost, err := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, serviceEnv)
 	if err != nil {
 		return fmt.Errorf("invalid authentication host url: %w", err)
@@ -310,7 +316,8 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return err
 	}
 	mcpService, err := newMCPService(c, mcpServiceDependencies{
-		Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
+		CallerAssertions: callerAssertions,
+		Logger:           logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
 		Sessions: sessionManager, ChatSessions: chatSessions, Environment: env,
 		Posthog: posthogClient, Features: featureFlags, ServerURL: serverURL, SiteURL: siteURL,
 		Encryption: enc, Guardian: guardianPolicy, Functions: functionsOrchestrator,
@@ -335,7 +342,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("build MCP server runtime: %w", err)
 	}
 
-	mux, err := newMCPServerMux(c, logger, db, serverURL, authenticationHost, chatSessions, publishers)
+	mux, err := newMCPServerMux(c, logger, db, serverURL, authenticationHost, chatSessions, publishers, callerAssertions)
 	if err != nil {
 		return err
 	}
@@ -416,8 +423,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 // newMCPServerMux builds the public listener middleware chain for the MCP
 // tier. It mirrors the public-route portion of the `gram start` chain and
 // omits the marketplace, hooks, and management-API layers.
-func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, authenticationHost *mcp.AuthenticationHost, chatSessions middleware.ChatSessionValidator, publishers *background.Publishers) (goahttp.Muxer, error) {
+func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, authenticationHost *mcp.AuthenticationHost, chatSessions middleware.ChatSessionValidator, publishers *background.Publishers, callerAssertions *mcpauthz.Issuer) (goahttp.Muxer, error) {
 	mux := goahttp.NewMuxer()
+	mux.Use(callerAssertions.Middleware)
 	mux.Use(middleware.NetworkServingPolicyVersion)
 	mux.Use(middleware.StripPrivateIngressHeaders)
 	mux.Use(func(h http.Handler) http.Handler {

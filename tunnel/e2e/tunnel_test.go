@@ -24,10 +24,14 @@ func TestTunnelEndToEnd(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx := t.Context()
 
+	receivedIdentity := make(chan http.Header, 1)
 	releaseSlowRequest := make(chan struct{})
 	var slowRequest sync.Once
 	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		if r.URL.Path == "/mcp/initialize" {
+			receivedIdentity <- r.Header.Clone()
+		}
 		if r.URL.Path == "/mcp/slow" {
 			slowRequest.Do(func() {
 				select {
@@ -77,6 +81,8 @@ func TestTunnelEndToEnd(t *testing.T) {
 	req.Header.Set(wire.HeaderTunnelID, tunnelID)
 	req.Header.Set(wire.HeaderTunnelForwardToken, forwardToken)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("SPEAKEASY_AUTHZ", "signed-assertion-opaque-to-tunnel")
+	req.Header.Set("Authorization", "Bearer upstream-oauth")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -84,6 +90,11 @@ func TestTunnelEndToEnd(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Contains(t, string(out), "POST /mcp/initialize")
 	require.Contains(t, string(out), `{"jsonrpc":"2.0"}`)
+	headers := <-receivedIdentity
+	require.Equal(t, "signed-assertion-opaque-to-tunnel", headers.Get("SPEAKEASY_AUTHZ"))
+	require.Equal(t, "Bearer upstream-oauth", headers.Get("Authorization"))
+	require.Empty(t, headers.Get(wire.HeaderTunnelForwardToken))
+	require.Empty(t, headers.Get(wire.HeaderTunnelID))
 
 	errCh := make(chan error, 1)
 	go func() {
