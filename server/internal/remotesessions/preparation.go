@@ -105,7 +105,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		return nil, preparationLookupError(err, "project not found")
 	}
 	if err = lockUserSessionIssuersForClientBinding(ctx, s.logger, tx, q, project, org, []uuid.UUID{in.UserSessionIssuerID}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
+		return nil, err
 	}
 	if _, err = q.LockEMAUserIssuer(ctx, repo.LockEMAUserIssuerParams{ID: in.UserSessionIssuerID, ProjectID: conv.ToNullUUID(project), OrganizationID: conv.ToPGText(org)}); err != nil {
 		return nil, preparationLookupError(err, "user session issuer not found")
@@ -294,8 +294,8 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 			return preparationResult(b, issuer, client, PreparationStateUnknownGrants), nil
 		}
 		// Selecting CIMD is not a grant declaration. Reuse recorded evidence or
-		// publish exactly ConfirmGrants; never add JWT-bearer implicitly, merge
-		// back removed grants, or turn an explicit empty declaration into grants.
+		// publish exactly ConfirmGrants; never add JWT-bearer implicitly or turn
+		// an explicit empty declaration into grants.
 		source = PreparationGrantSourceCIMDPublished
 		state = PreparationStatePublishedAcceptanceUnverified
 	}
@@ -316,6 +316,18 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		}
 	}
 	if !samePreparationGrants(grants, client.GrantTypes) {
+		// CIMD grants are also the live interactive registration. Preparation
+		// must not disable login or refresh, even when selected as manual.
+		// Reject removal rather than silently broadening explicit confirmation.
+		// NULL grants publish the legacy interactive compatibility document,
+		// but remain unknown registration evidence until explicitly confirmed.
+		if client.ClientIDMetadataUri.Valid {
+			for _, grant := range []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken} {
+				if (client.GrantTypes == nil || slices.Contains(client.GrantTypes, grant)) && !slices.Contains(grants, grant) {
+					return nil, oops.E(oops.CodeBadRequest, nil, "preparation cannot remove existing interactive CIMD grants")
+				}
+			}
+		}
 		// A grant publication is client-wide. Do not silently reconfigure another
 		// resource binding without invalidating its generation as well.
 		count, countErr := q.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(client.ID), OrganizationID: org, ProjectID: uuid.Nil})

@@ -426,7 +426,8 @@ func TestPreparationDCRIntegration_CIMDProvenanceRequiresGeneration(t *testing.T
 	require.NoError(t, err)
 	err = testrepo.New(ti.conn).SetPreparationFixtureCIMDURI(ctx, testrepo.SetPreparationFixtureCIMDURIParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
-	in.ConfirmGrants = []string{oauthwire.GrantTypeJWTBearer}
+	// A legacy CIMD publication already serves both interactive grants.
+	in.ConfirmGrants = []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}
 	manual, err := ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)
 	require.Equal(t, "ready", manual.State)

@@ -7,6 +7,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
@@ -31,10 +32,22 @@ func TestPreparationEvidence_CIMDUnknownRequiresConfirmation(t *testing.T) {
 	require.Nil(t, grants)
 	in.ConfirmGrants = []string{oauthwire.GrantTypeJWTBearer}
 	in.ExpectedGeneration = result.Generation
+	before, err := ti.service.ReadIdentityChaining(ctx, in)
+	require.NoError(t, err)
 	confirmed, err := ti.service.PrepareIdentityChaining(ctx, in)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Nil(t, confirmed)
+	grants, err = testrepo.New(ti.conn).GetPreparationFixtureClientGrants(ctx, testrepo.GetPreparationFixtureClientGrantsParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
+	require.NoError(t, err)
+	require.Nil(t, grants, "rejecting removal of legacy interactive publication must not infer recorded grants")
+	unchanged, err := ti.service.ReadIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, before, unchanged, "rejected confirmation must not change binding evidence")
+	in.ConfirmGrants = []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}
+	confirmed, err = ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)
 	require.Equal(t, "published_acceptance_unverified", confirmed.State)
-	require.Equal(t, []string{oauthwire.GrantTypeJWTBearer}, confirmed.GrantTypes, "do not guess interactive grants for a legacy NULL record")
+	require.Equal(t, in.ConfirmGrants, confirmed.GrantTypes, "record only the explicitly confirmed safe grant set")
 	require.Equal(t, "cimd_published", confirmed.GrantSource)
 }
 
