@@ -867,9 +867,12 @@ func mapRiskPolicyMutationError(err error) error {
 	var stale *policycore.StalePolicyError
 	var blockingConflict *policycore.BlockingPolicyConflictError
 	var decisionConflict *policycore.DecisionConflictError
+	var validation *policycore.ValidationError
 	switch {
 	case errors.As(err, &mutation):
 		return mutation
+	case errors.As(err, &validation):
+		return &RiskMutationError{Code: "invalid_request", Message: validation.Message, Cause: ErrRiskMutationInvalid}
 	case errors.As(err, &stale), errors.As(err, &blockingConflict), errors.As(err, &decisionConflict):
 		return riskMutationConflict("The risk policy could not be changed because its current state conflicts with the request.")
 	case errors.Is(err, policycore.ErrLoadPolicy):
