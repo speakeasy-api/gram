@@ -18,6 +18,27 @@ Examples: satisfaction → happy/unhappy; marketing campaign → named campaigns
 
 ## Approach
 
+### Platform MCP assessment
+
+The candidate agent outcome is managing project-scoped custom signals and sensors
+as an authorized project administrator/member. Existing Platform MCP tools do not
+represent this configuration workflow. **Intentionally defer adding tools:** signals
+intelligence is not production-ready, and the current configuration-only feature
+does not yet execute sensors or expose classification results. This applies to the
+API and gated dashboard layers. Reassess an outcome-oriented management workflow
+when the product contract is ready for production, preserving project authorization
+and feature availability. For this stage, the management API tests demonstrate
+configuration behavior; no Platform MCP catalog entry advertises the feature.
+
+### Name validation boundary
+
+Names are validated as 1–200 Unicode characters **after** trimming whitespace in
+the service. Goa/OpenAPI `minLength`/`maxLength` validate the untrimmed wire value,
+so applying those bounds to the four input forms would reject currently valid
+padded names while still accepting whitespace-only names. Keep the normalization
+rule explicit in each field description and enforce it in the service rather than
+advertising a different wire-level constraint.
+
 ### Scope and model
 
 Build one `sigint` management service. Custom signals form a reusable **project-scoped catalog**; sensors attach signals from that same project.
