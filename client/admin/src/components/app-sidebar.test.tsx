@@ -202,6 +202,7 @@ describe("AppSidebar", () => {
       {
         label: "Platform Management",
         links: [
+          { label: "Registry", href: "/registry" },
           { label: "Support matrix", href: "/integration-coverage" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
         ],
