@@ -69,7 +69,7 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 	result, err := ti.service.ListSetupTasks(platformCtx, &gen.ListSetupTasksPayload{IncludeHidden: &includeHidden})
 	require.NoError(t, err)
 	require.Len(t, result.Tasks, 15)
-	require.Equal(t, "platform-mcp", result.Tasks[14].Key)
+	require.Equal(t, "configure-policies", result.Tasks[14].Key)
 	for _, key := range []string{"connect-idp", "directory-sync", "create-marketplace", "enable-logging", "confirm-traffic", "anthropic-admin-controls", "litellm", "distribute-servers", "configure-policies", "platform-mcp"} {
 		require.True(t, setupTask(result.Tasks, key).Hidden, key)
 	}
