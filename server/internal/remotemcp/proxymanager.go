@@ -409,8 +409,7 @@ func (f *ProxyManager) BuildTarget(
 	}
 }
 
-// IssuesCallerAssertions reports whether a destination requires assertions for
-// forwarding and background probes. It requires a configured issuer and a private tunnel.
+// IssuesCallerAssertions reports whether Gram adds caller identity to a destination's requests.
 func (f *ProxyManager) IssuesCallerAssertions(visibility string, tunneled bool) bool {
 	return f != nil && f.callerAssertions.Enabled() && visibility == mcpservers.VisibilityPrivate && tunneled
 }

@@ -59,8 +59,6 @@ type validationTarget struct {
 	build memberProxyBuilder
 	// tunnelID is set when the upstream is reached through a tunnel, so a keepalive can skip a dial that has no route.
 	tunnelID uuid.NullUUID
-	// requiresCallerAssertion disables synthetic keepalives that cannot prove a caller.
-	requiresCallerAssertion bool
 }
 
 // validateRemoteSession probes one card's grant through the runtime routing path and records the verdict.
@@ -124,12 +122,6 @@ func (s *Service) probeRemoteSession(
 			return err
 		}
 		return oops.E(oops.CodeUnexpected, err, "resolve validation target").LogError(ctx, logger)
-	}
-
-	// Synthetic keepalives have no caller identity and would fail at an upstream
-	// that requires assertions, even with a valid OAuth grant. Keep the prior verdict.
-	if trigger == remotesessionmetrics.ValidationTriggerKeepalive && target.requiresCallerAssertion {
-		return errors.New("keepalive skipped: private tunnel requires authenticated caller provenance")
 	}
 
 	// A keepalive never dials a tunnel with no live route, and records nothing: the member is offline, not answering.
@@ -305,7 +297,7 @@ func (s *Service) metaValidationTarget(
 		}
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			// An unservable member is the probe's failure to report, not a reason to refuse the check.
-			return ctx, validationTarget{name: name, build: func(context.Context) (*proxy.Proxy, error) { return nil, memberErr }, tunnelID: member.tunneledServerID, requiresCallerAssertion: s.remoteProxyManager.IssuesCallerAssertions(member.visibility, member.tunneledServerID.Valid)}, nil
+			return ctx, validationTarget{name: name, build: func(context.Context) (*proxy.Proxy, error) { return nil, memberErr }, tunnelID: member.tunneledServerID}, nil
 		}
 		return ctx, none, fmt.Errorf("dial meta MCP member: %w", err)
 	}
@@ -317,7 +309,7 @@ func (s *Service) metaValidationTarget(
 	if _, err := routeMetaMemberToken(tokens, member, entry.Resource); err != nil {
 		return ctx, none, fmt.Errorf("%w: %w", errRemoteSessionUnroutable, err)
 	}
-	return ctx, validationTarget{name: name, build: probeProxyBuilder(dial.build), tunnelID: member.tunneledServerID, requiresCallerAssertion: s.remoteProxyManager.IssuesCallerAssertions(member.visibility, member.tunneledServerID.Valid)}, nil
+	return ctx, validationTarget{name: name, build: probeProxyBuilder(dial.build), tunnelID: member.tunneledServerID}, nil
 }
 
 // standaloneValidationTarget dials a proxied endpoint's own backend, routed as serveRemoteBackend and serveTunneledBackend route it.
@@ -375,7 +367,7 @@ func (s *Service) standaloneValidationTarget(
 		if berr != nil {
 			return ctx, none, fmt.Errorf("build remote backend proxy for validation: %w", berr)
 		}
-		return ctx, validationTarget{name: name, build: probeProxyBuilder(build), tunnelID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, requiresCallerAssertion: false}, nil
+		return ctx, validationTarget{name: name, build: probeProxyBuilder(build), tunnelID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
 	}
 	// One state-derived affinity key pins the handshake and its close to a single gateway.
 	affinity := tunnelrouting.HashedClientAffinityKey("consent-validate", challengeState.ID)
@@ -385,7 +377,7 @@ func (s *Service) standaloneValidationTarget(
 			return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 		}
 		return p, nil
-	}), tunnelID: server.TunneledMcpServerID, requiresCallerAssertion: s.remoteProxyManager.IssuesCallerAssertions(server.Visibility, server.TunneledMcpServerID.Valid)}, nil
+	}), tunnelID: server.TunneledMcpServerID}, nil
 }
 
 // tunnelHasRoute is one route-store read: whether any gateway currently holds the tunnel; a store error reads as no route.
