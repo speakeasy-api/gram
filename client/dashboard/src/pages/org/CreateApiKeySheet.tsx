@@ -25,6 +25,7 @@ import { invalidateListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { ApiKeyScopeField } from "./ApiKeyScopeField";
 import {
   ORGANIZATION_WIDE,
@@ -101,10 +102,17 @@ export function CreateApiKeySheet({
   };
 
   const handleCopyToken = async () => {
-    if (createdKey?.key) {
+    if (!createdKey?.key) return;
+    try {
       await navigator.clipboard.writeText(createdKey.key);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
+    } catch {
+      // A denied or unavailable clipboard must not read as a successful copy:
+      // this is the one moment the secret is recoverable, so say so and leave
+      // it on screen to select by hand.
+      setIsCopied(false);
+      toast.error("Could not copy the key. Select it and copy it manually.");
     }
   };
 
@@ -112,7 +120,7 @@ export function CreateApiKeySheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-[560px] flex-col sm:max-w-[560px]"
+        className="flex w-[560px] max-w-[calc(100vw-2rem)] flex-col sm:max-w-[560px]"
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">

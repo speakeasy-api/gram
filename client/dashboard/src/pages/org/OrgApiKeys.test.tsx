@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -367,23 +368,39 @@ describe("API key scope options", () => {
   it("keeps each scope's access details with its own card", async () => {
     render(<OrgApiKeys />);
     const user = await openForm();
+    // Scoped to the owning card: a global text query would also pass if a
+    // card rendered a neighbor's access list.
+    const cardFor = (scope: string) => {
+      const card = screen
+        .getByRole("button", { name: `Access details for ${scope}` })
+        .closest('[data-slot="radio-card"]');
+      expect(card).toBeTruthy();
+      return within(card as HTMLElement);
+    };
+
     await user.click(
       screen.getByRole("button", { name: "Access details for Agent" }),
     );
     expect(
-      screen.getByText(
+      cardFor("Agent").getByText(
         "Store it in managed.json as org_token, or hand it to a developer for speakeasy enroll.",
       ),
     ).toBeTruthy();
     expect(
       screen.queryByText("Send hook events, logs, metrics, and traces"),
     ).toBeNull();
+
     await user.click(
       screen.getByRole("button", { name: "Access details for Hooks" }),
     );
     expect(
-      screen.getByText("Send hook events, logs, metrics, and traces"),
+      cardFor("Hooks").getByText("Send hook events, logs, metrics, and traces"),
     ).toBeTruthy();
+    expect(
+      cardFor("Agent").queryByText(
+        "Send hook events, logs, metrics, and traces",
+      ),
+    ).toBeNull();
   });
 
   it("sends the scope value of the card the user picks", async () => {

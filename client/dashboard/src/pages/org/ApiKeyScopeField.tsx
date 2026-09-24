@@ -185,13 +185,16 @@ export function ApiKeyScopeField(): JSX.Element {
     <AnyField
       label="Scope"
       optionality="hidden"
-      render={() => (
+      render={({ id }) => (
         <>
           <Text small muted id={hintId}>
             A key's scope is fixed once it is created. Pick the narrowest scope
             that covers the job.
           </Text>
+          {/* The field's generated id belongs on the group: it is what the
+              "Scope" label points at, so dropping it orphans the label. */}
           <RadioCardGroup
+            id={id}
             name="scope"
             defaultValue={DEFAULT_API_KEY_SCOPE}
             aria-label="Scope"
