@@ -187,6 +187,9 @@ type CreateGlobalIssuerRequestBody struct {
 	ScopesSupported []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
 	// Grant types advertised by the issuer.
 	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string `form:"authorization_grant_profiles_supported,omitempty" json:"authorization_grant_profiles_supported,omitempty" xml:"authorization_grant_profiles_supported,omitempty"`
 	// Response types advertised by the issuer.
 	ResponseTypesSupported []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
 	// Token endpoint auth methods advertised by the issuer.
@@ -278,11 +281,14 @@ type UpdateGlobalIssuerRequestBody struct {
 	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
 	// Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any
 	// other value must be an absolute http(s) URL.
-	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	OpTosURI            *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	ScopesSupported     []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string `form:"authorization_grant_profiles_supported,omitempty" json:"authorization_grant_profiles_supported,omitempty" xml:"authorization_grant_profiles_supported,omitempty"`
+	ResponseTypesSupported              []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported   []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
 	// PKCE code challenge methods advertised by the issuer (RFC 8414
 	// code_challenge_methods_supported). Omitting the field leaves the stored
 	// value unchanged; an empty array records that the issuer advertises no
@@ -759,6 +765,13 @@ type ListOrganizationProjectsResponseBody struct {
 	Projects []*AdminProjectResponseBody `form:"projects" json:"projects" xml:"projects"`
 }
 
+// ListProjectMcpServersResponseBody is the type of the "admin" service
+// "listProjectMcpServers" endpoint HTTP response body.
+type ListProjectMcpServersResponseBody struct {
+	// The project's MCP servers, oldest first.
+	McpServers []*AdminMcpServerResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
+}
+
 // ListOrganizationActivityResponseBody is the type of the "admin" service
 // "listOrganizationActivity" endpoint HTTP response body.
 type ListOrganizationActivityResponseBody struct {
@@ -1123,11 +1136,14 @@ type CreateGlobalIssuerResponseBody struct {
 	// advertised.
 	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
 	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
-	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	OpTosURI            *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	ScopesSupported     []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string `form:"authorization_grant_profiles_supported,omitempty" json:"authorization_grant_profiles_supported,omitempty" xml:"authorization_grant_profiles_supported,omitempty"`
+	ResponseTypesSupported              []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported   []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
 	// PKCE code challenge methods advertised by the issuer (RFC 8414
 	// code_challenge_methods_supported). Null when neither discovery nor an
 	// operator has captured the field for this issuer yet; an empty array means
@@ -1262,11 +1278,14 @@ type UpdateGlobalIssuerResponseBody struct {
 	// advertised.
 	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
 	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
-	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	OpTosURI            *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	ScopesSupported     []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string `form:"authorization_grant_profiles_supported,omitempty" json:"authorization_grant_profiles_supported,omitempty" xml:"authorization_grant_profiles_supported,omitempty"`
+	ResponseTypesSupported              []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported   []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
 	// PKCE code challenge methods advertised by the issuer (RFC 8414
 	// code_challenge_methods_supported). Null when neither discovery nor an
 	// operator has captured the field for this issuer yet; an empty array means
@@ -1340,11 +1359,14 @@ type FetchGlobalIssuerMetadataResponseBody struct {
 	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
 	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised
 	// or when the advertised value is not an absolute http(s) URL.
-	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	OpTosURI            *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	ScopesSupported     []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string `form:"authorization_grant_profiles_supported,omitempty" json:"authorization_grant_profiles_supported,omitempty" xml:"authorization_grant_profiles_supported,omitempty"`
+	ResponseTypesSupported              []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported   []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
 	// PKCE code challenge methods advertised in the discovery document (RFC 8414
 	// code_challenge_methods_supported). Null when the document omits the field.
 	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
@@ -4929,6 +4951,194 @@ type ListOrganizationProjectsUnexpectedResponseBody struct {
 // service "listOrganizationProjects" endpoint HTTP response body for the
 // "gateway_error" error.
 type ListOrganizationProjectsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectMcpServersUnauthorizedResponseBody is the type of the "admin"
+// service "listProjectMcpServers" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListProjectMcpServersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectMcpServersForbiddenResponseBody is the type of the "admin"
+// service "listProjectMcpServers" endpoint HTTP response body for the
+// "forbidden" error.
+type ListProjectMcpServersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectMcpServersBadRequestResponseBody is the type of the "admin"
+// service "listProjectMcpServers" endpoint HTTP response body for the
+// "bad_request" error.
+type ListProjectMcpServersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectMcpServersNotFoundResponseBody is the type of the "admin" service
+// "listProjectMcpServers" endpoint HTTP response body for the "not_found"
+// error.
+type ListProjectMcpServersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectMcpServersConflictResponseBody is the type of the "admin" service
+// "listProjectMcpServers" endpoint HTTP response body for the "conflict" error.
+type ListProjectMcpServersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectMcpServersUnsupportedMediaResponseBody is the type of the "admin"
+// service "listProjectMcpServers" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListProjectMcpServersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectMcpServersInvalidResponseBody is the type of the "admin" service
+// "listProjectMcpServers" endpoint HTTP response body for the "invalid" error.
+type ListProjectMcpServersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectMcpServersInvariantViolationResponseBody is the type of the
+// "admin" service "listProjectMcpServers" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListProjectMcpServersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectMcpServersUnexpectedResponseBody is the type of the "admin"
+// service "listProjectMcpServers" endpoint HTTP response body for the
+// "unexpected" error.
+type ListProjectMcpServersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectMcpServersGatewayErrorResponseBody is the type of the "admin"
+// service "listProjectMcpServers" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListProjectMcpServersGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -12239,6 +12449,21 @@ type AdminProjectResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// AdminMcpServerResponseBody is used to define fields on response body types.
+type AdminMcpServerResponseBody struct {
+	// The mcp_servers row ID, or the toolset ID for a toolset-only server.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Display name of the server.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The URL clients connect to. Omitted when the server has no routable address.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// The visibility of the server.
+	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// What backs the server. toolset_only is a toolset with no mcp_servers row.
+	Source    string `form:"source" json:"source" xml:"source"`
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
 // AuditLogResponseBody is used to define fields on response body types.
 type AuditLogResponseBody struct {
 	ID               string  `form:"id" json:"id" xml:"id"`
@@ -12438,11 +12663,14 @@ type RemoteSessionIssuerResponseBody struct {
 	// advertised.
 	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
 	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
-	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	OpTosURI            *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	ScopesSupported     []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string `form:"authorization_grant_profiles_supported,omitempty" json:"authorization_grant_profiles_supported,omitempty" xml:"authorization_grant_profiles_supported,omitempty"`
+	ResponseTypesSupported              []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported   []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
 	// PKCE code challenge methods advertised by the issuer (RFC 8414
 	// code_challenge_methods_supported). Null when neither discovery nor an
 	// operator has captured the field for this issuer yet; an empty array means
@@ -12960,6 +13188,25 @@ func NewListOrganizationProjectsResponseBody(res *admin.AdminListOrganizationPro
 	return body
 }
 
+// NewListProjectMcpServersResponseBody builds the HTTP response body from the
+// result of the "listProjectMcpServers" endpoint of the "admin" service.
+func NewListProjectMcpServersResponseBody(res *admin.AdminListProjectMcpServersResult) *ListProjectMcpServersResponseBody {
+	body := &ListProjectMcpServersResponseBody{}
+	if res.McpServers != nil {
+		body.McpServers = make([]*AdminMcpServerResponseBody, len(res.McpServers))
+		for i, val := range res.McpServers {
+			if val == nil {
+				body.McpServers[i] = nil
+				continue
+			}
+			body.McpServers[i] = marshalAdminAdminMcpServerToAdminMcpServerResponseBody(val)
+		}
+	} else {
+		body.McpServers = []*AdminMcpServerResponseBody{}
+	}
+	return body
+}
+
 // NewListOrganizationActivityResponseBody builds the HTTP response body from
 // the result of the "listOrganizationActivity" endpoint of the "admin" service.
 func NewListOrganizationActivityResponseBody(res *admin.AdminListOrganizationActivityResult) *ListOrganizationActivityResponseBody {
@@ -13368,6 +13615,12 @@ func NewCreateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateGl
 			body.GrantTypesSupported[i] = val
 		}
 	}
+	if res.AuthorizationGrantProfilesSupported != nil {
+		body.AuthorizationGrantProfilesSupported = make([]string, len(res.AuthorizationGrantProfilesSupported))
+		for i, val := range res.AuthorizationGrantProfilesSupported {
+			body.AuthorizationGrantProfilesSupported[i] = val
+		}
+	}
 	if res.ResponseTypesSupported != nil {
 		body.ResponseTypesSupported = make([]string, len(res.ResponseTypesSupported))
 		for i, val := range res.ResponseTypesSupported {
@@ -13515,6 +13768,12 @@ func NewUpdateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateGl
 			body.GrantTypesSupported[i] = val
 		}
 	}
+	if res.AuthorizationGrantProfilesSupported != nil {
+		body.AuthorizationGrantProfilesSupported = make([]string, len(res.AuthorizationGrantProfilesSupported))
+		for i, val := range res.AuthorizationGrantProfilesSupported {
+			body.AuthorizationGrantProfilesSupported[i] = val
+		}
+	}
 	if res.ResponseTypesSupported != nil {
 		body.ResponseTypesSupported = make([]string, len(res.ResponseTypesSupported))
 		for i, val := range res.ResponseTypesSupported {
@@ -13593,6 +13852,12 @@ func NewFetchGlobalIssuerMetadataResponseBody(res *types.RemoteSessionIssuerDraf
 		body.GrantTypesSupported = make([]string, len(res.GrantTypesSupported))
 		for i, val := range res.GrantTypesSupported {
 			body.GrantTypesSupported[i] = val
+		}
+	}
+	if res.AuthorizationGrantProfilesSupported != nil {
+		body.AuthorizationGrantProfilesSupported = make([]string, len(res.AuthorizationGrantProfilesSupported))
+		for i, val := range res.AuthorizationGrantProfilesSupported {
+			body.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if res.ResponseTypesSupported != nil {
@@ -16600,6 +16865,156 @@ func NewListOrganizationProjectsUnexpectedResponseBody(res *goa.ServiceError) *L
 // "admin" service.
 func NewListOrganizationProjectsGatewayErrorResponseBody(res *goa.ServiceError) *ListOrganizationProjectsGatewayErrorResponseBody {
 	body := &ListOrganizationProjectsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectMcpServersUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listProjectMcpServers" endpoint of the "admin"
+// service.
+func NewListProjectMcpServersUnauthorizedResponseBody(res *goa.ServiceError) *ListProjectMcpServersUnauthorizedResponseBody {
+	body := &ListProjectMcpServersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectMcpServersForbiddenResponseBody builds the HTTP response body
+// from the result of the "listProjectMcpServers" endpoint of the "admin"
+// service.
+func NewListProjectMcpServersForbiddenResponseBody(res *goa.ServiceError) *ListProjectMcpServersForbiddenResponseBody {
+	body := &ListProjectMcpServersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectMcpServersBadRequestResponseBody builds the HTTP response body
+// from the result of the "listProjectMcpServers" endpoint of the "admin"
+// service.
+func NewListProjectMcpServersBadRequestResponseBody(res *goa.ServiceError) *ListProjectMcpServersBadRequestResponseBody {
+	body := &ListProjectMcpServersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectMcpServersNotFoundResponseBody builds the HTTP response body
+// from the result of the "listProjectMcpServers" endpoint of the "admin"
+// service.
+func NewListProjectMcpServersNotFoundResponseBody(res *goa.ServiceError) *ListProjectMcpServersNotFoundResponseBody {
+	body := &ListProjectMcpServersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectMcpServersConflictResponseBody builds the HTTP response body
+// from the result of the "listProjectMcpServers" endpoint of the "admin"
+// service.
+func NewListProjectMcpServersConflictResponseBody(res *goa.ServiceError) *ListProjectMcpServersConflictResponseBody {
+	body := &ListProjectMcpServersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectMcpServersUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listProjectMcpServers" endpoint of the
+// "admin" service.
+func NewListProjectMcpServersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListProjectMcpServersUnsupportedMediaResponseBody {
+	body := &ListProjectMcpServersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectMcpServersInvalidResponseBody builds the HTTP response body
+// from the result of the "listProjectMcpServers" endpoint of the "admin"
+// service.
+func NewListProjectMcpServersInvalidResponseBody(res *goa.ServiceError) *ListProjectMcpServersInvalidResponseBody {
+	body := &ListProjectMcpServersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectMcpServersInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listProjectMcpServers" endpoint of the
+// "admin" service.
+func NewListProjectMcpServersInvariantViolationResponseBody(res *goa.ServiceError) *ListProjectMcpServersInvariantViolationResponseBody {
+	body := &ListProjectMcpServersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectMcpServersUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listProjectMcpServers" endpoint of the "admin"
+// service.
+func NewListProjectMcpServersUnexpectedResponseBody(res *goa.ServiceError) *ListProjectMcpServersUnexpectedResponseBody {
+	body := &ListProjectMcpServersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectMcpServersGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listProjectMcpServers" endpoint of the "admin"
+// service.
+func NewListProjectMcpServersGatewayErrorResponseBody(res *goa.ServiceError) *ListProjectMcpServersGatewayErrorResponseBody {
+	body := &ListProjectMcpServersGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -22488,6 +22903,17 @@ func NewListOrganizationProjectsPayload(organizationID string, adminSessionToken
 	return v
 }
 
+// NewListProjectMcpServersPayload builds a admin service listProjectMcpServers
+// endpoint payload.
+func NewListProjectMcpServersPayload(organizationID string, projectID string, adminSessionToken *string) *admin.ListProjectMcpServersPayload {
+	v := &admin.ListProjectMcpServersPayload{}
+	v.OrganizationID = organizationID
+	v.ProjectID = projectID
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewListOrganizationActivityPayload builds a admin service
 // listOrganizationActivity endpoint payload.
 func NewListOrganizationActivityPayload(organizationID string, cursor *string, adminSessionToken *string) *admin.ListOrganizationActivityPayload {
@@ -22739,6 +23165,12 @@ func NewCreateGlobalIssuerPayload(body *CreateGlobalIssuerRequestBody, adminSess
 			v.GrantTypesSupported[i] = val
 		}
 	}
+	if body.AuthorizationGrantProfilesSupported != nil {
+		v.AuthorizationGrantProfilesSupported = make([]string, len(body.AuthorizationGrantProfilesSupported))
+		for i, val := range body.AuthorizationGrantProfilesSupported {
+			v.AuthorizationGrantProfilesSupported[i] = val
+		}
+	}
 	if body.ResponseTypesSupported != nil {
 		v.ResponseTypesSupported = make([]string, len(body.ResponseTypesSupported))
 		for i, val := range body.ResponseTypesSupported {
@@ -22855,6 +23287,12 @@ func NewUpdateGlobalIssuerPayload(body *UpdateGlobalIssuerRequestBody, adminSess
 		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
 		for i, val := range body.GrantTypesSupported {
 			v.GrantTypesSupported[i] = val
+		}
+	}
+	if body.AuthorizationGrantProfilesSupported != nil {
+		v.AuthorizationGrantProfilesSupported = make([]string, len(body.AuthorizationGrantProfilesSupported))
+		for i, val := range body.AuthorizationGrantProfilesSupported {
+			v.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if body.ResponseTypesSupported != nil {

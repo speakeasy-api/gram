@@ -18,6 +18,7 @@ import {
  */
 export const BlockingReason = {
   IdentityProviderLogin: "identity_provider_login",
+  IdentityChaining: "identity_chaining",
 } as const;
 /**
  * Stable reason deletion is blocked. Present when can_delete is false.
@@ -36,6 +37,10 @@ export type OrganizationClientDeletePreflight = {
    * Whether the client can be deleted now.
    */
   canDelete: boolean;
+  /**
+   * Active identity-chaining bindings that must be explicitly unlinked before deletion.
+   */
+  emaBindingCount: number;
   /**
    * Display names of MCP servers this client is attached to.
    */
@@ -63,6 +68,7 @@ export const OrganizationClientDeletePreflight$inboundSchema: z.ZodMiniType<
   z.object({
     blocking_reason: z.optional(BlockingReason$inboundSchema),
     can_delete: z.boolean(),
+    ema_binding_count: z.int(),
     mcp_server_names: z.array(z.string()),
     session_count: z.int(),
     trusted_user_session_issuers: z.array(
@@ -73,6 +79,7 @@ export const OrganizationClientDeletePreflight$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "blocking_reason": "blockingReason",
       "can_delete": "canDelete",
+      "ema_binding_count": "emaBindingCount",
       "mcp_server_names": "mcpServerNames",
       "session_count": "sessionCount",
       "trusted_user_session_issuers": "trustedUserSessionIssuers",

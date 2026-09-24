@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -1044,7 +1045,7 @@ func TestServeConsentAction_ValidatePersistsVerdictAfterRefresh(t *testing.T) {
 			}))
 			t.Cleanup(tokenServer.Close)
 
-			rows, err := remotesessions_repo.New(fx.ti.conn).ForceRemoteSessionIssuerTokenEndpointFixture(ctx, remotesessions_repo.ForceRemoteSessionIssuerTokenEndpointFixtureParams{
+			rows, err := testrepo.New(fx.ti.conn).ForceRemoteSessionIssuerTokenEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerTokenEndpointFixtureParams{
 				TokenEndpoint:         conv.ToPGText(tokenServer.URL),
 				RemoteSessionClientID: fx.clientID,
 				ProjectID:             projectID,
@@ -1247,7 +1248,7 @@ func TestServeConsentAction_ValidateRejectedThenIntrospectedAsInactive(t *testin
 	projectID, orgID := consentTestTenant(t, ctx)
 	var body atomic.Pointer[string]
 	body.Store(conv.PtrEmpty(`{"active":true,"sub":"user-123","username":"grant"}`))
-	rows, err := remotesessions_repo.New(fx.ti.conn).ForceRemoteSessionIssuerEnrichmentEndpointsFixture(ctx, remotesessions_repo.ForceRemoteSessionIssuerEnrichmentEndpointsFixtureParams{
+	rows, err := testrepo.New(fx.ti.conn).ForceRemoteSessionIssuerEnrichmentEndpointsFixture(ctx, testrepo.ForceRemoteSessionIssuerEnrichmentEndpointsFixtureParams{
 		UserinfoEndpoint:      pgtype.Text{String: "", Valid: false},
 		IntrospectionEndpoint: conv.ToPGText(introspectionServer(t, &body)),
 		JwksUri:               pgtype.Text{String: "", Valid: false},

@@ -1,7 +1,6 @@
+import { defineConfig } from "vite";
 import fs from "node:fs";
 import path from "node:path";
-
-import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
@@ -52,6 +51,21 @@ export default defineConfig(({ command }) => {
   const adminBackendUrl = process.env["GRAM_ADMIN_BACKEND_URL"];
   if (isDev && !adminBackendUrl) {
     throw new Error("GRAM_ADMIN_BACKEND_URL must be set in development");
+  }
+  let allowSelfSignedBackend = false;
+  if (isDev && adminBackendUrl) {
+    let backend: URL;
+    try {
+      backend = new URL(adminBackendUrl);
+    } catch {
+      throw new Error("GRAM_ADMIN_BACKEND_URL must be an absolute HTTPS URL");
+    }
+    if (backend.protocol !== "https:") {
+      throw new Error("GRAM_ADMIN_BACKEND_URL must use HTTPS");
+    }
+    allowSelfSignedBackend = ["localhost", "127.0.0.1", "[::1]"].includes(
+      backend.hostname,
+    );
   }
 
   // Baked in: a different origin, so there is no runtime way to learn it.
@@ -108,8 +122,23 @@ export default defineConfig(({ command }) => {
             "/admin": {
               target: adminBackendUrl,
               changeOrigin: true,
-              // The local admin API uses a self-signed certificate.
-              secure: false,
+              // Only the local admin API uses a self-signed certificate.
+              secure: !allowSelfSignedBackend,
+            },
+            "/admin-mcp": {
+              target: adminBackendUrl,
+              changeOrigin: true,
+              secure: !allowSelfSignedBackend,
+            },
+            "/.well-known/oauth-protected-resource/admin-mcp": {
+              target: adminBackendUrl,
+              changeOrigin: true,
+              secure: !allowSelfSignedBackend,
+            },
+            "/.well-known/oauth-authorization-server/admin-mcp/oauth": {
+              target: adminBackendUrl,
+              changeOrigin: true,
+              secure: !allowSelfSignedBackend,
             },
           }
         : undefined,

@@ -514,6 +514,9 @@ trackedFiles:
   src/funcs/remoteSessionClientsDetachUserSessionIssuer.ts: {}
   src/funcs/remoteSessionClientsGet.ts: {}
   src/funcs/remoteSessionClientsList.ts: {}
+  src/funcs/remoteSessionClientsPrepareEMA.ts: {}
+  src/funcs/remoteSessionClientsReadEMA.ts: {}
+  src/funcs/remoteSessionClientsUnlinkEMA.ts: {}
   src/funcs/remoteSessionClientsUpdate.ts: {}
   src/funcs/remoteSessionIssuersCreate.ts: {}
   src/funcs/remoteSessionIssuersDelete.ts: {}
@@ -1105,6 +1108,7 @@ trackedFiles:
   src/models/components/hooktracesummary.ts: {}
   src/models/components/hookusagedata.ts: {}
   src/models/components/httptooldefinition.ts: {}
+  src/models/components/identitychainingpreparation.ts: {}
   src/models/components/identitydirectory.ts: {}
   src/models/components/identitymodel.ts: {}
   src/models/components/identityproviderconnectionactivekey.ts: {}
@@ -1403,6 +1407,7 @@ trackedFiles:
   src/models/components/pluginserver.ts: {}
   src/models/components/pluginskilldistribution.ts: {}
   src/models/components/policybypassredemption.ts: {}
+  src/models/components/prepareemarequestbody.ts: {}
   src/models/components/previewspendrulerequestbody.ts: {}
   src/models/components/previewspendruleresult.ts: {}
   src/models/components/principalremotesessionbinding.ts: {}
@@ -1434,6 +1439,7 @@ trackedFiles:
   src/models/components/queryresult.ts: {}
   src/models/components/queryrow.ts: {}
   src/models/components/queryseries.ts: {}
+  src/models/components/reademarequestbody.ts: {}
   src/models/components/recorddashboardctaeventrequestbody.ts: {}
   src/models/components/recorddecisionrequestbody.ts: {}
   src/models/components/recordidentityproviderconnectionagentrequestbody.ts: {}
@@ -1712,6 +1718,7 @@ trackedFiles:
   src/models/components/tunneledmcpserverconnections.ts: {}
   src/models/components/undistributeskillrequestbody.ts: {}
   src/models/components/unknownskillactivation.ts: {}
+  src/models/components/unlinkemarequestbody.ts: {}
   src/models/components/unmarkriskresultsfalsepositiverequestbody.ts: {}
   src/models/components/unproxiedmcpserver.ts: {}
   src/models/components/unproxiedmcpserverclientusagerow.ts: {}
@@ -2324,6 +2331,7 @@ trackedFiles:
   src/models/operations/platformkillswitchesnumbergetprescription.ts: {}
   src/models/operations/platformkillswitchesnumberlistdefinitions.ts: {}
   src/models/operations/platformkillswitchesnumberlistprescriptions.ts: {}
+  src/models/operations/prepareema.ts: {}
   src/models/operations/previewspendrule.ts: {}
   src/models/operations/proberemotemcpurl.ts: {}
   src/models/operations/promotemcpapprovalrequest.ts: {}
@@ -2333,6 +2341,7 @@ trackedFiles:
   src/models/operations/query.ts: {}
   src/models/operations/queryskillefficacyinsights.ts: {}
   src/models/operations/querytumdetails.ts: {}
+  src/models/operations/readema.ts: {}
   src/models/operations/reassignagent.ts: {}
   src/models/operations/receiveworkoswebhook.ts: {}
   src/models/operations/recheckplatformmcponboardingreadiness.ts: {}
@@ -2456,6 +2465,7 @@ trackedFiles:
   src/models/operations/triggerriskanalysis.ts: {}
   src/models/operations/triggerskillsuggestion.ts: {}
   src/models/operations/undistributeskill.ts: {}
+  src/models/operations/unlinkema.ts: {}
   src/models/operations/unmarkriskresultsfalsepositive.ts: {}
   src/models/operations/unmaskriskresult.ts: {}
   src/models/operations/unshareskill.ts: {}
@@ -3205,6 +3215,9 @@ trackedFiles:
   src/react-query/remoteSessionClient.ts: {}
   src/react-query/remoteSessionClients.core.ts: {}
   src/react-query/remoteSessionClients.ts: {}
+  src/react-query/remoteSessionClientsPrepareEMA.ts: {}
+  src/react-query/remoteSessionClientsReadEMA.ts: {}
+  src/react-query/remoteSessionClientsUnlinkEMA.ts: {}
   src/react-query/remoteSessionIssuer.core.ts: {}
   src/react-query/remoteSessionIssuer.ts: {}
   src/react-query/remoteSessionIssuerDuplicatePreflight.core.ts: {}
@@ -3927,7 +3940,7 @@ examples:
         application/json: {"id": "e7e6581a-36ef-4abd-adb7-3e6bc710634a", "json_web_key_set_id": "66593794-a4af-441d-ab25-ef224c843f7a"}
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2026-11-11T07:11:18.805Z", "id": "ae870163-ac8d-4edb-a598-f036e26963ac", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "880b6480-b02a-455f-bdba-26a01034c0ad", "updated_at": "2026-03-09T22:05:46.544Z", "user_session_issuer_ids": []}
+          application/json: {"client_id": "<id>", "created_at": "2026-11-11T07:11:18.805Z", "grant_types": ["<value 1>"], "id": "ae870163-ac8d-4edb-a598-f036e26963ac", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "880b6480-b02a-455f-bdba-26a01034c0ad", "updated_at": "2026-03-09T22:05:46.544Z", "user_session_issuer_ids": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -3938,7 +3951,7 @@ examples:
         application/json: {"id": "037efc97-46a6-4bf2-b0b7-a0c4e6c62a86", "json_web_key_set_id": "b46520f5-6570-43c7-878c-84044cbe5b01"}
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2026-01-03T20:07:39.620Z", "id": "a55cffc1-911a-46c5-9127-b88d82fd2298", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "02a150aa-f928-4caa-a362-e284d723ccff", "updated_at": "2025-01-20T02:08:45.553Z", "user_session_issuer_ids": ["547c8b60-3e92-4fb5-b345-46b25ae05b37", "c2a36969-c6bf-4d4b-8243-94804eddc913"]}
+          application/json: {"client_id": "<id>", "created_at": "2026-01-03T20:07:39.620Z", "grant_types": null, "id": "a55cffc1-911a-46c5-9127-b88d82fd2298", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "02a150aa-f928-4caa-a362-e284d723ccff", "updated_at": "2025-01-20T02:08:45.553Z", "user_session_issuer_ids": ["547c8b60-3e92-4fb5-b345-46b25ae05b37", "c2a36969-c6bf-4d4b-8243-94804eddc913"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -3960,7 +3973,7 @@ examples:
         application/json: {"id": "6c1c491e-d9e7-4da6-81a3-c6c0c8c9ba6b", "user_session_issuer_id": "7655e5b7-d0fa-4ab1-b5a9-df3ca601f0fe"}
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2024-02-06T02:58:21.258Z", "id": "dddbc3ca-805c-4beb-85ff-5912c4cabb95", "organization_id": "<id>", "project_id": "86c47370-9e25-4074-a3bd-50e126895ab2", "remote_session_issuer_id": "e3b3547f-3d11-4e23-8311-2694b76b89b5", "updated_at": "2024-01-24T07:01:43.910Z", "user_session_issuer_ids": []}
+          application/json: {"client_id": "<id>", "created_at": "2024-02-06T02:58:21.258Z", "grant_types": ["<value 1>", "<value 2>", "<value 3>"], "id": "dddbc3ca-805c-4beb-85ff-5912c4cabb95", "organization_id": "<id>", "project_id": "86c47370-9e25-4074-a3bd-50e126895ab2", "remote_session_issuer_id": "e3b3547f-3d11-4e23-8311-2694b76b89b5", "updated_at": "2024-01-24T07:01:43.910Z", "user_session_issuer_ids": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -4272,7 +4285,7 @@ examples:
         application/json: {"remote_session_issuer_id": "d26acb2a-13f2-4784-955a-a0658dbb938d"}
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2024-08-02T23:06:33.021Z", "id": "647a1bf0-fc8e-481e-8e07-9468dc958072", "organization_id": "<id>", "project_id": "a0173293-a276-4d7a-a5d0-cfd8ed785bb1", "remote_session_issuer_id": "3736372e-1464-4371-a91a-2e32300eedab", "updated_at": "2025-06-16T11:26:57.629Z", "user_session_issuer_ids": ["a1b21407-ad6c-4294-828a-ede962e39608", "c7713f13-5b63-4467-b289-14c406cca771", "15f00246-0ee4-4eb7-bdfb-7e16104991a5"]}
+          application/json: {"client_id": "<id>", "created_at": "2024-08-02T23:06:33.021Z", "grant_types": [], "id": "647a1bf0-fc8e-481e-8e07-9468dc958072", "organization_id": "<id>", "project_id": "a0173293-a276-4d7a-a5d0-cfd8ed785bb1", "remote_session_issuer_id": "3736372e-1464-4371-a91a-2e32300eedab", "updated_at": "2025-06-16T11:26:57.629Z", "user_session_issuer_ids": ["a1b21407-ad6c-4294-828a-ede962e39608", "c7713f13-5b63-4467-b289-14c406cca771", "15f00246-0ee4-4eb7-bdfb-7e16104991a5"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -4283,7 +4296,7 @@ examples:
         application/json: {"remote_session_issuer_id": "69a60658-eb7f-4d4c-b255-ddae9b5f845c"}
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2026-08-02T00:21:50.989Z", "id": "f0b66e93-c993-4955-afbd-650174022a3e", "organization_id": "<id>", "project_id": "623d7118-12bb-41a4-b91c-0a57edef9f69", "remote_session_issuer_id": "b4f4002b-944b-4e10-b9b2-9a294557b8ec", "updated_at": "2026-08-31T13:17:28.814Z", "user_session_issuer_ids": ["49d16cb8-a0b0-4a35-8af0-7c1047ac47e4"]}
+          application/json: {"client_id": "<id>", "created_at": "2026-08-02T00:21:50.989Z", "grant_types": ["<value 1>", "<value 2>"], "id": "f0b66e93-c993-4955-afbd-650174022a3e", "organization_id": "<id>", "project_id": "623d7118-12bb-41a4-b91c-0a57edef9f69", "remote_session_issuer_id": "b4f4002b-944b-4e10-b9b2-9a294557b8ec", "updated_at": "2026-08-31T13:17:28.814Z", "user_session_issuer_ids": ["49d16cb8-a0b0-4a35-8af0-7c1047ac47e4"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -4416,7 +4429,7 @@ examples:
         application/json: {"client_id": "<id>", "remote_session_issuer_id": "6f267ffc-c6f0-4622-88cc-2899f4e1190f"}
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2024-12-29T06:40:50.923Z", "id": "370ec7d7-f8bc-4a92-a196-daab54d3a0f6", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "16e4894e-30c0-4aef-b5ef-5d9747c98b4f", "updated_at": "2025-08-19T00:14:09.736Z", "user_session_issuer_ids": ["93847116-b229-4e06-83c2-72e8d6314e70", "3e880637-2874-4997-ab06-bd4f83509cf3"]}
+          application/json: {"client_id": "<id>", "created_at": "2024-12-29T06:40:50.923Z", "grant_types": ["<value 1>", "<value 2>", "<value 3>"], "id": "370ec7d7-f8bc-4a92-a196-daab54d3a0f6", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "16e4894e-30c0-4aef-b5ef-5d9747c98b4f", "updated_at": "2025-08-19T00:14:09.736Z", "user_session_issuer_ids": ["93847116-b229-4e06-83c2-72e8d6314e70", "3e880637-2874-4997-ab06-bd4f83509cf3"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -4535,7 +4548,7 @@ examples:
         application/json: {"client_id": "<id>", "remote_session_issuer_id": "61f009bc-53b7-4a1c-962d-e2f62f10f198"}
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2026-04-24T03:33:08.707Z", "id": "67dace45-f57e-404a-b23a-a4e1a403297b", "organization_id": "<id>", "project_id": "acc8c9aa-e361-4543-943d-3945a1d58b4a", "remote_session_issuer_id": "d4a74053-aa70-4c0f-94e1-354d2007ca5e", "updated_at": "2025-05-23T19:39:03.554Z", "user_session_issuer_ids": ["b327ec4f-a78c-4e45-b756-d1a0ecdb08df", "16cfe5d4-d901-4acd-88f2-4bf3e6c1c091"]}
+          application/json: {"client_id": "<id>", "created_at": "2026-04-24T03:33:08.707Z", "grant_types": [], "id": "67dace45-f57e-404a-b23a-a4e1a403297b", "organization_id": "<id>", "project_id": "acc8c9aa-e361-4543-943d-3945a1d58b4a", "remote_session_issuer_id": "d4a74053-aa70-4c0f-94e1-354d2007ca5e", "updated_at": "2025-05-23T19:39:03.554Z", "user_session_issuer_ids": ["b327ec4f-a78c-4e45-b756-d1a0ecdb08df", "16cfe5d4-d901-4acd-88f2-4bf3e6c1c091"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -4676,7 +4689,7 @@ examples:
         application/json: {"client_id": "<id>", "remote_session_issuer_id": "9c427fdc-c54f-44c3-be91-8986011459d6"}
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2024-02-22T23:36:49.840Z", "id": "3b58bf62-f9bf-4a25-beed-c1c69148bd09", "organization_id": "<id>", "project_id": "82f5eecb-d49a-42c3-85ee-ee9697ad8481", "remote_session_issuer_id": "cff84fd5-1b43-4a7f-ad98-9246408582ff", "updated_at": "2024-11-28T16:12:11.805Z", "user_session_issuer_ids": ["c427fdcc-54f4-4c3e-b918-986011459d6d", "bd47e639-c471-42ae-b2de-642b16f5786a"]}
+          application/json: {"client_id": "<id>", "created_at": "2024-02-22T23:36:49.840Z", "grant_types": ["<value 1>", "<value 2>", "<value 3>"], "id": "3b58bf62-f9bf-4a25-beed-c1c69148bd09", "organization_id": "<id>", "project_id": "82f5eecb-d49a-42c3-85ee-ee9697ad8481", "remote_session_issuer_id": "cff84fd5-1b43-4a7f-ad98-9246408582ff", "updated_at": "2024-11-28T16:12:11.805Z", "user_session_issuer_ids": ["c427fdcc-54f4-4c3e-b918-986011459d6d", "bd47e639-c471-42ae-b2de-642b16f5786a"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -5587,7 +5600,7 @@ examples:
           id: "66bb66bf-576e-4af1-87d3-8b151269ef20"
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2024-10-30T10:54:13.869Z", "id": "af1f6272-bba9-466e-83fb-fc97e0edfa30", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "e4925d98-a71d-455c-8a01-baaff53b4892", "updated_at": "2025-08-21T00:03:47.105Z", "user_session_issuer_ids": ["0d772dd3-db55-4085-8b30-9ae629ca5c6e", "a6a2b1e9-ed7f-4387-9536-c5c95a11588c", "4a0cf07e-f7ba-40f6-baa3-1b2e0ba7e798"]}
+          application/json: {"client_id": "<id>", "created_at": "2024-10-30T10:54:13.869Z", "grant_types": ["<value 1>"], "id": "af1f6272-bba9-466e-83fb-fc97e0edfa30", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "e4925d98-a71d-455c-8a01-baaff53b4892", "updated_at": "2025-08-21T00:03:47.105Z", "user_session_issuer_ids": ["0d772dd3-db55-4085-8b30-9ae629ca5c6e", "a6a2b1e9-ed7f-4387-9536-c5c95a11588c", "4a0cf07e-f7ba-40f6-baa3-1b2e0ba7e798"]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5599,7 +5612,7 @@ examples:
           id: "ffbd533a-f86e-4729-ae8e-e20c60a21728"
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2026-12-29T15:24:39.024Z", "id": "81d34422-f49b-4b7a-b336-d0f2823454c0", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "a9e660b5-fafe-429f-8d83-d809f32bcfcd", "updated_at": "2026-10-22T05:53:17.225Z", "user_session_issuer_ids": ["8abe2b2f-e1de-4405-9432-cc5597c1dea2", "61af22fd-e724-4459-a38d-4c41cf5b994f"]}
+          application/json: {"client_id": "<id>", "created_at": "2026-12-29T15:24:39.024Z", "grant_types": ["<value 1>", "<value 2>", "<value 3>"], "id": "81d34422-f49b-4b7a-b336-d0f2823454c0", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "a9e660b5-fafe-429f-8d83-d809f32bcfcd", "updated_at": "2026-10-22T05:53:17.225Z", "user_session_issuer_ids": ["8abe2b2f-e1de-4405-9432-cc5597c1dea2", "61af22fd-e724-4459-a38d-4c41cf5b994f"]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -5619,7 +5632,7 @@ examples:
         application/json: {"id": "1abe0b39-ede5-4534-9ce7-e05cf60087a7", "user_session_issuer_id": "5c737e42-7d33-4672-90bb-2b871b96b9a6"}
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2024-10-19T22:09:56.380Z", "id": "cd7109c1-50f3-4b61-9791-936d3390eafd", "organization_id": "<id>", "project_id": "03de1e5c-d987-4dd6-9ceb-0c00a966c95d", "remote_session_issuer_id": "dcee3585-2c82-4f3c-bd1d-05b30f2e75e1", "updated_at": "2026-04-17T15:22:03.053Z", "user_session_issuer_ids": ["1114d362-c8a2-4121-aa54-49609354515b"]}
+          application/json: {"client_id": "<id>", "created_at": "2024-10-19T22:09:56.380Z", "grant_types": null, "id": "cd7109c1-50f3-4b61-9791-936d3390eafd", "organization_id": "<id>", "project_id": "03de1e5c-d987-4dd6-9ceb-0c00a966c95d", "remote_session_issuer_id": "dcee3585-2c82-4f3c-bd1d-05b30f2e75e1", "updated_at": "2026-04-17T15:22:03.053Z", "user_session_issuer_ids": ["1114d362-c8a2-4121-aa54-49609354515b"]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -6320,7 +6333,7 @@ examples:
           id: "a32e7fe3-ad88-4843-9e9b-d029eca73d54"
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2025-07-07T12:40:04.297Z", "id": "6f29e556-91e5-4edd-b721-b794f6472e81", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "e939aa40-3f85-44f7-9d08-32619e78c9a6", "updated_at": "2025-10-07T12:24:52.485Z", "user_session_issuer_ids": []}
+          application/json: {"client_id": "<id>", "created_at": "2025-07-07T12:40:04.297Z", "grant_types": [], "id": "6f29e556-91e5-4edd-b721-b794f6472e81", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "e939aa40-3f85-44f7-9d08-32619e78c9a6", "updated_at": "2025-10-07T12:24:52.485Z", "user_session_issuer_ids": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -6623,7 +6636,7 @@ examples:
           id: "5ca0426f-30f3-49c5-8b75-716fd349e47b"
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2026-02-20T07:04:22.319Z", "id": "024cc325-1f90-498e-aecb-ea584625122a", "organization_id": "<id>", "project_id": "77459054-4a9f-4e85-9042-8486e09f6d2a", "remote_session_issuer_id": "885d8829-eace-40f5-afa1-4df5c095fdce", "updated_at": "2026-11-02T11:34:00.635Z", "user_session_issuer_ids": ["ca0426f3-0f39-4c5b-b757-16fd349e47b0"]}
+          application/json: {"client_id": "<id>", "created_at": "2026-02-20T07:04:22.319Z", "grant_types": ["<value 1>", "<value 2>", "<value 3>"], "id": "024cc325-1f90-498e-aecb-ea584625122a", "organization_id": "<id>", "project_id": "77459054-4a9f-4e85-9042-8486e09f6d2a", "remote_session_issuer_id": "885d8829-eace-40f5-afa1-4df5c095fdce", "updated_at": "2026-11-02T11:34:00.635Z", "user_session_issuer_ids": ["ca0426f3-0f39-4c5b-b757-16fd349e47b0"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -6647,7 +6660,7 @@ examples:
           id: "e1f42171-6f72-4604-8a8f-46ad41ca8150"
       responses:
         "200":
-          application/json: {"can_delete": false, "mcp_server_names": ["<value 1>"], "session_count": 940270, "trusted_user_session_issuers": []}
+          application/json: {"can_delete": false, "ema_binding_count": 932690, "mcp_server_names": ["<value 1>"], "session_count": 940270, "trusted_user_session_issuers": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -6908,7 +6921,7 @@ examples:
           id: "0e9f80fa-56ce-4f95-84f4-54a1493b564e"
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2026-05-06T13:20:10.958Z", "id": "0e987f0f-2b04-456f-8ec9-ada2047e4f33", "organization_id": "<id>", "project_id": "28948500-fbc0-40bc-b1c4-dfea5b3616dd", "remote_session_issuer_id": "b19d16e6-4c1d-42a8-9fd1-a070dbf9262a", "updated_at": "2026-07-15T01:04:29.876Z", "user_session_issuer_ids": []}
+          application/json: {"client_id": "<id>", "created_at": "2026-05-06T13:20:10.958Z", "grant_types": null, "id": "0e987f0f-2b04-456f-8ec9-ada2047e4f33", "organization_id": "<id>", "project_id": "28948500-fbc0-40bc-b1c4-dfea5b3616dd", "remote_session_issuer_id": "b19d16e6-4c1d-42a8-9fd1-a070dbf9262a", "updated_at": "2026-07-15T01:04:29.876Z", "user_session_issuer_ids": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -8361,7 +8374,7 @@ examples:
           remote_session_issuer_id: "7c1fa209-8b42-46d5-9dae-1898e2a1e3bf"
       responses:
         "200":
-          application/json: {"items": [{"client_id": "<id>", "client_id_issued_at": "2026-10-03T14:38:30.681Z", "created_at": "2026-04-21T22:06:36.083Z", "id": "9812d234-04cc-4a10-9fd9-277c179ddb9a", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "99bd3ca7-f485-4720-ae42-50e9d9367813", "updated_at": "2025-05-06T08:56:14.123Z", "user_session_issuer_ids": ["6768a963-df51-43c1-be28-e9d6fa411025", "ea7cfbb1-4687-4820-82bf-7dda564a3211"]}]}
+          application/json: {"items": [{"client_id": "<id>", "client_id_issued_at": "2026-10-03T14:38:30.681Z", "created_at": "2026-04-21T22:06:36.083Z", "grant_types": ["<value 1>", "<value 2>", "<value 3>"], "id": "9812d234-04cc-4a10-9fd9-277c179ddb9a", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "99bd3ca7-f485-4720-ae42-50e9d9367813", "updated_at": "2025-05-06T08:56:14.123Z", "user_session_issuer_ids": ["6768a963-df51-43c1-be28-e9d6fa411025", "ea7cfbb1-4687-4820-82bf-7dda564a3211"]}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -8659,7 +8672,7 @@ examples:
           issuer_id: "7f11da21-036c-4fc5-beb2-c15362b44146"
       responses:
         "200":
-          application/json: {"items": [{"active_session_count": 367945, "client": {"client_id": "<id>", "client_id_issued_at": "2025-04-20T04:27:00.143Z", "created_at": "2024-04-06T20:00:46.605Z", "id": "3d9b75f3-091b-4a23-81ae-39fe8f2f3bc2", "organization_id": "<id>", "project_id": "7c47552d-83ab-4480-83f4-d215fbf8ccc3", "remote_session_issuer_id": "2d346c13-6b75-4fa7-9fcc-b6b4ab78f094", "updated_at": "2025-09-07T11:35:39.299Z", "user_session_issuer_ids": ["f11da210-36cf-4c5e-ab2c-15362b44146f"]}, "mcp_server_count": 94744}]}
+          application/json: {"items": [{"active_session_count": 367945, "client": {"client_id": "<id>", "client_id_issued_at": "2025-04-20T04:27:00.143Z", "created_at": "2024-04-06T20:00:46.605Z", "grant_types": ["<value 1>", "<value 2>", "<value 3>"], "id": "3d9b75f3-091b-4a23-81ae-39fe8f2f3bc2", "organization_id": "<id>", "project_id": "7c47552d-83ab-4480-83f4-d215fbf8ccc3", "remote_session_issuer_id": "2d346c13-6b75-4fa7-9fcc-b6b4ab78f094", "updated_at": "2025-09-07T11:35:39.299Z", "user_session_issuer_ids": ["f11da210-36cf-4c5e-ab2c-15362b44146f"]}, "mcp_server_count": 94744}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -9687,6 +9700,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  prepareEMA:
+    speakeasy-default-prepare-EMA:
+      requestBody:
+        application/json: {"expected_generation": 887238, "mechanism": "manual", "remote_session_issuer_id": "35f22c2e-c9b3-4159-9eb0-98835f44011e", "resource": "https://illustrious-settler.info/", "user_session_issuer_id": "d58f0606-0654-49ac-a076-b6d2907fd001"}
+      responses:
+        "200":
+          application/json: {"generation": 17915, "grant_source": "<value>", "grant_types": ["<value 1>"], "remediation": "<value>", "resource": "<value>", "retryable": true, "scopes": ["<value 1>"], "stage": "selection", "state": "manual_setup_required"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   previewSpendRule:
     speakeasy-default-preview-spend-rule:
       requestBody:
@@ -9815,6 +9839,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  readEMA:
+    speakeasy-default-read-EMA:
+      requestBody:
+        application/json: {"remote_session_issuer_id": "9b4cfcbf-daa4-44e6-bacb-ccfe1e875280", "resource": "https://dearest-yogurt.com/", "user_session_issuer_id": "777cd2eb-56e5-4f92-adfb-f0e8905624e6"}
+      responses:
+        "200":
+          application/json: {"generation": 309005, "grant_source": "<value>", "grant_types": ["<value 1>", "<value 2>", "<value 3>"], "remediation": "<value>", "resource": "<value>", "retryable": false, "scopes": ["<value 1>", "<value 2>"], "stage": "publication", "state": "published_acceptance_unverified"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   reassignAgent:
     speakeasy-default-reassign-agent:
       requestBody:
@@ -10502,7 +10537,7 @@ examples:
         application/json: {"id": "ad49b1eb-41f8-4b32-b0a3-f2ae2afb004f"}
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2026-11-18T14:04:19.428Z", "id": "ce0bff6f-5196-479b-ab10-00238fa08dc2", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "8c2736ca-c6b3-4ec6-92a2-c66dac1ca330", "updated_at": "2026-11-09T13:06:45.286Z", "user_session_issuer_ids": ["b3a97ca2-d19c-4214-8c85-26045f467b06", "3e16be52-08c8-46d8-8549-cd1ed4965381", "6ab6ea7e-238f-4627-b3db-5041c7709546"]}
+          application/json: {"client_id": "<id>", "created_at": "2026-11-18T14:04:19.428Z", "grant_types": ["<value 1>", "<value 2>", "<value 3>"], "id": "ce0bff6f-5196-479b-ab10-00238fa08dc2", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "8c2736ca-c6b3-4ec6-92a2-c66dac1ca330", "updated_at": "2026-11-09T13:06:45.286Z", "user_session_issuer_ids": ["b3a97ca2-d19c-4214-8c85-26045f467b06", "3e16be52-08c8-46d8-8549-cd1ed4965381", "6ab6ea7e-238f-4627-b3db-5041c7709546"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -11209,6 +11244,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  unlinkEMA:
+    speakeasy-default-unlink-EMA:
+      requestBody:
+        application/json: {"expected_generation": 849046, "remote_session_issuer_id": "05fd6e9b-a624-4e3c-9ebe-389460281dfb", "resource": "https://crazy-cutlet.net/", "user_session_issuer_id": "1a52b2e7-712f-41bc-a58a-88b8553ec249"}
+      responses:
+        "200":
+          application/json: {"generation": 192488, "grant_source": "<value>", "grant_types": ["<value 1>", "<value 2>", "<value 3>"], "remediation": "<value>", "resource": "<value>", "retryable": false, "scopes": ["<value 1>", "<value 2>", "<value 3>"], "stage": "eligibility", "state": "incomplete_metadata"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   unmarkRiskResultsFalsePositive:
     speakeasy-default-unmark-risk-results-false-positive:
       requestBody:
@@ -11435,7 +11481,7 @@ examples:
         application/json: {"id": "9988f3a1-fc36-4a9f-b68e-b087538c5460"}
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2026-09-25T17:11:59.178Z", "id": "f9bf0152-42d1-40fc-8a9f-836b4300511b", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "ef9d7dbf-465b-409b-8240-ec2eae783e9a", "updated_at": "2024-03-08T00:09:16.741Z", "user_session_issuer_ids": ["92c7eb85-cd67-4e69-8c2f-caba1cdcb403"]}
+          application/json: {"client_id": "<id>", "created_at": "2026-09-25T17:11:59.178Z", "grant_types": ["<value 1>", "<value 2>"], "id": "f9bf0152-42d1-40fc-8a9f-836b4300511b", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "ef9d7dbf-465b-409b-8240-ec2eae783e9a", "updated_at": "2024-03-08T00:09:16.741Z", "user_session_issuer_ids": ["92c7eb85-cd67-4e69-8c2f-caba1cdcb403"]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -11570,7 +11616,7 @@ examples:
         application/json: {"id": "2b7c2a8b-15ee-4195-8c17-432168bdfb4f"}
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2025-08-29T20:51:31.682Z", "id": "ffd1a1eb-e2ae-4ca0-949c-d00124dfff9d", "organization_id": "<id>", "project_id": "4c94e197-fb1c-409c-8927-ce3808e77130", "remote_session_issuer_id": "c21431a3-e934-4418-83a6-7b8e33d2351a", "updated_at": "2024-08-22T09:02:47.709Z", "user_session_issuer_ids": []}
+          application/json: {"client_id": "<id>", "created_at": "2025-08-29T20:51:31.682Z", "grant_types": ["<value 1>", "<value 2>"], "id": "ffd1a1eb-e2ae-4ca0-949c-d00124dfff9d", "organization_id": "<id>", "project_id": "4c94e197-fb1c-409c-8927-ce3808e77130", "remote_session_issuer_id": "c21431a3-e934-4418-83a6-7b8e33d2351a", "updated_at": "2024-08-22T09:02:47.709Z", "user_session_issuer_ids": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -11685,7 +11731,7 @@ examples:
         application/json: {"id": "eb9b6010-ede7-4af2-bb2c-975aff68be3f"}
       responses:
         "200":
-          application/json: {"client_id": "<id>", "created_at": "2024-10-01T21:25:33.628Z", "id": "baddcbfd-0c2d-4b77-ac8e-15b451ea3a7c", "organization_id": "<id>", "project_id": "4e384210-3bf1-4c91-aa5b-dd2d5c285e65", "remote_session_issuer_id": "ad546a1a-8cce-475c-ba08-37529ecf08d5", "updated_at": "2025-12-31T21:42:36.114Z", "user_session_issuer_ids": ["b9b6010e-de7a-4f2b-92c9-75aff68be3fc", "4baddcbf-d0c2-4db7-b7c8-e15b451ea3a7", "a4e38421-03bf-41c9-91a5-bdd2d5c285e6"]}
+          application/json: {"client_id": "<id>", "created_at": "2024-10-01T21:25:33.628Z", "grant_types": ["<value 1>", "<value 2>"], "id": "baddcbfd-0c2d-4b77-ac8e-15b451ea3a7c", "organization_id": "<id>", "project_id": "4e384210-3bf1-4c91-aa5b-dd2d5c285e65", "remote_session_issuer_id": "ad546a1a-8cce-475c-ba08-37529ecf08d5", "updated_at": "2025-12-31T21:42:36.114Z", "user_session_issuer_ids": ["b9b6010e-de7a-4f2b-92c9-75aff68be3fc", "4baddcbf-d0c2-4db7-b7c8-e15b451ea3a7", "a4e38421-03bf-41c9-91a5-bdd2d5c285e6"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

@@ -17,6 +17,18 @@ import (
 
 // Client lists the remoteSessionClients service endpoint HTTP clients.
 type Client struct {
+	// PrepareEMA Doer is the HTTP client used to make requests to the prepareEMA
+	// endpoint.
+	PrepareEMADoer goahttp.Doer
+
+	// ReadEMA Doer is the HTTP client used to make requests to the readEMA
+	// endpoint.
+	ReadEMADoer goahttp.Doer
+
+	// UnlinkEMA Doer is the HTTP client used to make requests to the unlinkEMA
+	// endpoint.
+	UnlinkEMADoer goahttp.Doer
+
 	// CreateRemoteSessionClient Doer is the HTTP client used to make requests to
 	// the createRemoteSessionClient endpoint.
 	CreateRemoteSessionClientDoer goahttp.Doer
@@ -78,6 +90,9 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		PrepareEMADoer:                doer,
+		ReadEMADoer:                   doer,
+		UnlinkEMADoer:                 doer,
 		CreateRemoteSessionClientDoer: doer,
 		CreateCimdDoer:                doer,
 		UpdateRemoteSessionClientDoer: doer,
@@ -93,6 +108,78 @@ func NewClient(
 		host:                          host,
 		decoder:                       dec,
 		encoder:                       enc,
+	}
+}
+
+// PrepareEMA returns an endpoint that makes HTTP requests to the
+// remoteSessionClients service prepareEMA server.
+func (c *Client) PrepareEMA() goa.Endpoint {
+	var (
+		encodeRequest  = EncodePrepareEMARequest(c.encoder)
+		decodeResponse = DecodePrepareEMAResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildPrepareEMARequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.PrepareEMADoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessionClients", "prepareEMA", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ReadEMA returns an endpoint that makes HTTP requests to the
+// remoteSessionClients service readEMA server.
+func (c *Client) ReadEMA() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeReadEMARequest(c.encoder)
+		decodeResponse = DecodeReadEMAResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildReadEMARequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ReadEMADoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessionClients", "readEMA", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UnlinkEMA returns an endpoint that makes HTTP requests to the
+// remoteSessionClients service unlinkEMA server.
+func (c *Client) UnlinkEMA() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUnlinkEMARequest(c.encoder)
+		decodeResponse = DecodeUnlinkEMAResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUnlinkEMARequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UnlinkEMADoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessionClients", "unlinkEMA", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 
