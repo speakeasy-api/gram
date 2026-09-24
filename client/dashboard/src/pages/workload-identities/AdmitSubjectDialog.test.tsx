@@ -68,10 +68,10 @@ it("warns when an exact subject contains a star, and blocks the submit", () => {
 });
 
 it("blocks the submit on the warning alone, with everything else filled in", () => {
-  // Driven through the button this could not fail: canAdmit also requires an
-  // agent, which the dialog's Radix select makes awkward to choose in jsdom, so
-  // the button is disabled either way. Asserting the gate directly is what
-  // catches the warning being dropped from it.
+  // Driven through the button this cannot fail: canAdmit also requires an agent,
+  // which the dialog's Radix select makes awkward to choose in jsdom, so the
+  // button is disabled either way. Asserting the gate directly is what catches
+  // the warning being dropped from it.
   const complete = {
     issuer: "https://identity.example.com",
     subject: "wimse://identity.example.com/org/acme/agent/a-1",

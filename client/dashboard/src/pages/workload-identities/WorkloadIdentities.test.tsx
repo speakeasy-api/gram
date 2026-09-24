@@ -166,7 +166,7 @@ it("names a subject with no assigned agent, which cannot authenticate", () => {
 it("still renders the policy when agents cannot be listed", () => {
   // The whole agents service 404s when the agent management rollout is off, and
   // the global query policy only suppresses 401 and 403 — so left to throw it
-  // took this page down even though the trust policy had loaded.
+  // takes this page down even though the trust policy has loaded.
   agentsState.data = undefined;
   agentsState.isError = true;
 
