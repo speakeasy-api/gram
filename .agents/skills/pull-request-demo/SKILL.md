@@ -1,5 +1,5 @@
 ---
-name: pr-demo-gif
+name: pull-request-demo
 description: Always use after creating a pull request that proposes user-visible changes.
 ---
 
