@@ -79,9 +79,28 @@ pubsub:
             string provider = 6;
             string model = 7;
             bool replayed = 8;
+            string adapter = 9;
+            string hook_source = 10;
+            string hostname = 11;
+            string user_agent = 12;
+            string user_email = 13;
+            Account account = 14;
+          }
+          message Account {
+            string user_account_id = 1;
+            string account_type = 2;
+            string billing_mode = 3;
+          }
+          message ConversationContext {
+            string external_conversation_id = 1;
+            string working_directory = 2;
           }
           message Body {
             repeated Part parts = 1;
+            oneof original_content {
+              ContentReference source_content = 2;
+              bytes source_content_json = 3;
+            }
           }
           message Part {
             oneof value {
@@ -115,6 +134,8 @@ pubsub:
             Body body = 11;
             ContentReference body_reference = 12;
           }
+          string correlation_id = 13;
+          ConversationContext conversation_context = 14;
         }
       type: PROTOCOL_BUFFER
   - labels:
