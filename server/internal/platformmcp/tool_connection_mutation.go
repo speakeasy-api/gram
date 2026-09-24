@@ -55,6 +55,9 @@ func unavailableMCPConnectionMutationTool[In, Out any]() mcp.ToolHandlerFor[In, 
 }
 
 func mcpConnectionMutationToolResult(err error) (*mcp.CallToolResult, bool) {
+	if refusal, ok := externalAuthorizationToolResult(err); ok {
+		return refusal, true
+	}
 	result := featureUnavailableResult{Feature: "mcp_connection_mutations"}
 	switch {
 	case errors.Is(err, ErrMCPConnectionMutationInvalid):

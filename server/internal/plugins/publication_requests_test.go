@@ -15,15 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-type publicationTestSignaler struct {
-	calls int
-}
-
-func (s *publicationTestSignaler) SignalPluginPublish(context.Context, uuid.UUID, string) error {
-	s.calls++
-	return nil
-}
-
 func TestSignalPluginPublishAfterRequest(t *testing.T) {
 	t.Parallel()
 
@@ -38,13 +29,13 @@ func TestSignalPluginPublishAfterRequest(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			signaler := &publicationTestSignaler{}
+			signaler := &capturePublishSignaler{}
 			err := plugins.SignalPluginPublishAfterRequest(context.Background(), signaler, test.outcome, uuid.New(), "actor")
 			require.NoError(t, err)
 			if test.wantSignal {
-				require.Equal(t, 1, signaler.calls)
+				require.Len(t, signaler.captured(), 1)
 			} else {
-				require.Zero(t, signaler.calls)
+				require.Empty(t, signaler.captured())
 			}
 		})
 	}

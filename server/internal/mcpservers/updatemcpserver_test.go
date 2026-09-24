@@ -42,6 +42,7 @@ func TestUpdateMcpServer_NetworkModeOnlyTransaction(t *testing.T) {
 		Visibility: types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
+	require.NotNil(t, created.UserSessionIssuerID)
 	issuerBefore := created.UserSessionIssuerID
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)

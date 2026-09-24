@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -69,7 +70,10 @@ func UpdateMCPServerNetworkAccessModeInTransaction(ctx context.Context, tx pgx.T
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("lock MCP server: %w", err)
 	}
-	updated, err := tx.Exec(ctx, `UPDATE mcp_servers SET network_access_mode = $1, updated_at = clock_timestamp() WHERE id = $2 AND project_id = $3 AND deleted IS FALSE`, networkaccess.Storage(mode), input.ServerID, input.ProjectID)
+	if existing.UnproxiedMcpServerID.Valid && !mode.IsPublicOnly() {
+		return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
+	}
+	updated, err := tx.Exec(ctx, `UPDATE mcp_servers SET network_access_mode = $1, updated_at = clock_timestamp() WHERE id = $2 AND project_id = $3 AND deleted IS FALSE AND EXISTS (SELECT 1 FROM projects p WHERE p.id = mcp_servers.project_id AND p.deleted IS FALSE)`, networkaccess.Storage(mode), input.ServerID, input.ProjectID)
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("update MCP server network access mode: %w", err)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
 func TestUpdateMcpEndpointAddressInTransaction(t *testing.T) {
@@ -138,7 +139,9 @@ func TestCreateMcpEndpointInTransactionDoesNotAttachDefaultPlugin(t *testing.T) 
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	serverID := seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+	serverID := seedMcpServerWithVisibility(t, ctx, ti.conn, *authCtx.ProjectID, "public")
+	plugin, err := pluginsrepo.New(ti.conn).CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
 	tx, err := ti.conn.Begin(ctx)
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -153,6 +156,11 @@ func TestCreateMcpEndpointInTransactionDoesNotAttachDefaultPlugin(t *testing.T) 
 	endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByProject(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
 	require.Len(t, endpoints, 1)
+	members, err := pluginsrepo.New(ti.conn).ListPluginServers(ctx, plugin.ID)
+	require.NoError(t, err)
+	for _, member := range members {
+		require.NotEqual(t, serverID, member.McpServerID.UUID)
+	}
 }
 
 func TestUpdateMcpEndpointAddressConcurrentWritersSerializeSlugClaims(t *testing.T) {

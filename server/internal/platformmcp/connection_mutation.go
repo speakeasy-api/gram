@@ -275,7 +275,10 @@ func (s *MCPConnectionMutationService) validateInput(ctx context.Context, princi
 		return "", uuid.Nil, ResolvedProject{}, fmt.Errorf("resolve live connection mutation project: %w", err)
 	}
 	if err := s.authorizer.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceID: project.ID.String()}); err != nil {
-		return "", uuid.Nil, ResolvedProject{}, err
+		return "", uuid.Nil, ResolvedProject{}, connectionMutationAuthorizationError(err, authz.ScopeMCPWrite)
+	}
+	if err := s.authorizer.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: principal.OrganizationID}); err != nil {
+		return "", uuid.Nil, ResolvedProject{}, connectionMutationAuthorizationError(err, authz.ScopeOrgAdmin)
 	}
 	if _, err := s.settings.Get(ctx, principal, GetMCPConnectionSettingsInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: parsedTarget.String()}); err != nil {
 		if errors.Is(err, ErrMCPConnectionSettingsNotFound) {
@@ -326,7 +329,7 @@ func (s *MCPConnectionMutationService) execute(ctx context.Context, principal Pr
 
 func (s *MCPConnectionMutationService) finish(ctx context.Context, principal Principal, projectID uuid.UUID, projectIDText string, kind MCPConnectionSettingsTargetKind, targetID uuid.UUID, stored connectionMutationReceipt, receipt OperationReceipt) (MCPConnectionMutationOutput, error) {
 	output := MCPConnectionMutationOutput{PublicationRequest: stored.PublicationRequest, PublishSignal: "not_requested", Receipt: riskMutationToolReceipt(receipt)}
-	if !receipt.Replayed && stored.PublicationRequest != string(plugins.ProjectPublicationEnqueued) {
+	if stored.PublicationRequest != string(plugins.ProjectPublicationEnqueued) {
 		if s.publisher == nil {
 			output.PublishSignal = "unavailable"
 		} else if err := plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(stored.PublicationRequest), projectID, principal.UserID); err != nil {
@@ -390,6 +393,13 @@ func classifyConnectionMutationError(err error) error {
 		}
 	}
 	return fmt.Errorf("mutate MCP connection settings: %w", err)
+}
+
+func connectionMutationAuthorizationError(err error, scope authz.Scope) error {
+	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
+		return &ExternalAuthorizationError{RequiredScope: string(scope), cause: err}
+	}
+	return err
 }
 
 func connectionMutationInvalid(message string) error {

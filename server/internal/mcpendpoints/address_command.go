@@ -7,13 +7,16 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -52,7 +55,7 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 	if err := lockEndpointMutationScope(ctx, tx, authCtx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope")
 	}
-	if err := lockCustomDomains(ctx, tx, uniqueIDs(input.CustomDomainID)); err != nil {
+	if err := lockCustomDomainsForOrganization(ctx, tx, authCtx.ActiveOrganizationID, uniqueIDs(input.CustomDomainID)); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeInvalid, err, "custom_domain_id does not reference a live custom domain")
 		}
@@ -91,6 +94,10 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		MetaMcpServerID: input.MetaMcpServerID, Slug: input.Slug,
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "mcp endpoint slug already exists for this domain")
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create mcp endpoint")
 	}
 	if err := s.audit.LogMcpEndpointCreate(ctx, tx, audit.LogMcpEndpointCreateEvent{
@@ -101,6 +108,16 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation")
 	}
 	return mv.BuildMcpEndpointView(created), nil
+}
+
+func lockCustomDomainsForOrganization(ctx context.Context, tx pgx.Tx, organizationID string, domainIDs []uuid.UUID) error {
+	queries := customdomainsrepo.New(tx)
+	for _, domainID := range domainIDs {
+		if _, err := queries.LockCustomDomainByIDAndOrganization(ctx, customdomainsrepo.LockCustomDomainByIDAndOrganizationParams{ID: domainID, OrganizationID: organizationID}); err != nil {
+			return fmt.Errorf("lock custom domain %s: %w", domainID, err)
+		}
+	}
+	return nil
 }
 
 // UpdateMcpEndpointAddressInput describes an address-only update to an existing
@@ -145,7 +162,7 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "get mcp endpoint")
 	}
-	if err := lockCustomDomains(ctx, tx, uniqueIDs(preexisting.CustomDomainID, input.CustomDomainID)); err != nil {
+	if err := lockCustomDomainsForOrganization(ctx, tx, authCtx.ActiveOrganizationID, uniqueIDs(preexisting.CustomDomainID, input.CustomDomainID)); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil, oops.E(oops.CodeInvalid, err, "custom_domain_id does not reference a live custom domain")
 		}
@@ -217,6 +234,10 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 		return nil, nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found")
 	}
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, nil, oops.E(oops.CodeConflict, err, "mcp endpoint slug already exists for this domain")
+		}
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "update mcp endpoint address")
 	}
 	beforeView, afterView := mv.BuildMcpEndpointView(existing), mv.BuildMcpEndpointView(updated)

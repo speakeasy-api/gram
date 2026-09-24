@@ -1,4 +1,3 @@
-//nolint:glint // Caller-owned transaction tests directly exercise network-mode-only writes.
 package metamcp_test
 
 import (
@@ -39,7 +38,7 @@ func TestUpdateMetaMcpServer_NetworkModeOnlyTransaction(t *testing.T) {
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMetaMcpServerUpdate)
 	require.NoError(t, err)
-	tx, err := ti.conn.Begin(ctx)
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // Caller-owned transaction exercises the network-mode-only write.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 
