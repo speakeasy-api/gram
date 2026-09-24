@@ -9,6 +9,7 @@ import (
 	"cloud.google.com/go/pubsub/v2"
 
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	networkingressv1 "github.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -29,6 +30,8 @@ type Topic string
 const (
 	// GramAuthzV1Challenge publishes to gram-authz-v1-challenge.
 	GramAuthzV1Challenge Topic = "gram.authz.v1.Challenge"
+	// GramConversationV1Message publishes to gram-conversation-v1-message.
+	GramConversationV1Message Topic = "gram.conversation.v1.Message"
 	// GramMeteringV1MeterReading publishes to gram-metering-v1-meter-reading.
 	GramMeteringV1MeterReading Topic = "gram.metering.v1.MeterReading"
 	// GramNetworkingressV1ReconcileRequested publishes to gram-networkingress-v1-reconcile-requested.
@@ -81,6 +84,7 @@ const (
 func All() []Topic {
 	return []Topic{
 		GramAuthzV1Challenge,
+		GramConversationV1Message,
 		GramMeteringV1MeterReading,
 		GramNetworkingressV1ReconcileRequested,
 		GramOtelV1InboundLogRecord,
@@ -112,6 +116,8 @@ func Lookup(name string) (Topic, bool) {
 	switch Topic(name) {
 	case GramAuthzV1Challenge:
 		return GramAuthzV1Challenge, true
+	case GramConversationV1Message:
+		return GramConversationV1Message, true
 	case GramMeteringV1MeterReading:
 		return GramMeteringV1MeterReading, true
 	case GramNetworkingressV1ReconcileRequested:
@@ -171,6 +177,8 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 	switch topic {
 	case GramAuthzV1Challenge:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &authzv1.Challenge{}, gcp.WithEncodedPublishSettings(settings))
+	case GramConversationV1Message:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &conversationv1.Message{}, gcp.WithEncodedPublishSettings(settings))
 	case GramMeteringV1MeterReading:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &meteringv1.MeterReading{}, gcp.WithEncodedPublishSettings(settings))
 	case GramNetworkingressV1ReconcileRequested:

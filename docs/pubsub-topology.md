@@ -17,6 +17,7 @@ flowchart LR
 
   t_gram_authz_v1_challenge(["gram-authz-v1-challenge<br/>(topic)"]):::topic
   t_gram_authz_v1_challenge_ch_writer_dlq(["gram-authz-v1-challenge-ch-writer-dlq<br/>(dlq)"]):::dlq
+  t_gram_conversation_v1_message(["gram-conversation-v1-message<br/>(topic)"]):::topic
   t_gram_metering_v1_meter_reading(["gram-metering-v1-meter-reading<br/>(topic)"]):::topic
   t_gram_metering_v1_meter_reading_ch_writer_dlq(["gram-metering-v1-meter-reading-ch-writer-dlq<br/>(dlq)"]):::dlq
   t_gram_networkingress_v1_reconcile_requested(["gram-networkingress-v1-reconcile-requested<br/>(topic)"]):::topic
@@ -268,6 +269,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | [`gram-authz-v1-challenge`](../infra/proto/gram/authz/v1/challenge.proto) | topic | 7d | [`server/internal/authz/challenge_logger.go`](../server/internal/authz/challenge_logger.go) |
 | [`gram-authz-v1-challenge-ch-writer-dlq`](../infra/proto/gram/authz/v1/challenge_ch_writer.proto) | DLQ | 7d | — |
+| [`gram-conversation-v1-message`](../infra/proto/gram/conversation/v1/message.proto) | topic | 7d | — |
 | [`gram-metering-v1-meter-reading`](../infra/proto/gram/metering/v1/meter_reading.proto) | topic | 4d | [`pystreams/src/pystreams/risk/metering.py`](../pystreams/src/pystreams/risk/metering.py) |
 | [`gram-metering-v1-meter-reading-ch-writer-dlq`](../infra/proto/gram/metering/v1/meter_reading_ch_writer.proto) | DLQ | 4d | — |
 | [`gram-networkingress-v1-reconcile-requested`](../infra/proto/gram/networkingress/v1/reconcile_requested.proto) | topic | 7d | [`server/internal/networkingress/reconcile_requests.go`](../server/internal/networkingress/reconcile_requests.go) |
@@ -353,6 +355,7 @@ flowchart LR
 
 ## Notes
 
+- Topic `gram-conversation-v1-message` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-inbound-metric` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-inbound-span` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-log-record` has no publisher in `server/` or `pystreams/`.
