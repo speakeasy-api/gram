@@ -220,8 +220,8 @@ func unmarshalMCPScope(raw []byte) *MCPScope {
 		}
 	}
 	for i := range scope.Servers {
-		if len(scope.Servers[i].Tools) == 0 {
-			scope.Servers[i].Tools = nil
+		if scope.Servers[i].Tools != nil && len(scope.Servers[i].Tools) == 0 {
+			return failClosedMCPScope()
 		}
 	}
 	if !scope.AllServers && len(scope.Servers) == 0 {

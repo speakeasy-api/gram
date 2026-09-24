@@ -359,23 +359,34 @@ effective_variation_group AS (
     (
       SELECT ptv.group_id
       FROM project_tool_variations ptv
+      JOIN tool_variations_groups ptvg
+        ON ptvg.id = ptv.group_id
+       AND ptvg.project_id = @project_id
+       AND ptvg.deleted IS FALSE
       WHERE ptv.project_id = @project_id
       ORDER BY ptv.id DESC
       LIMIT 1
     )
   ) AS group_id
   FROM target_server s
-  LEFT JOIN toolsets t ON t.id = s.toolset_id
+  LEFT JOIN toolsets t
+    ON t.id = s.toolset_id
+   AND t.project_id = @project_id
+   AND t.deleted IS FALSE
 ),
 latest_toolset_version AS (
   SELECT tv.tool_urns
   FROM target_server s
+  JOIN toolsets t
+    ON t.id = s.toolset_id
+   AND t.project_id = @project_id
+   AND t.deleted IS FALSE
   JOIN LATERAL (
-    SELECT tool_urns
-    FROM toolset_versions
-    WHERE toolset_id = s.toolset_id
-      AND deleted IS FALSE
-    ORDER BY version DESC
+    SELECT version.tool_urns
+    FROM toolset_versions version
+    WHERE version.toolset_id = t.id
+      AND version.deleted IS FALSE
+    ORDER BY version.version DESC
     LIMIT 1
   ) tv ON TRUE
 ),
@@ -389,13 +400,23 @@ active_deployment AS (
   LIMIT 1
 ),
 http_source_deployments AS (
-  SELECT id
-  FROM active_deployment
+  SELECT ad.id
+  FROM active_deployment ad
   UNION ALL
   SELECT pv.deployment_id
   FROM active_deployment ad
   JOIN deployments_packages dp ON dp.deployment_id = ad.id
-  JOIN package_versions pv ON pv.id = dp.version_id
+  JOIN package_versions pv
+    ON pv.id = dp.version_id
+   AND pv.package_id = dp.package_id
+   AND pv.deleted IS FALSE
+  JOIN packages p
+    ON p.id = pv.package_id
+   AND p.project_id = @project_id
+   AND p.deleted IS FALSE
+  JOIN deployments package_deployment
+    ON package_deployment.id = pv.deployment_id
+   AND package_deployment.project_id = @project_id
 ),
 source_annotations AS (
   SELECT
@@ -408,7 +429,8 @@ source_annotations AS (
   FROM latest_toolset_version tv
   JOIN http_tool_definitions h ON h.tool_urn = ANY(tv.tool_urns)
   JOIN http_source_deployments sd ON sd.id = h.deployment_id
-  WHERE h.deleted IS FALSE
+  WHERE h.project_id = @project_id
+    AND h.deleted IS FALSE
   UNION ALL
   SELECT
     f.tool_urn,
@@ -420,7 +442,8 @@ source_annotations AS (
   FROM latest_toolset_version tv
   JOIN function_tool_definitions f ON f.tool_urn = ANY(tv.tool_urns)
   JOIN active_deployment ad ON ad.id = f.deployment_id
-  WHERE f.deleted IS FALSE
+  WHERE f.project_id = @project_id
+    AND f.deleted IS FALSE
   UNION ALL
   SELECT
     e.tool_urn,
@@ -447,8 +470,12 @@ varied_annotations AS (
     COALESCE(v.open_world_hint, source.open_world_hint) AS open_world_hint
   FROM source_annotations source
   LEFT JOIN effective_variation_group variation_group ON TRUE
+  LEFT JOIN tool_variations_groups owned_variation_group
+    ON owned_variation_group.id = variation_group.group_id
+   AND owned_variation_group.project_id = @project_id
+   AND owned_variation_group.deleted IS FALSE
   LEFT JOIN tool_variations v
-    ON v.group_id = variation_group.group_id
+    ON v.group_id = owned_variation_group.id
    AND v.src_tool_urn = source.tool_urn
    AND v.deleted IS FALSE
 ),

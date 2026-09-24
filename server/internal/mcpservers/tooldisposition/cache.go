@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +20,7 @@ import (
 const ttl = 15 * time.Minute
 
 type serverTools struct {
+	ProjectID    string                            `json:"project_id"`
 	MCPServerID  string                            `json:"mcp_server_id"`
 	Dispositions map[string]string                 `json:"dispositions"`
 	Annotations  map[string]*types.ToolAnnotations `json:"annotations"`
@@ -26,12 +28,12 @@ type serverTools struct {
 
 var _ cache.CacheableObject[serverTools] = (*serverTools)(nil)
 
-func cacheKey(mcpServerID string) string {
-	return fmt.Sprintf("mcpservers:tool_disposition:v2:%s", mcpServerID)
+func cacheKey(projectID, mcpServerID string) string {
+	return fmt.Sprintf("mcpservers:tool_disposition:v3:%s:%s", projectID, mcpServerID)
 }
 
 func (s serverTools) CacheKey() string {
-	return cacheKey(s.MCPServerID)
+	return cacheKey(s.ProjectID, s.MCPServerID)
 }
 
 func (s serverTools) AdditionalCacheKeys() []string {
@@ -42,20 +44,29 @@ func (s serverTools) TTL() time.Duration {
 	return ttl
 }
 
+type cacheGeneration struct {
+	mu    sync.Mutex
+	value uint64
+}
+
 // Cache resolves effective tool annotations and dispositions through a pull-through cache.
 type Cache struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	cache  cache.TypedCacheObject[serverTools]
+	logger        *slog.Logger
+	db            *pgxpool.Pool
+	cache         cache.TypedCacheObject[serverTools]
+	generationsMu sync.Mutex
+	generations   map[string]*cacheGeneration
 }
 
 // New creates a tool annotation cache.
 func New(logger *slog.Logger, db *pgxpool.Pool, c cache.Cache) *Cache {
 	logger = logger.With(attr.SlogComponent("tool-disposition"))
 	return &Cache{
-		logger: logger,
-		db:     db,
-		cache:  cache.NewTypedObjectCache[serverTools](logger.With(attr.SlogCacheNamespace("tool-disposition")), c, cache.SuffixNone),
+		logger:        logger,
+		db:            db,
+		cache:         cache.NewTypedObjectCache[serverTools](logger.With(attr.SlogCacheNamespace("tool-disposition")), c, cache.SuffixNone),
+		generationsMu: sync.Mutex{},
+		generations:   make(map[string]*cacheGeneration),
 	}
 }
 
@@ -88,9 +99,17 @@ func (c *Cache) ToolAnnotations(ctx context.Context, mcpServerID, projectID uuid
 
 func (c *Cache) resolve(ctx context.Context, mcpServerID, projectID uuid.UUID) (serverTools, error) {
 	serverID := mcpServerID.String()
-	if cached, err := c.cache.Get(ctx, cacheKey(serverID)); err == nil {
+	projectIDString := projectID.String()
+	key := cacheKey(projectIDString, serverID)
+	generation := c.generationFor(key)
+
+	generation.mu.Lock()
+	if cached, err := c.cache.Get(ctx, key); err == nil {
+		generation.mu.Unlock()
 		return cached, nil
 	}
+	resolveGeneration := generation.value
+	generation.mu.Unlock()
 
 	rows, err := repo.New(c.db).ListEffectiveMCPServerToolAnnotations(ctx, repo.ListEffectiveMCPServerToolAnnotationsParams{
 		McpServerID: mcpServerID,
@@ -101,6 +120,7 @@ func (c *Cache) resolve(ctx context.Context, mcpServerID, projectID uuid.UUID) (
 	}
 
 	resolved := serverTools{
+		ProjectID:    projectIDString,
 		MCPServerID:  serverID,
 		Dispositions: make(map[string]string, len(rows)),
 		Annotations:  make(map[string]*types.ToolAnnotations, len(rows)),
@@ -118,19 +138,51 @@ func (c *Cache) resolve(ctx context.Context, mcpServerID, projectID uuid.UUID) (
 		}
 	}
 
-	if err := c.cache.Store(ctx, resolved); err != nil {
-		c.logger.WarnContext(ctx, "cache MCP tool annotations",
-			attr.SlogError(err),
-			attr.SlogMcpServerID(serverID),
-		)
-	}
+	c.storeResolved(ctx, generation, resolveGeneration, resolved)
 
 	return resolved, nil
 }
+func (c *Cache) storeResolved(
+	ctx context.Context,
+	generation *cacheGeneration,
+	resolveGeneration uint64,
+	resolved serverTools,
+) {
+	generation.mu.Lock()
+	defer generation.mu.Unlock()
 
-// Invalidate evicts a server's cached annotations.
-func (c *Cache) Invalidate(ctx context.Context, mcpServerID string) error {
-	if err := c.cache.DeleteByKey(ctx, cacheKey(mcpServerID)); err != nil {
+	if generation.value != resolveGeneration {
+		return
+	}
+	if err := c.cache.Store(ctx, resolved); err != nil {
+		c.logger.WarnContext(ctx, "cache MCP tool annotations",
+			attr.SlogError(err),
+			attr.SlogMcpServerID(resolved.MCPServerID),
+		)
+	}
+}
+
+func (c *Cache) generationFor(key string) *cacheGeneration {
+	c.generationsMu.Lock()
+	defer c.generationsMu.Unlock()
+
+	if generation, ok := c.generations[key]; ok {
+		return generation
+	}
+	generation := &cacheGeneration{mu: sync.Mutex{}, value: 0}
+	c.generations[key] = generation
+	return generation
+}
+
+// Invalidate evicts one project's cached annotations for a server.
+func (c *Cache) Invalidate(ctx context.Context, projectID, mcpServerID uuid.UUID) error {
+	key := cacheKey(projectID.String(), mcpServerID.String())
+	generation := c.generationFor(key)
+	generation.mu.Lock()
+	defer generation.mu.Unlock()
+
+	generation.value++
+	if err := c.cache.DeleteByKey(ctx, key); err != nil {
 		return fmt.Errorf("invalidate tool dispositions: %w", err)
 	}
 	return nil

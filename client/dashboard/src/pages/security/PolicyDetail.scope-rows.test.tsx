@@ -9,11 +9,16 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
+import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
 import { StandardPolicyEditor } from "./PolicyDetail";
-import { policyMCPScopePayload, policyMCPScopeValue } from "./policy-mcp-scope";
+import {
+  policyMCPScopePayload,
+  policyMCPScopeValue,
+  type PolicyMCPScopeValue,
+} from "./policy-mcp-scope";
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -81,7 +86,11 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
 
 vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
   useMetaMcpServers: () => ({
-    data: { metaMcpServers: [] },
+    data: {
+      metaMcpServers: [
+        { id: "gateway-1", name: "Support gateway", memberCount: 1 },
+      ],
+    },
     isLoading: false,
     isError: false,
   }),
@@ -202,6 +211,9 @@ const CATEGORIES: RiskCategoryDefinition[] = [
   }),
   category("shadow_mcp", "Shadow MCP"),
   category("custom", "Custom rules"),
+  category("account_identity", "Account identity", {
+    recommendedScopeApplicable: false,
+  }),
 ];
 
 function policy(overrides: Partial<RiskPolicy> = {}): RiskPolicy {
@@ -237,6 +249,27 @@ function renderEditor(p: RiskPolicy) {
         <StandardPolicyEditor policy={p} />
       </TooltipProvider>
     </QueryClientProvider>,
+  );
+}
+
+function ScopePickerHarness(): JSX.Element {
+  const [queryClient] = useState(() => new QueryClient());
+  const [value, setValue] = useState<PolicyMCPScopeValue>({
+    mode: "mcp",
+    allServers: false,
+    toolAnnotations: [],
+    servers: [],
+  });
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <PolicyMCPScopePicker value={value} onChange={setValue} action="flag" />
+        <output data-testid="mcp-scope-payload">
+          {JSON.stringify(policyMCPScopePayload(value))}
+        </output>
+      </TooltipProvider>
+    </QueryClientProvider>
   );
 }
 
@@ -293,6 +326,30 @@ describe("StandardPolicyEditor scope rows", () => {
     ).toBeTruthy();
   });
 
+  it("renders inapplicable detectors without editable inspection surfaces", () => {
+    renderEditor(
+      policy({
+        sources: ["account_identity"],
+        customRuleIds: [],
+      }),
+    );
+
+    expect(
+      screen.getByText("Inspection surfaces do not apply to this detector."),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("checkbox", { name: /^Account identity:/ }),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+    expect(
+      screen.getByText("Inspection surfaces do not apply to this detector."),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("checkbox", { name: /^Account identity:/ }),
+    ).toBeNull();
+  });
+
   it("preserves server selection across mode switches", async () => {
     renderEditor(policy());
 
@@ -340,11 +397,10 @@ describe("StandardPolicyEditor scope rows", () => {
     fireEvent.click(screen.getByText("Tools with MCP annotations"));
 
     expect(
-      screen.getByRole("button", {
-        name: "Tool rule: Destructive tools",
-      }),
-    ).toBeTruthy();
-    expect(screen.getByText("destructiveHint")).toBeTruthy();
+      screen
+        .getByRole("checkbox", { name: /^Destructive/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 
   it("shows the block latency note in MCP mode", () => {
@@ -356,6 +412,31 @@ describe("StandardPolicyEditor scope rows", () => {
         "Block runs before each matching call. Detector time adds to call latency.",
       ),
     ).toBeTruthy();
+  });
+});
+
+describe("PolicyMCPScopePicker all-server selection", () => {
+  afterEach(cleanup);
+
+  it("drops a selected gateway before producing an all-server payload", () => {
+    render(<ScopePickerHarness />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Support gateway" }));
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Support gateway" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "All MCP servers" }));
+
+    expect(
+      JSON.parse(screen.getByTestId("mcp-scope-payload").textContent ?? "null"),
+    ).toEqual({
+      allServers: true,
+      toolAnnotations: [],
+      servers: [],
+    });
   });
 });
 

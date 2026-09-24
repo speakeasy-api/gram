@@ -1240,7 +1240,10 @@ function InspectMatrix({
   }
   if (rows.length === 0) return null;
 
-  const edited = rows.some((category) => scopeOverrides.has(category.key));
+  const edited = rows.some(
+    (category) =>
+      category.recommendedScopeApplicable && scopeOverrides.has(category.key),
+  );
   return (
     <div className="space-y-3">
       <div className="space-y-1">
@@ -1478,6 +1481,7 @@ function inspectRowsAreValid(
   return [...selectedCategories].every((key) => {
     const category = categories.find((candidate) => candidate.key === key);
     if (!category) return true;
+    if (!category.recommendedScopeApplicable) return true;
     const scope = scopeOverrides.get(key) ?? {
       scopeInclude: category.recommendedScopeInclude,
       scopeExempt: category.recommendedScopeExempt,
@@ -1504,6 +1508,26 @@ function InspectRow({
   const [editing, setEditing] = useState(false);
   const engineState = useCelEngine();
   const engine = engineState.status === "ready" ? engineState.engine : null;
+  if (!category.recommendedScopeApplicable) {
+    return (
+      <div className="border-border border-b last:border-b-0">
+        <div className="grid grid-cols-[minmax(15rem,1.4fr)_repeat(4,minmax(6.5rem,0.65fr))]">
+          <div className="flex min-w-0 items-center gap-2 px-3 py-3">
+            <Text small className="truncate font-medium">
+              {category.label}
+            </Text>
+            <ScopeRationaleHint
+              rationale={category.recommendedScopeRationale}
+            />
+          </div>
+          <div className="border-border text-muted-foreground col-span-4 flex items-center border-l px-3 py-3 text-xs">
+            Inspection surfaces do not apply to this detector.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const activeScope = override ?? {
     scopeInclude: category.recommendedScopeInclude,
     scopeExempt: category.recommendedScopeExempt,

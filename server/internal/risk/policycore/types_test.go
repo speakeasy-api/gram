@@ -86,6 +86,16 @@ func TestUnmarshalMCPScopeNormalizesEmptyAndFailsClosed(t *testing.T) {
 	}
 }
 
+func TestUnmarshalMCPScopeFailsClosedOnExplicitEmptyTools(t *testing.T) {
+	t.Parallel()
+
+	scope := unmarshalMCPScope([]byte(`{"all_servers":true,"servers":[{"mcp_server_id":"11111111-1111-4111-8111-111111111111","tools":[]}]}`))
+	require.NotNil(t, scope)
+	require.False(t, scope.AllServers)
+	require.Nil(t, scope.ToolAnnotations)
+	require.Empty(t, scope.Servers)
+}
+
 func TestProjectPreservesPolicyReadSemantics(t *testing.T) {
 	t.Parallel()
 
