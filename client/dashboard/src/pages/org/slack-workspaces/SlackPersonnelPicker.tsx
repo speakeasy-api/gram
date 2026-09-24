@@ -1,10 +1,9 @@
 import { useOrganization } from "@/contexts/Auth";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useQueryClient } from "@tanstack/react-query";
-import { ApiErrorAlert } from "@/components/api-error-alert";
-import { Badge } from "@/components/ui/Badge";
 import { Combobox, type DropdownItem } from "@/components/ui/Combobox";
-import { Text } from "@/components/ui/Text";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { TriangleAlert } from "lucide-react";
 import type { OrganizationUser } from "@gram/client/models/components/organizationuser.js";
 import type { SlackDirectoryMember } from "@gram/client/models/components/slackdirectorymember.js";
 import { invalidateAllSlackDirectoryMember } from "@gram/client/react-query/slackDirectoryMember.js";
@@ -17,11 +16,6 @@ import { emailsDiffer, mappingFinding } from "./mappingFindings";
 const UNMAPPED = "__unmapped";
 const normalizedEmail = (email?: string | null) =>
   (email ?? "").trim().toLowerCase();
-
-function personLabel(member: SlackDirectoryMember): string {
-  const mapping = member.mapping;
-  return mapping ? mapping.displayName || mapping.email : "Not mapped";
-}
 
 /**
  * Maps a Slack member to a person as soon as one is picked. The request carries
@@ -106,52 +100,78 @@ export function SlackPersonnelPicker({
     });
   };
 
+  const warnings = [
+    finding && `Needs review: ${finding}`,
+    mapping &&
+      emailsDiffer(member.email, mapping.email) &&
+      `Slack email (${member.email?.trim()}) differs from ${mapping.displayName || mapping.email}’s email (${mapping.email})`,
+    mutation.isError &&
+      `${mutation.error?.message ?? "The mapping could not be saved"}. The row was reloaded; pick again to retry.`,
+  ].filter((warning): warning is string => Boolean(warning));
+
   return (
-    <div className="min-w-0 space-y-1">
+    <div className="flex min-w-0 items-center gap-1">
       <Combobox
         id={`slack-personnel-${member.id}`}
-        label={`Personnel for ${member.displayName || member.slackUserId}`}
         items={items}
         selected={mapping?.userId}
         onSelectionChange={(item) => pick(item.value)}
         searchable
         searchPlaceholder="Search personnel…"
         variant="tertiary"
-        className="h-auto max-w-full justify-start whitespace-normal text-left"
+        className="h-auto min-w-0 flex-1 justify-start py-1 text-left"
         contentClassName="w-[min(28rem,90vw)]"
         disabledMessage={disabledMessage}
       >
-        <span className="flex min-w-0 items-center gap-2">
-          {mapping && (
-            <PersonnelAvatar
-              name={mapping.displayName}
-              email={mapping.email}
-              photoUrl={mapping.photoUrl}
-            />
-          )}
-          <span className="break-words">
-            {mutation.isPending ? "Saving…" : personLabel(member)}
-          </span>
-        </span>
+        <PersonnelLabel member={member} saving={mutation.isPending} />
       </Combobox>
-      {finding && (
-        <Badge variant="warning" className="whitespace-normal">
-          Needs review: {finding}
-        </Badge>
-      )}
-      {mapping && emailsDiffer(member.email, mapping.email) && (
-        <Badge variant="warning" className="whitespace-normal">
-          Slack email differs from this person’s email
-        </Badge>
-      )}
-      {mutation.isError && (
-        <>
-          <ApiErrorAlert error={mutation.error} />
-          <Text muted small>
-            The row was reloaded. Pick again to retry.
-          </Text>
-        </>
+      {warnings.length > 0 && (
+        <SimpleTooltip tooltip={warnings.join(" · ")}>
+          <span
+            role="img"
+            aria-label={warnings.join(". ")}
+            className="text-warning inline-flex shrink-0"
+          >
+            <TriangleAlert className="size-4" />
+          </span>
+        </SimpleTooltip>
       )}
     </div>
+  );
+}
+
+function PersonnelLabel({
+  member,
+  saving,
+}: {
+  member: SlackDirectoryMember;
+  saving: boolean;
+}): JSX.Element {
+  const mapping = member.mapping;
+  if (!mapping)
+    return (
+      <span className="text-muted-foreground font-normal">
+        {saving ? "Saving…" : "Not mapped"}
+      </span>
+    );
+  return (
+    <span className="flex min-w-0 items-center gap-3">
+      <PersonnelAvatar
+        name={mapping.displayName}
+        email={mapping.email}
+        photoUrl={mapping.photoUrl}
+        className="size-8"
+      />
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate font-medium">
+          {saving ? "Saving…" : mapping.displayName || mapping.email}
+        </span>
+        {mapping.displayName && (
+          <span className="text-muted-foreground truncate text-xs font-normal">
+            {mapping.email}
+          </span>
+        )}
+      </span>
+    </span>
   );
 }

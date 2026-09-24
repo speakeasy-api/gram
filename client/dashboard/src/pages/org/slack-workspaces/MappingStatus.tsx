@@ -5,10 +5,12 @@ export function PersonnelAvatar({
   name,
   email,
   photoUrl,
+  className,
 }: {
   name: string;
   email: string;
   photoUrl?: string;
+  className?: string;
 }): JSX.Element {
   const label = name || email;
   const tint = useIdentityTint(label);
@@ -20,7 +22,7 @@ export function PersonnelAvatar({
     .join("")
     .toUpperCase();
   return (
-    <Avatar className="size-6">
+    <Avatar className={className ?? "size-6"}>
       {photoUrl && <AvatarImage src={photoUrl} alt="" />}
       <AvatarFallback className="text-xs" style={tint}>
         {initials || "?"}

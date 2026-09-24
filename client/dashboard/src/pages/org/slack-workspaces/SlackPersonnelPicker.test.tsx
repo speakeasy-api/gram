@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { SlackDirectoryMember } from "@gram/client/models/components/slackdirectorymember.js";
 import type { OrganizationUser } from "@gram/client/models/components/organizationuser.js";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { SlackPersonnelPicker } from "./SlackPersonnelPicker";
 
 const mocks = vi.hoisted(() => ({
@@ -36,14 +37,12 @@ vi.mock("@gram/client/react-query/setSlackIdentityMapping.js", () => ({
 vi.mock("@/components/ui/Combobox", () => ({
   Combobox: ({
     id,
-    label,
     items,
     selected,
     onSelectionChange,
     disabledMessage,
   }: {
     id: string;
-    label: string;
     items: Array<{ value: string; label: string; description?: string }>;
     selected?: string;
     disabledMessage?: string;
@@ -51,7 +50,7 @@ vi.mock("@/components/ui/Combobox", () => ({
   }) => (
     <select
       id={id}
-      aria-label={label}
+      aria-label="Personnel"
       title={disabledMessage}
       disabled={Boolean(disabledMessage)}
       value={selected ?? ""}
@@ -110,16 +109,17 @@ afterEach(() => {
 function show(canEdit = true) {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <SlackPersonnelPicker
-        member={mocks.member}
-        people={mocks.people}
-        canEdit={canEdit}
-      />
+      <TooltipProvider>
+        <SlackPersonnelPicker
+          member={mocks.member}
+          people={mocks.people}
+          canEdit={canEdit}
+        />
+      </TooltipProvider>
     </QueryClientProvider>,
   );
 }
-const picker = () =>
-  screen.getByLabelText("Personnel for Synthetic Person") as HTMLSelectElement;
+const picker = () => screen.getByLabelText("Personnel") as HTMLSelectElement;
 function mapped() {
   mocks.member.mapping = {
     id: "mapping-example",
@@ -172,24 +172,31 @@ it("offers only removal for a mapped bot and is disabled for an unmapped bot", (
   show();
   expect(picker().disabled).toBe(true);
 });
-it("shows a rejected stale edit and reloads the row", () => {
+const warning = () => screen.queryByRole("img")?.getAttribute("aria-label");
+it("shows a rejected stale edit only as a warning icon", () => {
   mocks.error = new Error("This Slack member changed. Reload the member.");
   show();
-  expect(screen.getByText(/This Slack member changed/)).toBeTruthy();
-  expect(screen.getByText(/Pick again to retry/)).toBeTruthy();
+  expect(screen.queryByText(/This Slack member changed/)).toBeNull();
+  expect(warning()).toMatch(/This Slack member changed.*pick again to retry/);
 });
-it("warns about findings and a mismatched email", () => {
+it("has no warning icon for a clean mapping", () => {
+  mapped();
+  show();
+  expect(warning()).toBeUndefined();
+  expect(screen.queryByText(/Personnel for/)).toBeNull();
+});
+it("folds findings and a mismatched email into one warning icon", () => {
   mapped();
   mocks.member.mapping!.email = "someone.else@demo.getgram.ai";
   mocks.member.mapping!.active = false;
   mocks.member.mappingStatus = "needs_review";
   show();
-  expect(
-    screen.getByText(/Mapped person is no longer active in this organization/),
-  ).toBeTruthy();
-  expect(
-    screen.getByText("Slack email differs from this person’s email"),
-  ).toBeTruthy();
+  expect(warning()).toMatch(
+    /Needs review: Mapped person is no longer active in this organization/,
+  );
+  expect(warning()).toMatch(
+    /Slack email .* differs from Synthetic One’s email/,
+  );
 });
 it("is read-only in the shared demo and for non-admins", () => {
   mocks.orgSlug = "acme-demo";
