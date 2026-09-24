@@ -3,6 +3,11 @@ package feature
 type Flag string
 
 const (
+	// FlagRiskPromptInjectionCascade gates Jev prefiltering and Opus confirmation.
+	// Evaluated server-side, locally, targeted by organization/project group keys.
+	// Missing flags and evaluation failures preserve the existing judge.
+	FlagRiskPromptInjectionCascade Flag = "risk-prompt-injection-cascade"
+
 	FlagSpeakeasyOpenAPIParserV0 Flag = "speakeasy-openapi-parser-v0"
 	FlagClickhouseToolMetrics    Flag = "clickhouse-tool-metrics"
 	FlagAssistants               Flag = "assistants"

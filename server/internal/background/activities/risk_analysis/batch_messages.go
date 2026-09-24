@@ -206,6 +206,17 @@ func messageTypeForRole(role string, toolCalls []byte) (message.Type, bool) {
 }
 
 func batchJudgeMessage(msg batchMessage) judgemessage.Message {
+	result := batchJudgeMessageContent(msg)
+	result.ChatID = msg.ChatID
+	if msg.ContentPart {
+		result.AnchorID = msg.ParentChatMessageID
+	} else {
+		result.AnchorID = msg.ID
+	}
+	return result
+}
+
+func batchJudgeMessageContent(msg batchMessage) judgemessage.Message {
 	if msg.Type != message.ToolRequest {
 		return judgemessage.New(msg.Type, "", msg.Content)
 	}

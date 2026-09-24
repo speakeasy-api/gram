@@ -3,6 +3,7 @@ package promptinjection
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"log/slog"
 	"time"
 
@@ -127,6 +128,17 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 }
 
 func promptInjectionJudgeMessage(m *riskv1.PromptInjectionAnalysis) judgemessage.Message {
+	msg := promptInjectionJudgeContent(m)
+	anchor := m.GetChatMessageId()
+	if anchor == "" {
+		anchor = m.GetParentChatMessageId()
+	}
+	msg.AnchorID, _ = uuid.Parse(anchor)
+	msg.ChatID, _ = uuid.Parse(m.GetChatId())
+	return msg
+}
+
+func promptInjectionJudgeContent(m *riskv1.PromptInjectionAnalysis) judgemessage.Message {
 	if len(m.GetToolCalls()) == 0 {
 		return judgemessage.New(m.GetMessageType(), m.GetToolName(), m.GetBody())
 	}
