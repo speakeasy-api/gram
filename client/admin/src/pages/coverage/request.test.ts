@@ -5,6 +5,7 @@ import type { Draft } from "./model";
 function draftWithNote(note: string): Draft {
   return {
     mappings: {},
+    accounts: {},
     references: {
       device: { session: { status: "supported", note, verify: false } },
     },
@@ -36,10 +37,12 @@ describe("support matrix request size", () => {
     ).toThrow("NUL");
     const draft: Draft = {
       references: {},
+      accounts: {},
       mappings: {
         "device/platform": {
           applicability: "applicable",
           conditions: "",
+          accounts: {},
           facts: {
             session: { status: "supported", note: "\0", verify: false },
           },

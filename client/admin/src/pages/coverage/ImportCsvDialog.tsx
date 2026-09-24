@@ -181,6 +181,7 @@ export function ImportCsvDialog({
             {parsed && (
               <p role="status" className="text-sm">
                 Ready to import: {parsed.counts.reference} reference claims,{" "}
+                {parsed.counts.method} method eligibility rows,{" "}
                 {parsed.counts.mapping} platform mappings,{" "}
                 {parsed.counts.coverage} coverage claims.
               </p>

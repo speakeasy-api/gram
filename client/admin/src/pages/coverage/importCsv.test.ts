@@ -12,7 +12,7 @@ const catalog: ImportCatalog = {
   products: [{ id: "claude-code-cli", name: "Claude Code CLI" }],
   capabilities: [{ id: "session", name: "Session tracking" }],
 };
-const empty: Draft = { mappings: {}, references: {} };
+const empty: Draft = { mappings: {}, references: {}, accounts: {} };
 const csv = (...rows: string[]) => [importCsvHeader, ...rows].join("\r\n");
 
 describe("matrix CSV import", () => {
@@ -20,7 +20,7 @@ describe("matrix CSV import", () => {
     const result = parseMatrixImport(
       "\uFEFF" +
         csv(
-          'reference,device,,session,partial,"via hooks, says ""verify""\nsecond line",true,,',
+          'reference,device,,session,partial,"via hooks, says ""verify""\nsecond line",true,,,',
         ),
       catalog,
       empty,
@@ -30,12 +30,18 @@ describe("matrix CSV import", () => {
       note: 'via hooks, says "verify"\nsecond line',
       verify: true,
     });
-    expect(result.counts).toEqual({ reference: 1, mapping: 0, coverage: 0 });
-    expect(empty).toEqual({ mappings: {}, references: {} });
+    expect(result.counts).toEqual({
+      reference: 1,
+      method: 0,
+      mapping: 0,
+      coverage: 0,
+    });
+    expect(empty).toEqual({ mappings: {}, references: {}, accounts: {} });
   });
 
   it("merges supplied entries without losing omitted facts or inventing coverage", () => {
     const current: Draft = {
+      accounts: {},
       references: {
         device: {
           untouched: { status: "unknown", note: "keep", verify: true },
@@ -45,6 +51,7 @@ describe("matrix CSV import", () => {
         "device/claude-code-cli": {
           applicability: "applicable",
           conditions: "old",
+          accounts: {},
           facts: {
             session: { status: "supported", note: "keep", verify: false },
           },
@@ -54,8 +61,8 @@ describe("matrix CSV import", () => {
     const before = structuredClone(current);
     const result = parseMatrixImport(
       csv(
-        "mapping,device,claude-code-cli,,,,,applicable,Mac; Linux VERIFY",
-        "reference,device,,session,unknown,,true,,",
+        "mapping,device,claude-code-cli,,,,,applicable,Mac; Linux VERIFY,",
+        "reference,device,,session,unknown,,true,,,",
       ),
       catalog,
       current,
@@ -71,7 +78,7 @@ describe("matrix CSV import", () => {
     );
     expect(current).toEqual(before);
     const withoutCoverage = parseMatrixImport(
-      csv("mapping,device,claude-code-cli,,,,,applicable,✅"),
+      csv("mapping,device,claude-code-cli,,,,,applicable,✅,"),
       catalog,
       empty,
     );
@@ -83,8 +90,8 @@ describe("matrix CSV import", () => {
   it("accepts explicit coverage before its mapping row", () => {
     const result = parseMatrixImport(
       csv(
-        "coverage,device,claude-code-cli,session,supported,via hooks,false,,",
-        "mapping,device,claude-code-cli,,,,,applicable,Team only",
+        "coverage,device,claude-code-cli,session,supported,via hooks,false,,,",
+        "mapping,device,claude-code-cli,,,,,applicable,Team only,",
       ),
       catalog,
       empty,
@@ -95,43 +102,43 @@ describe("matrix CSV import", () => {
   });
 
   it.each([
-    ["reference,missing,,session,supported,,false,,", "unknown method_id"],
-    ["reference,__proto__,,session,supported,,false,,", "unknown method_id"],
-    ["mapping,device,missing,,,,,applicable,", "unknown platform_id"],
-    ["reference,device,,missing,supported,,false,,", "unknown capability_id"],
-    ["reference,device,,session,yes,,false,,", "unknown status"],
-    ["reference,device,,session,constructor,,false,,", "unknown status"],
-    ["reference,device,,session,partial,,false,,", "requires a note"],
-    ["reference,device,,session,supported,,maybe,,", "verify must"],
+    ["reference,missing,,session,supported,,false,,,", "unknown method_id"],
+    ["reference,__proto__,,session,supported,,false,,,", "unknown method_id"],
+    ["mapping,device,missing,,,,,applicable,,", "unknown platform_id"],
+    ["reference,device,,missing,supported,,false,,,", "unknown capability_id"],
+    ["reference,device,,session,yes,,false,,,", "unknown status"],
+    ["reference,device,,session,constructor,,false,,,", "unknown status"],
+    ["reference,device,,session,partial,,false,,,", "requires a note"],
+    ["reference,device,,session,supported,,maybe,,,", "verify must"],
     [
-      "reference,device,claude-code-cli,session,supported,,false,,",
+      "reference,device,claude-code-cli,session,supported,,false,,,",
       "leave platform_id empty",
     ],
     [
-      "mapping,device,claude-code-cli,session,,,,applicable,",
+      "mapping,device,claude-code-cli,session,,,,applicable,,",
       "must leave capability_id",
     ],
-    ["mapping,device,claude-code-cli,,,,,supported,", "applicability must"],
+    ["mapping,device,claude-code-cli,,,,,supported,,", "applicability must"],
     [
-      "coverage,device,claude-code-cli,session,supported,,false,,",
+      "coverage,device,claude-code-cli,session,supported,,false,,,",
       "requires an applicable mapping",
     ],
     [
-      'reference,device,,session,supported,"unterminated,false,,',
+      'reference,device,,session,supported,"unterminated,false,,,',
       "unclosed quoted field",
     ],
     [
-      'reference,device,,session,supported,"note"extra,false,,',
+      'reference,device,,session,supported,"note"extra,false,,,',
       "Invalid CSV quoting",
     ],
-    ["reference,device,,session,supported,,false", "expected 9 columns"],
+    ["reference,device,,session,supported,,false", "expected 10 columns"],
   ])("rejects invalid input atomically: %s", (row, message) => {
     expect(() => parseMatrixImport(csv(row), catalog, empty)).toThrow(message);
-    expect(empty).toEqual({ mappings: {}, references: {} });
+    expect(empty).toEqual({ mappings: {}, references: {}, accounts: {} });
   });
 
   it("rejects duplicate records, empty files, and oversized files", () => {
-    const row = "reference,device,,session,supported,,false,,";
+    const row = "reference,device,,session,supported,,false,,,";
     expect(() => parseMatrixImport(csv(row, row), catalog, empty)).toThrow(
       "duplicate",
     );
@@ -152,8 +159,8 @@ describe("matrix CSV import", () => {
     expect(() =>
       parseMatrixImport(
         csv(
-          `reference,device,,session,supported,${note},false,,`,
-          `mapping,device,claude-code-cli,,,,,applicable,${conditions}`,
+          `reference,device,,session,supported,${note},false,,,`,
+          `mapping,device,claude-code-cli,,,,,applicable,${conditions},`,
         ),
         catalog,
         empty,
@@ -161,14 +168,14 @@ describe("matrix CSV import", () => {
     ).not.toThrow();
     expect(() =>
       parseMatrixImport(
-        csv(`reference,device,,session,supported,${note}🙂,false,,`),
+        csv(`reference,device,,session,supported,${note}🙂,false,,,`),
         catalog,
         empty,
       ),
     ).toThrow("10000 characters");
     expect(() =>
       parseMatrixImport(
-        csv(`mapping,device,claude-code-cli,,,,,applicable,${conditions}é`),
+        csv(`mapping,device,claude-code-cli,,,,,applicable,${conditions}é,`),
         catalog,
         empty,
       ),

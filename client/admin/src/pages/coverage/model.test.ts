@@ -62,6 +62,7 @@ describe("derived platform coverage", () => {
   const mapping: Mapping = {
     applicability: "applicable",
     conditions: "✅; Team plans only; macOS",
+    accounts: {},
     facts: {},
   };
   it("carries method and platform qualifiers into the derived note", () => {
@@ -151,6 +152,7 @@ describe("derived platform coverage", () => {
     const catalog = catalogSchema.parse(seed);
     const device = catalog.methods.find((method) => method.id === "device")!;
     const draft: Draft = {
+      accounts: {},
       references: {
         device: {
           session: { ...supported, note: "Updated reference", verify: true },

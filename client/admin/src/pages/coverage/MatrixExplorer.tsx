@@ -97,8 +97,7 @@ function headerIdentity(axis: Axis, item: Item) {
       vendor: undefined,
       family: undefined,
     };
-  const title =
-    platform.family === "Other Claudes" ? platform.surface : platform.family;
+  const title = platform.family;
   const detail =
     platform.surface === "App" || title.endsWith(platform.surface)
       ? undefined

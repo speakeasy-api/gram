@@ -34,14 +34,15 @@ export function integrationRequirements(
       return {
         method,
         fact: accountFact(
+          draft,
           method,
+          mapping,
           getFact(
             mapping,
             target.capabilityId,
             methodReference(draft, method, target.capabilityId),
           ),
           account,
-          mapping.conditions,
         ),
       };
     }),
