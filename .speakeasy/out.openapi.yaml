@@ -59338,6 +59338,100 @@ paths:
       x-speakeasy-react-hook:
         name: GetProjectOverview
         type: query
+  /rpc/telemetry.getSupportCoverage:
+    get:
+      description: 'Observed support coverage for the caller''s organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure. Every cell distinguishes evidence found from evidence absent from evidence not yet answerable, so an empty cell is never rendered as unsupported.'
+      operationId: getSupportCoverage
+      parameters:
+        - allowEmptyValue: true
+          description: Observation window in days.
+          in: query
+          name: window_days
+          schema:
+            default: 30
+            description: Observation window in days.
+            format: int64
+            maximum: 90
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportCoverageResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getSupportCoverage telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getSupportCoverage
+      x-speakeasy-react-hook:
+        name: TelemetrySupportCoverage
+        type: query
   /rpc/telemetry.getToolUsageClientToolBreakdown:
     post:
       description: Get per-tool MCP and tool usage grouped by MCP client
@@ -95031,6 +95125,99 @@ components:
         - summary
         - impact
         - cached
+    SupportCoverageCell:
+      type: object
+      properties:
+        capability:
+          type: string
+          description: Capability the cell reports on.
+          enum:
+            - session
+            - blocking
+            - identity
+            - cost
+            - shadow
+        detail:
+          type: string
+          description: Short human-readable qualifier rendered under the value, e.g. the identity split or the granularity a value was attributed at. Empty when there is nothing to qualify.
+        last_seen:
+          type: string
+          description: RFC3339 timestamp of the most recent supporting evidence. Empty when status is not observed.
+        status:
+          type: string
+          description: Whether evidence was found, absent, or cannot be answered for this surface yet.
+          enum:
+            - observed
+            - none
+            - pending
+        surface:
+          type: string
+          description: Consuming surface the cell reports on.
+          enum:
+            - claude_code
+            - claude_chat
+            - cowork
+            - codex
+            - cursor
+            - other
+        value:
+          type: integer
+          description: 'Primary measure behind the cell: sessions, tokens, blocks, attributed sessions or distinct shadow servers depending on the capability. Zero when status is not observed.'
+          format: int64
+      description: Observed evidence for one capability on one surface.
+      required:
+        - capability
+        - surface
+        - status
+        - value
+        - detail
+        - last_seen
+    SupportCoverageResult:
+      type: object
+      properties:
+        cells:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportCoverageCell'
+          description: One cell per (capability, surface) pair. Always fully populated, so clients never infer a missing pair as unsupported.
+        from:
+          type: string
+          description: RFC3339 start of the observation window.
+          format: date-time
+        to:
+          type: string
+          description: RFC3339 end of the observation window.
+          format: date-time
+        unmapped:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportCoverageUnmapped'
+          description: Activity whose hook_source folded to no surface. Non-empty means the matrix is not showing everything the org did.
+        window_days:
+          type: integer
+          description: Length of the observation window in days.
+          format: int64
+      description: Observed support coverage for the caller's organization over a fixed observation window.
+      required:
+        - cells
+        - unmapped
+        - window_days
+        - from
+        - to
+    SupportCoverageUnmapped:
+      type: object
+      properties:
+        hook_source:
+          type: string
+          description: The raw, unrecognized hook_source.
+        sessions:
+          type: integer
+          description: Sessions observed under it inside the window.
+          format: int64
+      description: A hook_source the surface fold did not recognize, reported rather than discarded.
+      required:
+        - hook_source
+        - sessions
     SyncIdentityProviderConnectionApplicationsRequestBody:
       type: object
       properties:

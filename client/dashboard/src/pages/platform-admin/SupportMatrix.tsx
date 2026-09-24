@@ -1,12 +1,16 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
-import type { QueryResult } from "@gram/client/models/components/queryresult.js";
+import type { SupportCoverageCell } from "@gram/client/models/components/supportcoveragecell.js";
 import { buildDeviceIntegrationCoverageQuery } from "@gram/client/react-query/deviceIntegrationCoverage.js";
-import { unwrapAsync } from "@gram/client/types/fp.js";
+import { buildTelemetrySupportCoverageQuery } from "@gram/client/react-query/telemetrySupportCoverage.js";
 import { InternalAdminBadge } from "@/components/internal-admin-badge";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/Badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
@@ -14,22 +18,18 @@ import { PlatformAdminGate } from "./PlatformAdminGate";
 import {
   activeAgentCoverageLabel,
   capabilities,
+  cellKey,
+  footprintOf,
+  gapsClosedBy,
+  indexCells,
   methods,
-  surfaceForHookSource,
   surfaces,
   type CapabilityId,
+  type IntegrationMethod,
   type SurfaceId,
 } from "./support-matrix-model";
 
 const WINDOW_DAYS = 30;
-
-type SurfaceEvidence = {
-  sessions: number;
-  tokens: number;
-  lastSeen: Date | null;
-};
-
-type EvidenceStatus = "loading" | "unavailable" | "ready";
 
 export default function SupportMatrix(): JSX.Element {
   return (
@@ -43,7 +43,7 @@ export default function SupportMatrix(): JSX.Element {
             Support coverage
           </Page.Section.Title>
           <Page.Section.Description>
-            Review aggregate evidence and potential integration coverage for the
+            Review observed evidence and recommended integrations for the
             current organization.
           </Page.Section.Description>
           <Page.Section.Body>
@@ -60,35 +60,17 @@ export default function SupportMatrix(): JSX.Element {
 function OrganizationSupportMatrix(): JSX.Element {
   const organization = useOrganization();
   const client = useSdkClient();
-  const from = useMemo(
-    () => new Date(Date.now() - WINDOW_DAYS * 86_400_000),
-    [],
-  );
-  const to = useMemo(() => new Date(), []);
-  const telemetry = useQuery({
-    queryKey: [
-      "support-coverage",
-      organization.id,
-      from.toISOString(),
-      to.toISOString(),
-    ],
-    queryFn: () =>
-      unwrapAsync(
-        telemetryQuery(client, {
-          queryPayload: {
-            from,
-            to,
-            groupBy: "hook_source",
-            sortBy: "total_chats",
-            topN: 1000,
-            granularitySeconds: 86_400,
-            includeDimensionValues: false,
-          },
-        }),
-      ),
+
+  const coverageQuery = buildTelemetrySupportCoverageQuery(client, {
+    windowDays: WINDOW_DAYS,
+  });
+  const coverage = useQuery({
+    ...coverageQuery,
+    queryKey: [...coverageQuery.queryKey, { organizationId: organization.id }],
     staleTime: 60_000,
     throwOnError: false,
   });
+
   const deviceCoverageQuery = buildDeviceIntegrationCoverageQuery(client);
   const deviceCoverage = useQuery({
     ...deviceCoverageQuery,
@@ -99,47 +81,65 @@ function OrganizationSupportMatrix(): JSX.Element {
     staleTime: 60_000,
     throwOnError: false,
   });
-  const evidence = useMemo(
-    () => buildEvidence(telemetry.data),
-    [telemetry.data],
+
+  // Deliberately dropped when the query is errored: react-query keeps the
+  // last successful payload in the cache, so a failed refetch would otherwise
+  // render stale observed values directly under the banner saying evidence is
+  // unavailable.
+  const cells = useMemo(
+    () => indexCells(coverage.isError ? undefined : coverage.data?.cells),
+    [coverage.isError, coverage.data?.cells],
   );
-  const telemetryStatus: EvidenceStatus = telemetry.isPending
-    ? "loading"
-    : telemetry.isError
-      ? "unavailable"
-      : "ready";
-  const deviceStatus: EvidenceStatus = deviceCoverage.isPending
-    ? "loading"
-    : deviceCoverage.isError
-      ? "unavailable"
-      : "ready";
-  const observedSurfaces = [...evidence.values()].filter(
-    (item) => item.sessions > 0 || item.tokens > 0,
+  const coverageLoaded = !coverage.isError && !coverage.isPending;
+
+  // Hovering an integration card highlights the cells it would fill, so the
+  // recommendation and the evidence it is derived from are legible as one
+  // statement rather than two disconnected sections.
+  const [hoveredMethod, setHoveredMethod] = useState<IntegrationMethod | null>(
+    null,
+  );
+  const highlighted = useMemo(
+    () => (hoveredMethod ? footprintOf(hoveredMethod) : null),
+    [hoveredMethod],
+  );
+  const highlightedGaps = useMemo(
+    () => (hoveredMethod ? gapsClosedBy(hoveredMethod, cells) : null),
+    [hoveredMethod, cells],
+  );
+
+  const observedSurfaces = surfaces.filter((surface) =>
+    capabilities.some(
+      (capability) =>
+        cells.get(cellKey(capability.id, surface.id))?.status === "observed",
+    ),
   ).length;
-  const latestSeen = latestEvidence(evidence);
+  const latestSeen = latestEvidence(coverage.data?.cells);
+  const unmapped = coverage.data?.unmapped ?? [];
 
   return (
     <main className="mx-auto max-w-[1240px] space-y-8 py-3">
       <header className="border-border flex flex-wrap items-center justify-between gap-4 border-b pb-4">
         <p className="text-muted-foreground max-w-2xl text-sm">
           Aggregate activity for the current organization during the last{" "}
-          {WINDOW_DAYS} days. Empty cells mean unknown—not unsupported.
+          {WINDOW_DAYS} days. An empty cell means no evidence was found, not
+          that the surface is unsupported.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <InternalAdminBadge />
           <Badge variant="neutral">
             <Badge.Text>{organization.name}</Badge.Text>
           </Badge>
-          <EvidenceBadge status={telemetryStatus} />
+          <EvidenceBadge
+            isPending={coverage.isPending}
+            isError={coverage.isError}
+          />
         </div>
       </header>
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-muted-foreground font-mono text-[10px] tracking-[0.1em] uppercase">
-              Feature / surface
-            </p>
+            <p className="text-eyebrow">Feature / surface</p>
             <h3 className="mt-2 text-xl font-medium">
               Observed organization coverage
             </h3>
@@ -147,24 +147,42 @@ function OrganizationSupportMatrix(): JSX.Element {
           <div className="flex flex-wrap gap-x-5 gap-y-2 font-mono text-[10px] tracking-[0.06em] uppercase">
             <Legend color="bg-success-default" label="Observed" />
             <Legend color="bg-muted-foreground/25" label="No evidence" />
-            <Legend color="border border-foreground/20" label="Unavailable" />
+            <Legend color="bg-warning-default" label="Not yet reportable" />
           </div>
         </div>
-        {telemetryStatus === "unavailable" && (
+
+        {coverage.isError && (
           <div className="border-border bg-muted/30 border px-4 py-3 text-sm">
-            Aggregate telemetry is unavailable. Cells remain unknown rather than
-            being reported as zero coverage.
+            Coverage evidence is unavailable. Cells are shown as unknown rather
+            than reported as zero coverage.
           </div>
         )}
-        <CoverageTable evidence={evidence} telemetryStatus={telemetryStatus} />
+
+        {unmapped.length > 0 && (
+          <div className="border-warning-default bg-muted/30 border px-4 py-3 text-sm">
+            <span className="font-medium">
+              {unmapped.length} unmapped {pluralize("source", unmapped.length)}.
+            </span>{" "}
+            Activity was observed under{" "}
+            {unmapped.map((item) => item.hookSource).join(", ")}, which does not
+            fold onto any surface below. The matrix is not showing everything
+            this organization did.
+          </div>
+        )}
+
+        <CoverageTable
+          cells={cells}
+          isPending={coverage.isPending}
+          isError={coverage.isError}
+          highlighted={highlighted}
+          highlightedGaps={highlightedGaps}
+        />
       </section>
 
       <section className="grid border-y sm:grid-cols-2 lg:grid-cols-4">
         <SummaryMetric
           value={
-            telemetryStatus === "ready"
-              ? `${observedSurfaces}/${surfaces.length}`
-              : "—"
+            coverage.isError ? "—" : `${observedSurfaces}/${surfaces.length}`
           }
           label="surfaces with activity evidence"
         />
@@ -173,13 +191,7 @@ function OrganizationSupportMatrix(): JSX.Element {
           label="latest aggregate evidence"
         />
         <SummaryMetric
-          value={
-            deviceStatus === "loading"
-              ? "Loading…"
-              : deviceStatus === "unavailable"
-                ? "Unavailable"
-                : String(deviceCoverage.data?.agentActive ?? 0)
-          }
+          value={deviceMetricValue(deviceCoverage)}
           label={activeAgentCoverageLabel(
             deviceCoverage.data?.attestation,
             deviceCoverage.data?.activeWindowMinutes,
@@ -192,20 +204,45 @@ function OrganizationSupportMatrix(): JSX.Element {
         />
       </section>
 
-      <IntegrationFootprints />
+      <IntegrationRecommendations
+        cells={cells}
+        isRanked={coverageLoaded}
+        hoveredMethodId={hoveredMethod?.id ?? null}
+        onHover={setHoveredMethod}
+      />
     </main>
   );
 }
 
-function EvidenceBadge({ status }: { status: EvidenceStatus }) {
-  if (status === "loading") {
+function deviceMetricValue(query: {
+  isPending: boolean;
+  isError: boolean;
+  data?: { agentActive?: number };
+}): string {
+  if (query.isPending) return "Loading…";
+  if (query.isError) return "Unavailable";
+  return String(query.data?.agentActive ?? 0);
+}
+
+function pluralize(word: string, count: number): string {
+  return count === 1 ? word : `${word}s`;
+}
+
+function EvidenceBadge({
+  isPending,
+  isError,
+}: {
+  isPending: boolean;
+  isError: boolean;
+}) {
+  if (isPending) {
     return (
       <Badge variant="neutral">
         <Badge.Text>Loading evidence…</Badge.Text>
       </Badge>
     );
   }
-  if (status === "unavailable") {
+  if (isError) {
     return (
       <Badge variant="warning">
         <Badge.Text>Evidence unavailable</Badge.Text>
@@ -253,18 +290,24 @@ function Legend({ color, label }: { color: string; label: string }) {
 }
 
 function CoverageTable({
-  evidence,
-  telemetryStatus,
+  cells,
+  isPending,
+  isError,
+  highlighted,
+  highlightedGaps,
 }: {
-  evidence: Map<SurfaceId, SurfaceEvidence>;
-  telemetryStatus: EvidenceStatus;
+  cells: Map<string, SupportCoverageCell>;
+  isPending: boolean;
+  isError: boolean;
+  highlighted: Set<string> | null;
+  highlightedGaps: Set<string> | null;
 }) {
   return (
-    <div className="border-border overflow-x-auto border bg-white dark:bg-background">
+    <div className="border-border dark:bg-background overflow-x-auto border bg-card">
       <table className="w-full min-w-[1080px] border-collapse text-sm">
         <thead>
           <tr>
-            <th className="border-border h-20 w-52 border-r border-b p-4 text-left font-mono text-[10px] font-normal tracking-[0.08em] text-muted-foreground uppercase">
+            <th className="border-border text-muted-foreground h-20 w-52 border-r border-b p-4 text-left font-mono text-[10px] font-normal tracking-[0.08em] uppercase">
               Capability / surface
             </th>
             {surfaces.map((surface) => (
@@ -291,18 +334,25 @@ function CoverageTable({
                   {capability.description}
                 </span>
               </th>
-              {surfaces.map((surface) => (
-                <td
-                  key={surface.id}
-                  className="border-border h-24 border-r border-b p-2 last:border-r-0"
-                >
-                  <EvidenceCell
-                    capability={capability.id}
-                    evidence={evidence.get(surface.id)}
-                    telemetryStatus={telemetryStatus}
-                  />
-                </td>
-              ))}
+              {surfaces.map((surface) => {
+                const key = cellKey(capability.id, surface.id);
+                return (
+                  <td
+                    key={surface.id}
+                    className="border-border h-24 border-r border-b p-2 last:border-r-0"
+                  >
+                    <EvidenceCell
+                      capability={capability.id}
+                      surface={surface.id}
+                      cell={cells.get(key)}
+                      isPending={isPending}
+                      isError={isError}
+                      closesGap={highlightedGaps?.has(key) ?? false}
+                      dimmed={highlighted != null && !highlighted.has(key)}
+                    />
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
@@ -311,187 +361,230 @@ function CoverageTable({
   );
 }
 
+function capabilityUnit(capability: CapabilityId): string {
+  return capabilities.find((item) => item.id === capability)?.unit ?? "event";
+}
+
+function cellLabel(
+  capability: CapabilityId,
+  cell: SupportCoverageCell | undefined,
+  isPending: boolean,
+  isError: boolean,
+): string {
+  if (isPending) return "Loading…";
+  if (isError || !cell) return "Evidence unavailable";
+
+  switch (cell.status) {
+    case "observed": {
+      const unit = capabilityUnit(capability);
+      return `${cell.value.toLocaleString()} ${pluralize(unit, cell.value)}`;
+    }
+    case "pending":
+      return cell.detail || "Not yet reportable";
+    case "none":
+      return `No ${capabilityUnit(capability)} evidence`;
+  }
+}
+
+function statusDotClass(
+  cell: SupportCoverageCell | undefined,
+  isPending: boolean,
+): string {
+  if (isPending || !cell) return "bg-muted-foreground/25";
+  switch (cell.status) {
+    case "observed":
+      return "bg-success-default";
+    case "pending":
+      return "bg-warning-default";
+    case "none":
+      return "bg-muted-foreground/25";
+  }
+}
+
 function EvidenceCell({
   capability,
-  evidence,
-  telemetryStatus,
+  surface,
+  cell,
+  isPending,
+  isError,
+  closesGap,
+  dimmed,
 }: {
   capability: CapabilityId;
-  evidence?: SurfaceEvidence;
-  telemetryStatus: EvidenceStatus;
+  surface: SurfaceId;
+  cell: SupportCoverageCell | undefined;
+  isPending: boolean;
+  isError: boolean;
+  closesGap: boolean;
+  dimmed: boolean;
 }) {
-  const unsupportedLabels: Partial<Record<CapabilityId, string>> = {
-    blocking: "Policy data unavailable",
-    identity: "Attribution unavailable",
-    shadow: "Device detail unavailable",
-  };
-  const unsupportedLabel = unsupportedLabels[capability];
-  const value =
-    capability === "session"
-      ? (evidence?.sessions ?? 0)
-      : capability === "cost"
-        ? (evidence?.tokens ?? 0)
-        : null;
-  const observed = telemetryStatus === "ready" && value !== null && value > 0;
-  const label = unsupportedLabel
-    ? unsupportedLabel
-    : telemetryStatus === "loading"
-      ? "Loading…"
-      : telemetryStatus === "unavailable"
-        ? "Evidence unavailable"
-        : capability === "session"
-          ? observed
-            ? `${value.toLocaleString()} sessions`
-            : "No activity evidence"
-          : observed
-            ? `${value.toLocaleString()} tokens`
-            : "No token evidence";
+  const observed = cell?.status === "observed";
+  const label = cellLabel(capability, cell, isPending, isError);
+  const capabilityName =
+    capabilities.find((item) => item.id === capability)?.name ?? capability;
+  const surfaceName =
+    surfaces.find((item) => item.id === surface)?.name ?? surface;
 
   return (
-    <div
-      className={cn(
-        "flex min-h-20 flex-col justify-center border px-3 py-2",
-        observed
-          ? "border-success-default/30 bg-success-default/10"
-          : "border-border bg-muted/15",
-      )}
-    >
-      <span className="flex items-center gap-2">
-        <span
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          tabIndex={0}
           className={cn(
-            "size-2 shrink-0",
-            observed ? "bg-success-default" : "bg-muted-foreground/25",
+            "flex min-h-20 flex-col justify-center border px-3 py-2 transition-opacity",
+            observed ? "border-success-default" : "border-border bg-muted/15",
+            // A highlighted cell that is already observed is not a gap the
+            // hovered integration would close, so only the gaps are called out.
+            closesGap && "border-information-default border-2",
+            dimmed && "opacity-40",
           )}
-        />
-        <span className="text-xs leading-snug">{label}</span>
-      </span>
-      {evidence?.lastSeen && observed && (
-        <span className="text-muted-foreground mt-1 pl-4 font-mono text-[9px] tracking-wide uppercase">
-          Last seen {evidence.lastSeen.toLocaleDateString()}
-        </span>
-      )}
-    </div>
+        >
+          <span className="flex items-center gap-2">
+            <span
+              className={cn("size-2 shrink-0", statusDotClass(cell, isPending))}
+            />
+            <span className="text-xs leading-snug">{label}</span>
+          </span>
+          {cell?.lastSeen && observed && (
+            <span className="text-muted-foreground mt-1 pl-4 font-mono text-[9px] tracking-wide uppercase">
+              Last seen {new Date(cell.lastSeen).toLocaleDateString()}
+            </span>
+          )}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p className="font-medium">
+          {capabilityName} · {surfaceName}
+        </p>
+        <p className="text-xs">{label}</p>
+        {cell?.detail && cell.status !== "pending" && (
+          <p className="text-xs">{cell.detail}</p>
+        )}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
-function IntegrationFootprints() {
-  const totalCells = surfaces.length * capabilities.length;
+function IntegrationRecommendations({
+  cells,
+  isRanked,
+  hoveredMethodId,
+  onHover,
+}: {
+  cells: Map<string, SupportCoverageCell>;
+  isRanked: boolean;
+  hoveredMethodId: string | null;
+  onHover: (method: IntegrationMethod | null) => void;
+}) {
+  // Ranked by how much of this organization's missing coverage the
+  // integration would close, so the list reads as advice for this org rather
+  // than as a static capability chart that looks the same everywhere.
+  const ranked = useMemo(() => {
+    return methods
+      .map((method) => ({
+        method,
+        gaps: gapsClosedBy(method, cells),
+        footprint: footprintOf(method),
+      }))
+      .sort((a, b) => b.gaps.size - a.gaps.size);
+  }, [cells]);
+
   return (
     <section className="space-y-4">
       <div>
-        <p className="text-muted-foreground font-mono text-[10px] tracking-[0.1em] uppercase">
-          Integration footprints
-        </p>
-        <h3 className="mt-2 text-xl font-medium">Potential coverage paths</h3>
+        <p className="text-eyebrow">Integration footprints</p>
+        <h3 className="mt-2 text-xl font-medium">Close the gaps</h3>
         <p className="text-muted-foreground mt-1 max-w-3xl text-sm">
-          Static product capability only. A filled cell indicates a potential
-          path; it does not mean the integration is configured or reporting for
-          this organization.
+          {isRanked
+            ? "Ranked by how much of this organization's missing coverage each integration would close."
+            : "Coverage evidence has not loaded, so these are not ranked against this organization yet."}{" "}
+          Hover a card to highlight the cells it reaches above. Static product
+          capability only — a card does not mean the integration is configured
+          here.
         </p>
       </div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {methods.map((method) => {
-          const footprint = surfaces.flatMap((surface) =>
-            capabilities.map(
-              (capability) =>
-                method.surfaces.includes(surface.id) &&
-                method.capabilities.includes(capability.id),
-            ),
-          );
-          const covered = footprint.filter(Boolean).length;
-          return (
-            <article
-              key={method.id}
-              className="border-border border bg-card p-5"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-medium">{method.name}</p>
-                  <p className="text-muted-foreground mt-1 font-mono text-[10px] tracking-wide uppercase">
-                    {method.setup}
-                  </p>
-                </div>
-                <span className="font-mono text-xs tabular-nums">
-                  {covered}/{totalCells}
-                </span>
-              </div>
-              <p className="text-muted-foreground mt-3 text-sm leading-relaxed">
-                {method.description}
-              </p>
-              <div
-                className="mt-5 grid grid-cols-6 gap-1"
-                aria-label={`${covered} of ${totalCells} potential coverage cells`}
-              >
-                {footprint.map((isCovered, index) => (
-                  <span
-                    key={index}
-                    aria-hidden="true"
-                    className={cn(
-                      "h-1.5",
-                      isCovered ? "bg-[#2873D7]" : "bg-muted",
-                    )}
-                  />
-                ))}
-              </div>
-            </article>
-          );
-        })}
+        {ranked.map(({ method, gaps, footprint }) => (
+          <RecommendationCard
+            key={method.id}
+            method={method}
+            gapCount={isRanked ? gaps.size : null}
+            footprintCount={footprint.size}
+            isActive={hoveredMethodId === method.id}
+            onHover={onHover}
+          />
+        ))}
       </div>
     </section>
   );
 }
 
-function latestEvidence(
-  evidence: Map<SurfaceId, SurfaceEvidence>,
-): Date | null {
-  let latest: Date | null = null;
-  for (const item of evidence.values()) {
-    if (item.lastSeen && (!latest || item.lastSeen > latest))
-      latest = item.lastSeen;
-  }
-  return latest;
+function RecommendationCard({
+  method,
+  gapCount,
+  footprintCount,
+  isActive,
+  onHover,
+}: {
+  method: IntegrationMethod;
+  gapCount: number | null;
+  footprintCount: number;
+  isActive: boolean;
+  onHover: (method: IntegrationMethod | null) => void;
+}) {
+  const summary = recommendationSummary(gapCount, footprintCount);
+
+  return (
+    <article
+      className={cn(
+        "border-border bg-card border p-5 transition-colors",
+        isActive && "border-information-default",
+        gapCount === 0 && "opacity-70",
+      )}
+      onMouseEnter={() => onHover(method)}
+      onMouseLeave={() => onHover(null)}
+      onFocus={() => onHover(method)}
+      onBlur={() => onHover(null)}
+      tabIndex={0}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-medium">{method.name}</p>
+          <p className="text-muted-foreground mt-1 font-mono text-[10px] tracking-wide uppercase">
+            {method.setup}
+          </p>
+        </div>
+        <span className="font-mono text-xs tabular-nums">
+          {gapCount === null ? "—" : `+${gapCount}`}
+        </span>
+      </div>
+      <p className="text-muted-foreground mt-3 text-sm leading-relaxed">
+        {method.description}
+      </p>
+      <p className="text-muted-foreground mt-3 text-xs">{summary}</p>
+    </article>
+  );
 }
 
-function buildEvidence(
-  data: QueryResult | undefined,
-): Map<SurfaceId, SurfaceEvidence> {
-  const result = new Map<SurfaceId, SurfaceEvidence>();
-  for (const row of data?.table ?? []) {
-    if (
-      !row.groupValue ||
-      row.groupValue === "Other" ||
-      /^Other \(\d+\)$/.test(row.groupValue)
-    )
-      continue;
-    const surface = surfaceForHookSource(row.groupValue);
-    if (!surface) continue;
-    const current = result.get(surface) ?? {
-      sessions: 0,
-      tokens: 0,
-      lastSeen: null,
-    };
-    current.sessions += Number(row.measures.totalChats);
-    current.tokens += Number(row.measures.totalTokens);
-    const series = data?.timeseries.find(
-      (item) => item.groupValue === row.groupValue,
-    );
-    const latest = [...(series?.points ?? [])]
-      .reverse()
-      .find(
-        (point) =>
-          Number(point.measures.totalChats) +
-            Number(point.measures.totalToolCalls) +
-            Number(point.measures.totalTokens) >
-          0,
-      );
-    if (latest) {
-      const latestDate = new Date(
-        Number(BigInt(latest.bucketTimeUnixNano) / 1_000_000n),
-      );
-      if (!current.lastSeen || latestDate > current.lastSeen)
-        current.lastSeen = latestDate;
-    }
-    result.set(surface, current);
+function recommendationSummary(
+  gapCount: number | null,
+  footprintCount: number,
+): string {
+  if (gapCount === null) {
+    return `Reaches ${footprintCount} ${pluralize("cell", footprintCount)}`;
   }
-  return result;
+  if (gapCount === 0) {
+    return "Everything it reaches is already reporting";
+  }
+  return `Would close ${gapCount} of ${footprintCount} ${pluralize("cell", footprintCount)} it reaches`;
+}
+
+function latestEvidence(cells: SupportCoverageCell[] | undefined): Date | null {
+  let latest: Date | null = null;
+  for (const cell of cells ?? []) {
+    if (!cell.lastSeen) continue;
+    const seen = new Date(cell.lastSeen);
+    if (!latest || seen > latest) latest = seen;
+  }
+  return latest;
 }

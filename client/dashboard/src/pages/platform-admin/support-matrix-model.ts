@@ -1,53 +1,76 @@
-export type SurfaceId = "cc" | "chat" | "cowork" | "codex" | "cursor" | "other";
-export type CapabilityId =
-  | "session"
-  | "blocking"
-  | "identity"
-  | "cost"
-  | "shadow";
+import type {
+  Capability,
+  SupportCoverageCell,
+  SupportCoverageCellSurface,
+} from "@gram/client/models/components/supportcoveragecell.js";
 
-export const surfaces = [
-  { id: "cc" as const, name: "Claude Code", detail: "CLI · Desktop · Cloud" },
-  { id: "chat" as const, name: "Claude Chat", detail: "Web · Desktop" },
-  { id: "cowork" as const, name: "Cowork", detail: "Desktop · Cloud · Web" },
-  {
-    id: "codex" as const,
-    name: "Codex / ChatGPT",
-    detail: "CLI · Desktop · Web",
-  },
-  { id: "cursor" as const, name: "Cursor", detail: "IDE · CLI · Cloud" },
-  {
-    id: "other" as const,
-    name: "Other agents",
-    detail: "OpenCode · Gemini · Copilot",
-  },
+export type SurfaceId = SupportCoverageCellSurface;
+export type CapabilityId = Capability;
+
+/**
+ * Column and row labels for the matrix.
+ *
+ * The ordering here mirrors the order the endpoint returns cells in, but the
+ * page never depends on that: cells are looked up by (capability, surface), so
+ * a reordering on either side cannot silently shift a value into the wrong
+ * column.
+ *
+ * There is deliberately no hook_source mapping in this file any more. Folding
+ * a raw hook_source onto a surface now happens server-side in
+ * internal/agentsurface, next to the ingest that produces the values. The copy
+ * that used to live here silently dropped every source missing from it, so
+ * unrecognized activity disappeared from the table while the summary tiles
+ * still reported full coverage.
+ */
+export const surfaces: ReadonlyArray<{
+  id: SurfaceId;
+  name: string;
+  detail: string;
+}> = [
+  { id: "claude_code", name: "Claude Code", detail: "CLI · Desktop · Cloud" },
+  { id: "claude_chat", name: "Claude Chat", detail: "Web · Desktop" },
+  { id: "cowork", name: "Cowork", detail: "Desktop · Cloud · Web" },
+  { id: "codex", name: "Codex / ChatGPT", detail: "CLI · Desktop · Web" },
+  { id: "cursor", name: "Cursor", detail: "IDE · CLI · Cloud" },
+  { id: "other", name: "Other agents", detail: "OpenCode · Gemini · Copilot" },
 ];
 
-export const capabilities = [
+export const capabilities: ReadonlyArray<{
+  id: CapabilityId;
+  name: string;
+  description: string;
+  /** Noun for the cell's primary measure, pluralized by the caller. */
+  unit: string;
+}> = [
   {
-    id: "session" as const,
+    id: "session",
     name: "Session activity observed",
     description: "Aggregate chat-session activity",
+    unit: "session",
   },
   {
-    id: "blocking" as const,
+    id: "blocking",
     name: "Policy enforcement",
     description: "Synchronous policy-decision evidence",
+    unit: "block",
   },
   {
-    id: "identity" as const,
+    id: "identity",
     name: "Identity attribution",
-    description: "Activity bound to an organization or user",
+    description: "Sessions bound to a named user",
+    unit: "attributed session",
   },
   {
-    id: "cost" as const,
+    id: "cost",
     name: "Token usage observed",
     description: "Aggregate token usage by surface",
+    unit: "token",
   },
   {
-    id: "shadow" as const,
+    id: "shadow",
     name: "Shadow MCP & AI",
     description: "Unsanctioned clients and servers",
+    unit: "server",
   },
 ];
 
@@ -60,13 +83,21 @@ export type IntegrationMethod = {
   capabilities: CapabilityId[];
 };
 
+/**
+ * What each integration can reach.
+ *
+ * This is static product capability, not observed state: it answers "if this
+ * org installed X, what would start reporting?". The page only renders it
+ * against the observed matrix, so a card always reads as a recommendation for
+ * this organization rather than as a general capability chart.
+ */
 export const methods: IntegrationMethod[] = [
   {
     id: "inference-hooks",
     name: "Anthropic Inference Hooks",
     description: "Broad Claude coverage with synchronous policy decisions.",
     setup: "About 10 minutes · Anthropic console",
-    surfaces: ["cc", "chat", "cowork"],
+    surfaces: ["claude_code", "claude_chat", "cowork"],
     capabilities: ["session", "blocking"],
   },
   {
@@ -75,7 +106,7 @@ export const methods: IntegrationMethod[] = [
     description:
       "Local session, tool, and usage evidence from supported developer agents.",
     setup: "About 20 minutes · managed settings",
-    surfaces: ["cc", "cowork", "codex", "cursor", "other"],
+    surfaces: ["claude_code", "cowork", "codex", "cursor", "other"],
     capabilities: ["session", "blocking", "cost"],
   },
   {
@@ -84,7 +115,7 @@ export const methods: IntegrationMethod[] = [
     description:
       "Device-local inventory and activity, including shadow AI and MCP discovery.",
     setup: "1–2 days · fleet rollout",
-    surfaces: ["cc", "codex", "cursor", "other"],
+    surfaces: ["claude_code", "codex", "cursor", "other"],
     capabilities: ["session", "identity", "cost", "shadow"],
   },
   {
@@ -93,7 +124,7 @@ export const methods: IntegrationMethod[] = [
     description:
       "Read-only workspace imports for conversations, usage, and spend.",
     setup: "5–15 minutes · provider admin key",
-    surfaces: ["chat", "codex", "cursor"],
+    surfaces: ["claude_chat", "codex", "cursor"],
     capabilities: ["session", "cost", "identity"],
   },
   {
@@ -101,50 +132,61 @@ export const methods: IntegrationMethod[] = [
     name: "OpenTelemetry export",
     description: "Usage and session evidence through an existing collector.",
     setup: "About 45 minutes · collector config",
-    surfaces: ["cc", "cowork"],
+    surfaces: ["claude_code", "cowork"],
     capabilities: ["session", "cost"],
   },
 ];
 
-const surfaceByHookSource: Readonly<Record<string, SurfaceId>> = {
-  claude: "chat",
-  "claude-desktop": "chat",
-  "claude-chat-desktop": "chat",
-  "claude-web": "chat",
-  "claude-chat": "chat",
-  "claude-chat-web": "chat",
-  claudecode: "cc",
-  "claude-code": "cc",
-  "claude-code-web": "cc",
-  "claude-code-desktop": "cc",
-  cowork: "cowork",
-  "claude-cowork": "cowork",
-  "cowork-desktop": "cowork",
-  cursor: "cursor",
-  "cursor-app": "cursor",
-  codex: "codex",
-  "codex-cli": "codex",
-  "codex-web": "codex",
-  chatgpt: "codex",
-  "chatgpt-work": "codex",
-  opencode: "other",
-  pi: "other",
-  openclaw: "other",
-  litellm: "other",
-  copilot: "other",
-  "github-copilot": "other",
-  gemini: "other",
-  glean: "other",
-  bedrock: "other",
-  "aws-bedrock": "other",
-};
+/** Stable key for one cell of the matrix. */
+export function cellKey(
+  capability: CapabilityId,
+  surface: SurfaceId,
+): `${CapabilityId}:${SurfaceId}` {
+  return `${capability}:${surface}`;
+}
 
-export function surfaceForHookSource(value: string): SurfaceId | null {
-  const source = value
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_]+/g, "-");
-  return surfaceByHookSource[source] ?? null;
+export function indexCells(
+  cells: SupportCoverageCell[] | undefined,
+): Map<string, SupportCoverageCell> {
+  const index = new Map<string, SupportCoverageCell>();
+  for (const cell of cells ?? []) {
+    index.set(cellKey(cell.capability, cell.surface), cell);
+  }
+  return index;
+}
+
+/**
+ * The cells an integration would fill that are not already observed.
+ *
+ * A method that only covers ground the org already has is not worth
+ * recommending, which is what makes this the ranking key rather than the raw
+ * footprint size.
+ */
+export function gapsClosedBy(
+  method: IntegrationMethod,
+  cells: Map<string, SupportCoverageCell>,
+): Set<string> {
+  const gaps = new Set<string>();
+  for (const surface of method.surfaces) {
+    for (const capability of method.capabilities) {
+      const key = cellKey(capability, surface);
+      if (cells.get(key)?.status !== "observed") {
+        gaps.add(key);
+      }
+    }
+  }
+  return gaps;
+}
+
+/** Every cell an integration touches, observed or not. */
+export function footprintOf(method: IntegrationMethod): Set<string> {
+  const footprint = new Set<string>();
+  for (const surface of method.surfaces) {
+    for (const capability of method.capabilities) {
+      footprint.add(cellKey(capability, surface));
+    }
+  }
+  return footprint;
 }
 
 export function activeAgentCoverageLabel(

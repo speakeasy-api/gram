@@ -179,7 +179,7 @@ func UsageCommands() []string {
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
-		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-meta-mcp-server-usage|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-clients|get-tool-usage-client-tool-breakdown|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-meta-mcp-server-usage|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-clients|get-tool-usage-client-tool-breakdown|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces|get-support-coverage)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
@@ -3583,6 +3583,10 @@ func ParseEndpoint(
 		telemetryListHooksTracesSessionTokenFlag     = telemetryListHooksTracesFlags.String("session-token", "", "")
 		telemetryListHooksTracesProjectSlugInputFlag = telemetryListHooksTracesFlags.String("project-slug-input", "", "")
 
+		telemetryGetSupportCoverageFlags            = flag.NewFlagSet("get-support-coverage", flag.ExitOnError)
+		telemetryGetSupportCoverageWindowDaysFlag   = telemetryGetSupportCoverageFlags.String("window-days", "30", "")
+		telemetryGetSupportCoverageSessionTokenFlag = telemetryGetSupportCoverageFlags.String("session-token", "", "")
+
 		templatesFlags = flag.NewFlagSet("templates", flag.ContinueOnError)
 
 		templatesCreateTemplateFlags                = flag.NewFlagSet("create-template", flag.ExitOnError)
@@ -5164,6 +5168,7 @@ func ParseEndpoint(
 	telemetryGetToolUsageFilterOptionsFlags.Usage = telemetryGetToolUsageFilterOptionsUsage
 	telemetryGetMcpServerActivityFlags.Usage = telemetryGetMcpServerActivityUsage
 	telemetryListHooksTracesFlags.Usage = telemetryListHooksTracesUsage
+	telemetryGetSupportCoverageFlags.Usage = telemetryGetSupportCoverageUsage
 
 	templatesFlags.Usage = templatesUsage
 	templatesCreateTemplateFlags.Usage = templatesCreateTemplateUsage
@@ -7665,6 +7670,9 @@ func ParseEndpoint(
 
 			case "list-hooks-traces":
 				epf = telemetryListHooksTracesFlags
+
+			case "get-support-coverage":
+				epf = telemetryGetSupportCoverageFlags
 
 			}
 
@@ -10365,6 +10373,9 @@ func ParseEndpoint(
 			case "list-hooks-traces":
 				endpoint = c.ListHooksTraces()
 				data, err = telemetryc.BuildListHooksTracesPayload(*telemetryListHooksTracesBodyFlag, *telemetryListHooksTracesApikeyTokenFlag, *telemetryListHooksTracesSessionTokenFlag, *telemetryListHooksTracesProjectSlugInputFlag)
+			case "get-support-coverage":
+				endpoint = c.GetSupportCoverage()
+				data, err = telemetryc.BuildGetSupportCoveragePayload(*telemetryGetSupportCoverageWindowDaysFlag, *telemetryGetSupportCoverageSessionTokenFlag)
 			}
 		case "templates":
 			c := templatesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -25155,6 +25166,7 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    get-tool-usage-filter-options: Get filter options for target-aware MCP and tool usage metrics`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-activity: Get per-MCP-server tool-call activity for the Distribute MCP listing. Returns, for every MCP server with usage in the lookback window, its total and recent tool-call counts plus the last tool-call time, so the listing can flag servers that have never received a tool call or that have gone quiet.`)
 	fmt.Fprintln(os.Stderr, `    list-hooks-traces: List hook traces aggregated by trace_id with user information`)
+	fmt.Fprintln(os.Stderr, `    get-support-coverage: Observed support coverage for the caller's organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure. Every cell distinguishes evidence found from evidence absent from evidence not yet answerable, so an empty cell is never rendered as unsupported.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s telemetry COMMAND --help\n", os.Args[0])
@@ -25987,6 +25999,26 @@ func telemetryListHooksTracesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry list-hooks-traces --body '{\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"operator\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"types_to_include\": [\n         \"mcp\",\n         \"skill\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetSupportCoverageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-support-coverage", os.Args[0])
+	fmt.Fprint(os.Stderr, " -window-days INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Observed support coverage for the caller's organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure. Every cell distinguishes evidence found from evidence absent from evidence not yet answerable, so an empty cell is never rendered as unsupported.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -window-days INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-support-coverage --window-days 2 --session-token \"abc123\"")
 }
 
 // templatesUsage displays the usage of the templates command and its

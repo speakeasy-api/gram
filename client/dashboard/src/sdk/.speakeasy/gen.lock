@@ -625,6 +625,7 @@ trackedFiles:
   src/funcs/telemetryGetObservabilityOverview.ts: {}
   src/funcs/telemetryGetProjectMetricsSummary.ts: {}
   src/funcs/telemetryGetProjectOverview.ts: {}
+  src/funcs/telemetryGetSupportCoverage.ts: {}
   src/funcs/telemetryGetToolUsageClientToolBreakdown.ts: {}
   src/funcs/telemetryGetToolUsageClients.ts: {}
   src/funcs/telemetryGetToolUsageFilterOptions.ts: {}
@@ -1639,6 +1640,9 @@ trackedFiles:
   src/models/components/summarizerequestbody.ts: {}
   src/models/components/summarizetoolcallrequestbody.ts: {}
   src/models/components/summarizetoolcallresult.ts: {}
+  src/models/components/supportcoveragecell.ts: {}
+  src/models/components/supportcoverageresult.ts: {}
+  src/models/components/supportcoverageunmapped.ts: {}
   src/models/components/syncedagentuser.ts: {}
   src/models/components/syncidentityproviderconnectionapplicationsrequestbody.ts: {}
   src/models/components/telemetrylogrecord.ts: {}
@@ -2110,6 +2114,7 @@ trackedFiles:
   src/models/operations/getspendrule.ts: {}
   src/models/operations/getspendrulesoverview.ts: {}
   src/models/operations/getstripesubscription.ts: {}
+  src/models/operations/getsupportcoverage.ts: {}
   src/models/operations/gettemplate.ts: {}
   src/models/operations/gettokensundermanagement.ts: {}
   src/models/operations/gettoolset.ts: {}
@@ -3432,6 +3437,8 @@ trackedFiles:
   src/react-query/telemetryQuery.ts: {}
   src/react-query/telemetryQueryTumDetails.core.ts: {}
   src/react-query/telemetryQueryTumDetails.ts: {}
+  src/react-query/telemetrySupportCoverage.core.ts: {}
+  src/react-query/telemetrySupportCoverage.ts: {}
   src/react-query/template.core.ts: {}
   src/react-query/template.ts: {}
   src/react-query/templates.core.ts: {}
@@ -7144,6 +7151,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getSupportCoverage:
+    speakeasy-default-get-support-coverage:
+      parameters:
+        query:
+          window_days: 30
+      responses:
+        "200":
+          application/json: {"cells": [], "from": "<value>", "to": "<value>", "unmapped": [], "window_days": 273709}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getTemplate:
     speakeasy-default-get-template:
       responses:
