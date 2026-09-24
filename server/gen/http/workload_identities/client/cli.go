@@ -53,7 +53,7 @@ func BuildRegisterIssuerPayload(workloadIdentitiesRegisterIssuerBody string, wor
 	{
 		err = json.Unmarshal([]byte(workloadIdentitiesRegisterIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"allow_wildcard_admission\": false,\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"name\": \"aa\",\n      \"project_scoped\": false\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"allow_wildcard_admission\": false,\n      \"issuer\": \"https://example.com/foo\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
@@ -61,6 +61,8 @@ func BuildRegisterIssuerPayload(workloadIdentitiesRegisterIssuerBody string, wor
 		if utf8.RuneCountInString(body.Name) > 100 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 100, false))
 		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.issuer", body.Issuer, goa.FormatURI))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_uri", body.JwksURI, goa.FormatURI))
 		if err != nil {
 			return nil, err
 		}
@@ -144,8 +146,9 @@ func BuildAdmitSubjectPayload(workloadIdentitiesAdmitSubjectBody string, workloa
 	{
 		err = json.Unmarshal([]byte(workloadIdentitiesAdmitSubjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"match_kind\": \"wildcard\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"subject\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"https://example.com/foo\",\n      \"match_kind\": \"wildcard\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"subject\": \"abc123\"\n   }'")
 		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.issuer", body.Issuer, goa.FormatURI))
 		if body.MatchKind != nil {
 			if !(*body.MatchKind == "exact" || *body.MatchKind == "wildcard") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_kind", *body.MatchKind, []any{"exact", "wildcard"}))

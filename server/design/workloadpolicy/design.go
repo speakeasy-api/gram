@@ -163,8 +163,17 @@ var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
 		MinLength(1)
 		MaxLength(100)
 	})
-	Attribute("issuer", String, "The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name.")
-	Attribute("jwks_uri", String, "Where the issuer publishes the keys its assertions are signed with. Must be an https URL.")
+	// FormatURI rejects a value that is not a URI at all, in generated clients and
+	// in the contract. It deliberately does not try to express the https and
+	// fully-qualified-domain rules: those are enforced on the write path, where
+	// the refusal can name which rule was broken, and a regex here would be a
+	// second copy of them free to drift.
+	Attribute("issuer", String, "The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name, with no query or fragment.", func() {
+		Format(FormatURI)
+	})
+	Attribute("jwks_uri", String, "Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.", func() {
+		Format(FormatURI)
+	})
 	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to false, and is re-checked on every lookup, so clearing it revokes wildcard rules already written.")
 	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Defaults to false.")
 
@@ -174,7 +183,9 @@ var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
 var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {
 	Description("Form for admitting a workload subject and assigning its agent.")
 
-	Attribute("issuer", String, "The issuer identifier of an already-trusted issuer, resolved within the caller's organization. Naming one the caller cannot see is a not-found, not a permission error.")
+	Attribute("issuer", String, "The issuer identifier of an already-trusted issuer, resolved within the caller's organization. Naming one the caller cannot see is a not-found, not a permission error.", func() {
+		Format(FormatURI)
+	})
 	Attribute("subject", String, "The sub claim the issuer must assert, stored and compared exactly as supplied.")
 	Attribute("match_kind", String, "How the subject is compared: exact compares the whole value; wildcard requires a trailing * and matches anything beginning with the value before it. Wildcard additionally requires the issuer to permit it. Defaults to exact.", func() {
 		Enum("exact", "wildcard")

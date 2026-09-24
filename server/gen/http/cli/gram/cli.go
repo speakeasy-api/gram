@@ -29679,7 +29679,7 @@ func workloadIdentitiesRegisterIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities register-issuer --body '{\n      \"allow_wildcard_admission\": false,\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"name\": \"aa\",\n      \"project_scoped\": false\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities register-issuer --body '{\n      \"allow_wildcard_admission\": false,\n      \"issuer\": \"https://example.com/foo\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesWithdrawIssuerUsage() {
@@ -29727,7 +29727,7 @@ func workloadIdentitiesAdmitSubjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities admit-subject --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"match_kind\": \"wildcard\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"subject\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities admit-subject --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"https://example.com/foo\",\n      \"match_kind\": \"wildcard\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"subject\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesWithdrawSubjectUsage() {

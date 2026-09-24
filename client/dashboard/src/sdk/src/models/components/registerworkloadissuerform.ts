@@ -14,11 +14,11 @@ export type RegisterWorkloadIssuerForm = {
    */
   allowWildcardAdmission?: boolean | undefined;
   /**
-   * The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name.
+   * The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name, with no query or fragment.
    */
   issuer: string;
   /**
-   * Where the issuer publishes the keys its assertions are signed with. Must be an https URL.
+   * Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.
    */
   jwksUri: string;
   /**

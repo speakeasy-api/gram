@@ -497,14 +497,26 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 	}
 	// The same issuer URL may legitimately be registered at both tiers, and the
 	// verification path gives the project row precedence, so follow it rather
-	// than asking an operator to withdraw a row that is doing its job. The list
-	// query orders organization tier first, so walk to the most specific.
-	issuerRow := issuers[0]
+	// than asking an operator to withdraw a row that is doing its job.
+	//
+	// Precedence resolves ACROSS tiers only. Within the winning tier the issuer
+	// column is not unique — two rows may share a URL under different names — and
+	// picking one would silently decide which jwks_uri verifies this subject and
+	// whether wildcards are permitted for it. That stays a refusal.
+	candidates := issuers
+	projectTier := make([]repo.WorkloadIssuer, 0, len(issuers))
 	for _, candidate := range issuers {
 		if candidate.ProjectID.Valid {
-			issuerRow = candidate
+			projectTier = append(projectTier, candidate)
 		}
 	}
+	if len(projectTier) > 0 {
+		candidates = projectTier
+	}
+	if len(candidates) > 1 {
+		return nil, oops.E(oops.CodeInvalid, nil, "%q matches %d trusted issuers at the same tier; withdraw the duplicates first", payload.Issuer, len(candidates))
+	}
+	issuerRow := candidates[0]
 
 	// The early, legible refusal. The issuer's permission is re-checked on every
 	// lookup, which is what makes clearing it revoke rules already written.

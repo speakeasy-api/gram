@@ -181,4 +181,9 @@ func TestWithdrawSubject_LeavesTheOtherTiersAgentInPlace(t *testing.T) {
 	require.Len(t, after.Admissions, 1)
 	require.Equal(t, agentID.String(), after.Admissions[0].AgentID,
 		"the remaining tier's admission lost its agent when the other tier was withdrawn")
+	// And it must be the OTHER tier that survived. Both admissions share one
+	// agent assignment, so the agent assertion alone cannot tell which row is
+	// left: withdrawing the wrong tier would satisfy it too.
+	require.Equal(t, ti.projectID.String(), after.Admissions[0].ProjectID,
+		"the project-tier admission should have survived withdrawing the organization-tier one")
 }
