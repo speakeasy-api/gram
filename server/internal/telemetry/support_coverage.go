@@ -8,14 +8,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
-	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/agentsurface"
-	"github.com/speakeasy-api/gram/server/internal/auth"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -62,31 +63,85 @@ type surfaceEvidence struct {
 	shadowLastSeen time.Time
 }
 
-// GetSupportCoverage assembles the org's observed coverage matrix. Every
-// (capability, surface) pair is always returned with an explicit status, so
-// callers must never infer meaning from an absent cell.
-func (s *Service) GetSupportCoverage(ctx context.Context, payload *telem_gen.GetSupportCoveragePayload) (*telem_gen.SupportCoverageResult, error) {
-	windowDays := defaultSupportCoverageWindowDays
-	if payload != nil && payload.WindowDays > 0 {
-		windowDays = payload.WindowDays
+// SupportCoverage assembles observed coverage matrices. It is constructed
+// separately from Service because the admin binary needs only these three
+// repositories, not the session, authz and feature-flag dependencies the full
+// telemetry service carries.
+type SupportCoverage struct {
+	chRepo       *repo.Queries
+	hooksRepo    *hooksRepo.Queries
+	projectsRepo *projectsRepo.Queries
+}
+
+// NewSupportCoverage builds a reader over the ClickHouse and Postgres sources
+// the coverage matrix is assembled from.
+func NewSupportCoverage(db *pgxpool.Pool, chConn clickhouse.Conn) *SupportCoverage {
+	return &SupportCoverage{
+		chRepo:       repo.New(chConn),
+		hooksRepo:    hooksRepo.New(db),
+		projectsRepo: projectsRepo.New(db),
 	}
-	// Platform-admin, not just org membership: this is a support view, and the
-	// dashboard's PlatformAdminGate is presentation only.
-	if _, _, err := auth.RequirePlatformAdmin(ctx, s.logger); err != nil {
-		return nil, err
+}
+
+// SupportCoverageResult is the assembled matrix. It mirrors the admin API
+// shape without importing it, so the telemetry service stays independent of
+// the surface that exposes it.
+type SupportCoverageResult struct {
+	Cells      []SupportCoverageCell
+	Unmapped   []SupportCoverageUnmapped
+	WindowDays int
+	From       time.Time
+	To         time.Time
+}
+
+// SupportCoverageCell is one (capability, surface) cell.
+type SupportCoverageCell struct {
+	Capability string
+	Surface    string
+	Status     string
+	Value      int64
+	Detail     string
+	LastSeen   time.Time
+}
+
+// SupportCoverageUnmapped is activity that folded onto no surface.
+type SupportCoverageUnmapped struct {
+	HookSource string
+	Sessions   int64
+}
+
+// SupportCoverageForOrganization assembles one organization's observed
+// coverage matrix. Every (capability, surface) pair is always returned with an
+// explicit status, so callers must never infer meaning from an absent cell.
+//
+// The organization is named by the caller rather than taken from the auth
+// context, and no RBAC check runs here: this is staff-only and the admin
+// service that exposes it authorizes the operator. Do not reach it from a
+// customer-facing surface without adding one.
+func (s *SupportCoverage) SupportCoverageForOrganization(ctx context.Context, organizationID string, windowDays int) (*SupportCoverageResult, error) {
+	if strings.TrimSpace(organizationID) == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "organization id is required")
+	}
+	if windowDays <= 0 {
+		windowDays = defaultSupportCoverageWindowDays
 	}
 
 	to := time.Now().UTC()
 	from := to.AddDate(0, 0, -windowDays)
 
-	scope, err := s.resolveOrgQueryScope(ctx, from.Format(time.RFC3339), to.Format(time.RFC3339), nil)
+	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, organizationID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list organization projects")
 	}
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return nil, oops.C(oops.CodeUnauthorized)
+	scope := orgQueryScope{
+		projectUUIDs: make([]uuid.UUID, 0, len(projects)),
+		projectIDs:   make([]string, 0, len(projects)),
+		timeStart:    from.UnixNano(),
+		timeEnd:      to.UnixNano(),
+	}
+	for _, project := range projects {
+		scope.projectUUIDs = append(scope.projectUUIDs, project.ID)
+		scope.projectIDs = append(scope.projectIDs, project.ID.String())
 	}
 
 	evidence := make(map[agentsurface.Surface]*surfaceEvidence, len(agentsurface.All))
@@ -101,20 +156,20 @@ func (s *Service) GetSupportCoverage(ctx context.Context, payload *telem_gen.Get
 	if err := s.collectShadowEvidence(ctx, scope, from, to, evidence, unmapped); err != nil {
 		return nil, err
 	}
-	if err := s.collectBlockEvidence(ctx, scope, authCtx.ActiveOrganizationID, from, to, evidence, unmapped); err != nil {
+	if err := s.collectBlockEvidence(ctx, scope, organizationID, from, to, evidence, unmapped); err != nil {
 		return nil, err
 	}
 
-	return &telem_gen.SupportCoverageResult{
+	return &SupportCoverageResult{
 		Cells:      buildCoverageCells(evidence),
 		Unmapped:   buildUnmappedList(unmapped),
 		WindowDays: windowDays,
-		From:       from.Format(time.RFC3339),
-		To:         to.Format(time.RFC3339),
+		From:       from,
+		To:         to,
 	}, nil
 }
 
-func (s *Service) collectSessionEvidence(ctx context.Context, scope orgQueryScope, from, to time.Time, evidence map[agentsurface.Surface]*surfaceEvidence, unmapped map[string]int64) error {
+func (s *SupportCoverage) collectSessionEvidence(ctx context.Context, scope orgQueryScope, from, to time.Time, evidence map[agentsurface.Surface]*surfaceEvidence, unmapped map[string]int64) error {
 	rows, err := s.chRepo.ListSurfaceEvidence(ctx, repoSurfaceEvidenceParams(scope, from, to))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to read surface activity evidence")
@@ -140,7 +195,7 @@ func (s *Service) collectSessionEvidence(ctx context.Context, scope orgQueryScop
 	return nil
 }
 
-func (s *Service) collectShadowEvidence(ctx context.Context, scope orgQueryScope, from, to time.Time, evidence map[agentsurface.Surface]*surfaceEvidence, unmapped map[string]int64) error {
+func (s *SupportCoverage) collectShadowEvidence(ctx context.Context, scope orgQueryScope, from, to time.Time, evidence map[agentsurface.Surface]*surfaceEvidence, unmapped map[string]int64) error {
 	rows, err := s.chRepo.ListSurfaceShadowExposure(ctx, repoSurfaceEvidenceParams(scope, from, to))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to read surface shadow exposure")
@@ -174,7 +229,7 @@ func (s *Service) collectShadowEvidence(ctx context.Context, scope orgQueryScope
 }
 
 // collectBlockEvidence attributes synchronous policy decisions to surfaces.
-func (s *Service) collectBlockEvidence(ctx context.Context, scope orgQueryScope, orgID string, from, to time.Time, evidence map[agentsurface.Surface]*surfaceEvidence, unmapped map[string]int64) error {
+func (s *SupportCoverage) collectBlockEvidence(ctx context.Context, scope orgQueryScope, orgID string, from, to time.Time, evidence map[agentsurface.Surface]*surfaceEvidence, unmapped map[string]int64) error {
 	blocks, err := s.hooksRepo.ListToolCallBlockSurfaceEvidence(ctx, hooksRepo.ListToolCallBlockSurfaceEvidenceParams{
 		OrganizationID: orgID,
 		ProjectIds:     scope.projectUUIDs,
@@ -244,8 +299,8 @@ func repoSurfaceEvidenceParams(scope orgQueryScope, from, to time.Time) repo.Sur
 	return repo.SurfaceEvidenceParams{GramProjectIDs: scope.projectIDs, From: from, To: to}
 }
 
-func buildCoverageCells(evidence map[agentsurface.Surface]*surfaceEvidence) []*telem_gen.SupportCoverageCell {
-	cells := make([]*telem_gen.SupportCoverageCell, 0, len(coverageCapabilities)*len(agentsurface.All))
+func buildCoverageCells(evidence map[agentsurface.Surface]*surfaceEvidence) []SupportCoverageCell {
+	cells := make([]SupportCoverageCell, 0, len(coverageCapabilities)*len(agentsurface.All))
 	for _, capability := range coverageCapabilities {
 		for _, surface := range agentsurface.All {
 			cells = append(cells, buildCoverageCell(capability, surface, evidence[surface]))
@@ -254,26 +309,26 @@ func buildCoverageCells(evidence map[agentsurface.Surface]*surfaceEvidence) []*t
 	return cells
 }
 
-func buildCoverageCell(capability string, surface agentsurface.Surface, item *surfaceEvidence) *telem_gen.SupportCoverageCell {
-	cell := &telem_gen.SupportCoverageCell{
+func buildCoverageCell(capability string, surface agentsurface.Surface, item *surfaceEvidence) SupportCoverageCell {
+	cell := SupportCoverageCell{
 		Capability: capability,
 		Surface:    string(surface),
 		Status:     "none",
 		Value:      0,
 		Detail:     "",
-		LastSeen:   "",
+		LastSeen:   time.Time{},
 	}
 
 	switch capability {
 	case "session":
 		cell.Value = item.sessions
-		cell.LastSeen = stamp(item.lastSeen)
+		cell.LastSeen = item.lastSeen
 	case "cost":
 		cell.Value = item.tokens
-		cell.LastSeen = stamp(item.lastSeen)
+		cell.LastSeen = item.lastSeen
 	case "identity":
 		cell.Value = item.attributedSessions
-		cell.LastSeen = stamp(item.lastSeen)
+		cell.LastSeen = item.lastSeen
 		// A session bound only to a device is not bound to a person, so the
 		// split is stated rather than summed.
 		switch {
@@ -285,7 +340,7 @@ func buildCoverageCell(capability string, surface agentsurface.Surface, item *su
 		}
 	case "blocking":
 		cell.Value = item.blocks
-		cell.LastSeen = stamp(item.blocksLastSeen)
+		cell.LastSeen = item.blocksLastSeen
 		if item.blocks == 0 && item.blocksProviderOnly {
 			// Blocks happened for this provider but none could be pinned to
 			// this surface's sessions.
@@ -298,21 +353,21 @@ func buildCoverageCell(capability string, surface agentsurface.Surface, item *su
 		}
 	case "shadow":
 		cell.Value = item.shadowServers
-		cell.LastSeen = stamp(item.shadowLastSeen)
+		cell.LastSeen = item.shadowLastSeen
 	}
 
 	if cell.Value > 0 {
 		cell.Status = "observed"
 	} else {
-		cell.LastSeen = ""
+		cell.LastSeen = time.Time{}
 	}
 	return cell
 }
 
-func buildUnmappedList(unmapped map[string]int64) []*telem_gen.SupportCoverageUnmapped {
-	list := make([]*telem_gen.SupportCoverageUnmapped, 0, len(unmapped))
+func buildUnmappedList(unmapped map[string]int64) []SupportCoverageUnmapped {
+	list := make([]SupportCoverageUnmapped, 0, len(unmapped))
 	for hookSource, sessions := range unmapped {
-		list = append(list, &telem_gen.SupportCoverageUnmapped{HookSource: hookSource, Sessions: sessions})
+		list = append(list, SupportCoverageUnmapped{HookSource: hookSource, Sessions: sessions})
 	}
 	sort.Slice(list, func(i, j int) bool {
 		if list[i].Sessions != list[j].Sessions {
@@ -330,11 +385,4 @@ func clampCount(v uint64) int64 {
 		return math.MaxInt64
 	}
 	return int64(v)
-}
-
-func stamp(at time.Time) string {
-	if at.IsZero() {
-		return ""
-	}
-	return at.UTC().Format(time.RFC3339)
 }

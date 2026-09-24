@@ -4,13 +4,12 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
   SupportCoverageResult,
@@ -31,23 +30,21 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  GetSupportCoverageRequest,
-  GetSupportCoverageRequest$outboundSchema,
-  GetSupportCoverageSecurity,
-} from "../models/operations/getsupportcoverage.js";
+  AdminGetSupportCoverageRequest,
+  AdminGetSupportCoverageRequest$outboundSchema,
+} from "../models/operations/admingetsupportcoverage.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getSupportCoverage telemetry
+ * getSupportCoverage admin
  *
  * @remarks
- * Observed support coverage for the caller's organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure. Every cell distinguishes evidence found from evidence absent from evidence not yet answerable, so an empty cell is never rendered as unsupported.
+ * Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.
  */
-export function telemetryGetSupportCoverage(
+export function adminGetSupportCoverage(
   client: GramCore,
-  request?: GetSupportCoverageRequest | undefined,
-  security?: GetSupportCoverageSecurity | undefined,
+  request: AdminGetSupportCoverageRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -66,15 +63,13 @@ export function telemetryGetSupportCoverage(
   return new APIPromise($do(
     client,
     request,
-    security,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  request?: GetSupportCoverageRequest | undefined,
-  security?: GetSupportCoverageSecurity | undefined,
+  request: AdminGetSupportCoverageRequest,
   options?: RequestOptions,
 ): Promise<
   [
@@ -95,8 +90,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(z.optional(GetSupportCoverageRequest$outboundSchema), value),
+    (value) => z.parse(AdminGetSupportCoverageRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -105,39 +99,26 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/telemetry.getSupportCoverage")();
+  const path = pathToFunc("/admin/supportCoverage.get")();
 
   const query = encodeFormQuery({
-    "window_days": payload?.window_days,
+    "organization_id": payload.organization_id,
+    "window_days": payload.window_days,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
-      explode: false,
-      charEncoding: "none",
-    }),
   }));
-
-  const requestSecurity = resolveSecurity(
-    [
-      {
-        fieldName: "Gram-Session",
-        type: "apiKey:header",
-        value: security?.sessionHeaderGramSession,
-      },
-    ],
-  );
 
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getSupportCoverage",
+    operationID: "adminGetSupportCoverage",
     oAuth2Scopes: null,
 
-    resolvedSecurity: requestSecurity,
+    resolvedSecurity: null,
 
-    securitySource: security,
+    securitySource: null,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },
@@ -145,7 +126,6 @@ async function $do(
   };
 
   const requestRes = client._createRequest(context, {
-    security: requestSecurity,
     method: "GET",
     baseURL: options?.serverURL,
     path: path,

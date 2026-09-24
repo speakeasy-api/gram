@@ -10,7 +10,6 @@ import { telemetryGetMetaMcpServerUsage } from "../funcs/telemetryGetMetaMcpServ
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetryGetProjectOverview } from "../funcs/telemetryGetProjectOverview.js";
-import { telemetryGetSupportCoverage } from "../funcs/telemetryGetSupportCoverage.js";
 import { telemetryGetToolUsageClients } from "../funcs/telemetryGetToolUsageClients.js";
 import { telemetryGetToolUsageClientToolBreakdown } from "../funcs/telemetryGetToolUsageClientToolBreakdown.js";
 import { telemetryGetToolUsageFilterOptions } from "../funcs/telemetryGetToolUsageFilterOptions.js";
@@ -73,7 +72,6 @@ import { SearchChatsResult } from "../models/components/searchchatsresult.js";
 import { SearchLogsResult } from "../models/components/searchlogsresult.js";
 import { SearchToolCallsResult } from "../models/components/searchtoolcallsresult.js";
 import { SearchUsersResult } from "../models/components/searchusersresult.js";
-import { SupportCoverageResult } from "../models/components/supportcoverageresult.js";
 import { TumDetailsResult } from "../models/components/tumdetailsresult.js";
 import {
   CaptureEventRequest,
@@ -107,10 +105,6 @@ import {
   GetProjectOverviewRequest,
   GetProjectOverviewSecurity,
 } from "../models/operations/getprojectoverview.js";
-import {
-  GetSupportCoverageRequest,
-  GetSupportCoverageSecurity,
-} from "../models/operations/getsupportcoverage.js";
 import {
   GetToolUsageClientsRequest,
   GetToolUsageClientsSecurity,
@@ -364,25 +358,6 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetProjectOverviewResult> {
     return unwrapAsync(telemetryGetProjectOverview(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * getSupportCoverage telemetry
-   *
-   * @remarks
-   * Observed support coverage for the caller's organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure. Every cell distinguishes evidence found from evidence absent from evidence not yet answerable, so an empty cell is never rendered as unsupported.
-   */
-  async getSupportCoverage(
-    request?: GetSupportCoverageRequest | undefined,
-    security?: GetSupportCoverageSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<SupportCoverageResult> {
-    return unwrapAsync(telemetryGetSupportCoverage(
       this,
       request,
       security,

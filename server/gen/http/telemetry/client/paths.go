@@ -181,8 +181,3 @@ func GetMcpServerActivityTelemetryPath() string {
 func ListHooksTracesTelemetryPath() string {
 	return "/rpc/telemetry.listHooksTraces"
 }
-
-// GetSupportCoverageTelemetryPath returns the URL path to the telemetry service getSupportCoverage HTTP endpoint.
-func GetSupportCoverageTelemetryPath() string {
-	return "/rpc/telemetry.getSupportCoverage"
-}

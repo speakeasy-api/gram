@@ -1,16 +1,12 @@
 ---
 "server": minor
-"dashboard": minor
+"admin": minor
 ---
 
-Back the platform-admin support coverage page with observed evidence instead of hardcoded placeholders.
+Add an observed support coverage matrix to the staff admin app, on each organization's record.
 
-Policy enforcement, identity attribution and shadow MCP exposure previously rendered as "unavailable" on every surface for every organization, because the page only ever read session and token counts and hardcoded the other three rows. They are now served from real sources through a new org-scoped `telemetry.getSupportCoverage` endpoint: policy enforcement joins `tool_call_blocks` to the session summaries via `chat_id`, identity comes from per-session user attribution, and shadow exposure comes from a new `shadow_mcp_inventory_surfaces` table that records which consuming surface reached each shadow MCP server.
+A new `admin.getSupportCoverage` endpoint reports, per consuming surface, evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure. Policy enforcement joins `tool_call_blocks` to session summaries via `chat_id`; identity counts sessions bound to a named user separately from those bound only to a device hostname; shadow exposure is derived from `trace_summaries`, which already carries the MCP server URL and hook_source on the same trace.
 
-Each cell now carries an explicit status, so evidence found, evidence absent, and evidence not yet reportable are three distinct states rather than one blank cell. Identity reports sessions bound to a named user separately from sessions bound only to a device hostname, which previously would have counted as attributed.
+Every `(capability, surface)` pair is returned with an explicit status so evidence found and evidence absent stay distinct, and hook sources the fold does not recognize are reported rather than dropped. Folding a raw `hook_source` onto a surface now happens server-side in `internal/agentsurface`.
 
-Folding a raw `hook_source` onto a surface moves from the dashboard into `internal/agentsurface`, beside the ingest that produces the values. The client-side copy silently discarded any source missing from its map, so unrecognized activity vanished from the matrix while the summary still reported full coverage; unmapped sources are now reported to the page instead.
-
-The integration footprint cards are ranked by how much of the organization's missing coverage each one would close, and hovering a card highlights the matrix cells it reaches.
-
-Shadow surface tagging starts at deploy and does not backfill, so shadow cells read as not-yet-reportable until tagged activity accumulates.
+The integration cards beside the matrix read from the operator-editable support matrix catalog, ranked by how much of that organization's missing coverage each method would close.

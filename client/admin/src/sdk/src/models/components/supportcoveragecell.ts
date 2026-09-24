@@ -25,7 +25,7 @@ export const Capability = {
 export type Capability = ClosedEnum<typeof Capability>;
 
 /**
- * Whether evidence was found, absent, or cannot be answered for this surface yet.
+ * Whether evidence was found, absent, or not answerable yet.
  */
 export const SupportCoverageCellStatus = {
   Observed: "observed",
@@ -33,7 +33,7 @@ export const SupportCoverageCellStatus = {
   Pending: "pending",
 } as const;
 /**
- * Whether evidence was found, absent, or cannot be answered for this surface yet.
+ * Whether evidence was found, absent, or not answerable yet.
  */
 export type SupportCoverageCellStatus = ClosedEnum<
   typeof SupportCoverageCellStatus
@@ -42,7 +42,7 @@ export type SupportCoverageCellStatus = ClosedEnum<
 /**
  * Consuming surface the cell reports on.
  */
-export const SupportCoverageCellSurface = {
+export const Surface = {
   ClaudeCode: "claude_code",
   ClaudeChat: "claude_chat",
   Cowork: "cowork",
@@ -53,9 +53,7 @@ export const SupportCoverageCellSurface = {
 /**
  * Consuming surface the cell reports on.
  */
-export type SupportCoverageCellSurface = ClosedEnum<
-  typeof SupportCoverageCellSurface
->;
+export type Surface = ClosedEnum<typeof Surface>;
 
 /**
  * Observed evidence for one capability on one surface.
@@ -66,23 +64,23 @@ export type SupportCoverageCell = {
    */
   capability: Capability;
   /**
-   * Short human-readable qualifier rendered under the value, e.g. the identity split or the granularity a value was attributed at. Empty when there is nothing to qualify.
+   * Short qualifier rendered under the value. Empty when there is nothing to qualify.
    */
   detail: string;
   /**
-   * RFC3339 timestamp of the most recent supporting evidence. Empty when status is not observed.
+   * RFC3339 timestamp of the most recent supporting evidence. Empty unless observed.
    */
-  lastSeen: string;
+  lastSeen: Date;
   /**
-   * Whether evidence was found, absent, or cannot be answered for this surface yet.
+   * Whether evidence was found, absent, or not answerable yet.
    */
   status: SupportCoverageCellStatus;
   /**
    * Consuming surface the cell reports on.
    */
-  surface: SupportCoverageCellSurface;
+  surface: Surface;
   /**
-   * Primary measure behind the cell: sessions, tokens, blocks, attributed sessions or distinct shadow servers depending on the capability. Zero when status is not observed.
+   * Primary measure: sessions, tokens, blocks, attributed sessions or distinct shadow servers depending on the capability. Zero unless observed.
    */
   value: number;
 };
@@ -97,9 +95,9 @@ export const SupportCoverageCellStatus$inboundSchema: z.ZodMiniEnum<
 > = z.enum(SupportCoverageCellStatus);
 
 /** @internal */
-export const SupportCoverageCellSurface$inboundSchema: z.ZodMiniEnum<
-  typeof SupportCoverageCellSurface
-> = z.enum(SupportCoverageCellSurface);
+export const Surface$inboundSchema: z.ZodMiniEnum<typeof Surface> = z.enum(
+  Surface,
+);
 
 /** @internal */
 export const SupportCoverageCell$inboundSchema: z.ZodMiniType<
@@ -109,9 +107,12 @@ export const SupportCoverageCell$inboundSchema: z.ZodMiniType<
   z.object({
     capability: Capability$inboundSchema,
     detail: z.string(),
-    last_seen: z.string(),
+    last_seen: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
     status: SupportCoverageCellStatus$inboundSchema,
-    surface: SupportCoverageCellSurface$inboundSchema,
+    surface: Surface$inboundSchema,
     value: z.int(),
   }),
   z.transform((v) => {

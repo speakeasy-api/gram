@@ -211,6 +211,10 @@ type Service interface {
 	GetSupportMatrix(context.Context, *GetSupportMatrixPayload) (res *SupportMatrix, err error)
 	// Save coverage against the last read revision; rejects concurrent changes.
 	UpdateSupportMatrix(context.Context, *UpdateSupportMatrixPayload) (res *SupportMatrix, err error)
+	// Observed support coverage for one organization: per-surface evidence for
+	// session activity, policy enforcement, identity attribution, token usage and
+	// shadow MCP exposure.
+	GetSupportCoverage(context.Context, *GetSupportCoveragePayload) (res *SupportCoverageResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -233,7 +237,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [56]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "getOrganizationOnboarding", "setOrganizationOnboarding", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix"}
+var MethodNames = [57]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "getOrganizationOnboarding", "setOrganizationOnboarding", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -977,6 +981,16 @@ type GetStripeSubscriptionPayload struct {
 	OrganizationID    string
 }
 
+// GetSupportCoveragePayload is the payload type of the admin service
+// getSupportCoverage method.
+type GetSupportCoveragePayload struct {
+	AdminSessionToken *string
+	// Organization to report coverage for.
+	OrganizationID string
+	// Observation window in days.
+	WindowDays int
+}
+
 // GetSupportMatrixPayload is the payload type of the admin service
 // getSupportMatrix method.
 type GetSupportMatrixPayload struct {
@@ -1470,6 +1484,48 @@ type SupportCapability struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Group string `json:"group"`
+}
+
+// Observed evidence for one capability on one surface.
+type SupportCoverageCell struct {
+	// Capability the cell reports on.
+	Capability string
+	// Consuming surface the cell reports on.
+	Surface string
+	// Whether evidence was found, absent, or not answerable yet.
+	Status string
+	// Primary measure: sessions, tokens, blocks, attributed sessions or distinct
+	// shadow servers depending on the capability. Zero unless observed.
+	Value int64
+	// Short qualifier rendered under the value. Empty when there is nothing to
+	// qualify.
+	Detail string
+	// RFC3339 timestamp of the most recent supporting evidence. Empty unless
+	// observed.
+	LastSeen string
+}
+
+// SupportCoverageResult is the result type of the admin service
+// getSupportCoverage method.
+type SupportCoverageResult struct {
+	// One cell per (capability, surface) pair. Always fully populated.
+	Cells []*SupportCoverageCell
+	// Activity whose hook_source folded to no surface.
+	Unmapped []*SupportCoverageUnmapped
+	// Length of the observation window in days.
+	WindowDays int
+	// RFC3339 start of the observation window.
+	From string
+	// RFC3339 end of the observation window.
+	To string
+}
+
+// A hook_source the surface fold did not recognize.
+type SupportCoverageUnmapped struct {
+	// The raw, unrecognized hook_source.
+	HookSource string
+	// Sessions observed under it inside the window.
+	Sessions int64
 }
 
 type SupportDraft struct {

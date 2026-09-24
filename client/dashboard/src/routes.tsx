@@ -117,7 +117,6 @@ import PlatformAdminOverview from "./pages/platform-admin/Overview";
 import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
 import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
 import PlatformAdminOpenRouterKeys from "./pages/platform-admin/OpenRouterKeys";
-import PlatformAdminSupportMatrix from "./pages/platform-admin/SupportMatrix";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
@@ -1502,12 +1501,6 @@ const ORG_ROUTE_STRUCTURE = {
     url: "platform-admin/openrouter-keys",
     icon: "key-round",
     component: PlatformAdminOpenRouterKeys,
-  },
-  platformAdminSupportMatrix: {
-    title: "Support Coverage",
-    url: "platform-admin/support-coverage",
-    icon: "layout-dashboard",
-    component: PlatformAdminSupportMatrix,
   },
   deviceAgent: {
     title: "Device Agent",

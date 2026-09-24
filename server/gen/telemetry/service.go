@@ -113,12 +113,6 @@ type Service interface {
 	GetMcpServerActivity(context.Context, *GetMcpServerActivityPayload) (res *GetMcpServerActivityResult, err error)
 	// List hook traces aggregated by trace_id with user information
 	ListHooksTraces(context.Context, *ListHooksTracesPayload) (res *ListHooksTracesResult, err error)
-	// Observed support coverage for the caller's organization: per-surface
-	// evidence for session activity, policy enforcement, identity attribution,
-	// token usage and shadow MCP exposure. Every cell distinguishes evidence found
-	// from evidence absent from evidence not yet answerable, so an empty cell is
-	// never rendered as unsupported.
-	GetSupportCoverage(context.Context, *GetSupportCoveragePayload) (res *SupportCoverageResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -143,7 +137,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [36]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMetaMcpServerUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces", "getSupportCoverage"}
+var MethodNames = [35]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMetaMcpServerUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -450,14 +444,6 @@ type GetProjectOverviewResult struct {
 	Comparison *ProjectOverviewSummary
 	// Indicates whether metrics are session-based or tool-call-based
 	MetricsMode string
-}
-
-// GetSupportCoveragePayload is the payload type of the telemetry service
-// getSupportCoverage method.
-type GetSupportCoveragePayload struct {
-	SessionToken *string
-	// Observation window in days.
-	WindowDays int
 }
 
 // GetToolUsageClientToolBreakdownPayload is the payload type of the telemetry
@@ -1979,54 +1965,6 @@ type SkillTimeSeriesPoint struct {
 	SkillName string
 	// Number of skill use events in this bucket
 	EventCount int64
-}
-
-// Observed evidence for one capability on one surface.
-type SupportCoverageCell struct {
-	// Capability the cell reports on.
-	Capability string
-	// Consuming surface the cell reports on.
-	Surface string
-	// Whether evidence was found, absent, or cannot be answered for this surface
-	// yet.
-	Status string
-	// Primary measure behind the cell: sessions, tokens, blocks, attributed
-	// sessions or distinct shadow servers depending on the capability. Zero when
-	// status is not observed.
-	Value int64
-	// Short human-readable qualifier rendered under the value, e.g. the identity
-	// split or the granularity a value was attributed at. Empty when there is
-	// nothing to qualify.
-	Detail string
-	// RFC3339 timestamp of the most recent supporting evidence. Empty when status
-	// is not observed.
-	LastSeen string
-}
-
-// SupportCoverageResult is the result type of the telemetry service
-// getSupportCoverage method.
-type SupportCoverageResult struct {
-	// One cell per (capability, surface) pair. Always fully populated, so clients
-	// never infer a missing pair as unsupported.
-	Cells []*SupportCoverageCell
-	// Activity whose hook_source folded to no surface. Non-empty means the matrix
-	// is not showing everything the org did.
-	Unmapped []*SupportCoverageUnmapped
-	// Length of the observation window in days.
-	WindowDays int
-	// RFC3339 start of the observation window.
-	From string
-	// RFC3339 end of the observation window.
-	To string
-}
-
-// A hook_source the surface fold did not recognize, reported rather than
-// discarded.
-type SupportCoverageUnmapped struct {
-	// The raw, unrecognized hook_source.
-	HookSource string
-	// Sessions observed under it inside the window.
-	Sessions int64
 }
 
 // OpenTelemetry log record

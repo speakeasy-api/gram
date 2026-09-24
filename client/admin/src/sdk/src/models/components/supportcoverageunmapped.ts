@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * A hook_source the surface fold did not recognize, reported rather than discarded.
+ * A hook_source the surface fold did not recognize.
  */
 export type SupportCoverageUnmapped = {
   /**

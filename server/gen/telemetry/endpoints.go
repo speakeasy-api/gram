@@ -51,7 +51,6 @@ type Endpoints struct {
 	GetToolUsageFilterOptions        goa.Endpoint
 	GetMcpServerActivity             goa.Endpoint
 	ListHooksTraces                  goa.Endpoint
-	GetSupportCoverage               goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "telemetry" service with endpoints.
@@ -94,7 +93,6 @@ func NewEndpoints(s Service) *Endpoints {
 		GetToolUsageFilterOptions:        NewGetToolUsageFilterOptionsEndpoint(s, a.APIKeyAuth),
 		GetMcpServerActivity:             NewGetMcpServerActivityEndpoint(s, a.APIKeyAuth),
 		ListHooksTraces:                  NewListHooksTracesEndpoint(s, a.APIKeyAuth),
-		GetSupportCoverage:               NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -135,7 +133,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetToolUsageFilterOptions = m(e.GetToolUsageFilterOptions)
 	e.GetMcpServerActivity = m(e.GetMcpServerActivity)
 	e.ListHooksTraces = m(e.ListHooksTraces)
-	e.GetSupportCoverage = m(e.GetSupportCoverage)
 }
 
 // NewSearchLogsEndpoint returns an endpoint function that calls the method
@@ -2105,28 +2102,5 @@ func NewListHooksTracesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.ListHooksTraces(ctx, p)
-	}
-}
-
-// NewGetSupportCoverageEndpoint returns an endpoint function that calls the
-// method "getSupportCoverage" of service "telemetry".
-func NewGetSupportCoverageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetSupportCoveragePayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.GetSupportCoverage(ctx, p)
 	}
 }

@@ -10,21 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
-
-// platformAdminCtx marks the caller as Speakeasy staff, which the handler
-// requires.
-func platformAdminCtx(t *testing.T, ctx context.Context) context.Context {
-	t.Helper()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	platformAuth := *authCtx
-	platformAuth.IsAdmin = true
-	return contextvalues.SetAuthContext(ctx, &platformAuth)
-}
 
 // waitForSupportCoverage polls until the seeded rows have propagated through
 // the session-summary materialized view, which is eventually consistent.
@@ -32,16 +19,14 @@ func waitForSupportCoverage(
 	t *testing.T,
 	ctx context.Context,
 	ti *testInstance,
-	ready func(*telem_gen.SupportCoverageResult) bool,
-) *telem_gen.SupportCoverageResult {
+	ready func(*telemetry.SupportCoverageResult) bool,
+) *telemetry.SupportCoverageResult {
 	t.Helper()
 
-	var result *telem_gen.SupportCoverageResult
+	var result *telemetry.SupportCoverageResult
 	var err error
 	require.Eventually(t, func() bool {
-		result, err = ti.service.GetSupportCoverage(ctx, &telem_gen.GetSupportCoveragePayload{
-			SessionToken: nil, WindowDays: 30,
-		})
+		result, err = ti.coverage.SupportCoverageForOrganization(ctx, ti.orgID, 30)
 		return err == nil && result != nil && ready(result)
 	}, 10*time.Second, 200*time.Millisecond, "expected support coverage to become query-ready")
 	// After Eventually, not inside it: the condition runs in its own
@@ -51,7 +36,7 @@ func waitForSupportCoverage(
 }
 
 // cellFor finds the cell for a pair. Every pair is promised, so a miss fails.
-func cellFor(t *testing.T, result *telem_gen.SupportCoverageResult, capability, surface string) *telem_gen.SupportCoverageCell {
+func cellFor(t *testing.T, result *telemetry.SupportCoverageResult, capability, surface string) telemetry.SupportCoverageCell {
 	t.Helper()
 
 	for _, cell := range result.Cells {
@@ -60,31 +45,15 @@ func cellFor(t *testing.T, result *telem_gen.SupportCoverageResult, capability, 
 		}
 	}
 	t.Fatalf("no cell for capability %q surface %q", capability, surface)
-	return nil
-}
-
-func TestGetSupportCoverage_RefusesNonPlatformAdmins(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestLogsService(t)
-
-	// Org membership is not enough; PlatformAdminGate is presentation only.
-	_, err := ti.service.GetSupportCoverage(ctx, &telem_gen.GetSupportCoveragePayload{
-		SessionToken: nil, WindowDays: 30,
-	})
-	require.Error(t, err)
-	require.ErrorContains(t, err, "platform admin")
+	return telemetry.SupportCoverageCell{} //exhaustruct:ignore
 }
 
 func TestGetSupportCoverage_EmptyOrganization(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
-	ctx = platformAdminCtx(t, ctx)
 
-	result, err := ti.service.GetSupportCoverage(ctx, &telem_gen.GetSupportCoveragePayload{
-		SessionToken: nil, WindowDays: 30,
-	})
+	result, err := ti.coverage.SupportCoverageForOrganization(ctx, ti.orgID, 30)
 	require.NoError(t, err)
 
 	// Always complete, so a client never has to interpret a missing cell.
@@ -101,7 +70,6 @@ func TestGetSupportCoverage_SessionAndIdentityEvidence(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
-	ctx = platformAdminCtx(t, ctx)
 	projectID := uuid.MustParse(ti.projectID)
 	now := time.Now().UTC().Add(-time.Hour)
 
@@ -123,7 +91,7 @@ func TestGetSupportCoverage_SessionAndIdentityEvidence(t *testing.T) {
 		inputTokens: 20, outputTokens: 5, totalTokens: 25,
 	})
 
-	result := waitForSupportCoverage(t, ctx, ti, func(res *telem_gen.SupportCoverageResult) bool {
+	result := waitForSupportCoverage(t, ctx, ti, func(res *telemetry.SupportCoverageResult) bool {
 		for _, cell := range res.Cells {
 			if cell.Capability == "session" && cell.Surface == "cursor" && cell.Value == 2 {
 				return true
@@ -135,7 +103,7 @@ func TestGetSupportCoverage_SessionAndIdentityEvidence(t *testing.T) {
 	session := cellFor(t, result, "session", "cursor")
 	require.Equal(t, "observed", session.Status)
 	require.Equal(t, int64(2), session.Value)
-	require.NotEmpty(t, session.LastSeen)
+	require.False(t, session.LastSeen.IsZero())
 
 	cost := cellFor(t, result, "cost", "cursor")
 	require.Equal(t, "observed", cost.Status)
@@ -154,7 +122,6 @@ func TestGetSupportCoverage_ReportsUnmappedHookSources(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
-	ctx = platformAdminCtx(t, ctx)
 	now := time.Now().UTC().Add(-time.Hour)
 
 	// Traces carry whatever hook_source was reported, so a new adapter shows
@@ -162,7 +129,7 @@ func TestGetSupportCoverage_ReportsUnmappedHookSources(t *testing.T) {
 	// it only ingests a known set of sources.
 	insertShadowSurfaceSighting(t, ctx, ti.projectID, "https://unknown.example.com/mcp", "some-brand-new-agent", now)
 
-	result := waitForSupportCoverage(t, ctx, ti, func(res *telem_gen.SupportCoverageResult) bool {
+	result := waitForSupportCoverage(t, ctx, ti, func(res *telemetry.SupportCoverageResult) bool {
 		return len(res.Unmapped) == 1
 	})
 
@@ -181,7 +148,6 @@ func TestGetSupportCoverage_ShadowExposurePerSurface(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
-	ctx = platformAdminCtx(t, ctx)
 	now := time.Now().UTC().Add(-time.Hour)
 
 	insertShadowSurfaceSighting(t, ctx, ti.projectID, "https://evil.example.com/mcp", "cursor", now)
@@ -189,9 +155,7 @@ func TestGetSupportCoverage_ShadowExposurePerSurface(t *testing.T) {
 	// The same server reached twice by one surface is one server, not two.
 	insertShadowSurfaceSighting(t, ctx, ti.projectID, "https://evil.example.com/mcp", "cursor", now.Add(time.Minute))
 
-	result, err := ti.service.GetSupportCoverage(ctx, &telem_gen.GetSupportCoveragePayload{
-		SessionToken: nil, WindowDays: 30,
-	})
+	result, err := ti.coverage.SupportCoverageForOrganization(ctx, ti.orgID, 30)
 	require.NoError(t, err)
 
 	shadow := cellFor(t, result, "shadow", "cursor")
@@ -207,21 +171,20 @@ func TestGetSupportCoverage_FoldsShadowAliasesToOneServer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
-	ctx = platformAdminCtx(t, ctx)
 	now := time.Now().UTC().Add(-time.Hour)
 
 	// Two spellings of one surface reaching the same server is one server.
 	insertShadowSurfaceSighting(t, ctx, ti.projectID, "https://evil.example.com/mcp", "claude-code", now)
 	insertShadowSurfaceSighting(t, ctx, ti.projectID, "https://evil.example.com/mcp", "claudecode", now)
 
-	result := waitForSupportCoverage(t, ctx, ti, func(res *telem_gen.SupportCoverageResult) bool {
+	result := waitForSupportCoverage(t, ctx, ti, func(res *telemetry.SupportCoverageResult) bool {
 		return cellStatus(res, "shadow", "claude_code") == "observed"
 	})
 
 	require.Equal(t, int64(1), cellFor(t, result, "shadow", "claude_code").Value)
 }
 
-func cellStatus(result *telem_gen.SupportCoverageResult, capability, surface string) string {
+func cellStatus(result *telemetry.SupportCoverageResult, capability, surface string) string {
 	for _, cell := range result.Cells {
 		if cell.Capability == capability && cell.Surface == surface {
 			return cell.Status

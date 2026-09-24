@@ -92,6 +92,8 @@ type Service struct {
 
 	trial   trialemails.Notifier
 	billing BillingOperations
+
+	supportCoverage SupportCoverageReader
 }
 
 type BillingOperations interface {
@@ -195,6 +197,7 @@ func NewService(
 	chatAnalysisSignaler analysis.Signaler,
 	openRouterSpendCap OpenRouterSpendCapScheduler,
 	billing BillingOperations,
+	supportCoverage SupportCoverageReader,
 	dashboardURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
@@ -237,8 +240,9 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:   trialNotifier,
-		billing: billing,
+		trial:           trialNotifier,
+		billing:         billing,
+		supportCoverage: supportCoverage,
 	}
 }
 

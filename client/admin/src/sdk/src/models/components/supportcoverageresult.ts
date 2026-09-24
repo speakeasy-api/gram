@@ -17,11 +17,11 @@ import {
 } from "./supportcoverageunmapped.js";
 
 /**
- * Observed support coverage for the caller's organization over a fixed observation window.
+ * Observed support coverage for one organization over a fixed window.
  */
 export type SupportCoverageResult = {
   /**
-   * One cell per (capability, surface) pair. Always fully populated, so clients never infer a missing pair as unsupported.
+   * One cell per (capability, surface) pair. Always fully populated.
    */
   cells: Array<SupportCoverageCell>;
   /**
@@ -33,7 +33,7 @@ export type SupportCoverageResult = {
    */
   to: Date;
   /**
-   * Activity whose hook_source folded to no surface. Non-empty means the matrix is not showing everything the org did.
+   * Activity whose hook_source folded to no surface.
    */
   unmapped: Array<SupportCoverageUnmapped>;
   /**

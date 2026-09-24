@@ -10,7 +10,6 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"unicode/utf8"
 
 	telemetry "github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -2948,43 +2947,6 @@ func BuildListHooksTracesPayload(telemetryListHooksTracesBody string, telemetryL
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildGetSupportCoveragePayload builds the payload for the telemetry
-// getSupportCoverage endpoint from CLI flags.
-func BuildGetSupportCoveragePayload(telemetryGetSupportCoverageWindowDays string, telemetryGetSupportCoverageSessionToken string) (*telemetry.GetSupportCoveragePayload, error) {
-	var err error
-	var windowDays int
-	{
-		if telemetryGetSupportCoverageWindowDays != "" {
-			var v int64
-			v, err = strconv.ParseInt(telemetryGetSupportCoverageWindowDays, 10, strconv.IntSize)
-			windowDays = int(v)
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for windowDays, must be INT")
-			}
-			if windowDays < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 1, true))
-			}
-			if windowDays > 90 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 90, false))
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var sessionToken *string
-	{
-		if telemetryGetSupportCoverageSessionToken != "" {
-			sessionToken = &telemetryGetSupportCoverageSessionToken
-		}
-	}
-	v := &telemetry.GetSupportCoveragePayload{}
-	v.WindowDays = windowDays
-	v.SessionToken = sessionToken
 
 	return v, nil
 }

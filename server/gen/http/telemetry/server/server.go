@@ -54,7 +54,6 @@ type Server struct {
 	GetToolUsageFilterOptions        http.Handler
 	GetMcpServerActivity             http.Handler
 	ListHooksTraces                  http.Handler
-	GetSupportCoverage               http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -119,7 +118,6 @@ func New(
 			{"GetToolUsageFilterOptions", "POST", "/rpc/telemetry.getToolUsageFilterOptions"},
 			{"GetMcpServerActivity", "POST", "/rpc/telemetry.getMcpServerActivity"},
 			{"ListHooksTraces", "POST", "/rpc/telemetry.listHooksTraces"},
-			{"GetSupportCoverage", "GET", "/rpc/telemetry.getSupportCoverage"},
 		},
 		SearchLogs:                       NewSearchLogsHandler(e.SearchLogs, mux, decoder, encoder, errhandler, formatter),
 		SearchToolCalls:                  NewSearchToolCallsHandler(e.SearchToolCalls, mux, decoder, encoder, errhandler, formatter),
@@ -156,7 +154,6 @@ func New(
 		GetToolUsageFilterOptions:        NewGetToolUsageFilterOptionsHandler(e.GetToolUsageFilterOptions, mux, decoder, encoder, errhandler, formatter),
 		GetMcpServerActivity:             NewGetMcpServerActivityHandler(e.GetMcpServerActivity, mux, decoder, encoder, errhandler, formatter),
 		ListHooksTraces:                  NewListHooksTracesHandler(e.ListHooksTraces, mux, decoder, encoder, errhandler, formatter),
-		GetSupportCoverage:               NewGetSupportCoverageHandler(e.GetSupportCoverage, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -200,7 +197,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetToolUsageFilterOptions = m(s.GetToolUsageFilterOptions)
 	s.GetMcpServerActivity = m(s.GetMcpServerActivity)
 	s.ListHooksTraces = m(s.ListHooksTraces)
-	s.GetSupportCoverage = m(s.GetSupportCoverage)
 }
 
 // MethodNames returns the methods served.
@@ -243,7 +239,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetToolUsageFilterOptionsHandler(mux, h.GetToolUsageFilterOptions)
 	MountGetMcpServerActivityHandler(mux, h.GetMcpServerActivity)
 	MountListHooksTracesHandler(mux, h.ListHooksTraces)
-	MountGetSupportCoverageHandler(mux, h.GetSupportCoverage)
 }
 
 // Mount configures the mux to serve the telemetry endpoints.
@@ -2096,59 +2091,6 @@ func NewListHooksTracesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listHooksTraces")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountGetSupportCoverageHandler configures the mux to serve the "telemetry"
-// service "getSupportCoverage" endpoint.
-func MountGetSupportCoverageHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("GET", "/rpc/telemetry.getSupportCoverage", f)
-}
-
-// NewGetSupportCoverageHandler creates a HTTP handler which loads the HTTP
-// request and calls the "telemetry" service "getSupportCoverage" endpoint.
-func NewGetSupportCoverageHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeGetSupportCoverageRequest(mux, decoder)
-		encodeResponse = EncodeGetSupportCoverageResponse(encoder)
-		encodeError    = EncodeGetSupportCoverageError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getSupportCoverage")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {
