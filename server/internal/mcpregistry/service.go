@@ -167,3 +167,5 @@ func (s *Service) List(ctx context.Context, opts ListOptions) (Page, error) {
 	}
 	return page, nil
 }
+
+func (s *Service) Validate(data json.RawMessage) []Issue { return s.validator.Validate(data) }

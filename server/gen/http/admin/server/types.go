@@ -387,6 +387,32 @@ type UpdateSupportMatrixRequestBody struct {
 	Draft    *SupportDraftRequestBody `form:"draft,omitempty" json:"draft,omitempty" xml:"draft,omitempty"`
 }
 
+// CreateRegistryEntryRequestBody is the type of the "admin" service
+// "createRegistryEntry" endpoint HTTP request body.
+type CreateRegistryEntryRequestBody struct {
+	// Complete registry record JSON; at most 8388608 UTF-8 bytes (8 MiB), enforced
+	// by the server on incoming writes. Stored records remain readable for repair.
+	DataJSON *string `form:"data_json,omitempty" json:"data_json,omitempty" xml:"data_json,omitempty"`
+}
+
+// SaveRegistryEntryRequestBody is the type of the "admin" service
+// "saveRegistryEntry" endpoint HTTP request body.
+type SaveRegistryEntryRequestBody struct {
+	ID        *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Complete registry record JSON; at most 8388608 UTF-8 bytes (8 MiB), enforced
+	// by the server on incoming writes. Stored records remain readable for repair.
+	DataJSON *string `form:"data_json,omitempty" json:"data_json,omitempty" xml:"data_json,omitempty"`
+}
+
+// SetRegistryEntryPublishedRequestBody is the type of the "admin" service
+// "setRegistryEntryPublished" endpoint HTTP request body.
+type SetRegistryEntryPublishedRequestBody struct {
+	ID        *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Published *bool   `form:"published,omitempty" json:"published,omitempty" xml:"published,omitempty"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -1638,6 +1664,65 @@ type GetSupportCoverageResponseBody struct {
 	From string `form:"from" json:"from" xml:"from"`
 	// RFC3339 end of the observation window.
 	To string `form:"to" json:"to" xml:"to"`
+}
+
+// ListRegistryEntriesResponseBody is the type of the "admin" service
+// "listRegistryEntries" endpoint HTTP response body.
+type ListRegistryEntriesResponseBody struct {
+	Entries    []*AdminRegistrySummaryResponseBody `form:"entries" json:"entries" xml:"entries"`
+	NextCursor *string                             `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetRegistryEntryResponseBody is the type of the "admin" service
+// "getRegistryEntry" endpoint HTTP response body.
+type GetRegistryEntryResponseBody struct {
+	ID string `form:"id" json:"id" xml:"id"`
+	// Complete lossless registry record JSON
+	DataJSON  string `form:"data_json" json:"data_json" xml:"data_json"`
+	Published bool   `form:"published" json:"published" xml:"published"`
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// Opaque write precondition; echo unchanged
+	UpdatedAt string                            `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Issues    []*AdminRegistryIssueResponseBody `form:"issues" json:"issues" xml:"issues"`
+}
+
+// CreateRegistryEntryResponseBody is the type of the "admin" service
+// "createRegistryEntry" endpoint HTTP response body.
+type CreateRegistryEntryResponseBody struct {
+	ID string `form:"id" json:"id" xml:"id"`
+	// Complete lossless registry record JSON
+	DataJSON  string `form:"data_json" json:"data_json" xml:"data_json"`
+	Published bool   `form:"published" json:"published" xml:"published"`
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// Opaque write precondition; echo unchanged
+	UpdatedAt string                            `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Issues    []*AdminRegistryIssueResponseBody `form:"issues" json:"issues" xml:"issues"`
+}
+
+// SaveRegistryEntryResponseBody is the type of the "admin" service
+// "saveRegistryEntry" endpoint HTTP response body.
+type SaveRegistryEntryResponseBody struct {
+	ID string `form:"id" json:"id" xml:"id"`
+	// Complete lossless registry record JSON
+	DataJSON  string `form:"data_json" json:"data_json" xml:"data_json"`
+	Published bool   `form:"published" json:"published" xml:"published"`
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// Opaque write precondition; echo unchanged
+	UpdatedAt string                            `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Issues    []*AdminRegistryIssueResponseBody `form:"issues" json:"issues" xml:"issues"`
+}
+
+// SetRegistryEntryPublishedResponseBody is the type of the "admin" service
+// "setRegistryEntryPublished" endpoint HTTP response body.
+type SetRegistryEntryPublishedResponseBody struct {
+	ID string `form:"id" json:"id" xml:"id"`
+	// Complete lossless registry record JSON
+	DataJSON  string `form:"data_json" json:"data_json" xml:"data_json"`
+	Published bool   `form:"published" json:"published" xml:"published"`
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// Opaque write precondition; echo unchanged
+	UpdatedAt string                            `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Issues    []*AdminRegistryIssueResponseBody `form:"issues" json:"issues" xml:"issues"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -12617,6 +12702,931 @@ type GetSupportCoverageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListRegistryEntriesUnauthorizedResponseBody is the type of the "admin"
+// service "listRegistryEntries" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListRegistryEntriesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryEntriesForbiddenResponseBody is the type of the "admin" service
+// "listRegistryEntries" endpoint HTTP response body for the "forbidden" error.
+type ListRegistryEntriesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryEntriesBadRequestResponseBody is the type of the "admin" service
+// "listRegistryEntries" endpoint HTTP response body for the "bad_request"
+// error.
+type ListRegistryEntriesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryEntriesNotFoundResponseBody is the type of the "admin" service
+// "listRegistryEntries" endpoint HTTP response body for the "not_found" error.
+type ListRegistryEntriesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryEntriesConflictResponseBody is the type of the "admin" service
+// "listRegistryEntries" endpoint HTTP response body for the "conflict" error.
+type ListRegistryEntriesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryEntriesUnsupportedMediaResponseBody is the type of the "admin"
+// service "listRegistryEntries" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListRegistryEntriesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryEntriesInvalidResponseBody is the type of the "admin" service
+// "listRegistryEntries" endpoint HTTP response body for the "invalid" error.
+type ListRegistryEntriesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryEntriesInvariantViolationResponseBody is the type of the "admin"
+// service "listRegistryEntries" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListRegistryEntriesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryEntriesUnexpectedResponseBody is the type of the "admin" service
+// "listRegistryEntries" endpoint HTTP response body for the "unexpected" error.
+type ListRegistryEntriesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryEntriesGatewayErrorResponseBody is the type of the "admin"
+// service "listRegistryEntries" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListRegistryEntriesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryEntryUnauthorizedResponseBody is the type of the "admin" service
+// "getRegistryEntry" endpoint HTTP response body for the "unauthorized" error.
+type GetRegistryEntryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryEntryForbiddenResponseBody is the type of the "admin" service
+// "getRegistryEntry" endpoint HTTP response body for the "forbidden" error.
+type GetRegistryEntryForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryEntryBadRequestResponseBody is the type of the "admin" service
+// "getRegistryEntry" endpoint HTTP response body for the "bad_request" error.
+type GetRegistryEntryBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryEntryNotFoundResponseBody is the type of the "admin" service
+// "getRegistryEntry" endpoint HTTP response body for the "not_found" error.
+type GetRegistryEntryNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryEntryConflictResponseBody is the type of the "admin" service
+// "getRegistryEntry" endpoint HTTP response body for the "conflict" error.
+type GetRegistryEntryConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryEntryUnsupportedMediaResponseBody is the type of the "admin"
+// service "getRegistryEntry" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetRegistryEntryUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryEntryInvalidResponseBody is the type of the "admin" service
+// "getRegistryEntry" endpoint HTTP response body for the "invalid" error.
+type GetRegistryEntryInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryEntryInvariantViolationResponseBody is the type of the "admin"
+// service "getRegistryEntry" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetRegistryEntryInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryEntryUnexpectedResponseBody is the type of the "admin" service
+// "getRegistryEntry" endpoint HTTP response body for the "unexpected" error.
+type GetRegistryEntryUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryEntryGatewayErrorResponseBody is the type of the "admin" service
+// "getRegistryEntry" endpoint HTTP response body for the "gateway_error" error.
+type GetRegistryEntryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRegistryEntryUnauthorizedResponseBody is the type of the "admin"
+// service "createRegistryEntry" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateRegistryEntryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRegistryEntryForbiddenResponseBody is the type of the "admin" service
+// "createRegistryEntry" endpoint HTTP response body for the "forbidden" error.
+type CreateRegistryEntryForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRegistryEntryBadRequestResponseBody is the type of the "admin" service
+// "createRegistryEntry" endpoint HTTP response body for the "bad_request"
+// error.
+type CreateRegistryEntryBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRegistryEntryNotFoundResponseBody is the type of the "admin" service
+// "createRegistryEntry" endpoint HTTP response body for the "not_found" error.
+type CreateRegistryEntryNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRegistryEntryConflictResponseBody is the type of the "admin" service
+// "createRegistryEntry" endpoint HTTP response body for the "conflict" error.
+type CreateRegistryEntryConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRegistryEntryUnsupportedMediaResponseBody is the type of the "admin"
+// service "createRegistryEntry" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateRegistryEntryUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRegistryEntryInvalidResponseBody is the type of the "admin" service
+// "createRegistryEntry" endpoint HTTP response body for the "invalid" error.
+type CreateRegistryEntryInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRegistryEntryInvariantViolationResponseBody is the type of the "admin"
+// service "createRegistryEntry" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateRegistryEntryInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRegistryEntryUnexpectedResponseBody is the type of the "admin" service
+// "createRegistryEntry" endpoint HTTP response body for the "unexpected" error.
+type CreateRegistryEntryUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRegistryEntryGatewayErrorResponseBody is the type of the "admin"
+// service "createRegistryEntry" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateRegistryEntryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SaveRegistryEntryUnauthorizedResponseBody is the type of the "admin" service
+// "saveRegistryEntry" endpoint HTTP response body for the "unauthorized" error.
+type SaveRegistryEntryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SaveRegistryEntryForbiddenResponseBody is the type of the "admin" service
+// "saveRegistryEntry" endpoint HTTP response body for the "forbidden" error.
+type SaveRegistryEntryForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SaveRegistryEntryBadRequestResponseBody is the type of the "admin" service
+// "saveRegistryEntry" endpoint HTTP response body for the "bad_request" error.
+type SaveRegistryEntryBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SaveRegistryEntryNotFoundResponseBody is the type of the "admin" service
+// "saveRegistryEntry" endpoint HTTP response body for the "not_found" error.
+type SaveRegistryEntryNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SaveRegistryEntryConflictResponseBody is the type of the "admin" service
+// "saveRegistryEntry" endpoint HTTP response body for the "conflict" error.
+type SaveRegistryEntryConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SaveRegistryEntryUnsupportedMediaResponseBody is the type of the "admin"
+// service "saveRegistryEntry" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SaveRegistryEntryUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SaveRegistryEntryInvalidResponseBody is the type of the "admin" service
+// "saveRegistryEntry" endpoint HTTP response body for the "invalid" error.
+type SaveRegistryEntryInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SaveRegistryEntryInvariantViolationResponseBody is the type of the "admin"
+// service "saveRegistryEntry" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SaveRegistryEntryInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SaveRegistryEntryUnexpectedResponseBody is the type of the "admin" service
+// "saveRegistryEntry" endpoint HTTP response body for the "unexpected" error.
+type SaveRegistryEntryUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SaveRegistryEntryGatewayErrorResponseBody is the type of the "admin" service
+// "saveRegistryEntry" endpoint HTTP response body for the "gateway_error"
+// error.
+type SaveRegistryEntryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRegistryEntryPublishedUnauthorizedResponseBody is the type of the "admin"
+// service "setRegistryEntryPublished" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetRegistryEntryPublishedUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRegistryEntryPublishedForbiddenResponseBody is the type of the "admin"
+// service "setRegistryEntryPublished" endpoint HTTP response body for the
+// "forbidden" error.
+type SetRegistryEntryPublishedForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRegistryEntryPublishedBadRequestResponseBody is the type of the "admin"
+// service "setRegistryEntryPublished" endpoint HTTP response body for the
+// "bad_request" error.
+type SetRegistryEntryPublishedBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRegistryEntryPublishedNotFoundResponseBody is the type of the "admin"
+// service "setRegistryEntryPublished" endpoint HTTP response body for the
+// "not_found" error.
+type SetRegistryEntryPublishedNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRegistryEntryPublishedConflictResponseBody is the type of the "admin"
+// service "setRegistryEntryPublished" endpoint HTTP response body for the
+// "conflict" error.
+type SetRegistryEntryPublishedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRegistryEntryPublishedUnsupportedMediaResponseBody is the type of the
+// "admin" service "setRegistryEntryPublished" endpoint HTTP response body for
+// the "unsupported_media" error.
+type SetRegistryEntryPublishedUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRegistryEntryPublishedInvalidResponseBody is the type of the "admin"
+// service "setRegistryEntryPublished" endpoint HTTP response body for the
+// "invalid" error.
+type SetRegistryEntryPublishedInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRegistryEntryPublishedInvariantViolationResponseBody is the type of the
+// "admin" service "setRegistryEntryPublished" endpoint HTTP response body for
+// the "invariant_violation" error.
+type SetRegistryEntryPublishedInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRegistryEntryPublishedUnexpectedResponseBody is the type of the "admin"
+// service "setRegistryEntryPublished" endpoint HTTP response body for the
+// "unexpected" error.
+type SetRegistryEntryPublishedUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRegistryEntryPublishedGatewayErrorResponseBody is the type of the "admin"
+// service "setRegistryEntryPublished" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetRegistryEntryPublishedGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -13103,6 +14113,23 @@ type SupportCoverageUnmappedResponseBody struct {
 	HookSource string `form:"hook_source" json:"hook_source" xml:"hook_source"`
 	// Sessions observed under it inside the window.
 	Sessions int64 `form:"sessions" json:"sessions" xml:"sessions"`
+}
+
+// AdminRegistrySummaryResponseBody is used to define fields on response body
+// types.
+type AdminRegistrySummaryResponseBody struct {
+	ID        string                            `form:"id" json:"id" xml:"id"`
+	Name      string                            `form:"name" json:"name" xml:"name"`
+	Published bool                              `form:"published" json:"published" xml:"published"`
+	UpdatedAt string                            `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Issues    []*AdminRegistryIssueResponseBody `form:"issues" json:"issues" xml:"issues"`
+}
+
+// AdminRegistryIssueResponseBody is used to define fields on response body
+// types.
+type AdminRegistryIssueResponseBody struct {
+	Path    string `form:"path" json:"path" xml:"path"`
+	Message string `form:"message" json:"message" xml:"message"`
 }
 
 // SupportDraftRequestBody is used to define fields on request body types.
@@ -14519,6 +15546,128 @@ func NewGetSupportCoverageResponseBody(res *admin.SupportCoverageResult) *GetSup
 		}
 	} else {
 		body.Unmapped = []*SupportCoverageUnmappedResponseBody{}
+	}
+	return body
+}
+
+// NewListRegistryEntriesResponseBody builds the HTTP response body from the
+// result of the "listRegistryEntries" endpoint of the "admin" service.
+func NewListRegistryEntriesResponseBody(res *admin.AdminRegistryPage) *ListRegistryEntriesResponseBody {
+	body := &ListRegistryEntriesResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Entries != nil {
+		body.Entries = make([]*AdminRegistrySummaryResponseBody, len(res.Entries))
+		for i, val := range res.Entries {
+			if val == nil {
+				body.Entries[i] = nil
+				continue
+			}
+			body.Entries[i] = marshalAdminAdminRegistrySummaryToAdminRegistrySummaryResponseBody(val)
+		}
+	} else {
+		body.Entries = []*AdminRegistrySummaryResponseBody{}
+	}
+	return body
+}
+
+// NewGetRegistryEntryResponseBody builds the HTTP response body from the
+// result of the "getRegistryEntry" endpoint of the "admin" service.
+func NewGetRegistryEntryResponseBody(res *admin.AdminRegistryEntry) *GetRegistryEntryResponseBody {
+	body := &GetRegistryEntryResponseBody{
+		ID:        res.ID,
+		DataJSON:  res.DataJSON,
+		Published: res.Published,
+		CreatedAt: res.CreatedAt,
+		UpdatedAt: res.UpdatedAt,
+	}
+	if res.Issues != nil {
+		body.Issues = make([]*AdminRegistryIssueResponseBody, len(res.Issues))
+		for i, val := range res.Issues {
+			if val == nil {
+				body.Issues[i] = nil
+				continue
+			}
+			body.Issues[i] = marshalAdminAdminRegistryIssueToAdminRegistryIssueResponseBody(val)
+		}
+	} else {
+		body.Issues = []*AdminRegistryIssueResponseBody{}
+	}
+	return body
+}
+
+// NewCreateRegistryEntryResponseBody builds the HTTP response body from the
+// result of the "createRegistryEntry" endpoint of the "admin" service.
+func NewCreateRegistryEntryResponseBody(res *admin.AdminRegistryEntry) *CreateRegistryEntryResponseBody {
+	body := &CreateRegistryEntryResponseBody{
+		ID:        res.ID,
+		DataJSON:  res.DataJSON,
+		Published: res.Published,
+		CreatedAt: res.CreatedAt,
+		UpdatedAt: res.UpdatedAt,
+	}
+	if res.Issues != nil {
+		body.Issues = make([]*AdminRegistryIssueResponseBody, len(res.Issues))
+		for i, val := range res.Issues {
+			if val == nil {
+				body.Issues[i] = nil
+				continue
+			}
+			body.Issues[i] = marshalAdminAdminRegistryIssueToAdminRegistryIssueResponseBody(val)
+		}
+	} else {
+		body.Issues = []*AdminRegistryIssueResponseBody{}
+	}
+	return body
+}
+
+// NewSaveRegistryEntryResponseBody builds the HTTP response body from the
+// result of the "saveRegistryEntry" endpoint of the "admin" service.
+func NewSaveRegistryEntryResponseBody(res *admin.AdminRegistryEntry) *SaveRegistryEntryResponseBody {
+	body := &SaveRegistryEntryResponseBody{
+		ID:        res.ID,
+		DataJSON:  res.DataJSON,
+		Published: res.Published,
+		CreatedAt: res.CreatedAt,
+		UpdatedAt: res.UpdatedAt,
+	}
+	if res.Issues != nil {
+		body.Issues = make([]*AdminRegistryIssueResponseBody, len(res.Issues))
+		for i, val := range res.Issues {
+			if val == nil {
+				body.Issues[i] = nil
+				continue
+			}
+			body.Issues[i] = marshalAdminAdminRegistryIssueToAdminRegistryIssueResponseBody(val)
+		}
+	} else {
+		body.Issues = []*AdminRegistryIssueResponseBody{}
+	}
+	return body
+}
+
+// NewSetRegistryEntryPublishedResponseBody builds the HTTP response body from
+// the result of the "setRegistryEntryPublished" endpoint of the "admin"
+// service.
+func NewSetRegistryEntryPublishedResponseBody(res *admin.AdminRegistryEntry) *SetRegistryEntryPublishedResponseBody {
+	body := &SetRegistryEntryPublishedResponseBody{
+		ID:        res.ID,
+		DataJSON:  res.DataJSON,
+		Published: res.Published,
+		CreatedAt: res.CreatedAt,
+		UpdatedAt: res.UpdatedAt,
+	}
+	if res.Issues != nil {
+		body.Issues = make([]*AdminRegistryIssueResponseBody, len(res.Issues))
+		for i, val := range res.Issues {
+			if val == nil {
+				body.Issues[i] = nil
+				continue
+			}
+			body.Issues[i] = marshalAdminAdminRegistryIssueToAdminRegistryIssueResponseBody(val)
+		}
+	} else {
+		body.Issues = []*AdminRegistryIssueResponseBody{}
 	}
 	return body
 }
@@ -23115,6 +24264,724 @@ func NewGetSupportCoverageGatewayErrorResponseBody(res *goa.ServiceError) *GetSu
 	return body
 }
 
+// NewListRegistryEntriesUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listRegistryEntries" endpoint of the "admin" service.
+func NewListRegistryEntriesUnauthorizedResponseBody(res *goa.ServiceError) *ListRegistryEntriesUnauthorizedResponseBody {
+	body := &ListRegistryEntriesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryEntriesForbiddenResponseBody builds the HTTP response body
+// from the result of the "listRegistryEntries" endpoint of the "admin" service.
+func NewListRegistryEntriesForbiddenResponseBody(res *goa.ServiceError) *ListRegistryEntriesForbiddenResponseBody {
+	body := &ListRegistryEntriesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryEntriesBadRequestResponseBody builds the HTTP response body
+// from the result of the "listRegistryEntries" endpoint of the "admin" service.
+func NewListRegistryEntriesBadRequestResponseBody(res *goa.ServiceError) *ListRegistryEntriesBadRequestResponseBody {
+	body := &ListRegistryEntriesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryEntriesNotFoundResponseBody builds the HTTP response body
+// from the result of the "listRegistryEntries" endpoint of the "admin" service.
+func NewListRegistryEntriesNotFoundResponseBody(res *goa.ServiceError) *ListRegistryEntriesNotFoundResponseBody {
+	body := &ListRegistryEntriesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryEntriesConflictResponseBody builds the HTTP response body
+// from the result of the "listRegistryEntries" endpoint of the "admin" service.
+func NewListRegistryEntriesConflictResponseBody(res *goa.ServiceError) *ListRegistryEntriesConflictResponseBody {
+	body := &ListRegistryEntriesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryEntriesUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listRegistryEntries" endpoint of the "admin"
+// service.
+func NewListRegistryEntriesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListRegistryEntriesUnsupportedMediaResponseBody {
+	body := &ListRegistryEntriesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryEntriesInvalidResponseBody builds the HTTP response body from
+// the result of the "listRegistryEntries" endpoint of the "admin" service.
+func NewListRegistryEntriesInvalidResponseBody(res *goa.ServiceError) *ListRegistryEntriesInvalidResponseBody {
+	body := &ListRegistryEntriesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryEntriesInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listRegistryEntries" endpoint of the
+// "admin" service.
+func NewListRegistryEntriesInvariantViolationResponseBody(res *goa.ServiceError) *ListRegistryEntriesInvariantViolationResponseBody {
+	body := &ListRegistryEntriesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryEntriesUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listRegistryEntries" endpoint of the "admin" service.
+func NewListRegistryEntriesUnexpectedResponseBody(res *goa.ServiceError) *ListRegistryEntriesUnexpectedResponseBody {
+	body := &ListRegistryEntriesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryEntriesGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listRegistryEntries" endpoint of the "admin" service.
+func NewListRegistryEntriesGatewayErrorResponseBody(res *goa.ServiceError) *ListRegistryEntriesGatewayErrorResponseBody {
+	body := &ListRegistryEntriesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryEntryUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getRegistryEntry" endpoint of the "admin" service.
+func NewGetRegistryEntryUnauthorizedResponseBody(res *goa.ServiceError) *GetRegistryEntryUnauthorizedResponseBody {
+	body := &GetRegistryEntryUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryEntryForbiddenResponseBody builds the HTTP response body from
+// the result of the "getRegistryEntry" endpoint of the "admin" service.
+func NewGetRegistryEntryForbiddenResponseBody(res *goa.ServiceError) *GetRegistryEntryForbiddenResponseBody {
+	body := &GetRegistryEntryForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryEntryBadRequestResponseBody builds the HTTP response body from
+// the result of the "getRegistryEntry" endpoint of the "admin" service.
+func NewGetRegistryEntryBadRequestResponseBody(res *goa.ServiceError) *GetRegistryEntryBadRequestResponseBody {
+	body := &GetRegistryEntryBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryEntryNotFoundResponseBody builds the HTTP response body from
+// the result of the "getRegistryEntry" endpoint of the "admin" service.
+func NewGetRegistryEntryNotFoundResponseBody(res *goa.ServiceError) *GetRegistryEntryNotFoundResponseBody {
+	body := &GetRegistryEntryNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryEntryConflictResponseBody builds the HTTP response body from
+// the result of the "getRegistryEntry" endpoint of the "admin" service.
+func NewGetRegistryEntryConflictResponseBody(res *goa.ServiceError) *GetRegistryEntryConflictResponseBody {
+	body := &GetRegistryEntryConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryEntryUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getRegistryEntry" endpoint of the "admin"
+// service.
+func NewGetRegistryEntryUnsupportedMediaResponseBody(res *goa.ServiceError) *GetRegistryEntryUnsupportedMediaResponseBody {
+	body := &GetRegistryEntryUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryEntryInvalidResponseBody builds the HTTP response body from
+// the result of the "getRegistryEntry" endpoint of the "admin" service.
+func NewGetRegistryEntryInvalidResponseBody(res *goa.ServiceError) *GetRegistryEntryInvalidResponseBody {
+	body := &GetRegistryEntryInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryEntryInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getRegistryEntry" endpoint of the "admin"
+// service.
+func NewGetRegistryEntryInvariantViolationResponseBody(res *goa.ServiceError) *GetRegistryEntryInvariantViolationResponseBody {
+	body := &GetRegistryEntryInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryEntryUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getRegistryEntry" endpoint of the "admin" service.
+func NewGetRegistryEntryUnexpectedResponseBody(res *goa.ServiceError) *GetRegistryEntryUnexpectedResponseBody {
+	body := &GetRegistryEntryUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryEntryGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getRegistryEntry" endpoint of the "admin" service.
+func NewGetRegistryEntryGatewayErrorResponseBody(res *goa.ServiceError) *GetRegistryEntryGatewayErrorResponseBody {
+	body := &GetRegistryEntryGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRegistryEntryUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createRegistryEntry" endpoint of the "admin" service.
+func NewCreateRegistryEntryUnauthorizedResponseBody(res *goa.ServiceError) *CreateRegistryEntryUnauthorizedResponseBody {
+	body := &CreateRegistryEntryUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRegistryEntryForbiddenResponseBody builds the HTTP response body
+// from the result of the "createRegistryEntry" endpoint of the "admin" service.
+func NewCreateRegistryEntryForbiddenResponseBody(res *goa.ServiceError) *CreateRegistryEntryForbiddenResponseBody {
+	body := &CreateRegistryEntryForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRegistryEntryBadRequestResponseBody builds the HTTP response body
+// from the result of the "createRegistryEntry" endpoint of the "admin" service.
+func NewCreateRegistryEntryBadRequestResponseBody(res *goa.ServiceError) *CreateRegistryEntryBadRequestResponseBody {
+	body := &CreateRegistryEntryBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRegistryEntryNotFoundResponseBody builds the HTTP response body
+// from the result of the "createRegistryEntry" endpoint of the "admin" service.
+func NewCreateRegistryEntryNotFoundResponseBody(res *goa.ServiceError) *CreateRegistryEntryNotFoundResponseBody {
+	body := &CreateRegistryEntryNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRegistryEntryConflictResponseBody builds the HTTP response body
+// from the result of the "createRegistryEntry" endpoint of the "admin" service.
+func NewCreateRegistryEntryConflictResponseBody(res *goa.ServiceError) *CreateRegistryEntryConflictResponseBody {
+	body := &CreateRegistryEntryConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRegistryEntryUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createRegistryEntry" endpoint of the "admin"
+// service.
+func NewCreateRegistryEntryUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateRegistryEntryUnsupportedMediaResponseBody {
+	body := &CreateRegistryEntryUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRegistryEntryInvalidResponseBody builds the HTTP response body from
+// the result of the "createRegistryEntry" endpoint of the "admin" service.
+func NewCreateRegistryEntryInvalidResponseBody(res *goa.ServiceError) *CreateRegistryEntryInvalidResponseBody {
+	body := &CreateRegistryEntryInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRegistryEntryInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createRegistryEntry" endpoint of the
+// "admin" service.
+func NewCreateRegistryEntryInvariantViolationResponseBody(res *goa.ServiceError) *CreateRegistryEntryInvariantViolationResponseBody {
+	body := &CreateRegistryEntryInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRegistryEntryUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createRegistryEntry" endpoint of the "admin" service.
+func NewCreateRegistryEntryUnexpectedResponseBody(res *goa.ServiceError) *CreateRegistryEntryUnexpectedResponseBody {
+	body := &CreateRegistryEntryUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRegistryEntryGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createRegistryEntry" endpoint of the "admin" service.
+func NewCreateRegistryEntryGatewayErrorResponseBody(res *goa.ServiceError) *CreateRegistryEntryGatewayErrorResponseBody {
+	body := &CreateRegistryEntryGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSaveRegistryEntryUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "saveRegistryEntry" endpoint of the "admin" service.
+func NewSaveRegistryEntryUnauthorizedResponseBody(res *goa.ServiceError) *SaveRegistryEntryUnauthorizedResponseBody {
+	body := &SaveRegistryEntryUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSaveRegistryEntryForbiddenResponseBody builds the HTTP response body from
+// the result of the "saveRegistryEntry" endpoint of the "admin" service.
+func NewSaveRegistryEntryForbiddenResponseBody(res *goa.ServiceError) *SaveRegistryEntryForbiddenResponseBody {
+	body := &SaveRegistryEntryForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSaveRegistryEntryBadRequestResponseBody builds the HTTP response body
+// from the result of the "saveRegistryEntry" endpoint of the "admin" service.
+func NewSaveRegistryEntryBadRequestResponseBody(res *goa.ServiceError) *SaveRegistryEntryBadRequestResponseBody {
+	body := &SaveRegistryEntryBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSaveRegistryEntryNotFoundResponseBody builds the HTTP response body from
+// the result of the "saveRegistryEntry" endpoint of the "admin" service.
+func NewSaveRegistryEntryNotFoundResponseBody(res *goa.ServiceError) *SaveRegistryEntryNotFoundResponseBody {
+	body := &SaveRegistryEntryNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSaveRegistryEntryConflictResponseBody builds the HTTP response body from
+// the result of the "saveRegistryEntry" endpoint of the "admin" service.
+func NewSaveRegistryEntryConflictResponseBody(res *goa.ServiceError) *SaveRegistryEntryConflictResponseBody {
+	body := &SaveRegistryEntryConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSaveRegistryEntryUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "saveRegistryEntry" endpoint of the "admin"
+// service.
+func NewSaveRegistryEntryUnsupportedMediaResponseBody(res *goa.ServiceError) *SaveRegistryEntryUnsupportedMediaResponseBody {
+	body := &SaveRegistryEntryUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSaveRegistryEntryInvalidResponseBody builds the HTTP response body from
+// the result of the "saveRegistryEntry" endpoint of the "admin" service.
+func NewSaveRegistryEntryInvalidResponseBody(res *goa.ServiceError) *SaveRegistryEntryInvalidResponseBody {
+	body := &SaveRegistryEntryInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSaveRegistryEntryInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "saveRegistryEntry" endpoint of the "admin"
+// service.
+func NewSaveRegistryEntryInvariantViolationResponseBody(res *goa.ServiceError) *SaveRegistryEntryInvariantViolationResponseBody {
+	body := &SaveRegistryEntryInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSaveRegistryEntryUnexpectedResponseBody builds the HTTP response body
+// from the result of the "saveRegistryEntry" endpoint of the "admin" service.
+func NewSaveRegistryEntryUnexpectedResponseBody(res *goa.ServiceError) *SaveRegistryEntryUnexpectedResponseBody {
+	body := &SaveRegistryEntryUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSaveRegistryEntryGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "saveRegistryEntry" endpoint of the "admin" service.
+func NewSaveRegistryEntryGatewayErrorResponseBody(res *goa.ServiceError) *SaveRegistryEntryGatewayErrorResponseBody {
+	body := &SaveRegistryEntryGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRegistryEntryPublishedUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "setRegistryEntryPublished" endpoint of
+// the "admin" service.
+func NewSetRegistryEntryPublishedUnauthorizedResponseBody(res *goa.ServiceError) *SetRegistryEntryPublishedUnauthorizedResponseBody {
+	body := &SetRegistryEntryPublishedUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRegistryEntryPublishedForbiddenResponseBody builds the HTTP response
+// body from the result of the "setRegistryEntryPublished" endpoint of the
+// "admin" service.
+func NewSetRegistryEntryPublishedForbiddenResponseBody(res *goa.ServiceError) *SetRegistryEntryPublishedForbiddenResponseBody {
+	body := &SetRegistryEntryPublishedForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRegistryEntryPublishedBadRequestResponseBody builds the HTTP response
+// body from the result of the "setRegistryEntryPublished" endpoint of the
+// "admin" service.
+func NewSetRegistryEntryPublishedBadRequestResponseBody(res *goa.ServiceError) *SetRegistryEntryPublishedBadRequestResponseBody {
+	body := &SetRegistryEntryPublishedBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRegistryEntryPublishedNotFoundResponseBody builds the HTTP response
+// body from the result of the "setRegistryEntryPublished" endpoint of the
+// "admin" service.
+func NewSetRegistryEntryPublishedNotFoundResponseBody(res *goa.ServiceError) *SetRegistryEntryPublishedNotFoundResponseBody {
+	body := &SetRegistryEntryPublishedNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRegistryEntryPublishedConflictResponseBody builds the HTTP response
+// body from the result of the "setRegistryEntryPublished" endpoint of the
+// "admin" service.
+func NewSetRegistryEntryPublishedConflictResponseBody(res *goa.ServiceError) *SetRegistryEntryPublishedConflictResponseBody {
+	body := &SetRegistryEntryPublishedConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRegistryEntryPublishedUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setRegistryEntryPublished" endpoint of
+// the "admin" service.
+func NewSetRegistryEntryPublishedUnsupportedMediaResponseBody(res *goa.ServiceError) *SetRegistryEntryPublishedUnsupportedMediaResponseBody {
+	body := &SetRegistryEntryPublishedUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRegistryEntryPublishedInvalidResponseBody builds the HTTP response
+// body from the result of the "setRegistryEntryPublished" endpoint of the
+// "admin" service.
+func NewSetRegistryEntryPublishedInvalidResponseBody(res *goa.ServiceError) *SetRegistryEntryPublishedInvalidResponseBody {
+	body := &SetRegistryEntryPublishedInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRegistryEntryPublishedInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setRegistryEntryPublished" endpoint of
+// the "admin" service.
+func NewSetRegistryEntryPublishedInvariantViolationResponseBody(res *goa.ServiceError) *SetRegistryEntryPublishedInvariantViolationResponseBody {
+	body := &SetRegistryEntryPublishedInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRegistryEntryPublishedUnexpectedResponseBody builds the HTTP response
+// body from the result of the "setRegistryEntryPublished" endpoint of the
+// "admin" service.
+func NewSetRegistryEntryPublishedUnexpectedResponseBody(res *goa.ServiceError) *SetRegistryEntryPublishedUnexpectedResponseBody {
+	body := &SetRegistryEntryPublishedUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRegistryEntryPublishedGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "setRegistryEntryPublished" endpoint of
+// the "admin" service.
+func NewSetRegistryEntryPublishedGatewayErrorResponseBody(res *goa.ServiceError) *SetRegistryEntryPublishedGatewayErrorResponseBody {
+	body := &SetRegistryEntryPublishedGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -23914,6 +25781,66 @@ func NewGetSupportCoveragePayload(organizationID string, windowDays int, adminSe
 	return v
 }
 
+// NewListRegistryEntriesPayload builds a admin service listRegistryEntries
+// endpoint payload.
+func NewListRegistryEntriesPayload(query *string, published *bool, cursor *string, limit *int32, adminSessionToken *string) *admin.ListRegistryEntriesPayload {
+	v := &admin.ListRegistryEntriesPayload{}
+	v.Query = query
+	v.Published = published
+	v.Cursor = cursor
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetRegistryEntryPayload builds a admin service getRegistryEntry endpoint
+// payload.
+func NewGetRegistryEntryPayload(id string, adminSessionToken *string) *admin.GetRegistryEntryPayload {
+	v := &admin.GetRegistryEntryPayload{}
+	v.ID = id
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewCreateRegistryEntryPayload builds a admin service createRegistryEntry
+// endpoint payload.
+func NewCreateRegistryEntryPayload(body *CreateRegistryEntryRequestBody, adminSessionToken *string) *admin.CreateRegistryEntryPayload {
+	v := &admin.CreateRegistryEntryPayload{
+		DataJSON: *body.DataJSON,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewSaveRegistryEntryPayload builds a admin service saveRegistryEntry
+// endpoint payload.
+func NewSaveRegistryEntryPayload(body *SaveRegistryEntryRequestBody, adminSessionToken *string) *admin.SaveRegistryEntryPayload {
+	v := &admin.SaveRegistryEntryPayload{
+		ID:        *body.ID,
+		UpdatedAt: *body.UpdatedAt,
+		DataJSON:  *body.DataJSON,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewSetRegistryEntryPublishedPayload builds a admin service
+// setRegistryEntryPublished endpoint payload.
+func NewSetRegistryEntryPublishedPayload(body *SetRegistryEntryPublishedRequestBody, adminSessionToken *string) *admin.SetRegistryEntryPublishedPayload {
+	v := &admin.SetRegistryEntryPublishedPayload{
+		ID:        *body.ID,
+		UpdatedAt: *body.UpdatedAt,
+		Published: *body.Published,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
 // SetOrganizationFeatureRequestBody
 func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureRequestBody) (err error) {
@@ -24355,6 +26282,51 @@ func ValidateUpdateSupportMatrixRequestBody(body *UpdateSupportMatrixRequestBody
 		if err2 := ValidateSupportDraftRequestBody(body.Draft); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateCreateRegistryEntryRequestBody runs the validations defined on
+// CreateRegistryEntryRequestBody
+func ValidateCreateRegistryEntryRequestBody(body *CreateRegistryEntryRequestBody) (err error) {
+	if body.DataJSON == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("data_json", "body"))
+	}
+	return
+}
+
+// ValidateSaveRegistryEntryRequestBody runs the validations defined on
+// SaveRegistryEntryRequestBody
+func ValidateSaveRegistryEntryRequestBody(body *SaveRegistryEntryRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.DataJSON == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("data_json", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSetRegistryEntryPublishedRequestBody runs the validations defined on
+// SetRegistryEntryPublishedRequestBody
+func ValidateSetRegistryEntryPublishedRequestBody(body *SetRegistryEntryPublishedRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Published == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("published", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

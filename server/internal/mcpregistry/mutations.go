@@ -22,6 +22,7 @@ import (
 )
 
 var ErrConflict = errors.New("registry entry conflict")
+var ErrInvalidToken = errors.New("invalid registry write token")
 
 // ErrEndpointStructureImmutable enforces a temporary restriction for the initial
 // catalog rollout and migration from Pulse: endpoint structure is frozen even
@@ -32,6 +33,15 @@ var ErrEndpointStructureImmutable = errors.New("registry endpoint structure is i
 var tokenSyntax = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$`)
 
 func Token(e Entry) string { return e.UpdatedAt.UTC().Format(time.RFC3339Nano) }
+
+// ParseToken validates the opaque write precondition shared by service and adapters.
+func ParseToken(token string) (time.Time, error) {
+	parsed, err := time.Parse(time.RFC3339Nano, token)
+	if err != nil || !tokenSyntax.MatchString(token) {
+		return time.Time{}, ErrInvalidToken
+	}
+	return parsed, nil
+}
 
 func (s *Service) Create(ctx context.Context, data json.RawMessage) (Entry, error) {
 	if issues := s.validator.Validate(data); len(issues) > 0 {
@@ -67,8 +77,11 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 	if err != nil {
 		return Entry{}, err
 	}
-	parsed, err := time.Parse(time.RFC3339Nano, token)
-	if err != nil || !tokenSyntax.MatchString(token) || !parsed.Equal(old.UpdatedAt) {
+	parsed, err := ParseToken(token)
+	if err != nil {
+		return Entry{}, err
+	}
+	if !parsed.Equal(old.UpdatedAt) {
 		return Entry{}, ErrConflict
 	}
 	if published == nil {

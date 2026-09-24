@@ -13841,6 +13841,1188 @@ func DecodeGetSupportCoverageResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildListRegistryEntriesRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "listRegistryEntries"
+// endpoint
+func (c *Client) BuildListRegistryEntriesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListRegistryEntriesAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listRegistryEntries", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListRegistryEntriesRequest returns an encoder for requests sent to the
+// admin listRegistryEntries server.
+func EncodeListRegistryEntriesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListRegistryEntriesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listRegistryEntries", "*admin.ListRegistryEntriesPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		if p.Query != nil {
+			values.Add("query", *p.Query)
+		}
+		if p.Published != nil {
+			values.Add("published", fmt.Sprintf("%v", *p.Published))
+		}
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListRegistryEntriesResponse returns a decoder for responses returned
+// by the admin listRegistryEntries endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListRegistryEntriesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListRegistryEntriesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListRegistryEntriesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryEntries", err)
+			}
+			err = ValidateListRegistryEntriesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryEntries", err)
+			}
+			res := NewListRegistryEntriesAdminRegistryPageOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListRegistryEntriesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryEntries", err)
+			}
+			err = ValidateListRegistryEntriesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryEntries", err)
+			}
+			return nil, NewListRegistryEntriesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListRegistryEntriesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryEntries", err)
+			}
+			err = ValidateListRegistryEntriesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryEntries", err)
+			}
+			return nil, NewListRegistryEntriesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListRegistryEntriesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryEntries", err)
+			}
+			err = ValidateListRegistryEntriesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryEntries", err)
+			}
+			return nil, NewListRegistryEntriesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListRegistryEntriesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryEntries", err)
+			}
+			err = ValidateListRegistryEntriesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryEntries", err)
+			}
+			return nil, NewListRegistryEntriesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListRegistryEntriesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryEntries", err)
+			}
+			err = ValidateListRegistryEntriesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryEntries", err)
+			}
+			return nil, NewListRegistryEntriesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListRegistryEntriesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryEntries", err)
+			}
+			err = ValidateListRegistryEntriesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryEntries", err)
+			}
+			return nil, NewListRegistryEntriesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListRegistryEntriesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryEntries", err)
+			}
+			err = ValidateListRegistryEntriesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryEntries", err)
+			}
+			return nil, NewListRegistryEntriesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListRegistryEntriesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listRegistryEntries", err)
+				}
+				err = ValidateListRegistryEntriesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listRegistryEntries", err)
+				}
+				return nil, NewListRegistryEntriesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListRegistryEntriesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listRegistryEntries", err)
+				}
+				err = ValidateListRegistryEntriesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listRegistryEntries", err)
+				}
+				return nil, NewListRegistryEntriesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listRegistryEntries", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListRegistryEntriesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryEntries", err)
+			}
+			err = ValidateListRegistryEntriesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryEntries", err)
+			}
+			return nil, NewListRegistryEntriesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listRegistryEntries", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetRegistryEntryRequest instantiates a HTTP request object with method
+// and path set to call the "admin" service "getRegistryEntry" endpoint
+func (c *Client) BuildGetRegistryEntryRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRegistryEntryAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getRegistryEntry", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRegistryEntryRequest returns an encoder for requests sent to the
+// admin getRegistryEntry server.
+func EncodeGetRegistryEntryRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetRegistryEntryPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getRegistryEntry", "*admin.GetRegistryEntryPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetRegistryEntryResponse returns a decoder for responses returned by
+// the admin getRegistryEntry endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetRegistryEntryResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetRegistryEntryResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetRegistryEntryResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryEntry", err)
+			}
+			err = ValidateGetRegistryEntryResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryEntry", err)
+			}
+			res := NewGetRegistryEntryAdminRegistryEntryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetRegistryEntryUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryEntry", err)
+			}
+			err = ValidateGetRegistryEntryUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryEntry", err)
+			}
+			return nil, NewGetRegistryEntryUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetRegistryEntryForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryEntry", err)
+			}
+			err = ValidateGetRegistryEntryForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryEntry", err)
+			}
+			return nil, NewGetRegistryEntryForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetRegistryEntryBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryEntry", err)
+			}
+			err = ValidateGetRegistryEntryBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryEntry", err)
+			}
+			return nil, NewGetRegistryEntryBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetRegistryEntryNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryEntry", err)
+			}
+			err = ValidateGetRegistryEntryNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryEntry", err)
+			}
+			return nil, NewGetRegistryEntryNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetRegistryEntryConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryEntry", err)
+			}
+			err = ValidateGetRegistryEntryConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryEntry", err)
+			}
+			return nil, NewGetRegistryEntryConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetRegistryEntryUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryEntry", err)
+			}
+			err = ValidateGetRegistryEntryUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryEntry", err)
+			}
+			return nil, NewGetRegistryEntryUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetRegistryEntryInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryEntry", err)
+			}
+			err = ValidateGetRegistryEntryInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryEntry", err)
+			}
+			return nil, NewGetRegistryEntryInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetRegistryEntryInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getRegistryEntry", err)
+				}
+				err = ValidateGetRegistryEntryInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getRegistryEntry", err)
+				}
+				return nil, NewGetRegistryEntryInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetRegistryEntryUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getRegistryEntry", err)
+				}
+				err = ValidateGetRegistryEntryUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getRegistryEntry", err)
+				}
+				return nil, NewGetRegistryEntryUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getRegistryEntry", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetRegistryEntryGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryEntry", err)
+			}
+			err = ValidateGetRegistryEntryGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryEntry", err)
+			}
+			return nil, NewGetRegistryEntryGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getRegistryEntry", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCreateRegistryEntryRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "createRegistryEntry"
+// endpoint
+func (c *Client) BuildCreateRegistryEntryRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateRegistryEntryAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "createRegistryEntry", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateRegistryEntryRequest returns an encoder for requests sent to the
+// admin createRegistryEntry server.
+func EncodeCreateRegistryEntryRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.CreateRegistryEntryPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "createRegistryEntry", "*admin.CreateRegistryEntryPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewCreateRegistryEntryRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "createRegistryEntry", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateRegistryEntryResponse returns a decoder for responses returned
+// by the admin createRegistryEntry endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeCreateRegistryEntryResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateRegistryEntryResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateRegistryEntryResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createRegistryEntry", err)
+			}
+			err = ValidateCreateRegistryEntryResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createRegistryEntry", err)
+			}
+			res := NewCreateRegistryEntryAdminRegistryEntryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateRegistryEntryUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createRegistryEntry", err)
+			}
+			err = ValidateCreateRegistryEntryUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createRegistryEntry", err)
+			}
+			return nil, NewCreateRegistryEntryUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateRegistryEntryForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createRegistryEntry", err)
+			}
+			err = ValidateCreateRegistryEntryForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createRegistryEntry", err)
+			}
+			return nil, NewCreateRegistryEntryForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateRegistryEntryBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createRegistryEntry", err)
+			}
+			err = ValidateCreateRegistryEntryBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createRegistryEntry", err)
+			}
+			return nil, NewCreateRegistryEntryBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateRegistryEntryNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createRegistryEntry", err)
+			}
+			err = ValidateCreateRegistryEntryNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createRegistryEntry", err)
+			}
+			return nil, NewCreateRegistryEntryNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateRegistryEntryConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createRegistryEntry", err)
+			}
+			err = ValidateCreateRegistryEntryConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createRegistryEntry", err)
+			}
+			return nil, NewCreateRegistryEntryConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateRegistryEntryUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createRegistryEntry", err)
+			}
+			err = ValidateCreateRegistryEntryUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createRegistryEntry", err)
+			}
+			return nil, NewCreateRegistryEntryUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateRegistryEntryInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createRegistryEntry", err)
+			}
+			err = ValidateCreateRegistryEntryInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createRegistryEntry", err)
+			}
+			return nil, NewCreateRegistryEntryInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateRegistryEntryInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "createRegistryEntry", err)
+				}
+				err = ValidateCreateRegistryEntryInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "createRegistryEntry", err)
+				}
+				return nil, NewCreateRegistryEntryInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateRegistryEntryUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "createRegistryEntry", err)
+				}
+				err = ValidateCreateRegistryEntryUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "createRegistryEntry", err)
+				}
+				return nil, NewCreateRegistryEntryUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "createRegistryEntry", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateRegistryEntryGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createRegistryEntry", err)
+			}
+			err = ValidateCreateRegistryEntryGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createRegistryEntry", err)
+			}
+			return nil, NewCreateRegistryEntryGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "createRegistryEntry", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSaveRegistryEntryRequest instantiates a HTTP request object with method
+// and path set to call the "admin" service "saveRegistryEntry" endpoint
+func (c *Client) BuildSaveRegistryEntryRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SaveRegistryEntryAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "saveRegistryEntry", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSaveRegistryEntryRequest returns an encoder for requests sent to the
+// admin saveRegistryEntry server.
+func EncodeSaveRegistryEntryRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.SaveRegistryEntryPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "saveRegistryEntry", "*admin.SaveRegistryEntryPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewSaveRegistryEntryRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "saveRegistryEntry", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSaveRegistryEntryResponse returns a decoder for responses returned by
+// the admin saveRegistryEntry endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSaveRegistryEntryResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSaveRegistryEntryResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SaveRegistryEntryResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "saveRegistryEntry", err)
+			}
+			err = ValidateSaveRegistryEntryResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "saveRegistryEntry", err)
+			}
+			res := NewSaveRegistryEntryAdminRegistryEntryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SaveRegistryEntryUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "saveRegistryEntry", err)
+			}
+			err = ValidateSaveRegistryEntryUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "saveRegistryEntry", err)
+			}
+			return nil, NewSaveRegistryEntryUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SaveRegistryEntryForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "saveRegistryEntry", err)
+			}
+			err = ValidateSaveRegistryEntryForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "saveRegistryEntry", err)
+			}
+			return nil, NewSaveRegistryEntryForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SaveRegistryEntryBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "saveRegistryEntry", err)
+			}
+			err = ValidateSaveRegistryEntryBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "saveRegistryEntry", err)
+			}
+			return nil, NewSaveRegistryEntryBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SaveRegistryEntryNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "saveRegistryEntry", err)
+			}
+			err = ValidateSaveRegistryEntryNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "saveRegistryEntry", err)
+			}
+			return nil, NewSaveRegistryEntryNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SaveRegistryEntryConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "saveRegistryEntry", err)
+			}
+			err = ValidateSaveRegistryEntryConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "saveRegistryEntry", err)
+			}
+			return nil, NewSaveRegistryEntryConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SaveRegistryEntryUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "saveRegistryEntry", err)
+			}
+			err = ValidateSaveRegistryEntryUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "saveRegistryEntry", err)
+			}
+			return nil, NewSaveRegistryEntryUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SaveRegistryEntryInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "saveRegistryEntry", err)
+			}
+			err = ValidateSaveRegistryEntryInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "saveRegistryEntry", err)
+			}
+			return nil, NewSaveRegistryEntryInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SaveRegistryEntryInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "saveRegistryEntry", err)
+				}
+				err = ValidateSaveRegistryEntryInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "saveRegistryEntry", err)
+				}
+				return nil, NewSaveRegistryEntryInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SaveRegistryEntryUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "saveRegistryEntry", err)
+				}
+				err = ValidateSaveRegistryEntryUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "saveRegistryEntry", err)
+				}
+				return nil, NewSaveRegistryEntryUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "saveRegistryEntry", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SaveRegistryEntryGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "saveRegistryEntry", err)
+			}
+			err = ValidateSaveRegistryEntryGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "saveRegistryEntry", err)
+			}
+			return nil, NewSaveRegistryEntryGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "saveRegistryEntry", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetRegistryEntryPublishedRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "setRegistryEntryPublished" endpoint
+func (c *Client) BuildSetRegistryEntryPublishedRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetRegistryEntryPublishedAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "setRegistryEntryPublished", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetRegistryEntryPublishedRequest returns an encoder for requests sent
+// to the admin setRegistryEntryPublished server.
+func EncodeSetRegistryEntryPublishedRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.SetRegistryEntryPublishedPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "setRegistryEntryPublished", "*admin.SetRegistryEntryPublishedPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewSetRegistryEntryPublishedRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "setRegistryEntryPublished", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetRegistryEntryPublishedResponse returns a decoder for responses
+// returned by the admin setRegistryEntryPublished endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetRegistryEntryPublishedResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetRegistryEntryPublishedResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetRegistryEntryPublishedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setRegistryEntryPublished", err)
+			}
+			err = ValidateSetRegistryEntryPublishedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setRegistryEntryPublished", err)
+			}
+			res := NewSetRegistryEntryPublishedAdminRegistryEntryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetRegistryEntryPublishedUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setRegistryEntryPublished", err)
+			}
+			err = ValidateSetRegistryEntryPublishedUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setRegistryEntryPublished", err)
+			}
+			return nil, NewSetRegistryEntryPublishedUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetRegistryEntryPublishedForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setRegistryEntryPublished", err)
+			}
+			err = ValidateSetRegistryEntryPublishedForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setRegistryEntryPublished", err)
+			}
+			return nil, NewSetRegistryEntryPublishedForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetRegistryEntryPublishedBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setRegistryEntryPublished", err)
+			}
+			err = ValidateSetRegistryEntryPublishedBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setRegistryEntryPublished", err)
+			}
+			return nil, NewSetRegistryEntryPublishedBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetRegistryEntryPublishedNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setRegistryEntryPublished", err)
+			}
+			err = ValidateSetRegistryEntryPublishedNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setRegistryEntryPublished", err)
+			}
+			return nil, NewSetRegistryEntryPublishedNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetRegistryEntryPublishedConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setRegistryEntryPublished", err)
+			}
+			err = ValidateSetRegistryEntryPublishedConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setRegistryEntryPublished", err)
+			}
+			return nil, NewSetRegistryEntryPublishedConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetRegistryEntryPublishedUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setRegistryEntryPublished", err)
+			}
+			err = ValidateSetRegistryEntryPublishedUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setRegistryEntryPublished", err)
+			}
+			return nil, NewSetRegistryEntryPublishedUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetRegistryEntryPublishedInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setRegistryEntryPublished", err)
+			}
+			err = ValidateSetRegistryEntryPublishedInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setRegistryEntryPublished", err)
+			}
+			return nil, NewSetRegistryEntryPublishedInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetRegistryEntryPublishedInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setRegistryEntryPublished", err)
+				}
+				err = ValidateSetRegistryEntryPublishedInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setRegistryEntryPublished", err)
+				}
+				return nil, NewSetRegistryEntryPublishedInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetRegistryEntryPublishedUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setRegistryEntryPublished", err)
+				}
+				err = ValidateSetRegistryEntryPublishedUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setRegistryEntryPublished", err)
+				}
+				return nil, NewSetRegistryEntryPublishedUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "setRegistryEntryPublished", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetRegistryEntryPublishedGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setRegistryEntryPublished", err)
+			}
+			err = ValidateSetRegistryEntryPublishedGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setRegistryEntryPublished", err)
+			}
+			return nil, NewSetRegistryEntryPublishedGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "setRegistryEntryPublished", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -14550,6 +15732,40 @@ func unmarshalSupportCoverageUnmappedResponseBodyToAdminSupportCoverageUnmapped(
 	res := &admin.SupportCoverageUnmapped{
 		HookSource: *v.HookSource,
 		Sessions:   *v.Sessions,
+	}
+
+	return res
+}
+
+// unmarshalAdminRegistrySummaryResponseBodyToAdminAdminRegistrySummary builds
+// a value of type *admin.AdminRegistrySummary from a value of type
+// *AdminRegistrySummaryResponseBody.
+func unmarshalAdminRegistrySummaryResponseBodyToAdminAdminRegistrySummary(v *AdminRegistrySummaryResponseBody) *admin.AdminRegistrySummary {
+	res := &admin.AdminRegistrySummary{
+		ID:        *v.ID,
+		Name:      *v.Name,
+		Published: *v.Published,
+		UpdatedAt: *v.UpdatedAt,
+	}
+	res.Issues = make([]*admin.AdminRegistryIssue, len(v.Issues))
+	for i, val := range v.Issues {
+		if val == nil {
+			res.Issues[i] = nil
+			continue
+		}
+		res.Issues[i] = unmarshalAdminRegistryIssueResponseBodyToAdminAdminRegistryIssue(val)
+	}
+
+	return res
+}
+
+// unmarshalAdminRegistryIssueResponseBodyToAdminAdminRegistryIssue builds a
+// value of type *admin.AdminRegistryIssue from a value of type
+// *AdminRegistryIssueResponseBody.
+func unmarshalAdminRegistryIssueResponseBodyToAdminAdminRegistryIssue(v *AdminRegistryIssueResponseBody) *admin.AdminRegistryIssue {
+	res := &admin.AdminRegistryIssue{
+		Path:    *v.Path,
+		Message: *v.Message,
 	}
 
 	return res
