@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/typesafe"
 )
 
 const (
@@ -207,6 +208,11 @@ type accuracySummary struct {
 	KnownGaps      []knownGapSummary   `json:"known_gaps,omitempty"`
 	RecallGate     recallGateSummary   `json:"recall_gate"`
 	RecallGateRuns []recallGateSummary `json:"recall_gate_runs"`
+	// JevRecallGate mirrors RecallGate's directive-present, in-taxonomy subset
+	// for the Jev candidate, when -jev is passed. It is reported alongside the
+	// judge's gate for comparison but never checked against floors.json: those
+	// floors were tuned for the judge, not for Jev.
+	JevRecallGate *recallGateSummary `json:"jev_recall_gate,omitempty"`
 }
 
 type recallGateSummary struct {
@@ -282,6 +288,8 @@ type options struct {
 	extraCorpus      string
 	repeats          int
 	samples          int
+	jev              bool
+	skipJudge        bool
 }
 
 const (
@@ -317,6 +325,8 @@ func parseFlags() options {
 		extraCorpus:      "",
 		repeats:          0,
 		samples:          0,
+		jev:              false,
+		skipJudge:        false,
 	}
 	flag.StringVar(&opts.corpusDir, "corpus-dir", defaultCorpusDir, "directory containing prompt-injection JSONL corpus files")
 	flag.StringVar(&opts.outFile, "out", defaultOutFile, "path to write metrics JSON")
@@ -328,6 +338,8 @@ func parseFlags() options {
 	flag.StringVar(&opts.extraCorpus, "extra-corpus", "", "absolute path to an additional local JSONL corpus; never loaded by default")
 	flag.IntVar(&opts.repeats, "repeats", 1, "number of complete repeated trials")
 	flag.IntVar(&opts.samples, "samples", piopenrouter.SamplesPerEvent, "physical judge calls per event; production defaults to one")
+	flag.BoolVar(&opts.jev, "jev", false, "also evaluate Jev (TypeSafe) as a shadow candidate for the L1 judge (needs OPENROUTER_DEV_KEY)")
+	flag.BoolVar(&opts.skipJudge, "skip-judge", false, "skip the OpenRouter L1 judge entirely; pair with -jev to evaluate Jev standalone")
 	flag.Parse()
 	return opts
 }
@@ -393,9 +405,26 @@ func run(ctx context.Context, opts options) error {
 	if opts.samples < 1 {
 		return fmt.Errorf("--samples must be at least 1")
 	}
+	if opts.judgeConcurrency < 1 {
+		return fmt.Errorf("--judge-concurrency must be at least 1")
+	}
+	if opts.skipJudge && !opts.jev {
+		return fmt.Errorf("--skip-judge with no --jev evaluates nothing")
+	}
+	if opts.skipJudge && opts.checkFloors {
+		return fmt.Errorf("--skip-judge leaves no judge run to check floors against; pass --check-floors=false explicitly")
+	}
 	modes := make([]modeSummary, 0, opts.repeats*2)
 	allFindings := make([][][]scanners.Finding, 0, opts.repeats)
-	for repeat := 1; repeat <= opts.repeats; repeat++ {
+	if opts.skipJudge {
+		var skipped modeSummary
+		skipped.Name = "judge"
+		skipped.Skipped = true
+		skipped.SkipReason = "--skip-judge"
+		skipped.Total = len(corpus)
+		modes = append(modes, skipped)
+	}
+	for repeat := 1; !opts.skipJudge && repeat <= opts.repeats; repeat++ {
 		fmt.Fprintf(os.Stderr, "trial %d/%d\n", repeat, opts.repeats)
 		judgeMode, judgeFindings, err := scanJudgeMode(ctx, opts, corpus)
 		if err != nil {
@@ -415,27 +444,63 @@ func run(ctx context.Context, opts options) error {
 	}
 	worstRecallGate := worstRecallGate(recallGateRuns)
 
+	var jevRecallGate *recallGateSummary
+	var jevMode modeSummary
+	if opts.jev {
+		var jevFindings [][]scanners.Finding
+		var err error
+		jevMode, jevFindings, err = scanJevMode(ctx, opts, corpus)
+		if err != nil {
+			return err
+		}
+		modes = append(modes, jevMode)
+		gate := summarizeRecallGate(corpus, jevFindings)
+		jevRecallGate = &gate
+	}
+
+	// A skipped judge leaves modes[0] as a zero-valued placeholder; report the
+	// Jev mode at the top level instead so a standalone -jev run isn't summarized
+	// as all zeros.
+	primary := judgeMode
+	if opts.skipJudge {
+		primary = jevMode
+	}
+
 	summary := accuracySummary{
-		Total:          judgeMode.Total,
-		Counts:         judgeMode.Counts,
-		Overall:        judgeMode.Overall,
-		Sources:        judgeMode.Sources,
-		Rules:          judgeMode.Rules,
+		Total:          primary.Total,
+		Counts:         primary.Counts,
+		Overall:        primary.Overall,
+		Sources:        primary.Sources,
+		Rules:          primary.Rules,
 		Modes:          modes,
 		Stability:      summarizeStability(corpus, allFindings),
 		Distributions:  summarizeDistributions(modes, recallGateRuns),
 		KnownGaps:      summarizeKnownGaps(corpus),
 		RecallGate:     worstRecallGate,
 		RecallGateRuns: recallGateRuns,
+		JevRecallGate:  jevRecallGate,
 	}
 
 	printSummary(os.Stderr, modes)
-	fmt.Fprintf(os.Stderr, "stability: flips=%d/%d (%.2f%%) stable_fp=%d benign_flips=%d\n",
-		summary.Stability.Flipped, summary.Total, summary.Stability.FlipRate*100,
-		summary.Stability.StableFalsePositives, summary.Stability.FlippedBenign)
+	if opts.skipJudge {
+		fmt.Fprintln(os.Stderr, "stability: not applicable (--skip-judge ran no judge repeats)")
+	} else {
+		fmt.Fprintf(os.Stderr, "stability: flips=%d/%d (%.2f%%) stable_fp=%d benign_flips=%d\n",
+			summary.Stability.Flipped, summary.Total, summary.Stability.FlipRate*100,
+			summary.Stability.StableFalsePositives, summary.Stability.FlippedBenign)
+	}
 	for i, gate := range summary.RecallGateRuns {
 		fmt.Fprintf(os.Stderr, "recall gate run %d: TP=%d FN=%d recall=%.3f known_gaps_excluded=%d\n",
 			i+1, gate.Counts.TP, gate.Counts.FN, gate.Recall, gate.Excluded)
+		for _, source := range gate.BySource {
+			fmt.Fprintf(os.Stderr, "  %-24s TP=%-4d FN=%-4d recall=%.3f\n",
+				source.Source, source.Counts.TP, source.Counts.FN, source.Metrics.Recall)
+		}
+	}
+	if summary.JevRecallGate != nil {
+		gate := *summary.JevRecallGate
+		fmt.Fprintf(os.Stderr, "jev recall gate: TP=%d FN=%d recall=%.3f known_gaps_excluded=%d (not checked against floors.json)\n",
+			gate.Counts.TP, gate.Counts.FN, gate.Recall, gate.Excluded)
 		for _, source := range gate.BySource {
 			fmt.Fprintf(os.Stderr, "  %-24s TP=%-4d FN=%-4d recall=%.3f\n",
 				source.Source, source.Counts.TP, source.Counts.FN, source.Metrics.Recall)
@@ -538,7 +603,7 @@ func summarizeStability(corpus []labeledCase, runs [][][]scanners.Finding) stabi
 func summarizeDistributions(modes []modeSummary, recallGates []recallGateSummary) distributionSummary {
 	var falsePositiveRates, recalls, costs []float64
 	for _, mode := range modes {
-		if strings.HasPrefix(mode.Name, "scoped_") {
+		if strings.HasPrefix(mode.Name, "scoped_") || mode.Skipped {
 			continue
 		}
 		falsePositiveRates = append(falsePositiveRates, mode.Overall.FPRate)
@@ -1398,20 +1463,26 @@ func writeMetrics(path string, opts options, corpus []labeledCase, summary accur
 	if err != nil {
 		return fmt.Errorf("marshal corpus for hash: %w", err)
 	}
-	promptHash := sha256.Sum256([]byte(piopenrouter.SystemPrompt))
-	schemaHash := sha256.Sum256(schemaJSON)
 	corpusHash := sha256.Sum256(corpusJSON)
+	promptHashHex, schemaHashHex := fmt.Sprintf("%x", sha256.Sum256([]byte(piopenrouter.SystemPrompt))), fmt.Sprintf("%x", sha256.Sum256(schemaJSON))
+	model, reasoning, providerRoute := opts.judgeModel, opts.reasoning, "OpenRouter default routing"
+	if opts.skipJudge {
+		// No OpenRouter judge ran, so its system prompt and verdict schema were
+		// never evaluated; hashing them would misidentify what this run tested.
+		model, reasoning, providerRoute = typesafe.Model, "", "OpenRouter alpha Decisions API (Jev)"
+		promptHashHex, schemaHashHex = "", ""
+	}
 	payload := envelope{
 		GitSHA:          envOr("GITHUB_SHA", "local"),
 		Ref:             envOr("GITHUB_REF_NAME", "local"),
 		Timestamp:       time.Now().UTC().Format(time.RFC3339),
-		Model:           opts.judgeModel,
-		Reasoning:       opts.reasoning,
-		ProviderRoute:   "OpenRouter default routing",
+		Model:           model,
+		Reasoning:       reasoning,
+		ProviderRoute:   providerRoute,
 		SamplesPerEvent: opts.samples,
 		TimeoutMS:       piopenrouter.JudgeTimeout.Milliseconds(),
-		PromptSHA256:    fmt.Sprintf("%x", promptHash),
-		SchemaSHA256:    fmt.Sprintf("%x", schemaHash),
+		PromptSHA256:    promptHashHex,
+		SchemaSHA256:    schemaHashHex,
 		CorpusSHA256:    fmt.Sprintf("%x", corpusHash),
 		Summary:         summary,
 	}

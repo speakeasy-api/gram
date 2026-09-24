@@ -3,6 +3,14 @@ package feature
 type Flag string
 
 const (
+	// FlagJevPromptInjectionShadow enables sampled comparisons only, never enforcement.
+	// Evaluated locally by judgeshadow.Enabled (server/internal/scanners/judgeshadow),
+	// wired in cmd/gram/{streams,start,worker}.go, targeted by organization ID as
+	// the distinct ID (no groups or person properties). Missing/error means off.
+	FlagJevPromptInjectionShadow Flag = "jev-prompt-injection-shadow"
+	// FlagJevPromptPolicyShadow has the same local organization-ID targeting and
+	// fail-closed behavior for prompt-based policy comparisons.
+	FlagJevPromptPolicyShadow    Flag = "jev-prompt-policy-shadow"
 	FlagSpeakeasyOpenAPIParserV0 Flag = "speakeasy-openapi-parser-v0"
 	FlagClickhouseToolMetrics    Flag = "clickhouse-tool-metrics"
 	FlagAssistants               Flag = "assistants"

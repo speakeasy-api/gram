@@ -54,6 +54,8 @@ const (
 	GramRiskV1GitleaksAnalysis Topic = "gram.risk.v1.GitleaksAnalysis"
 	// GramRiskV1GitleaksEnforcement publishes to gram-risk-v1-gitleaks-enforcement.
 	GramRiskV1GitleaksEnforcement Topic = "gram.risk.v1.GitleaksEnforcement"
+	// GramRiskV1JudgeShadowAnalysis publishes to gram-risk-v1-judge-shadow-analysis.
+	GramRiskV1JudgeShadowAnalysis Topic = "gram.risk.v1.JudgeShadowAnalysis"
 	// GramRiskV1LLMAnalysis publishes to gram-risk-v1-llm-analysis.
 	GramRiskV1LLMAnalysis Topic = "gram.risk.v1.LLMAnalysis"
 	// GramRiskV1LLMEnforcement publishes to gram-risk-v1-llm-enforcement.
@@ -89,6 +91,7 @@ func All() []Topic {
 		GramRiskV1Finding,
 		GramRiskV1GitleaksAnalysis,
 		GramRiskV1GitleaksEnforcement,
+		GramRiskV1JudgeShadowAnalysis,
 		GramRiskV1LLMAnalysis,
 		GramRiskV1LLMEnforcement,
 		GramRiskV1PresidioAnalysis,
@@ -131,6 +134,8 @@ func Lookup(name string) (Topic, bool) {
 		return GramRiskV1GitleaksAnalysis, true
 	case GramRiskV1GitleaksEnforcement:
 		return GramRiskV1GitleaksEnforcement, true
+	case GramRiskV1JudgeShadowAnalysis:
+		return GramRiskV1JudgeShadowAnalysis, true
 	case GramRiskV1LLMAnalysis:
 		return GramRiskV1LLMAnalysis, true
 	case GramRiskV1LLMEnforcement:
@@ -186,6 +191,8 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.GitleaksAnalysis{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1GitleaksEnforcement:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.GitleaksEnforcement{}, gcp.WithEncodedPublishSettings(settings))
+	case GramRiskV1JudgeShadowAnalysis:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.JudgeShadowAnalysis{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1LLMAnalysis:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.LLMAnalysis{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1LLMEnforcement:

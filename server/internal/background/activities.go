@@ -73,6 +73,7 @@ import (
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/judgeshadow"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -91,6 +92,7 @@ import (
 )
 
 type Publishers struct {
+	JudgeShadowAnalysis     gcp.Publisher[*riskv1.JudgeShadowAnalysis]
 	PresidioAnalysis        gcp.Publisher[*riskv1.PresidioAnalysis]
 	GitleaksAnalysis        gcp.Publisher[*riskv1.GitleaksAnalysis]
 	PromptInjectionAnalysis gcp.Publisher[*riskv1.PromptInjectionAnalysis]
@@ -278,7 +280,7 @@ func NewActivities(
 		piScanner,
 		shadowMCPClient,
 		telemetryRepo,
-		ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate,
+		judgeshadow.NewPublisher(logger, features, publishers.JudgeShadowAnalysis, judgeshadow.DefaultSampleRate).WrapPolicy(ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate),
 		features,
 		publishers.PresidioAnalysis,
 		publishers.GitleaksAnalysis,

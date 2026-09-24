@@ -1,0 +1,27 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+// JudgeShadowAnalysis pairs the exact prepared judge evidence with its baseline.
+// Evidence is sensitive and must never be copied to logs or findings.
+message JudgeShadowAnalysis {
+  string comparison_id = 1;
+  string organization_id = 2;
+  string project_id = 3;
+  string detector = 4;
+  bytes state_json = 5;
+  string baseline_outcome = 6;
+  string baseline_model = 7;
+  double baseline_duration_seconds = 8;
+  string baseline_trace_id = 9;
+  string policy_hash = 10;
+  string created_at = 11;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {seconds: 86400}
+  };
+}

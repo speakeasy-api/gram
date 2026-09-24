@@ -580,6 +580,7 @@ const (
 	RiskScanRequestIDKey           = attribute.Key("gram.risk.scan.request_id")
 	RiskScanEngineKey              = attribute.Key("gram.risk.scan.engine")
 	RiskScanGateReasonKey          = attribute.Key("gram.risk.scan.gate_reason")
+	RiskJudgeShadowKey             = attribute.Key("gram.risk.judge_shadow")
 	RiskFindingIDKey               = attribute.Key("gram.risk.finding.id")
 	RiskPolicyVersionKey           = attribute.Key("gram.risk.policy.version")
 	RiskConfidenceKey              = attribute.Key("gram.risk.confidence")
@@ -3149,3 +3150,6 @@ func SlogInferenceInputCount(v int) slog.Attr {
 func SlogInferenceAcceptedMessages(v int) slog.Attr {
 	return slog.Int(string(InferenceAcceptedMessagesKey), v)
 }
+
+// SlogRiskJudgeShadow contains a payload-free paired judge assessment.
+func SlogRiskJudgeShadow(v any) slog.Attr { return slog.Any(string(RiskJudgeShadowKey), v) }

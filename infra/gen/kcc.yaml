@@ -1024,6 +1024,27 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-judge-shadow-analysis
+    name: gram-risk-v1-judge-shadow-analysis
+    spec:
+      definition: |
+        edition = "2024";
+        message JudgeShadowAnalysis {
+          string comparison_id = 1;
+          string organization_id = 2;
+          string project_id = 3;
+          string detector = 4;
+          bytes state_json = 5;
+          string baseline_outcome = 6;
+          string baseline_model = 7;
+          double baseline_duration_seconds = 8;
+          string baseline_trace_id = 9;
+          string policy_hash = 10;
+          string created_at = 11;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-llm-analysis
     name: gram-risk-v1-llm-analysis
     spec:
@@ -1670,6 +1691,24 @@ pubsub:
         name: gram-risk-v1-gitleaks-enforcement
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-judge-shadow-analyzer
+      topic_proto_message: gram-risk-v1-judge-shadow-analysis
+    name: gram-risk-v1-judge-shadow-analyzer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-risk-v1-judge-shadow-analyzer-dlq
+        maxDeliveryAttempts: 5
+      messageRetentionDuration: 86400s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-judge-shadow-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-llm-analyzer
       topic_proto_message: gram-risk-v1-llm-analysis
     name: gram-risk-v1-llm-analyzer
@@ -2068,6 +2107,23 @@ pubsub:
     name: gram-risk-v1-gitleaks-enforcer-dlq
     spec:
       messageRetentionDuration: 600s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-judge-shadow-analysis
+    name: gram-risk-v1-judge-shadow-analysis
+    spec:
+      messageRetentionDuration: 86400s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-judge-shadow-analysis
+  - labels:
+      dlq_for: gram-risk-v1-judge-shadow-analyzer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-judge-shadow-analyzer
+    name: gram-risk-v1-judge-shadow-analyzer-dlq
+    spec:
+      messageRetentionDuration: 86400s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-llm-analysis
