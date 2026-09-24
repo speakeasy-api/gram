@@ -103,7 +103,9 @@ JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND 
 LEFT JOIN slack_identity_mappings im ON im.organization_id = m.organization_id AND im.slack_team_id = m.slack_team_id AND im.slack_user_id = m.slack_user_id AND im.revoked_at IS NULL
 LEFT JOIN users u ON u.id = im.user_id
 LEFT JOIN organization_user_relationships our ON our.organization_id = m.organization_id AND our.user_id = im.user_id
-WHERE m.organization_id = @organization_id AND c.disconnected_at IS NULL
+WHERE m.organization_id = @organization_id
+  -- Lists hide disconnected workspaces; a lookup by membership ID still resolves retained history.
+  AND (c.disconnected_at IS NULL OR sqlc.narg(member_id)::uuid IS NOT NULL)
  AND (@mapping_status::text = '' OR CASE WHEN im.id IS NULL THEN 'unmapped' WHEN m.mapping_conflict_reason IS NOT NULL OR u.deleted_at IS NOT NULL OR our.deleted_at IS NOT NULL THEN 'needs_review' ELSE 'mapped' END = @mapping_status)
   AND (sqlc.narg(connection_id)::uuid IS NULL OR c.id = sqlc.narg(connection_id))
   AND (@search::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower(@search)) > 0
@@ -112,6 +114,33 @@ WHERE m.organization_id = @organization_id AND c.disconnected_at IS NULL
   AND (sqlc.narg(cursor)::uuid IS NULL OR m.id > sqlc.narg(cursor))
 ORDER BY m.id
 LIMIT @page_size;
+
+-- name: ListSlackDirectoryMembersPage :many
+SELECT m.*, coalesce(im.id::text, '')::text AS mapping_id, coalesce(im.user_id, '')::text AS mapped_user_id,
+ coalesce(u.display_name, '')::text AS mapped_display_name, coalesce(u.email, '')::text AS mapped_email,
+ u.photo_url AS mapped_photo_url, (im.id IS NOT NULL AND u.deleted_at IS NULL AND our.deleted_at IS NULL)::boolean AS mapped_user_active,
+ c.id AS connection_id, c.slack_team_name AS workspace_name,
+    (m.last_seen_at = c.last_full_sync_succeeded_at)::boolean AS observed_in_last_sync
+FROM slack_directory_memberships m
+JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND c.slack_team_id = m.slack_team_id
+LEFT JOIN slack_identity_mappings im ON im.organization_id = m.organization_id AND im.slack_team_id = m.slack_team_id AND im.slack_user_id = m.slack_user_id AND im.revoked_at IS NULL
+LEFT JOIN users u ON u.id = im.user_id
+LEFT JOIN organization_user_relationships our ON our.organization_id = m.organization_id AND our.user_id = im.user_id
+WHERE m.organization_id = @organization_id AND c.disconnected_at IS NULL
+ AND (@mapping_status::text = '' OR CASE WHEN im.id IS NULL THEN 'unmapped' WHEN m.mapping_conflict_reason IS NOT NULL OR u.deleted_at IS NOT NULL OR our.deleted_at IS NOT NULL THEN 'needs_review' ELSE 'mapped' END = @mapping_status)
+  AND (sqlc.narg(connection_id)::uuid IS NULL OR c.id = sqlc.narg(connection_id))
+  AND (@search::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower(@search)) > 0
+    OR strpos(lower(coalesce(m.email, '')), lower(@search)) > 0 OR strpos(lower(m.slack_user_id), lower(@search)) > 0)
+  AND (@include_deactivated::boolean OR m.status <> 'deactivated')
+  AND (@include_bots::boolean OR m.member_type <> 'bot')
+  AND (@include_guests::boolean OR m.member_type NOT IN ('guest', 'single_channel_guest'))
+-- Rank by mapping state at @sort_as_of so later edits keep rows in place.
+ORDER BY CASE WHEN NOT EXISTS (SELECT 1 FROM slack_identity_mappings h
+    WHERE h.organization_id = m.organization_id AND h.slack_team_id = m.slack_team_id AND h.slack_user_id = m.slack_user_id
+      AND h.created_at <= @sort_as_of::timestamptz AND (h.revoked_at IS NULL OR h.revoked_at > @sort_as_of::timestamptz)) THEN 0
+  WHEN m.mapping_conflict_detected_at <= @sort_as_of::timestamptz THEN 1 ELSE 2 END,
+ lower(coalesce(nullif(m.display_name, ''), nullif(m.email, ''), m.slack_user_id)), m.id
+LIMIT @page_size OFFSET @page_offset;
 
 -- name: CountSlackDirectoryMembers :one
 SELECT count(*)::bigint FROM slack_directory_memberships m
@@ -123,7 +152,10 @@ WHERE m.organization_id = @organization_id AND c.disconnected_at IS NULL
  AND (@mapping_status::text = '' OR CASE WHEN im.id IS NULL THEN 'unmapped' WHEN m.mapping_conflict_reason IS NOT NULL OR u.deleted_at IS NOT NULL OR our.deleted_at IS NOT NULL THEN 'needs_review' ELSE 'mapped' END = @mapping_status)
   AND (sqlc.narg(connection_id)::uuid IS NULL OR c.id = sqlc.narg(connection_id))
   AND (@search::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower(@search)) > 0
-    OR strpos(lower(coalesce(m.email, '')), lower(@search)) > 0 OR strpos(lower(m.slack_user_id), lower(@search)) > 0);
+    OR strpos(lower(coalesce(m.email, '')), lower(@search)) > 0 OR strpos(lower(m.slack_user_id), lower(@search)) > 0)
+  AND (@include_deactivated::boolean OR m.status <> 'deactivated')
+  AND (@include_bots::boolean OR m.member_type <> 'bot')
+  AND (@include_guests::boolean OR m.member_type NOT IN ('guest', 'single_channel_guest'));
 
 -- name: UpsertSlackDirectoryMembershipBatch :exec
 WITH observations AS (
@@ -227,3 +259,21 @@ WHERE organization_id = @organization_id AND user_id = @user_id;
 
 -- name: DeleteSlackMappingUserForTest :exec
 UPDATE users SET deleted_at = clock_timestamp() WHERE id = @user_id;
+
+-- name: ListSlackEmailMappingCandidates :many
+-- Active full members never mapped before, whose email matches exactly one
+-- active person in the organization who has no current mapping in the workspace.
+SELECT m.id AS membership_id, min(u.id)::text AS user_id
+FROM slack_directory_memberships m
+JOIN organization_user_relationships our ON our.organization_id = m.organization_id AND our.deleted_at IS NULL
+JOIN users u ON u.id = our.user_id AND u.deleted_at IS NULL AND lower(trim(u.email)) = lower(trim(m.email))
+WHERE m.organization_id = @organization_id AND m.slack_team_id = @slack_team_id
+  AND m.member_type = 'person' AND m.status = 'active' AND nullif(trim(m.email), '') IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM slack_directory_memberships d WHERE d.organization_id = m.organization_id
+    AND d.slack_team_id = m.slack_team_id AND d.id <> m.id AND lower(trim(d.email)) = lower(trim(m.email)))
+  AND NOT EXISTS (SELECT 1 FROM slack_identity_mappings h
+    WHERE h.organization_id = m.organization_id AND h.slack_team_id = m.slack_team_id AND h.slack_user_id = m.slack_user_id)
+GROUP BY m.id
+HAVING count(*) = 1 AND NOT EXISTS (SELECT 1 FROM slack_identity_mappings x
+  WHERE x.organization_id = @organization_id AND x.slack_team_id = @slack_team_id AND x.user_id = min(u.id) AND x.revoked_at IS NULL)
+ORDER BY m.id;

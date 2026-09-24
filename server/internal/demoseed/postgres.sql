@@ -707,7 +707,7 @@ BEGIN
     (id, organization_id, slack_team_id, slack_team_name, generation, health, disconnected_at)
   VALUES
     (demo.det_uuid('gram-demo-slackconn-1'), demo_org, 'T0DEMO0001', 'Acme Engineering',
-     gen_random_uuid(), 'disconnected', now() - interval '2 days'),
+     gen_random_uuid(), 'pending', NULL),
     (demo.det_uuid('gram-demo-slackconn-2'), demo_org, 'T0DEMO0002', 'Acme Operations',
      gen_random_uuid(), 'pending', NULL);
 

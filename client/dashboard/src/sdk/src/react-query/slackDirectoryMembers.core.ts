@@ -53,7 +53,11 @@ export function buildSlackDirectoryMembersQuery(
       connectionId: request?.connectionId,
       search: request?.search,
       mappingStatus: request?.mappingStatus,
-      cursor: request?.cursor,
+      includeDeactivated: request?.includeDeactivated,
+      includeBots: request?.includeBots,
+      includeGuests: request?.includeGuests,
+      sortAsOf: request?.sortAsOf,
+      page: request?.page,
       limit: request?.limit,
       gramSession: request?.gramSession,
     }),
@@ -86,7 +90,11 @@ export function queryKeySlackDirectoryMembers(
     connectionId?: string | undefined;
     search?: string | undefined;
     mappingStatus?: MappingStatus | undefined;
-    cursor?: string | undefined;
+    includeDeactivated?: boolean | undefined;
+    includeBots?: boolean | undefined;
+    includeGuests?: boolean | undefined;
+    sortAsOf?: Date | undefined;
+    page?: number | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
   },

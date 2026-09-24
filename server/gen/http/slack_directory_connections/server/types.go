@@ -74,8 +74,6 @@ type ListMembersResponseBody struct {
 	Members []*SlackDirectoryMemberResponseBody `form:"members" json:"members" xml:"members"`
 	// Matching retained membership rows.
 	Total int64 `form:"total" json:"total" xml:"total"`
-	// Cursor for the next page, when present.
-	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // GetMemberResponseBody is the type of the "slackDirectoryConnections" service
@@ -1766,8 +1764,7 @@ func NewSyncResponseBody(res *slackdirectoryconnections.SyncResult) *SyncRespons
 // the "listMembers" endpoint of the "slackDirectoryConnections" service.
 func NewListMembersResponseBody(res *slackdirectoryconnections.ListMembersResult) *ListMembersResponseBody {
 	body := &ListMembersResponseBody{
-		Total:      res.Total,
-		NextCursor: res.NextCursor,
+		Total: res.Total,
 	}
 	if res.Members != nil {
 		body.Members = make([]*SlackDirectoryMemberResponseBody, len(res.Members))
@@ -3026,12 +3023,16 @@ func NewSyncPayload(body *SyncRequestBody, sessionToken *string) *slackdirectory
 
 // NewListMembersPayload builds a slackDirectoryConnections service listMembers
 // endpoint payload.
-func NewListMembersPayload(connectionID *string, search *string, mappingStatus *string, cursor *string, limit int, sessionToken *string) *slackdirectoryconnections.ListMembersPayload {
+func NewListMembersPayload(connectionID *string, search *string, mappingStatus *string, includeDeactivated bool, includeBots bool, includeGuests bool, sortAsOf *string, page int, limit int, sessionToken *string) *slackdirectoryconnections.ListMembersPayload {
 	v := &slackdirectoryconnections.ListMembersPayload{}
 	v.ConnectionID = connectionID
 	v.Search = search
 	v.MappingStatus = mappingStatus
-	v.Cursor = cursor
+	v.IncludeDeactivated = includeDeactivated
+	v.IncludeBots = includeBots
+	v.IncludeGuests = includeGuests
+	v.SortAsOf = sortAsOf
+	v.Page = page
 	v.Limit = limit
 	v.SessionToken = sessionToken
 

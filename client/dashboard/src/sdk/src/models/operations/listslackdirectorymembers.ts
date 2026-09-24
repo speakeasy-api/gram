@@ -37,9 +37,25 @@ export type ListSlackDirectoryMembersRequest = {
    */
   mappingStatus?: MappingStatus | undefined;
   /**
-   * Continue after the last membership ID.
+   * Include members deactivated in Slack.
    */
-  cursor?: string | undefined;
+  includeDeactivated?: boolean | undefined;
+  /**
+   * Include bots and apps.
+   */
+  includeBots?: boolean | undefined;
+  /**
+   * Include guests.
+   */
+  includeGuests?: boolean | undefined;
+  /**
+   * Sort by mapping state at this time, so mapping changes after it do not reorder pages. Defaults to now.
+   */
+  sortAsOf?: Date | undefined;
+  /**
+   * One-based page number. Unmapped members sort first, then members needing review, then mapped members, each alphabetically.
+   */
+  page?: number | undefined;
   /**
    * Maximum returned rows.
    */
@@ -89,7 +105,11 @@ export type ListSlackDirectoryMembersRequest$Outbound = {
   connection_id?: string | undefined;
   search?: string | undefined;
   mapping_status?: string | undefined;
-  cursor?: string | undefined;
+  include_deactivated: boolean;
+  include_bots: boolean;
+  include_guests: boolean;
+  sort_as_of?: string | undefined;
+  page: number;
   limit: number;
   "Gram-Session"?: string | undefined;
 };
@@ -103,7 +123,11 @@ export const ListSlackDirectoryMembersRequest$outboundSchema: z.ZodMiniType<
     connectionId: z.optional(z.string()),
     search: z.optional(z.string()),
     mappingStatus: z.optional(MappingStatus$outboundSchema),
-    cursor: z.optional(z.string()),
+    includeDeactivated: z._default(z.boolean(), false),
+    includeBots: z._default(z.boolean(), false),
+    includeGuests: z._default(z.boolean(), false),
+    sortAsOf: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    page: z._default(z.int(), 1),
     limit: z._default(z.int(), 50),
     gramSession: z.optional(z.string()),
   }),
@@ -111,6 +135,10 @@ export const ListSlackDirectoryMembersRequest$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       connectionId: "connection_id",
       mappingStatus: "mapping_status",
+      includeDeactivated: "include_deactivated",
+      includeBots: "include_bots",
+      includeGuests: "include_guests",
+      sortAsOf: "sort_as_of",
       gramSession: "Gram-Session",
     });
   }),

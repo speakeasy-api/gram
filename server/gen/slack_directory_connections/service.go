@@ -101,8 +101,18 @@ type ListMembersPayload struct {
 	MappingStatus *string
 	// Literal case-insensitive name, email or Slack ID search.
 	Search *string
-	// Continue after the last membership ID.
-	Cursor *string
+	// Include members deactivated in Slack.
+	IncludeDeactivated bool
+	// Include bots and apps.
+	IncludeBots bool
+	// Include guests.
+	IncludeGuests bool
+	// Sort by mapping state at this time, so mapping changes after it do not
+	// reorder pages. Defaults to now.
+	SortAsOf *string
+	// One-based page number. Unmapped members sort first, then members needing
+	// review, then mapped members, each alphabetically.
+	Page int
 	// Maximum returned rows.
 	Limit int
 }
@@ -113,8 +123,6 @@ type ListMembersResult struct {
 	Members []*SlackDirectoryMember
 	// Matching retained membership rows.
 	Total int64
-	// Cursor for the next page, when present.
-	NextCursor *string
 }
 
 // ListPayload is the payload type of the slackDirectoryConnections service

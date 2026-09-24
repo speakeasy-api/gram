@@ -122,3 +122,37 @@ func (s *Service) SetMapping(ctx context.Context, p *gen.SetMappingPayload) (*ge
 	}
 	return after, nil
 }
+
+// autoMapByEmail maps members whose Slack email matches exactly one active person.
+// Members with any mapping history are skipped, so an administrator's removal sticks.
+func autoMapByEmail(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, org, team string) error {
+	q := repo.New(tx)
+	candidates, err := q.ListSlackEmailMappingCandidates(ctx, repo.ListSlackEmailMappingCandidatesParams{OrganizationID: org, SlackTeamID: team})
+	if err != nil {
+		return fmt.Errorf("list Slack email mapping candidates: %w", err)
+	}
+	for _, candidate := range candidates {
+		member, err := q.LockSlackDirectoryMembership(ctx, repo.LockSlackDirectoryMembershipParams{OrganizationID: org, ID: candidate.MembershipID})
+		if err != nil {
+			return fmt.Errorf("lock Slack member for email mapping: %w", err)
+		}
+		before, err := readMember(ctx, q, org, candidate.MembershipID)
+		if err != nil {
+			return err
+		}
+		if err := q.ConfirmSlackIdentityMapping(ctx, repo.ConfirmSlackIdentityMappingParams{OrganizationID: org, SlackTeamID: member.SlackTeamID, SlackUserID: member.SlackUserID, UserID: candidate.UserID}); err != nil {
+			return fmt.Errorf("map Slack member by email: %w", err)
+		}
+		if err := q.AdvanceSlackMappingRevision(ctx, repo.AdvanceSlackMappingRevisionParams{OrganizationID: org, ID: candidate.MembershipID}); err != nil {
+			return fmt.Errorf("advance Slack mapping revision: %w", err)
+		}
+		after, err := readMember(ctx, q, org, candidate.MembershipID)
+		if err != nil {
+			return err
+		}
+		if err := auditLogger.LogSlackIdentityMapping(ctx, tx, audit.ActionSlackIdentityMappingConfirm, audit.LogSlackIdentityMappingEvent{OrganizationID: org, Actor: urn.NewSystemPrincipal("slack-directory-email-match"), ActorDisplayName: nil, MembershipURN: urn.NewSlackDirectoryMembership(candidate.MembershipID), MembershipSnapshotBefore: before, MembershipSnapshotAfter: after}); err != nil {
+			return fmt.Errorf("audit Slack email mapping: %w", err)
+		}
+	}
+	return nil
+}

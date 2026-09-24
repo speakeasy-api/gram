@@ -72,8 +72,6 @@ type ListMembersResponseBody struct {
 	Members []*SlackDirectoryMemberResponseBody `form:"members,omitempty" json:"members,omitempty" xml:"members,omitempty"`
 	// Matching retained membership rows.
 	Total *int64 `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
-	// Cursor for the next page, when present.
-	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // GetMemberResponseBody is the type of the "slackDirectoryConnections" service
@@ -2133,8 +2131,7 @@ func NewSyncUnavailable(body *SyncUnavailableResponseBody) *goa.ServiceError {
 // "listMembers" endpoint result from a HTTP "OK" response.
 func NewListMembersResultOK(body *ListMembersResponseBody) *slackdirectoryconnections.ListMembersResult {
 	v := &slackdirectoryconnections.ListMembersResult{
-		Total:      *body.Total,
-		NextCursor: body.NextCursor,
+		Total: *body.Total,
 	}
 	v.Members = make([]*slackdirectoryconnections.SlackDirectoryMember, len(body.Members))
 	for i, val := range body.Members {

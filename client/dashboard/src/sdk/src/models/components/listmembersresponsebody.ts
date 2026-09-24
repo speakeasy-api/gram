@@ -3,7 +3,6 @@
  */
 
 import * as z from "zod/v4-mini";
-import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -15,10 +14,6 @@ import {
 export type ListMembersResponseBody = {
   members: Array<SlackDirectoryMember>;
   /**
-   * Cursor for the next page, when present.
-   */
-  nextCursor?: string | undefined;
-  /**
    * Matching retained membership rows.
    */
   total: number;
@@ -28,18 +23,10 @@ export type ListMembersResponseBody = {
 export const ListMembersResponseBody$inboundSchema: z.ZodMiniType<
   ListMembersResponseBody,
   unknown
-> = z.pipe(
-  z.object({
-    members: z.array(SlackDirectoryMember$inboundSchema),
-    next_cursor: z.optional(z.string()),
-    total: z.int(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      "next_cursor": "nextCursor",
-    });
-  }),
-);
+> = z.object({
+  members: z.array(SlackDirectoryMember$inboundSchema),
+  total: z.int(),
+});
 
 export function listMembersResponseBodyFromJSON(
   jsonString: string,

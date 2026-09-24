@@ -471,13 +471,17 @@ func DecodeListMembersRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 	return func(r *http.Request) (*slackdirectoryconnections.ListMembersPayload, error) {
 		var payload *slackdirectoryconnections.ListMembersPayload
 		var (
-			connectionID  *string
-			search        *string
-			mappingStatus *string
-			cursor        *string
-			limit         int
-			sessionToken  *string
-			err           error
+			connectionID       *string
+			search             *string
+			mappingStatus      *string
+			includeDeactivated bool
+			includeBots        bool
+			includeGuests      bool
+			sortAsOf           *string
+			page               int
+			limit              int
+			sessionToken       *string
+			err                error
 		)
 		qp := r.URL.Query()
 		connectionIDRaw := qp.Get("connection_id")
@@ -505,12 +509,57 @@ func DecodeListMembersRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("mapping_status", *mappingStatus, []any{"unmapped", "mapped", "needs_review"}))
 			}
 		}
-		cursorRaw := qp.Get("cursor")
-		if cursorRaw != "" {
-			cursor = &cursorRaw
+		{
+			includeDeactivatedRaw := qp.Get("include_deactivated")
+			if includeDeactivatedRaw != "" {
+				v, err2 := strconv.ParseBool(includeDeactivatedRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_deactivated", includeDeactivatedRaw, "boolean"))
+				}
+				includeDeactivated = v
+			}
 		}
-		if cursor != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+		{
+			includeBotsRaw := qp.Get("include_bots")
+			if includeBotsRaw != "" {
+				v, err2 := strconv.ParseBool(includeBotsRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_bots", includeBotsRaw, "boolean"))
+				}
+				includeBots = v
+			}
+		}
+		{
+			includeGuestsRaw := qp.Get("include_guests")
+			if includeGuestsRaw != "" {
+				v, err2 := strconv.ParseBool(includeGuestsRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_guests", includeGuestsRaw, "boolean"))
+				}
+				includeGuests = v
+			}
+		}
+		sortAsOfRaw := qp.Get("sort_as_of")
+		if sortAsOfRaw != "" {
+			sortAsOf = &sortAsOfRaw
+		}
+		if sortAsOf != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("sort_as_of", *sortAsOf, goa.FormatDateTime))
+		}
+		{
+			pageRaw := qp.Get("page")
+			if pageRaw == "" {
+				page = 1
+			} else {
+				v, err2 := strconv.ParseInt(pageRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("page", pageRaw, "integer"))
+				}
+				page = int(v)
+			}
+		}
+		if page < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("page", page, 1, true))
 		}
 		{
 			limitRaw := qp.Get("limit")
@@ -537,7 +586,7 @@ func DecodeListMembersRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListMembersPayload(connectionID, search, mappingStatus, cursor, limit, sessionToken)
+		payload = NewListMembersPayload(connectionID, search, mappingStatus, includeDeactivated, includeBots, includeGuests, sortAsOf, page, limit, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

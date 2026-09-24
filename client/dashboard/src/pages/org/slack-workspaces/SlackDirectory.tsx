@@ -1,6 +1,6 @@
 import { syncInProgress } from "./syncView";
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { Page } from "@/components/page-layout";
 import { defineFilters, useFilterState } from "@/components/filters";
 import { ApiErrorAlert } from "@/components/api-error-alert";
@@ -8,12 +8,21 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Switch } from "@/components/ui/Switch";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
-import { SlackMappingDialog } from "./SlackMappingDialog";
-import { MappingStatus, PersonnelAvatar } from "./MappingStatus";
+import { SlackPersonnelPicker } from "./SlackPersonnelPicker";
+import type { OrganizationUser } from "@gram/client/models/components/organizationuser.js";
+import { useListOrganizationUsers } from "@gram/client/react-query/listOrganizationUsers.js";
 import { stateLabels, typeLabels } from "./memberLabels";
 import type { SlackDirectoryConnection } from "@gram/client/models/components/slackdirectoryconnection.js";
 import type { SlackDirectoryMember } from "@gram/client/models/components/slackdirectorymember.js";
@@ -31,7 +40,7 @@ const FILTERS = defineFilters([
   },
 ]);
 function memberColumns(
-  onEdit: (id: string) => void,
+  people: OrganizationUser[] | undefined,
   canEdit: boolean,
 ): Column<SlackDirectoryMember>[] {
   return [
@@ -83,39 +92,14 @@ function memberColumns(
     {
       key: "mapping",
       header: "Personnel",
-      width: "1.6fr",
-      render: (member) => {
-        const mapping = member.mapping;
-        return (
-          <Button
-            variant="tertiary"
-            size="sm"
-            className="h-auto max-w-full justify-start whitespace-normal text-left"
-            disabled={!canEdit || (member.memberType === "bot" && !mapping)}
-            aria-label={`Change mapping for ${member.displayName || member.slackUserId} in ${member.workspaceName || member.workspaceId}`}
-            onClick={() => onEdit(member.id)}
-          >
-            {mapping && (
-              <Button.LeftIcon>
-                <PersonnelAvatar
-                  name={mapping.displayName}
-                  email={mapping.email}
-                  photoUrl={mapping.photoUrl}
-                />
-              </Button.LeftIcon>
-            )}
-            <Button.Text>
-              {mapping ? mapping.displayName || mapping.email : "Not mapped"}
-            </Button.Text>
-          </Button>
-        );
-      },
-    },
-    {
-      key: "mappingStatus",
-      header: "Mapping status",
-      width: "1.6fr",
-      render: (member) => <MappingStatus member={member} />,
+      width: "2fr",
+      render: (member) => (
+        <SlackPersonnelPicker
+          member={member}
+          people={people}
+          canEdit={canEdit}
+        />
+      ),
     },
   ];
 }
@@ -125,7 +109,22 @@ export function SlackDirectory({
 }: {
   connections: SlackDirectoryConnection[];
 }): JSX.Element {
+  const [params, setParams] = useSearchParams();
   const { values, setValue, clearValue, clearAll } = useFilterState(FILTERS);
+  const includeGuests = params.get("slack_guests") === "true";
+  const includeDeactivated = params.get("slack_deactivated") === "true";
+  const includeBots = params.get("slack_bots") === "true";
+  const setToggle = (key: string, on: boolean) => {
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        if (on) next.set(key, "true");
+        else next.delete(key);
+        return next;
+      },
+      { replace: true },
+    );
+  };
   const [search, setSearch] = useState("");
   const connectionId = values.slack_workspace ?? undefined;
   const mappingStatus = values.slack_mapping as
@@ -179,6 +178,29 @@ export function SlackDirectory({
           }}
           onClearAll={clearAll}
         />
+        <Page.Toolbar.Actions>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <Switch
+              checked={includeDeactivated}
+              onCheckedChange={(on) => setToggle("slack_deactivated", on)}
+            />
+            Show deactivated members
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <Switch
+              checked={includeBots}
+              onCheckedChange={(on) => setToggle("slack_bots", on)}
+            />
+            Show bots and apps
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <Switch
+              checked={includeGuests}
+              onCheckedChange={(on) => setToggle("slack_guests", on)}
+            />
+            Show guests
+          </label>
+        </Page.Toolbar.Actions>
       </Page.Toolbar>
       <div className="divide-border divide-y border">
         {connections
@@ -199,10 +221,13 @@ export function SlackDirectory({
           ))}
       </div>
       <MemberTable
-        key={`${connectionId ?? "all"}:${mappingStatus ?? "all"}:${search}`}
+        key={`${connectionId ?? "all"}:${mappingStatus ?? "all"}:${search}:${includeDeactivated}:${includeBots}:${includeGuests}`}
         connectionId={connectionId}
         mappingStatus={mappingStatus ?? undefined}
         search={search}
+        includeDeactivated={includeDeactivated}
+        includeBots={includeBots}
+        includeGuests={includeGuests}
         syncing={connections.some(syncInProgress)}
       />
     </section>
@@ -213,22 +238,43 @@ function MemberTable({
   connectionId,
   mappingStatus,
   search,
+  includeDeactivated,
+  includeBots,
+  includeGuests,
   syncing,
 }: {
   connectionId?: string;
   mappingStatus?: SlackDirectoryMember["mappingStatus"];
   search: string;
+  includeDeactivated: boolean;
+  includeBots: boolean;
+  includeGuests: boolean;
   syncing: boolean;
 }): JSX.Element {
   const { hasScope } = useRBAC();
-  const [editing, setEditing] = useState<string | null>(null);
-  const columns = memberColumns(setEditing, hasScope("org:admin"));
-  const [cursors, setCursors] = useState<Array<string | undefined>>([
-    undefined,
-  ]);
-  const cursor = cursors[cursors.length - 1];
+  const canEdit = hasScope("org:admin");
+  const people = useListOrganizationUsers(undefined, SESSION_SECURITY, {
+    enabled: canEdit,
+    retry: false,
+    throwOnError: false,
+  });
+  const columns = memberColumns(people.data?.users, canEdit);
+  // Pin the sort to when this view loaded so mapping someone does not move rows until a refresh.
+  const [sortAsOf] = useState(() => new Date());
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const query = useSlackDirectoryMembers(
-    { connectionId, mappingStatus, search, cursor, limit: 50 },
+    {
+      connectionId,
+      mappingStatus,
+      search,
+      includeDeactivated,
+      includeBots,
+      includeGuests,
+      sortAsOf,
+      page,
+      limit: pageSize,
+    },
     SESSION_SECURITY,
     {
       retry: false,
@@ -237,11 +283,10 @@ function MemberTable({
     },
   );
   const rows = query.data?.members ?? [];
+  const total = query.data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   return (
     <div className="space-y-4" aria-busy={query.isFetching}>
-      {editing && (
-        <SlackMappingDialog id={editing} onClose={() => setEditing(null)} />
-      )}
       <ApiErrorAlert error={query.error} />
       {query.isError && (
         <Button
@@ -276,28 +321,44 @@ function MemberTable({
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Text muted small>
-              {query.data?.total.toLocaleString()} matching members · page{" "}
-              {cursors.length}
+              {total.toLocaleString()} {total === 1 ? "member" : "members"} ·
+              Page {page} of {totalPages}
             </Text>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Text muted small>
+                Per page
+              </Text>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(value) => {
+                  setPageSize(Number(value));
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="w-20" aria-label="Members per page">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[25, 50, 100].map((size) => (
+                    <SelectItem key={size} value={String(size)}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button
                 variant="secondary"
                 size="sm"
-                disabled={cursors.length <= 1 || query.isFetching}
-                onClick={() => setCursors((previous) => previous.slice(0, -1))}
+                disabled={page <= 1 || query.isFetching}
+                onClick={() => setPage((current) => current - 1)}
               >
                 Previous
               </Button>
               <Button
                 variant="secondary"
                 size="sm"
-                disabled={!query.data?.nextCursor || query.isFetching}
-                onClick={() =>
-                  setCursors((previous) => [
-                    ...previous,
-                    query.data?.nextCursor,
-                  ])
-                }
+                disabled={page >= totalPages || query.isFetching}
+                onClick={() => setPage((current) => current + 1)}
               >
                 Next
               </Button>

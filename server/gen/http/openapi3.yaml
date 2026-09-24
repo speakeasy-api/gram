@@ -62958,13 +62958,47 @@ paths:
                         - needs_review
                     type: string
                 - allowEmptyValue: true
-                  description: Continue after the last membership ID.
+                  description: Include members deactivated in Slack.
                   in: query
-                  name: cursor
+                  name: include_deactivated
                   schema:
-                    description: Continue after the last membership ID.
-                    format: uuid
+                    default: false
+                    description: Include members deactivated in Slack.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Include bots and apps.
+                  in: query
+                  name: include_bots
+                  schema:
+                    default: false
+                    description: Include bots and apps.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Include guests.
+                  in: query
+                  name: include_guests
+                  schema:
+                    default: false
+                    description: Include guests.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Sort by mapping state at this time, so mapping changes after it do not reorder pages. Defaults to now.
+                  in: query
+                  name: sort_as_of
+                  schema:
+                    description: Sort by mapping state at this time, so mapping changes after it do not reorder pages. Defaults to now.
+                    format: date-time
                     type: string
+                - allowEmptyValue: true
+                  description: One-based page number. Unmapped members sort first, then members needing review, then mapped members, each alphabetically.
+                  in: query
+                  name: page
+                  schema:
+                    default: 1
+                    description: One-based page number. Unmapped members sort first, then members needing review, then mapped members, each alphabetically.
+                    format: int64
+                    minimum: 1
+                    type: integer
                 - allowEmptyValue: true
                   description: Maximum returned rows.
                   in: query
@@ -91031,9 +91065,6 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SlackDirectoryMember'
-                next_cursor:
-                    type: string
-                    description: Cursor for the next page, when present.
                 total:
                     type: integer
                     description: Matching retained membership rows.

@@ -3,12 +3,14 @@ package slackdirectoryconnections
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -54,7 +56,6 @@ func (s *Service) ListMembers(ctx context.Context, p *gen.ListMembersPayload) (*
 		return nil, err
 	}
 	connectionID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	cursor := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if p.ConnectionID != nil {
 		id, err := uuid.Parse(*p.ConnectionID)
 		if err != nil {
@@ -67,13 +68,6 @@ func (s *Service) ListMembers(ctx context.Context, p *gen.ListMembersPayload) (*
 			return nil, oops.E(oops.CodeUnexpected, err, "could not read Slack workspace").LogError(ctx, s.logger)
 		}
 	}
-	if p.Cursor != nil {
-		id, err := uuid.Parse(*p.Cursor)
-		if err != nil {
-			return nil, oops.C(oops.CodeBadRequest)
-		}
-		cursor = uuid.NullUUID{UUID: id, Valid: true}
-	}
 	mappingStatus := conv.PtrValOr(p.MappingStatus, "")
 	if mappingStatus != "" && mappingStatus != "mapped" && mappingStatus != "unmapped" && mappingStatus != "needs_review" {
 		return nil, oops.C(oops.CodeBadRequest)
@@ -83,24 +77,34 @@ func (s *Service) ListMembers(ctx context.Context, p *gen.ListMembersPayload) (*
 	if limit == 0 {
 		limit = 50
 	}
-	if limit < 1 || limit > 100 || utf8.RuneCountInString(search) > 200 {
+	page := p.Page
+	if page == 0 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 || page < 1 || page > math.MaxInt32/limit || utf8.RuneCountInString(search) > 200 {
 		return nil, oops.C(oops.CodeBadRequest)
 	}
-	rows, err := repo.New(s.db).ListSlackDirectoryMembers(ctx, repo.ListSlackDirectoryMembersParams{OrganizationID: ac.ActiveOrganizationID, ConnectionID: connectionID, Cursor: cursor, MemberID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, MappingStatus: mappingStatus, Search: search, PageSize: int32(limit + 1)})
+	sortAsOf := time.Now()
+	if p.SortAsOf != nil {
+		parsed, err := time.Parse(time.RFC3339, *p.SortAsOf)
+		if err != nil {
+			return nil, oops.C(oops.CodeBadRequest)
+		}
+		sortAsOf = parsed
+	}
+	offset := int32((page - 1) * limit) // #nosec G115 -- page is bounded above so the offset fits in int32.
+	q := repo.New(s.db)
+	rows, err := q.ListSlackDirectoryMembersPage(ctx, repo.ListSlackDirectoryMembersPageParams{OrganizationID: ac.ActiveOrganizationID, ConnectionID: connectionID, MappingStatus: mappingStatus, Search: search, IncludeDeactivated: p.IncludeDeactivated, IncludeBots: p.IncludeBots, IncludeGuests: p.IncludeGuests, SortAsOf: pgtype.Timestamptz{Time: sortAsOf, Valid: true, InfinityModifier: pgtype.Finite}, PageOffset: offset, PageSize: int32(limit)})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not list Slack members").LogError(ctx, s.logger)
 	}
-	total, err := repo.New(s.db).CountSlackDirectoryMembers(ctx, repo.CountSlackDirectoryMembersParams{OrganizationID: ac.ActiveOrganizationID, ConnectionID: connectionID, Search: search, MappingStatus: mappingStatus})
+	total, err := q.CountSlackDirectoryMembers(ctx, repo.CountSlackDirectoryMembersParams{OrganizationID: ac.ActiveOrganizationID, ConnectionID: connectionID, Search: search, MappingStatus: mappingStatus, IncludeDeactivated: p.IncludeDeactivated, IncludeBots: p.IncludeBots, IncludeGuests: p.IncludeGuests})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not count Slack members").LogError(ctx, s.logger)
 	}
-	result := &gen.ListMembersResult{Members: make([]*gen.SlackDirectoryMember, 0, min(len(rows), limit)), Total: total, NextCursor: nil}
-	if len(rows) > limit {
-		result.NextCursor = conv.PtrEmpty(rows[limit-1].ID.String())
-		rows = rows[:limit]
-	}
+	result := &gen.ListMembersResult{Members: make([]*gen.SlackDirectoryMember, 0, len(rows)), Total: total}
 	for _, row := range rows {
-		result.Members = append(result.Members, mv.BuildSlackDirectoryMemberView(row))
+		result.Members = append(result.Members, mv.BuildSlackDirectoryMemberView(repo.ListSlackDirectoryMembersRow(row)))
 	}
 	return result, nil
 }

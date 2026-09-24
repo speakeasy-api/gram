@@ -65,7 +65,7 @@ func BuildSyncPayload(slackDirectoryConnectionsSyncBody string, slackDirectoryCo
 
 // BuildListMembersPayload builds the payload for the slackDirectoryConnections
 // listMembers endpoint from CLI flags.
-func BuildListMembersPayload(slackDirectoryConnectionsListMembersConnectionID string, slackDirectoryConnectionsListMembersSearch string, slackDirectoryConnectionsListMembersMappingStatus string, slackDirectoryConnectionsListMembersCursor string, slackDirectoryConnectionsListMembersLimit string, slackDirectoryConnectionsListMembersSessionToken string) (*slackdirectoryconnections.ListMembersPayload, error) {
+func BuildListMembersPayload(slackDirectoryConnectionsListMembersConnectionID string, slackDirectoryConnectionsListMembersSearch string, slackDirectoryConnectionsListMembersMappingStatus string, slackDirectoryConnectionsListMembersIncludeDeactivated string, slackDirectoryConnectionsListMembersIncludeBots string, slackDirectoryConnectionsListMembersIncludeGuests string, slackDirectoryConnectionsListMembersSortAsOf string, slackDirectoryConnectionsListMembersPage string, slackDirectoryConnectionsListMembersLimit string, slackDirectoryConnectionsListMembersSessionToken string) (*slackdirectoryconnections.ListMembersPayload, error) {
 	var err error
 	var connectionID *string
 	{
@@ -101,11 +101,55 @@ func BuildListMembersPayload(slackDirectoryConnectionsListMembersConnectionID st
 			}
 		}
 	}
-	var cursor *string
+	var includeDeactivated bool
 	{
-		if slackDirectoryConnectionsListMembersCursor != "" {
-			cursor = &slackDirectoryConnectionsListMembersCursor
-			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+		if slackDirectoryConnectionsListMembersIncludeDeactivated != "" {
+			includeDeactivated, err = strconv.ParseBool(slackDirectoryConnectionsListMembersIncludeDeactivated)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeDeactivated, must be BOOL")
+			}
+		}
+	}
+	var includeBots bool
+	{
+		if slackDirectoryConnectionsListMembersIncludeBots != "" {
+			includeBots, err = strconv.ParseBool(slackDirectoryConnectionsListMembersIncludeBots)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeBots, must be BOOL")
+			}
+		}
+	}
+	var includeGuests bool
+	{
+		if slackDirectoryConnectionsListMembersIncludeGuests != "" {
+			includeGuests, err = strconv.ParseBool(slackDirectoryConnectionsListMembersIncludeGuests)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeGuests, must be BOOL")
+			}
+		}
+	}
+	var sortAsOf *string
+	{
+		if slackDirectoryConnectionsListMembersSortAsOf != "" {
+			sortAsOf = &slackDirectoryConnectionsListMembersSortAsOf
+			err = goa.MergeErrors(err, goa.ValidateFormat("sort_as_of", *sortAsOf, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var page int
+	{
+		if slackDirectoryConnectionsListMembersPage != "" {
+			var v int64
+			v, err = strconv.ParseInt(slackDirectoryConnectionsListMembersPage, 10, strconv.IntSize)
+			page = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for page, must be INT")
+			}
+			if page < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("page", page, 1, true))
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -141,7 +185,11 @@ func BuildListMembersPayload(slackDirectoryConnectionsListMembersConnectionID st
 	v.ConnectionID = connectionID
 	v.Search = search
 	v.MappingStatus = mappingStatus
-	v.Cursor = cursor
+	v.IncludeDeactivated = includeDeactivated
+	v.IncludeBots = includeBots
+	v.IncludeGuests = includeGuests
+	v.SortAsOf = sortAsOf
+	v.Page = page
 	v.Limit = limit
 	v.SessionToken = sessionToken
 

@@ -22,14 +22,38 @@ const mocks = vi.hoisted(() => ({
   scope: vi.fn(),
   error: null as Error | null,
   rows: [] as unknown[],
+  total: null as number | null,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ slug: mocks.orgSlug }),
 }));
-vi.mock("./SlackMappingDialog", () => ({
-  SlackMappingDialog: ({ id }: { id: string }) => (
-    <div role="dialog">Review {id}</div>
+vi.mock("./SlackPersonnelPicker", () => ({
+  SlackPersonnelPicker: ({
+    member,
+    people,
+    canEdit,
+  }: {
+    member: { id: string; mapping?: { displayName: string } };
+    people?: unknown[];
+    canEdit: boolean;
+  }) => (
+    <div data-testid={`picker-${member.id}`}>
+      {member.mapping?.displayName ?? "Not mapped"}
+      {canEdit ? "" : " · read-only"}
+      {people ? ` · ${people.length} people` : ""}
+    </div>
   ),
+}));
+vi.mock("@gram/client/react-query/listOrganizationUsers.js", () => ({
+  useListOrganizationUsers: (
+    _r: unknown,
+    _s: unknown,
+    options: { enabled: boolean },
+  ) => ({
+    data: options.enabled
+      ? { users: [{ userId: "user_synthetic" }] }
+      : undefined,
+  }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -46,7 +70,7 @@ vi.mock("@gram/client/react-query/slackDirectoryMembers.js", () => ({
     return {
       data: mocks.pending
         ? undefined
-        : { members: mocks.rows, total: mocks.rows.length },
+        : { members: mocks.rows, total: mocks.total ?? mocks.rows.length },
       isPending: mocks.pending,
       isFetching: mocks.pending,
       isError: Boolean(mocks.error),
@@ -100,6 +124,7 @@ beforeEach(() => {
   mocks.canEdit = true;
   mocks.error = null;
   mocks.rows = [];
+  mocks.total = null;
 });
 afterEach(() => {
   cleanup();
@@ -149,6 +174,60 @@ it("labels absent profiles and missing email without inventing a person", () => 
   expect(screen.getByText("Not seen in last sync")).toBeTruthy();
   expect(screen.getByText("Not provided")).toBeTruthy();
   expect(screen.getByRole("table")).toBeTruthy();
+});
+it("hides deactivated members and bots until toggled and pages by number", async () => {
+  mocks.rows = [
+    {
+      id: "example-member",
+      connectionId: connection.id,
+      workspaceId: connection.workspaceId,
+      workspaceName: connection.workspaceName,
+      slackUserId: "UEXAMPLE01",
+      status: "active",
+      memberType: "person",
+      lastSeenAt: "2025-12-01T00:00:00Z",
+      observedInLastSync: true,
+    },
+  ];
+  mocks.total = 120;
+  show(<SlackDirectory connections={[connection]} />);
+  expect(mocks.query).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      includeDeactivated: false,
+      includeBots: false,
+      includeGuests: false,
+      page: 1,
+      limit: 50,
+    }),
+  );
+  expect(screen.queryByText("Mapping status")).toBeNull();
+  expect(screen.getByText(/Page 1 of 3/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await waitFor(() =>
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 2 }),
+    ),
+  );
+  fireEvent.click(
+    screen.getByRole("switch", { name: "Show deactivated members" }),
+  );
+  await waitFor(() =>
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ includeDeactivated: true, page: 1 }),
+    ),
+  );
+  fireEvent.click(screen.getByRole("switch", { name: "Show bots and apps" }));
+  await waitFor(() =>
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ includeDeactivated: true, includeBots: true }),
+    ),
+  );
+  fireEvent.click(screen.getByRole("switch", { name: "Show guests" }));
+  await waitFor(() =>
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ includeGuests: true }),
+    ),
+  );
 });
 it("shows an error recovery action and never calls it an empty directory", () => {
   mocks.error = new Error("Could not load members");
@@ -264,22 +343,12 @@ const unmappedMember = {
   mappingRevision: 0,
   observationToken: "example-evidence",
 };
-it("opens Personnel for the exact unmapped membership", () => {
-  mocks.rows = [unmappedMember];
-  show(<SlackDirectory connections={[connection]} />);
-  const button = screen.getByRole("button", {
-    name: /Change mapping for Synthetic Account/,
-  });
-  expect(button.textContent).toBe("Not mapped");
-  fireEvent.click(button);
-  expect(screen.getByRole("dialog").textContent).toBe(
-    "Review member-synthetic",
-  );
-});
-it("shows the mapped person's avatar and name in Personnel", () => {
+it("renders an inline Personnel picker per row with the organization's people", () => {
   mocks.rows = [
+    unmappedMember,
     {
       ...unmappedMember,
+      id: "member-mapped",
       mappingStatus: "mapped",
       mapping: {
         id: "mapping-synthetic",
@@ -291,31 +360,32 @@ it("shows the mapped person's avatar and name in Personnel", () => {
     },
   ];
   show(<SlackDirectory connections={[connection]} />);
-  const button = screen.getByRole("button", {
-    name: /Change mapping for Synthetic Account/,
-  });
-  expect(button.textContent).toContain("Synthetic Person");
-  expect(button.querySelector('[data-slot="avatar"]')).toBeTruthy();
+  expect(screen.getByTestId("picker-member-synthetic").textContent).toBe(
+    "Not mapped · 1 people",
+  );
+  expect(screen.getByTestId("picker-member-mapped").textContent).toContain(
+    "Synthetic Person",
+  );
+  expect(screen.queryByRole("dialog")).toBeNull();
 });
-it("disables assignment for unmapped bots", () => {
-  mocks.rows = [{ ...unmappedMember, memberType: "bot" }];
-  show(<SlackDirectory connections={[connection]} />);
-  expect(
-    screen
-      .getByRole("button", { name: /Change mapping for Synthetic Account/ })
-      .hasAttribute("disabled"),
-  ).toBe(true);
-});
-it("disables mapping changes for employees", () => {
+it("renders read-only pickers for employees without loading people", () => {
   mocks.canEdit = false;
   mocks.rows = [unmappedMember];
   show(<SlackDirectory connections={[connection]} />);
   expect(mocks.scope).toHaveBeenCalledWith("org:admin");
-  expect(
-    screen
-      .getByRole("button", { name: /Change mapping for Synthetic Account/ })
-      .hasAttribute("disabled"),
-  ).toBe(true);
+  expect(screen.getByTestId("picker-member-synthetic").textContent).toBe(
+    "Not mapped · read-only",
+  );
+});
+it("pins the sort time for the life of the view", () => {
+  show(<SlackDirectory connections={[connection]} />);
+  const first = mocks.query.mock.calls[0]?.[0].sortAsOf;
+  expect(first).toBeInstanceOf(Date);
+  fireEvent.change(
+    screen.getByPlaceholderText("Search name, email or Slack ID…"),
+    { target: { value: "" } },
+  );
+  expect(mocks.query.mock.calls.at(-1)?.[0].sortAsOf).toBe(first);
 });
 it("passes the mapping-status toolbar filter to the paginated query", () => {
   show(

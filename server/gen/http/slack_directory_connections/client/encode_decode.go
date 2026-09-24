@@ -551,9 +551,13 @@ func EncodeListMembersRequest(encoder func(*http.Request) goahttp.Encoder) func(
 		if p.MappingStatus != nil {
 			values.Add("mapping_status", *p.MappingStatus)
 		}
-		if p.Cursor != nil {
-			values.Add("cursor", *p.Cursor)
+		values.Add("include_deactivated", fmt.Sprintf("%v", p.IncludeDeactivated))
+		values.Add("include_bots", fmt.Sprintf("%v", p.IncludeBots))
+		values.Add("include_guests", fmt.Sprintf("%v", p.IncludeGuests))
+		if p.SortAsOf != nil {
+			values.Add("sort_as_of", *p.SortAsOf)
 		}
+		values.Add("page", fmt.Sprintf("%v", p.Page))
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		req.URL.RawQuery = values.Encode()
 		return nil

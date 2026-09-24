@@ -273,6 +273,9 @@ func (s *DirectorySync) Run(ctx context.Context, input SyncInput, report func(Sy
 	if err != nil {
 		return fmt.Errorf("record Slack snapshot: %w", err)
 	}
+	if err := autoMapByEmail(ctx, tx, s.audit, input.OrganizationID, current.SlackTeamID); err != nil {
+		return err
+	}
 	beforeView := mv.BuildSlackDirectoryConnectionView(current)
 	beforeView.MemberCount = previousCount
 	afterView := mv.BuildSlackDirectoryConnectionView(after)

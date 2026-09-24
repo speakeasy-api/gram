@@ -121,7 +121,11 @@ export function setSlackDirectoryMembersData(
       connectionId?: string | undefined;
       search?: string | undefined;
       mappingStatus?: MappingStatus | undefined;
-      cursor?: string | undefined;
+      includeDeactivated?: boolean | undefined;
+      includeBots?: boolean | undefined;
+      includeGuests?: boolean | undefined;
+      sortAsOf?: Date | undefined;
+      page?: number | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
     },
@@ -140,7 +144,11 @@ export function invalidateSlackDirectoryMembers(
       connectionId?: string | undefined;
       search?: string | undefined;
       mappingStatus?: MappingStatus | undefined;
-      cursor?: string | undefined;
+      includeDeactivated?: boolean | undefined;
+      includeBots?: boolean | undefined;
+      includeGuests?: boolean | undefined;
+      sortAsOf?: Date | undefined;
+      page?: number | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
     }]

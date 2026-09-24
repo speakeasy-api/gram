@@ -9348,6 +9348,10 @@ examples:
       parameters:
         query:
           limit: 50
+          include_deactivated: false
+          include_bots: false
+          page: 1
+          include_guests: false
       responses:
         "200":
           application/json: {"members": [{"connection_id": "1fb1542a-a487-4baf-9477-ed76bdc31044", "id": "b1aecbce-45c3-4ac3-80ca-67ae2988b697", "last_seen_at": "2025-10-25T00:20:34.182Z", "mapping_revision": 934320, "mapping_status": "unmapped", "member_type": "unknown", "observation_token": "<value>", "observed_in_last_sync": true, "slack_user_id": "<id>", "status": "unknown", "workspace_id": "<id>", "workspace_name": "<value>"}], "total": 944149}

@@ -117,13 +117,19 @@ WHERE m.organization_id = $1 AND c.disconnected_at IS NULL
   AND ($3::uuid IS NULL OR c.id = $3)
   AND ($4::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower($4)) > 0
     OR strpos(lower(coalesce(m.email, '')), lower($4)) > 0 OR strpos(lower(m.slack_user_id), lower($4)) > 0)
+  AND ($5::boolean OR m.status <> 'deactivated')
+  AND ($6::boolean OR m.member_type <> 'bot')
+  AND ($7::boolean OR m.member_type NOT IN ('guest', 'single_channel_guest'))
 `
 
 type CountSlackDirectoryMembersParams struct {
-	OrganizationID string
-	MappingStatus  string
-	ConnectionID   uuid.NullUUID
-	Search         string
+	OrganizationID     string
+	MappingStatus      string
+	ConnectionID       uuid.NullUUID
+	Search             string
+	IncludeDeactivated bool
+	IncludeBots        bool
+	IncludeGuests      bool
 }
 
 func (q *Queries) CountSlackDirectoryMembers(ctx context.Context, arg CountSlackDirectoryMembersParams) (int64, error) {
@@ -132,6 +138,9 @@ func (q *Queries) CountSlackDirectoryMembers(ctx context.Context, arg CountSlack
 		arg.MappingStatus,
 		arg.ConnectionID,
 		arg.Search,
+		arg.IncludeDeactivated,
+		arg.IncludeBots,
+		arg.IncludeGuests,
 	)
 	var column_1 int64
 	err := row.Scan(&column_1)
@@ -588,12 +597,14 @@ JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND 
 LEFT JOIN slack_identity_mappings im ON im.organization_id = m.organization_id AND im.slack_team_id = m.slack_team_id AND im.slack_user_id = m.slack_user_id AND im.revoked_at IS NULL
 LEFT JOIN users u ON u.id = im.user_id
 LEFT JOIN organization_user_relationships our ON our.organization_id = m.organization_id AND our.user_id = im.user_id
-WHERE m.organization_id = $1 AND c.disconnected_at IS NULL
- AND ($2::text = '' OR CASE WHEN im.id IS NULL THEN 'unmapped' WHEN m.mapping_conflict_reason IS NOT NULL OR u.deleted_at IS NOT NULL OR our.deleted_at IS NOT NULL THEN 'needs_review' ELSE 'mapped' END = $2)
-  AND ($3::uuid IS NULL OR c.id = $3)
-  AND ($4::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower($4)) > 0
-    OR strpos(lower(coalesce(m.email, '')), lower($4)) > 0 OR strpos(lower(m.slack_user_id), lower($4)) > 0)
-  AND ($5::uuid IS NULL OR m.id = $5)
+WHERE m.organization_id = $1
+  -- Lists hide disconnected workspaces; a lookup by membership ID still resolves retained history.
+  AND (c.disconnected_at IS NULL OR $2::uuid IS NOT NULL)
+ AND ($3::text = '' OR CASE WHEN im.id IS NULL THEN 'unmapped' WHEN m.mapping_conflict_reason IS NOT NULL OR u.deleted_at IS NOT NULL OR our.deleted_at IS NOT NULL THEN 'needs_review' ELSE 'mapped' END = $3)
+  AND ($4::uuid IS NULL OR c.id = $4)
+  AND ($5::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower($5)) > 0
+    OR strpos(lower(coalesce(m.email, '')), lower($5)) > 0 OR strpos(lower(m.slack_user_id), lower($5)) > 0)
+  AND ($2::uuid IS NULL OR m.id = $2)
   AND ($6::uuid IS NULL OR m.id > $6)
 ORDER BY m.id
 LIMIT $7
@@ -601,10 +612,10 @@ LIMIT $7
 
 type ListSlackDirectoryMembersParams struct {
 	OrganizationID string
+	MemberID       uuid.NullUUID
 	MappingStatus  string
 	ConnectionID   uuid.NullUUID
 	Search         string
-	MemberID       uuid.NullUUID
 	Cursor         uuid.NullUUID
 	PageSize       int32
 }
@@ -639,10 +650,10 @@ type ListSlackDirectoryMembersRow struct {
 func (q *Queries) ListSlackDirectoryMembers(ctx context.Context, arg ListSlackDirectoryMembersParams) ([]ListSlackDirectoryMembersRow, error) {
 	rows, err := q.db.Query(ctx, listSlackDirectoryMembers,
 		arg.OrganizationID,
+		arg.MemberID,
 		arg.MappingStatus,
 		arg.ConnectionID,
 		arg.Search,
-		arg.MemberID,
 		arg.Cursor,
 		arg.PageSize,
 	)
@@ -679,6 +690,179 @@ func (q *Queries) ListSlackDirectoryMembers(ctx context.Context, arg ListSlackDi
 			&i.WorkspaceName,
 			&i.ObservedInLastSync,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSlackDirectoryMembersPage = `-- name: ListSlackDirectoryMembersPage :many
+SELECT m.id, m.organization_id, m.slack_team_id, m.slack_user_id, m.display_name, m.email, m.status, m.member_type, m.provider_updated_at, m.last_seen_at, m.mapping_revision, m.mapping_conflict_reason, m.mapping_conflict_detected_at, m.created_at, m.updated_at, coalesce(im.id::text, '')::text AS mapping_id, coalesce(im.user_id, '')::text AS mapped_user_id,
+ coalesce(u.display_name, '')::text AS mapped_display_name, coalesce(u.email, '')::text AS mapped_email,
+ u.photo_url AS mapped_photo_url, (im.id IS NOT NULL AND u.deleted_at IS NULL AND our.deleted_at IS NULL)::boolean AS mapped_user_active,
+ c.id AS connection_id, c.slack_team_name AS workspace_name,
+    (m.last_seen_at = c.last_full_sync_succeeded_at)::boolean AS observed_in_last_sync
+FROM slack_directory_memberships m
+JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND c.slack_team_id = m.slack_team_id
+LEFT JOIN slack_identity_mappings im ON im.organization_id = m.organization_id AND im.slack_team_id = m.slack_team_id AND im.slack_user_id = m.slack_user_id AND im.revoked_at IS NULL
+LEFT JOIN users u ON u.id = im.user_id
+LEFT JOIN organization_user_relationships our ON our.organization_id = m.organization_id AND our.user_id = im.user_id
+WHERE m.organization_id = $1 AND c.disconnected_at IS NULL
+ AND ($2::text = '' OR CASE WHEN im.id IS NULL THEN 'unmapped' WHEN m.mapping_conflict_reason IS NOT NULL OR u.deleted_at IS NOT NULL OR our.deleted_at IS NOT NULL THEN 'needs_review' ELSE 'mapped' END = $2)
+  AND ($3::uuid IS NULL OR c.id = $3)
+  AND ($4::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower($4)) > 0
+    OR strpos(lower(coalesce(m.email, '')), lower($4)) > 0 OR strpos(lower(m.slack_user_id), lower($4)) > 0)
+  AND ($5::boolean OR m.status <> 'deactivated')
+  AND ($6::boolean OR m.member_type <> 'bot')
+  AND ($7::boolean OR m.member_type NOT IN ('guest', 'single_channel_guest'))
+ORDER BY CASE WHEN NOT EXISTS (SELECT 1 FROM slack_identity_mappings h
+    WHERE h.organization_id = m.organization_id AND h.slack_team_id = m.slack_team_id AND h.slack_user_id = m.slack_user_id
+      AND h.created_at <= $8::timestamptz AND (h.revoked_at IS NULL OR h.revoked_at > $8::timestamptz)) THEN 0
+  WHEN m.mapping_conflict_detected_at <= $8::timestamptz THEN 1 ELSE 2 END,
+ lower(coalesce(nullif(m.display_name, ''), nullif(m.email, ''), m.slack_user_id)), m.id
+LIMIT $10 OFFSET $9
+`
+
+type ListSlackDirectoryMembersPageParams struct {
+	OrganizationID     string
+	MappingStatus      string
+	ConnectionID       uuid.NullUUID
+	Search             string
+	IncludeDeactivated bool
+	IncludeBots        bool
+	IncludeGuests      bool
+	SortAsOf           pgtype.Timestamptz
+	PageOffset         int32
+	PageSize           int32
+}
+
+type ListSlackDirectoryMembersPageRow struct {
+	ID                        uuid.UUID
+	OrganizationID            string
+	SlackTeamID               string
+	SlackUserID               string
+	DisplayName               pgtype.Text
+	Email                     pgtype.Text
+	Status                    string
+	MemberType                string
+	ProviderUpdatedAt         pgtype.Timestamptz
+	LastSeenAt                pgtype.Timestamptz
+	MappingRevision           int64
+	MappingConflictReason     pgtype.Text
+	MappingConflictDetectedAt pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+	MappingID                 string
+	MappedUserID              string
+	MappedDisplayName         string
+	MappedEmail               string
+	MappedPhotoUrl            pgtype.Text
+	MappedUserActive          bool
+	ConnectionID              uuid.UUID
+	WorkspaceName             pgtype.Text
+	ObservedInLastSync        bool
+}
+
+// Rank by mapping state at @sort_as_of so later edits keep rows in place.
+func (q *Queries) ListSlackDirectoryMembersPage(ctx context.Context, arg ListSlackDirectoryMembersPageParams) ([]ListSlackDirectoryMembersPageRow, error) {
+	rows, err := q.db.Query(ctx, listSlackDirectoryMembersPage,
+		arg.OrganizationID,
+		arg.MappingStatus,
+		arg.ConnectionID,
+		arg.Search,
+		arg.IncludeDeactivated,
+		arg.IncludeBots,
+		arg.IncludeGuests,
+		arg.SortAsOf,
+		arg.PageOffset,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSlackDirectoryMembersPageRow
+	for rows.Next() {
+		var i ListSlackDirectoryMembersPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.SlackTeamID,
+			&i.SlackUserID,
+			&i.DisplayName,
+			&i.Email,
+			&i.Status,
+			&i.MemberType,
+			&i.ProviderUpdatedAt,
+			&i.LastSeenAt,
+			&i.MappingRevision,
+			&i.MappingConflictReason,
+			&i.MappingConflictDetectedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.MappingID,
+			&i.MappedUserID,
+			&i.MappedDisplayName,
+			&i.MappedEmail,
+			&i.MappedPhotoUrl,
+			&i.MappedUserActive,
+			&i.ConnectionID,
+			&i.WorkspaceName,
+			&i.ObservedInLastSync,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSlackEmailMappingCandidates = `-- name: ListSlackEmailMappingCandidates :many
+SELECT m.id AS membership_id, min(u.id)::text AS user_id
+FROM slack_directory_memberships m
+JOIN organization_user_relationships our ON our.organization_id = m.organization_id AND our.deleted_at IS NULL
+JOIN users u ON u.id = our.user_id AND u.deleted_at IS NULL AND lower(trim(u.email)) = lower(trim(m.email))
+WHERE m.organization_id = $1 AND m.slack_team_id = $2
+  AND m.member_type = 'person' AND m.status = 'active' AND nullif(trim(m.email), '') IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM slack_directory_memberships d WHERE d.organization_id = m.organization_id
+    AND d.slack_team_id = m.slack_team_id AND d.id <> m.id AND lower(trim(d.email)) = lower(trim(m.email)))
+  AND NOT EXISTS (SELECT 1 FROM slack_identity_mappings h
+    WHERE h.organization_id = m.organization_id AND h.slack_team_id = m.slack_team_id AND h.slack_user_id = m.slack_user_id)
+GROUP BY m.id
+HAVING count(*) = 1 AND NOT EXISTS (SELECT 1 FROM slack_identity_mappings x
+  WHERE x.organization_id = $1 AND x.slack_team_id = $2 AND x.user_id = min(u.id) AND x.revoked_at IS NULL)
+ORDER BY m.id
+`
+
+type ListSlackEmailMappingCandidatesParams struct {
+	OrganizationID string
+	SlackTeamID    string
+}
+
+type ListSlackEmailMappingCandidatesRow struct {
+	MembershipID uuid.UUID
+	UserID       string
+}
+
+// Active full members never mapped before, whose email matches exactly one
+// active person in the organization who has no current mapping in the workspace.
+func (q *Queries) ListSlackEmailMappingCandidates(ctx context.Context, arg ListSlackEmailMappingCandidatesParams) ([]ListSlackEmailMappingCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listSlackEmailMappingCandidates, arg.OrganizationID, arg.SlackTeamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSlackEmailMappingCandidatesRow
+	for rows.Next() {
+		var i ListSlackEmailMappingCandidatesRow
+		if err := rows.Scan(&i.MembershipID, &i.UserID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

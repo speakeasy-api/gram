@@ -112,10 +112,14 @@ async function $do(
 
   const query = encodeFormQuery({
     "connection_id": payload?.connection_id,
-    "cursor": payload?.cursor,
+    "include_bots": payload?.include_bots,
+    "include_deactivated": payload?.include_deactivated,
+    "include_guests": payload?.include_guests,
     "limit": payload?.limit,
     "mapping_status": payload?.mapping_status,
+    "page": payload?.page,
     "search": payload?.search,
+    "sort_as_of": payload?.sort_as_of,
   });
 
   const headers = new Headers(compactMap({
