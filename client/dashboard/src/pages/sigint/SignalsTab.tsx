@@ -72,7 +72,16 @@ export function SignalsTab(): JSX.Element {
   });
   const create = useCreateSigintSignalMutation();
   const update = useUpdateSigintSignalMutation();
-  const remove = useDeleteSigintSignalMutation();
+  const remove = useDeleteSigintSignalMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAllSigintSignals(queryClient),
+        invalidateAllSigintSensors(queryClient),
+      ]);
+      toast.success("Signal deleted and detached from sensors");
+      setDeleting(null);
+    },
+  });
   const [search, setSearch] = useState("");
   const [editorSignal, setEditorSignal] = useState<
     SigintSignal | null | undefined
@@ -194,12 +203,6 @@ export function SignalsTab(): JSX.Element {
     if (!canWrite || !deleting || mutationPending) return;
     try {
       await remove.mutateAsync({ request: { id: deleting.id } });
-      await Promise.all([
-        invalidateAllSigintSignals(queryClient),
-        invalidateAllSigintSensors(queryClient),
-      ]);
-      toast.success("Signal deleted and detached from sensors");
-      setDeleting(null);
     } catch (error) {
       toast.error(errorMessage(error, "Unable to delete the signal."));
     }

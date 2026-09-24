@@ -1,3 +1,4 @@
+import { duplicateNameCounts } from "./signal-names";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Alert } from "@/components/ui/Alert";
@@ -79,14 +80,6 @@ function validateName(name: string): string | null {
   if (length === 0) return "Enter a name.";
   if (length > 200) return "Use 200 characters or fewer.";
   return null;
-}
-
-function duplicateNameCounts(signals: SigintSignal[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const signal of signals) {
-    counts.set(signal.name, (counts.get(signal.name) ?? 0) + 1);
-  }
-  return counts;
 }
 
 function signalLabel(
