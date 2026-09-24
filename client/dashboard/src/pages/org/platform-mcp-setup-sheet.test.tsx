@@ -56,8 +56,8 @@ const skip = () => fireEvent.click(button("Skip this step"));
 afterEach(cleanup);
 
 describe("Platform MCP setup guide", () => {
-  it("skips unused MCP steps and finishes without recording lifecycle evidence", () => {
-    const { onDone, onDismiss } = setup();
+  it("skips unused MCP steps and finishes without invoking evidence callbacks", () => {
+    const { onDone, onDismiss, props } = setup();
     expect(button("Next").disabled).toBe(true);
     skip(); // Install and authenticate
     expect(screen.getByText("Explore the MCP Catalogue")).toBeTruthy();
@@ -71,7 +71,8 @@ describe("Platform MCP setup guide", () => {
     fireEvent.click(button("Skip and finish guide"));
     expect(onDone).toHaveBeenCalledOnce();
     expect(onDismiss).not.toHaveBeenCalled();
-    expect(incompleteState.distributionAttached).toBe(false);
+    expect(props.onConfigurationCopied).not.toHaveBeenCalled();
+    expect(props.onContinueSecureSetup).not.toHaveBeenCalled();
   });
 
   it("keeps a verified connection while skipping MCP registration and distribution", () => {
