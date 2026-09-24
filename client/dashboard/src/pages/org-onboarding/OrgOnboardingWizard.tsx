@@ -11,7 +11,7 @@ import { useVerifyOnboardingStepMutation } from "@gram/client/react-query/verify
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useCallback, useState, type ReactNode } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -46,6 +46,9 @@ import {
   type WizardScreen,
 } from "./wizard-state";
 
+/** Query parameter a product page sets to open the wizard on its use case. */
+const USE_CASE_PARAM = "useCase";
+
 /**
  * The onboarding wizard in two stages. Stage one is the organization's
  * stack: providers with their plans, their products, and the MDM vendor,
@@ -66,6 +69,7 @@ export default function OrgOnboardingWizard(): JSX.Element {
 function WizardInner(): JSX.Element {
   const { orgSlug } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const reference = useOnboardingReferenceData();
   const onboarding = useOnboarding();
@@ -85,9 +89,25 @@ function WizardInner(): JSX.Element {
   const stackSaved = Boolean(state?.answers);
   const useCasePicked = Boolean(state?.answers?.useCase);
 
-  const screen = screenOverride ?? resumeScreen(state);
+  // A product page can send the admin here with its use case chosen
+  // (?useCase=security). Until that use case is the saved one, the use case
+  // screen preselects it: with a saved stack the wizard opens on that
+  // screen, and without one it starts on the stack and the answer waits
+  // there.
+  const requestedUseCase = searchParams.get(USE_CASE_PARAM);
+  const requestPending =
+    requestedUseCase !== null &&
+    requestedUseCase !== state?.answers?.useCase &&
+    (reference.data?.useCases ?? []).some(
+      (option) => option.slug === requestedUseCase,
+    );
+  const screen =
+    screenOverride ??
+    (requestPending && stackSaved ? "use-case" : resumeScreen(state));
   const draft = draftOverride ?? draftFromAnswers(state?.answers);
-  const useCaseDraft = useCaseOverride ?? state?.answers?.useCase ?? null;
+  const useCaseDraft =
+    useCaseOverride ??
+    (requestPending ? requestedUseCase : (state?.answers?.useCase ?? null));
 
   const leave = () => {
     if (orgSlug && !stackSaved) wizardSkippedStore.write(orgSlug, true);

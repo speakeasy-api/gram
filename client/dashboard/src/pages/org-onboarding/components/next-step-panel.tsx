@@ -7,7 +7,10 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { destinationLabel, useDestinationHref } from "../use-destination-href";
+import {
+  destinationLabel,
+  useDestinationHref,
+} from "@/components/onboarding/use-destination-href";
 
 /** How often the panel re-checks evidence while a step is open. */
 const CHECK_INTERVAL_MS = 20_000;
