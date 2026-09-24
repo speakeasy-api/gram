@@ -25,32 +25,36 @@ type ApiKeyScopeOption = {
   badge?: string;
 };
 
-// Wording mirrors the scope descriptions declared in
-// server/design/security/api_key.go, including the one-way implications
-// (producer covers consumer and chat; agent covers agent_user).
+// Each tagline names the integration the scope exists for, because that is what
+// the person creating a key actually knows. The grants and exclusions are
+// checked against the `Scope(...)` gates in server/design — both the
+// declarations in security/api_key.go and the per-service and per-method gates
+// that decide which endpoints a scope reaches — including the one-way
+// implications (producer covers consumer and chat; agent covers agent_user).
 const GENERAL_SCOPE_OPTIONS: ApiKeyScopeOption[] = [
   {
     value: "consumer",
     title: "Consumer",
-    tagline: "Use what is already set up, without changing it.",
+    tagline: "For clients that call your MCP servers and tools at runtime.",
     grants: [
       "Call MCP servers and the tools they expose",
-      "Read toolsets, servers, install metadata, and roles",
+      "Look up the tools in a toolset for an environment",
+      "Read and update MCP install metadata",
     ],
-    excludes: "Deployments, configuration changes, conversation content",
+    excludes: "Deployments, editing toolsets, chat transcripts",
     badge: "Default",
   },
   {
     value: "producer",
     title: "Producer",
-    tagline:
-      "Manage a project end to end. Covers everything Consumer and Chat allow.",
+    tagline: "For automation that sets up and updates a project, such as CI.",
     grants: [
       "Upload OpenAPI documents and trigger deployments",
       "Create and edit projects, toolsets, and MCP servers",
       "Read chat transcripts, telemetry, and risk findings",
+      "Everything a Consumer or Chat key can do",
     ],
-    excludes: "AI traffic ingestion, device agent enrollment",
+    excludes: "Sending AI traffic in, enrolling device agents",
   },
 ];
 
@@ -58,26 +62,33 @@ const PURPOSE_BUILT_SCOPE_OPTIONS: ApiKeyScopeOption[] = [
   {
     value: "chat",
     title: "Chat",
-    tagline: "Model access for chat clients.",
-    grants: ["Start chat sessions and run agent workflows"],
-    excludes: "Project setup, deployments, tool management",
+    tagline: "For a chat client that sends messages to models through Gram.",
+    grants: [
+      "Create chat sessions and run agent workflows",
+      "Look up the tools in a toolset for an environment",
+    ],
+    excludes: "Project setup, deployments, past transcripts",
   },
   {
     value: "hooks",
     title: "Hooks",
-    tagline: "Ingestion only, for AI traffic sent from agents and plugins.",
-    grants: ["Send hook events and OpenTelemetry data"],
-    excludes: "Reading or changing any project resource",
+    tagline: "For agent plugins that report AI traffic back to Gram.",
+    grants: [
+      "Send hook events, logs, metrics, and traces",
+      "Send skill content and feedback",
+    ],
+    excludes: "Reading or changing anything in a project",
   },
   {
     value: "agent",
     title: "Agent",
-    tagline: "Organization install credential for the Speakeasy device agent.",
+    tagline:
+      "For rolling out the Speakeasy device agent across the organization.",
     grants: [
-      "Fetch a user's assigned plugins",
-      "Exchange for per-user device agent keys",
+      "Mint the per-user key each enrolled device runs on",
+      "Read a user's assigned plugins and report device scans",
     ],
-    excludes: "Project setup, deployments, tool management",
+    excludes: "Project setup, deployments, tool calls",
     note: "Store it in managed.json as org_token, or hand it to a developer for speakeasy enroll.",
   },
 ];

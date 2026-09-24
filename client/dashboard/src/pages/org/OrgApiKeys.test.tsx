@@ -322,11 +322,13 @@ describe("API key scope options", () => {
     render(<OrgApiKeys />);
     await openForm();
     expect(
-      screen.getByText("Use what is already set up, without changing it."),
+      screen.getByText(
+        "For clients that call your MCP servers and tools at runtime.",
+      ),
     ).toBeTruthy();
     expect(
       screen.getByText(
-        "Manage a project end to end. Covers everything Consumer and Chat allow.",
+        "For automation that sets up and updates a project, such as CI.",
       ),
     ).toBeTruthy();
     expect(
@@ -349,7 +351,7 @@ describe("API key scope options", () => {
       screen.getByText("Upload OpenAPI documents and trigger deployments"),
     ).toBeTruthy();
     expect(
-      screen.getByText("AI traffic ingestion, device agent enrollment"),
+      screen.getByText("Sending AI traffic in, enrolling device agents"),
     ).toBeTruthy();
     expect(
       screen.getByRole("radio", { checked: true }).getAttribute("value"),
@@ -374,13 +376,13 @@ describe("API key scope options", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.queryByText("Send hook events and OpenTelemetry data"),
+      screen.queryByText("Send hook events, logs, metrics, and traces"),
     ).toBeNull();
     await user.click(
       screen.getByRole("button", { name: "Access details for Hooks" }),
     );
     expect(
-      screen.getByText("Send hook events and OpenTelemetry data"),
+      screen.getByText("Send hook events, logs, metrics, and traces"),
     ).toBeTruthy();
   });
 
@@ -397,7 +399,11 @@ describe("API key scope options", () => {
   it("selects a scope when its card body is clicked, not just the radio", async () => {
     render(<OrgApiKeys />);
     const user = await openForm();
-    await user.click(screen.getByText("Model access for chat clients."));
+    await user.click(
+      screen.getByText(
+        "For a chat client that sends messages to models through Gram.",
+      ),
+    );
     await user.click(screen.getByRole("button", { name: "Create" }));
     expect(
       mocks.mutate.mock.calls[0]?.[0].request.createKeyForm.scopes,
