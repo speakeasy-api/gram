@@ -50,11 +50,14 @@ type RemoteSessionIssuer struct {
 	// advertised.
 	OpPolicyURI *string
 	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
-	OpTosURI                          *string
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
+	OpTosURI            *string
+	ScopesSupported     []string
+	GrantTypesSupported []string
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string
+	ResponseTypesSupported              []string
+	TokenEndpointAuthMethodsSupported   []string
 	// PKCE code challenge methods advertised by the issuer (RFC 8414
 	// code_challenge_methods_supported). Null when neither discovery nor an
 	// operator has captured the field for this issuer yet; an empty array means

@@ -171,6 +171,12 @@ type GetOnboardingStatusResponseBody struct {
 	SsoConfigured *bool `form:"sso_configured,omitempty" json:"sso_configured,omitempty" xml:"sso_configured,omitempty"`
 	// Whether the organization has at least one linked directory sync in WorkOS.
 	DsyncConfigured *bool `form:"dsync_configured,omitempty" json:"dsync_configured,omitempty" xml:"dsync_configured,omitempty"`
+	// Whether the organization has at least one verified domain in WorkOS. Single
+	// sign-on cannot be set up until one is verified.
+	DomainVerified *bool `form:"domain_verified,omitempty" json:"domain_verified,omitempty" xml:"domain_verified,omitempty"`
+	// Domains WorkOS has verified for the organization. Single sign-on only works
+	// for users on these domains.
+	VerifiedDomains []string `form:"verified_domains,omitempty" json:"verified_domains,omitempty" xml:"verified_domains,omitempty"`
 }
 
 // VerifyOnboardingHooksSetupResponseBody is the type of the "organizations"
@@ -5040,6 +5046,11 @@ func NewGetOnboardingStatusOnboardingStatusResultOK(body *GetOnboardingStatusRes
 	v := &organizations.OnboardingStatusResult{
 		SsoConfigured:   *body.SsoConfigured,
 		DsyncConfigured: *body.DsyncConfigured,
+		DomainVerified:  *body.DomainVerified,
+	}
+	v.VerifiedDomains = make([]string, len(body.VerifiedDomains))
+	for i, val := range body.VerifiedDomains {
+		v.VerifiedDomains[i] = val
 	}
 
 	return v
@@ -6202,6 +6213,12 @@ func ValidateGetOnboardingStatusResponseBody(body *GetOnboardingStatusResponseBo
 	}
 	if body.DsyncConfigured == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("dsync_configured", "body"))
+	}
+	if body.DomainVerified == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("domain_verified", "body"))
+	}
+	if body.VerifiedDomains == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("verified_domains", "body"))
 	}
 	return
 }

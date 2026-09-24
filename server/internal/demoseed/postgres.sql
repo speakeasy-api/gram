@@ -181,6 +181,8 @@ DECLARE
   toolset_3    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005e03';
   toolset_4    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005e04';
   us_issuer    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005a01';
+  chaining_issuer CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005a11';
+  chaining_client CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005c11';
   -- One registered agent per credential kind the Connections list can report,
   -- plus the pre-column row whose kind is resolved from the rest of it.
   usc_key      CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005c01';
@@ -368,6 +370,11 @@ BEGIN
         gram_account_type = EXCLUDED.gram_account_type,
         whitelisted = EXCLUDED.whitelisted;
 
+  INSERT INTO organization_onboarding (organization_id, preset)
+  VALUES (demo_org, 'security')
+  ON CONFLICT (organization_id) DO UPDATE
+    SET preset = EXCLUDED.preset, updated_at = clock_timestamp();
+
   -- Killswitch aggregates retain canonical MCP server keys in immutable
   -- snapshots. Clear every org-scoped aggregate and replay receipt before the
   -- referenced servers/toolsets, including rows created by local visitors.
@@ -432,6 +439,11 @@ BEGIN
     (SELECT id FROM user_session_issuers WHERE project_id = proj_a OR organization_id = demo_org)
     OR remote_session_client_id IN
     (SELECT id FROM remote_session_clients WHERE project_id = proj_a OR organization_id = demo_org);
+  -- A reseed explicitly resets preparation claims before hard-deleting their
+  -- parents. Do not depend on lifecycle triggers or SET NULL owner references.
+  DELETE FROM remote_session_ema_bindings
+  WHERE organization_id = demo_org
+    AND project_id IN (SELECT id FROM projects WHERE organization_id = demo_org);
   DELETE FROM remote_session_clients WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM remote_session_issuers WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM mcp_servers WHERE project_id = proj_a;
@@ -503,15 +515,24 @@ BEGIN
           workos_id = EXCLUDED.workos_id;
   END LOOP;
 
-  -- Setup board: persisted overrides cover each non-default state while
-  -- catalog-derived rows continue to demonstrate To Do and blocked tasks.
+  -- Customized Security selection: defer Anthropic admin controls and include
+  -- server distribution. Both views read this same explicit selection.
   INSERT INTO organization_setup_tasks
     (organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at)
   VALUES
+    (demo_org, 'identity-provider', 'todo', NULL, NULL, now()),
+    (demo_org, 'connect-idp', 'todo', NULL, NULL, NULL),
+    (demo_org, 'directory-sync', 'todo', NULL, NULL, NULL),
+    (demo_org, 'create-marketplace', 'todo', NULL, NULL, NULL),
+    (demo_org, 'distribute-servers', 'todo', NULL, NULL, NULL),
+    (demo_org, 'enable-logging', 'todo', NULL, NULL, NULL),
+    (demo_org, 'anthropic-observability', 'todo', NULL, NULL, NULL),
+    (demo_org, 'confirm-traffic', 'todo', NULL, NULL, NULL),
+    (demo_org, 'anthropic-admin-controls', 'todo', NULL, NULL, now()),
     (demo_org, 'instrument-agents', 'in_progress', 'user_demo_priya', NULL, NULL),
     (demo_org, 'additional-agent-config', 'awaiting_support', NULL,
      'security-owner@demo.getgram.ai', NULL),
-    (demo_org, 'configure-policies', 'done', NULL, NULL, now()),
+    (demo_org, 'configure-policies', 'done', NULL, NULL, NULL),
     (demo_org, 'platform-mcp', 'todo', NULL, NULL, now());
 
   -- Memberships: fake, credential-less members so team/enrollment/facepile
@@ -985,6 +1006,31 @@ BEGIN
 
   UPDATE toolsets SET user_session_issuer_id = us_issuer WHERE id = toolset_3;
 
+  -- Advertised capability and an administrator-declared registration are
+  -- separate evidence. No binding or session is created: neither proves
+  -- that a provisioned human can use this resource. Reserved example URLs
+  -- and a public client keep this fixture free of operational credentials.
+  -- This projection is administrator-declared, not a completed discovery visit.
+  INSERT INTO remote_session_issuers
+    (id, project_id, organization_id, slug, issuer, token_endpoint, name,
+     grant_types_supported, authorization_grant_profiles_supported,
+     token_endpoint_auth_methods_supported, metadata_fetched_at)
+  VALUES
+    (chaining_issuer, proj_a, demo_org, 'identity-chaining-example',
+     'https://authorization.example.com', 'https://authorization.example.com/token',
+     'Identity chaining example',
+     ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
+     ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'], ARRAY['none'], NULL);
+
+  INSERT INTO remote_session_clients
+    (id, project_id, organization_id, remote_session_issuer_id, client_id,
+     token_endpoint_auth_method, grant_types, scope, resource_identifier)
+  VALUES
+    (chaining_client, proj_a, demo_org, chaining_issuer,
+     'demo-resource-client', 'none',
+     ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'], ARRAY['documents:read'],
+     'https://resource.example.com/mcp');
+
   -- Resolved from a Client ID Metadata Document, and the strongest posture
   -- available: it signs an assertion with a key it publishes, so Gram holds no
   -- secret for it. This is the row the "Key-authenticated" badge appears on.
@@ -1315,10 +1361,11 @@ BEGIN
   -- Reserved .invalid endpoints, an invalid ciphertext and no refresh token
   -- prevent this display fixture from becoming a usable upstream credential.
   INSERT INTO remote_session_issuers
-    (id, project_id, organization_id, slug, issuer, name)
+    (id, project_id, organization_id, slug, issuer, name, authorization_grant_profiles_supported)
   VALUES (demo.det_uuid('gram-demo-attachment-issuer'), proj_a, demo_org,
           'fictional-release-account', 'https://release.example.invalid',
-          'Fictional release account');
+          -- Administrator-declared capability only: not a discovery visit or client grant.
+          'Fictional release account', ARRAY['urn:ietf:params:oauth:grant-profile:id-jag']);
 
   INSERT INTO remote_session_clients
     (id, project_id, organization_id, remote_session_issuer_id, client_id,
@@ -2358,8 +2405,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   FROM organization_user_relationships WHERE organization_id = demo_org AND deleted_at IS NULL;
   SELECT count(*) INTO stray FROM organization_setup_tasks
   WHERE organization_id = demo_org;
-  IF stray <> 4 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 4 setup task overrides, found %', stray;
+  IF stray <> 13 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 13 setup task selections, found %', stray;
+  END IF;
+  IF (SELECT preset FROM organization_onboarding WHERE organization_id = demo_org) IS DISTINCT FROM 'security'
+    OR (SELECT count(*) FROM organization_setup_tasks WHERE organization_id = demo_org AND hidden_at IS NULL) <> 10
+    OR EXISTS (SELECT 1 FROM organization_setup_tasks WHERE organization_id = demo_org
+      AND ((task_key IN ('identity-provider', 'anthropic-admin-controls', 'platform-mcp')) IS DISTINCT FROM (hidden_at IS NOT NULL))) THEN
+    RAISE EXCEPTION 'demo seed postflight: expected customized Security onboarding selection';
   END IF;
   SELECT count(*) INTO stray FROM organization_features
   WHERE organization_id = demo_org AND feature_name = 'network_ingress';
@@ -2942,6 +2995,22 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE project_id = proj_a AND deleted IS FALSE;
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 external OAuth metadata row, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_session_issuers
+  WHERE project_id = proj_a AND organization_id = demo_org AND id = chaining_issuer
+    AND metadata IS NULL AND metadata_fetched_at IS NULL AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: declared chaining metadata must not claim discovery';
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_session_clients
+  WHERE project_id = proj_a AND id = chaining_client
+    AND remote_session_issuer_id = chaining_issuer
+    AND grant_types = ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer']
+    AND client_secret_encrypted IS NULL AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected one declared chaining registration, found %', stray;
   END IF;
 
   -- The registrations are the point of the Connections surfaces: one per

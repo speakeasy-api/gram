@@ -6,9 +6,12 @@ import { DEFAULT_DATE_RANGE_PRESET } from "@/components/observe/useDateRangeFilt
 import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQuery";
 import { PROJECT_GUIDE_ENTRY_PATH } from "@/components/project-guide/GuideEntryRedirect";
 import { Button } from "@/components/ui/Button";
-import { useOrganization, useSession } from "@/contexts/Auth";
+import { useOrganization, useSession, useUser } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useSlugs } from "@/contexts/Sdk";
 import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
+import { createDismissedCtaStore } from "@/hooks/useDismissedCtaStore";
+import { useOrganizationPlatformMCPOnboarding } from "@/hooks/useOrganizationPlatformMCPOnboarding";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { useOrgWelcomeBanner } from "@/hooks/useOrgWelcomeBanner";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -43,9 +46,12 @@ const COLUMN_CLASS = "mx-auto w-full max-w-7xl px-8";
 
 const CARD_SHELL_CLASS =
   "group bg-card border-border hover:border-foreground relative flex min-h-[250px] flex-col gap-3 overflow-hidden border px-6.5 pt-7.5 pb-6.5 no-underline transition-colors hover:no-underline";
+const dismissedMemberCta = createDismissedCtaStore(
+  "gram:platform-mcp-member-promotion:v1",
+);
 
 type RouteCard = {
-  id: WelcomeCardId;
+  id: WelcomeCardId | "memberPlatformMcp";
   index: string;
   title: string;
   body: string;
@@ -62,11 +68,13 @@ type RouteCard = {
  */
 export function OrgWelcomeBanner(): JSX.Element | null {
   const organization = useOrganization();
+  const user = useUser();
+  const telemetry = useTelemetry();
   const { trial } = useSession();
   const { orgSlug } = useSlugs();
   const orgRoutes = useOrgRoutes();
   const { visible } = useOrgWelcomeBanner();
-  const { hasScope } = useRBAC();
+  const { hasScope, isLoading: grantsLoading, error: grantsError } = useRBAC();
   const { setupStarted, markSetupStarted } = useOrgSetupStarted(orgSlug);
   const canSetUpOrg = useCanSetUpOrg();
   const { data: featuresData } = useProductFeatures({
@@ -96,6 +104,40 @@ export function OrgWelcomeBanner(): JSX.Element | null {
 
   const isTrial = getTrialLifecycleFromDates(trial, new Date()) === "active";
   const isAdmin = hasScope("org:admin");
+  const memberEligible =
+    !grantsLoading &&
+    !grantsError &&
+    !isAdmin &&
+    (hasScope("project:read") ||
+      hasScope("skill:read") ||
+      hasScope("mcp:read"));
+  const onboarding = useOrganizationPlatformMCPOnboarding(organization.id, {
+    enabled: visible && memberEligible,
+    throwOnError: false,
+  });
+  const memberKey =
+    user.id && organization.id ? `${user.id}:${organization.id}` : undefined;
+  const memberDismissed = dismissedMemberCta.useDismissed(memberKey);
+  const showMemberCard =
+    visible &&
+    !!memberKey &&
+    memberEligible &&
+    !memberDismissed &&
+    onboarding.data?.enabled &&
+    !(
+      onboarding.data.connectionAuthorized &&
+      onboarding.data.connectionAuthState === "active"
+    ) &&
+    !onboarding.isError;
+  const memberImpression = useRef<string | null>(null);
+  useEffect(() => {
+    if (!showMemberCard || memberImpression.current === memberKey) return;
+    memberImpression.current = memberKey;
+    telemetry.capture("platform_mcp_member_cta", {
+      action: "impression",
+      workflow: "organization_home",
+    });
+  }, [showMemberCard, memberKey, telemetry]);
   const isZeroData =
     !startProject ||
     !logsEnabled ||
@@ -187,6 +229,23 @@ export function OrgWelcomeBanner(): JSX.Element | null {
     }
   });
 
+  if (showMemberCard) {
+    cards.push({
+      id: "memberPlatformMcp",
+      index: String(cards.length + 1).padStart(2, "0"),
+      title: "Use Speakeasy from your agent",
+      body: "Work with the projects and tools your role can access, right from your agent.",
+      cta: "Connect your agent",
+      to: platformMcpHref,
+      onClick: () => {
+        telemetry.capture("platform_mcp_member_cta", {
+          action: "selected",
+          workflow: "organization_home",
+        });
+      },
+    });
+  }
+
   const showAnnouncement =
     announcement !== null && !isTrial && !announcementDismissed;
   const recordedImpression = useRef(false);
@@ -242,9 +301,31 @@ export function OrgWelcomeBanner(): JSX.Element | null {
               columnCount > 2 ? "lg:grid-cols-3" : "lg:grid-cols-2",
             )}
           >
-            {cards.map((card) => (
-              <RouteCardLink key={card.id} card={card} />
-            ))}
+            {cards.map((card) =>
+              card.id === "memberPlatformMcp" ? (
+                <div key={card.id} className="relative">
+                  <RouteCardLink card={card} />
+                  <Button
+                    type="button"
+                    variant="tertiary"
+                    size="sm"
+                    icon="x"
+                    aria-label="Dismiss Platform MCP suggestion"
+                    className="absolute top-3 right-3"
+                    onClick={() => {
+                      if (!memberKey) return;
+                      dismissedMemberCta.write(memberKey, true);
+                      telemetry.capture("platform_mcp_member_cta", {
+                        action: "dismissed",
+                        workflow: "organization_home",
+                      });
+                    }}
+                  />
+                </div>
+              ) : (
+                <RouteCardLink key={card.id} card={card} />
+              ),
+            )}
             {showAnnouncement && announcement ? (
               <AnnouncementCard
                 onDismiss={dismissAnnouncement}

@@ -24,7 +24,11 @@ const (
 	skillObservationScheduleID         = "v1:skill-observation-reconciliation-schedule"
 	skillObservationWorkflowID         = skillObservationScheduleID + "/scheduled"
 	skillObservationInterval           = time.Minute
-	skillObservationRunTimeout         = 70 * time.Minute
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	skillObservationCatchupWindow = skillObservationInterval - time.Second
+
+	skillObservationRunTimeout = 70 * time.Minute
 )
 
 type ReconcileSkillObservationsParams struct {
@@ -159,10 +163,11 @@ func AddSkillObservationReconciliationSchedule(ctx context.Context, temporalEnv 
 	}
 
 	_, err := scheduleClient.Create(ctx, client.ScheduleOptions{
-		ID:      skillObservationScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		Spec:    spec,
-		Action:  action,
+		CatchupWindow: skillObservationCatchupWindow,
+		ID:            skillObservationScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		Spec:          spec,
+		Action:        action,
 	})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
@@ -170,6 +175,7 @@ func AddSkillObservationReconciliationSchedule(ctx context.Context, temporalEnv 
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, skillObservationCatchupWindow)
 				return &client.ScheduleUpdate{Schedule: &input.Description.Schedule, TypedSearchAttributes: nil}, nil
 			},
 		}); err != nil {

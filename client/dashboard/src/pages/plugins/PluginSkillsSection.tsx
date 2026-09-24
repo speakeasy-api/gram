@@ -1,3 +1,4 @@
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { RequirePluginWrite } from "@/components/require-plugin-write";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { ErrorAlert } from "@/components/ui/Alert";
@@ -53,6 +54,7 @@ export function PluginSkillsSection({
 }): JSX.Element {
   const { grants } = useRBAC();
   const project = useProject();
+  const scope = usePluginQueryScope();
   const canWritePlugin = usePluginWriteAccess();
   // Reads retain skill authorization; reference changes require plugin write.
   const canReadAllSkills = hasScopeInGrants(
@@ -68,7 +70,12 @@ export function PluginSkillsSection({
   const [viewMode, setViewMode] = useViewMode();
 
   const distributionsQuery = useSkillDistributionsInfinite(
-    { pluginId, skillId: canReadAllSkills ? undefined : skillId, limit: 50 },
+    {
+      ...scope,
+      pluginId,
+      skillId: canReadAllSkills ? undefined : skillId,
+      limit: 50,
+    },
     undefined,
     { throwOnError: false, enabled: canReadAllSkills || !!skillId },
   );
@@ -235,24 +242,26 @@ export function PluginSkillsSection({
               />
             </>
           )}
-          <RequirePluginWrite>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={!isMembershipLoaded}
-              onClick={() => setIsAddSkillOpen(true)}
-            >
-              <Button.LeftIcon>
-                <Icon name="plus" className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Add Skill</Button.Text>
-            </Button>
-          </RequirePluginWrite>
+          {canReadAllSkills && (
+            <RequirePluginWrite>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!isMembershipLoaded}
+                onClick={() => setIsAddSkillOpen(true)}
+              >
+                <Button.LeftIcon>
+                  <Icon name="plus" className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Add Skill</Button.Text>
+              </Button>
+            </RequirePluginWrite>
+          )}
         </div>
       </div>
       {listContent}
 
-      {isAddSkillOpen && (
+      {isAddSkillOpen && canReadAllSkills && canWritePlugin && (
         <SkillPickerDialog
           open={isAddSkillOpen}
           onOpenChange={setIsAddSkillOpen}

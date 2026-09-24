@@ -502,8 +502,11 @@ func (s *Service) loadMemberToolset(
 		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, nil, "hosted member %q has no toolset", member.slug).LogError(ctx, logger)
 	}
 	toolset, err := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
-		ID:        member.toolsetID.UUID,
-		ProjectID: gate.projectID,
+		ID: member.toolsetID.UUID,
+		// The member's own project: an agent gateway's members are not all in
+		// one, and a mismatch here reads as "not servable" rather than failing
+		// loudly, so it would silently hide members.
+		ProjectID: member.projectID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):

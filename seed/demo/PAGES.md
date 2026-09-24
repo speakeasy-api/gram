@@ -51,6 +51,8 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | Network Access                                                 | Deliberately no `network_ingress` entitlement, ingress row, or credential; every reseed removes active and tombstoned private-ingress state before asserting absence, so the temporary PostHog rollout cannot expose retained setup or server-mode controls to the demo organization                                                                                                                                                                                                                                                                                                                                                                                                           | `[~]`  |
 | Explore (analytics.query over agent_events)                    | CH `agent_events`: 144 sessions over the trailing 12 days for the six users, dealt across claude-code and codex, 2-5 turns each with prompt/api_request/api_response rows and 0-3 tool calls (tool_decision + tool_call_result on Claude, results alone on Codex); Codex rows state tokens but no cost                                                                                                                                                                                                                                                                                                                                                                                         | `[x]`  |
 
+Onboarding selection: the seed persists 13 explicit task rows, 10 visible, with a customized Security preset. Distribute servers is included and Anthropic admin controls is deferred. In Admin organization Features, verify "security - customized", apply a preset to a draft, then discard it; saved task status and assignment must remain unchanged.
+
 The ordinary MCP connection inventory totals 11 sessions: five on Acme Partner
 Gateway and six across Linear, Slack, and Acme Agent Gateway. The project-scoped
 managed-agent session below is checked separately, not counted as a twelfth MCP
@@ -189,3 +191,27 @@ Claude Tag: Agent Sessions includes “Claude Tag in #demo-releases”. Open it 
 - `[~]` Trial end-date changes: org-scoped audit example records a shortened trial with previous/new dates; browser verification pending.
 
 The Collaborator role includes project-selected `plugin:write` for plugin references and publishing, separately from its unchanged skill authoring grants.
+
+### Identity chaining preparation (management API) — `[x]`
+
+The project has one reserved-example remote issuer advertising both ID-JAG and
+JWT-bearer, plus a separate resource registration with explicitly recorded
+JWT-bearer grants and `documents:read` scope. It contains no secret, binding,
+remote session, or claim of usable human access.
+
+Browser-verified on 2026-09-23 against the actual local demo seed at
+`8e4fa893a862edc5219adf973a80724133c1ed25`, after two successful `mise run seed`
+runs. The issuer Overview renders its JWT-bearer capability; Clients lists
+`demo-resource-client`, whose Overview renders `documents:read` and auth method
+`none`. Its Sessions tab correctly shows no active sessions, and the project
+MCP Sessions search finds no connection for it. These intentional empty session
+states are part of the inert fixture contract, not missing seed data.
+
+The client Overview does not render effective grant types, and the issuer
+Overview does not render the ID-JAG profile. Separate management API checks
+verified those fields without conflating issuer capability with client grant
+evidence. Client deletion preflight and a read-only local database check
+confirmed zero bindings/sessions and no client secret. No dedicated preparation
+dashboard, provider acceptance, or usable human access is demonstrated.
+
+[Browser evidence and supplementary checks](https://github.com/speakeasy-api/gram/pull/6438#issuecomment-5798502630).

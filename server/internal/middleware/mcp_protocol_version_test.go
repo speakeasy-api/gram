@@ -129,6 +129,13 @@ func TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes(t *testing.T) {
 	got := recordSpanForRequest(t, http.MethodPost, "/platform-mcp", mcpversions.Version20250618)
 	require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)],
 		"/platform-mcp is an MCP JSON-RPC endpoint and must be matched")
+
+	// The per-agent gateway is addressed by agent id rather than slug and is
+	// registered for POST only, hence no verb cross-product.
+	agentPath := routePathForSlug(t, mcp.AgentGatewayRoute, "0e3b6b1a-0000-4000-8000-000000000001")
+	got = recordSpanForRequest(t, http.MethodPost, agentPath, mcpversions.Version20250618)
+	require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)],
+		"%s is an MCP JSON-RPC endpoint and must be matched", mcp.AgentGatewayRoute)
 }
 
 func TestMCPProtocolVersionTelemetryIgnoresOAuthSubRoutes(t *testing.T) {
@@ -202,7 +209,7 @@ func TestMCPProtocolVersionTelemetryMatchesSlugsResemblingSiblingRoutes(t *testi
 func TestMCPProtocolVersionTelemetryIgnoresNonMCPRoutes(t *testing.T) {
 	t.Parallel()
 
-	for _, path := range []string{"/rpc/toolsets.list", "/healthz", "/", "/mcp", "/x/mcp", "/x/other/slug"} {
+	for _, path := range []string{"/rpc/toolsets.list", "/healthz", "/", "/mcp", "/x/mcp", "/x/other/slug", "/agent-mcp"} {
 		got := recordSpanForRequest(t, http.MethodPost, path, mcpversions.Version20250618)
 		require.NotContains(t, got, string(attr.McpNegotiatedProtocolVersionKey), "path %s", path)
 	}

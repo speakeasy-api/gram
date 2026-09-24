@@ -307,6 +307,9 @@ type skillCaptureSignal struct {
 // from a nil capture signal, which only says the payload carried no usable raw
 // hash — so callers can tell a durable write apart from a no-op or a failure.
 func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, seenAt time.Time, blockReason string) (*skillCaptureSignal, bool, error) {
+	ctx, span := s.tracer.Start(ctx, "hooks.recordSkillActivation")
+	defer span.End()
+
 	if payload.Data == nil || payload.Data.Skill == nil {
 		return nil, false, nil
 	}
@@ -379,6 +382,9 @@ func normalizeRawSHA256(value string) string {
 // Best-effort: on lookup failure the effects are omitted and senders keep
 // their last-seen value.
 func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.IngestHookResult, capture *skillCaptureSignal) *gen.IngestHookResult {
+	ctx, span := s.tracer.Start(ctx, "hooks.withOrgSettings")
+	defer span.End()
+
 	if s.productFeatures == nil {
 		return res
 	}
@@ -455,6 +461,9 @@ type canonicalActor struct {
 // used as a fallback: an event from such a key with no self-reported email
 // stays unattributed rather than crediting every machine to the publisher.
 func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) canonicalActor {
+	ctx, span := s.tracer.Start(ctx, "hooks.resolveCanonicalActor")
+	defer span.End()
+
 	// An agent key is the actor itself; it has no human identity to resolve.
 	if isAgentActor(ctx) {
 		return canonicalActor{UserID: "", Email: ""}
@@ -559,6 +568,9 @@ func isReservedAssistantAdapter(adapter string) bool {
 }
 
 func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time) (string, string) {
+	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalHook")
+	defer span.End()
+
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
@@ -710,6 +722,9 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 // legacy per-provider handlers. Retried deliveries keep the deny but must not
 // mint a second row.
 func (s *Service) appendCanonicalBlockURL(ctx context.Context, authCtx *contextvalues.AuthContext, actor canonicalActor, payload *gen.IngestPayload, auditReason, toolName, policyID, userReason string) string {
+	ctx, span := s.tracer.Start(ctx, "hooks.appendCanonicalBlockURL")
+	defer span.End()
+
 	if s.isHookDuplicate(ctx) {
 		return userReason
 	}
@@ -792,6 +807,9 @@ func canonicalRiskEventType(payload *gen.IngestPayload) hookevents.EventType {
 }
 
 func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *contextvalues.AuthContext, actor canonicalActor, payload *gen.IngestPayload, rawToolName string, toolInput any) (string, string) {
+	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalShadowMCP")
+	defer span.End()
+
 	policy := s.lookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID)
 	if policy == nil {
 		return "", ""
@@ -875,15 +893,19 @@ func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evide
 // resolve a later tool call's target to a configured server. Best-effort: a
 // cache miss downgrades a deny's detail, it never changes the decision.
 func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead bool) {
-	if sessionID == "" {
+	ctx, span := s.tracer.Start(ctx, "hooks.cacheCanonicalMCPList")
+	defer span.End()
+
+	projectID := s.mcpListProjectID(ctx, sessionID)
+	if sessionID == "" || projectID == "" {
 		return
 	}
 
 	// Extend both keys on every event, as the legacy endpoints do for the
 	// snapshot: a session outliving its TTL loses the inventory, and losing the
 	// read status silently disables the guard for the rest of that session.
-	s.refreshMCPListTTL(ctx, sessionID)
-	if err := s.cache.Expire(ctx, sessionMCPInventoryReadCacheKey(sessionID), sessionMCPInventoryReadTTL); err != nil {
+	s.refreshMCPListTTL(ctx, projectID, sessionID)
+	if err := s.cache.Expire(ctx, sessionMCPInventoryReadCacheKey(projectID, sessionID), sessionMCPInventoryReadTTL); err != nil {
 		s.logger.DebugContext(ctx, "failed to extend MCP inventory read status",
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(sessionID),
@@ -898,10 +920,10 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 	// it while the entries write failed would leave the session claiming a read
 	// it cannot back up — and under block_all every later meta-tool call denies
 	// for the rest of the session.
-	if !inventoryRead || !s.claimMCPListSnapshot(ctx, sessionID) {
+	if !inventoryRead || !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
 		return
 	}
-	if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
+	if err := s.cache.Set(ctx, sessionMCPListCacheKey(projectID, sessionID), entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
 			attr.SlogEvent("hook_mcp_list_cache_set_failed"),
 			attr.SlogError(err),
@@ -912,7 +934,7 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 
 	// Meta-tool calls arrive later carrying no inventory status, so the
 	// authoritative read status has to be held per session.
-	if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(sessionID), true, sessionMCPInventoryReadTTL); err != nil {
+	if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(projectID, sessionID), true, sessionMCPInventoryReadTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP inventory read status",
 			attr.SlogEvent("hook_mcp_list_read_cache_set_failed"),
 			attr.SlogError(err),
@@ -963,15 +985,19 @@ func (s *Service) canonicalCodexMetaTool(ctx context.Context, payload *gen.Inges
 // current behavior until they upgrade, rather than enforcement depending on a
 // server deploy and a hooks release landing in the right order.
 func (s *Service) canonicalClientReportsMCPInventory(ctx context.Context, payload *gen.IngestPayload) bool {
+	ctx, span := s.tracer.Start(ctx, "hooks.canonicalClientReportsMCPInventory")
+	defer span.End()
+
 	if canonicalMCPInventoryRead(payload) {
 		return true
 	}
 	sessionID := canonicalSessionID(payload)
-	if sessionID == "" {
+	projectID := s.mcpListProjectID(ctx, sessionID)
+	if sessionID == "" || projectID == "" {
 		return false
 	}
 	var read bool
-	if err := s.cache.Get(ctx, sessionMCPInventoryReadCacheKey(sessionID), &read); err != nil {
+	if err := s.cache.Get(ctx, sessionMCPInventoryReadCacheKey(projectID, sessionID), &read); err != nil {
 		return false
 	}
 	return read
@@ -1010,6 +1036,9 @@ func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) 
 }
 
 func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time, blockReason string) {
+	ctx, span := s.tracer.Start(ctx, "hooks.recordCanonicalHook")
+	defer span.End()
+
 	// Resolve the session identity once, before the telemetry write, so the
 	// hook row and the chat persistence below stamp the same AI-account
 	// attribution.
@@ -1030,7 +1059,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	if (strings.TrimSpace(payload.Event.Type) == "session.started" || metadata.ServiceName == "claude-tag") &&
 		metadata.SessionID != "" && !isAgentActor(ctx) && (metadata.ServiceName == "claude-tag" || metadata.UserID != "" || metadata.UserEmail != "" || metadata.Hostname != "") {
 		cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
-		err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
+		err := s.cacheSessionMetadata(cacheCtx, metadata)
 		cancel()
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to cache canonical hook session identity",
@@ -1192,7 +1221,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 				// event; this write-back exists for sessions whose started
 				// event was never seen.
 				cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
-				err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
+				err := s.cacheSessionMetadata(cacheCtx, metadata)
 				cancel()
 				if err != nil {
 					s.logger.WarnContext(ctx, "failed to cache Codex session metadata",

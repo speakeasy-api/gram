@@ -96,18 +96,20 @@ function StepsRail({
   return (
     <div>
       <BoardLink className="mb-6" />
-      <p className="text-eyebrow mb-4">
-        {railSteps.filter((step) => step.status === "done").length} of{" "}
-        {railSteps.length} complete
-      </p>
-      <OnboardingStepper
-        steps={railSteps}
-        currentStep={currentStep === -1 ? 0 : currentStep}
-        onStepClick={(position) => {
-          const step = steps[position];
-          if (step) setActiveIndex(step.index);
-        }}
-      />
+      <div className="bg-card border-border border p-5">
+        <p className="text-eyebrow mb-4">
+          {railSteps.filter((step) => step.status === "done").length} of{" "}
+          {railSteps.length} complete
+        </p>
+        <OnboardingStepper
+          steps={railSteps}
+          currentStep={currentStep === -1 ? 0 : currentStep}
+          onStepClick={(position) => {
+            const step = steps[position];
+            if (step) setActiveIndex(step.index);
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -167,6 +169,7 @@ function SetupTaskPageInner(): JSX.Element {
   const complete = () =>
     guarded(async () => {
       if (!task) return;
+      if (task.completedByFact) return goToBoard();
       if (await setStatus("done", "Failed to complete setup task")) {
         toast.success(`${task.title} completed`);
         goToBoard();
@@ -175,6 +178,7 @@ function SetupTaskPageInner(): JSX.Element {
 
   const requestSupport = () =>
     guarded(async () => {
+      if (task?.completedByFact) return showPylonChat();
       if (await setStatus("awaiting_support", "Failed to request support")) {
         showPylonChat();
       }
@@ -224,6 +228,7 @@ function SetupTaskPageInner(): JSX.Element {
         projectSlug="default"
         onComplete={() => void complete()}
         onSupport={() => void requestSupport()}
+        onClose={goToBoard}
       />
     );
   }

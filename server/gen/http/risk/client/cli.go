@@ -524,7 +524,7 @@ func BuildReleaseSessionQuarantinePayload(riskReleaseSessionQuarantineBody strin
 
 // BuildListRiskResultsPayload builds the payload for the risk listRiskResults
 // endpoint from CLI flags.
-func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCategory string, riskListRiskResultsRuleID string, riskListRiskResultsUserID string, riskListRiskResultsExternalUserIds string, riskListRiskResultsUniqueMatch string, riskListRiskResultsNonAssistant string, riskListRiskResultsAssistantID string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
+func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsMcpServerID string, riskListRiskResultsCategory string, riskListRiskResultsRuleID string, riskListRiskResultsUserID string, riskListRiskResultsExternalUserIds string, riskListRiskResultsUniqueMatch string, riskListRiskResultsNonAssistant string, riskListRiskResultsAssistantID string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -541,6 +541,16 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 		if riskListRiskResultsChatID != "" {
 			chatID = &riskListRiskResultsChatID
 			err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", *chatID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var mcpServerID *string
+	{
+		if riskListRiskResultsMcpServerID != "" {
+			mcpServerID = &riskListRiskResultsMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -673,6 +683,7 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	v := &risk.ListRiskResultsPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
+	v.McpServerID = mcpServerID
 	v.Category = category
 	v.RuleID = ruleID
 	v.UserID = userID
@@ -693,7 +704,7 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 
 // BuildListRiskResultsForAgentPayload builds the payload for the risk
 // listRiskResultsForAgent endpoint from CLI flags.
-func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID string, riskListRiskResultsForAgentChatID string, riskListRiskResultsForAgentCategory string, riskListRiskResultsForAgentRuleID string, riskListRiskResultsForAgentUserID string, riskListRiskResultsForAgentUniqueMatch string, riskListRiskResultsForAgentNonAssistant string, riskListRiskResultsForAgentAssistantID string, riskListRiskResultsForAgentFrom string, riskListRiskResultsForAgentTo string, riskListRiskResultsForAgentCursor string, riskListRiskResultsForAgentLimit string, riskListRiskResultsForAgentApikeyToken string, riskListRiskResultsForAgentSessionToken string, riskListRiskResultsForAgentProjectSlugInput string) (*risk.ListRiskResultsForAgentPayload, error) {
+func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID string, riskListRiskResultsForAgentChatID string, riskListRiskResultsForAgentMcpServerID string, riskListRiskResultsForAgentCategory string, riskListRiskResultsForAgentRuleID string, riskListRiskResultsForAgentUserID string, riskListRiskResultsForAgentUniqueMatch string, riskListRiskResultsForAgentNonAssistant string, riskListRiskResultsForAgentAssistantID string, riskListRiskResultsForAgentFrom string, riskListRiskResultsForAgentTo string, riskListRiskResultsForAgentCursor string, riskListRiskResultsForAgentLimit string, riskListRiskResultsForAgentApikeyToken string, riskListRiskResultsForAgentSessionToken string, riskListRiskResultsForAgentProjectSlugInput string) (*risk.ListRiskResultsForAgentPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -710,6 +721,16 @@ func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID str
 		if riskListRiskResultsForAgentChatID != "" {
 			chatID = &riskListRiskResultsForAgentChatID
 			err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", *chatID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var mcpServerID *string
+	{
+		if riskListRiskResultsForAgentMcpServerID != "" {
+			mcpServerID = &riskListRiskResultsForAgentMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -833,6 +854,7 @@ func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID str
 	v := &risk.ListRiskResultsForAgentPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
+	v.McpServerID = mcpServerID
 	v.Category = category
 	v.RuleID = ruleID
 	v.UserID = userID

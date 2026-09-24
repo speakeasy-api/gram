@@ -29,7 +29,8 @@ const grant = (scope: string, resourceId: string, effect = "allow") => ({
   ],
 });
 vi.mock("@/contexts/Auth", () => ({
-  useProject: () => ({ id: "project-a" }),
+  useSession: () => ({ session: "session-a" }),
+  useProject: () => ({ id: "project-a", slug: "project-a" }),
   useOrganization: () => ({ id: "org-a" }),
 }));
 vi.mock("@/hooks/useRBAC", async (importOriginal) => ({
@@ -133,10 +134,14 @@ describe("plugin skill picker authorization", () => {
       grant("skill:read", "skill-a"),
     ];
     render(picker());
-    expect(state.skillsQuery).toHaveBeenCalledWith({ limit: 200 }, undefined, {
-      throwOnError: false,
-      enabled: false,
-    });
+    expect(state.skillsQuery).toHaveBeenCalledWith(
+      { limit: 200, gramProject: "project-a", gramSession: "session-a" },
+      undefined,
+      {
+        throwOnError: false,
+        enabled: false,
+      },
+    );
     expect(screen.queryByRole("checkbox")).toBeNull();
   });
   it("supports project collection grants while excluding blocked skills", () => {
@@ -146,10 +151,14 @@ describe("plugin skill picker authorization", () => {
       grant("skill:blocked_read", "skill-b"),
     ];
     render(picker());
-    expect(state.skillsQuery).toHaveBeenCalledWith({ limit: 200 }, undefined, {
-      throwOnError: false,
-      enabled: true,
-    });
+    expect(state.skillsQuery).toHaveBeenCalledWith(
+      { limit: 200, gramProject: "project-a", gramSession: "session-a" },
+      undefined,
+      {
+        throwOnError: false,
+        enabled: true,
+      },
+    );
     expect(screen.getByText("First skill")).toBeTruthy();
     expect(screen.queryByText("Second skill")).toBeNull();
   });

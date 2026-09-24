@@ -12,7 +12,7 @@ import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { useOrganization } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,7 @@ import { getPresetRange } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Button } from "@/components/ui/Button";
@@ -129,6 +130,7 @@ function SignalScore({ score }: { score: number | undefined }): JSX.Element {
 const RISK_FILTERS = defineFilters([
   { id: "policy_id", label: "Policy", kind: "select", pinned: true },
   { id: "date", label: "Date range", kind: "daterange", pinned: true },
+  { id: "mcp_server_id", label: "MCP server", kind: "select" },
   {
     id: "rule_id",
     label: "Rule ID",
@@ -161,6 +163,7 @@ const NO_ASSISTANT = "none";
 
 export default function RiskEvents(): JSX.Element {
   const client = useSdkClient();
+  const gramProject = useProjectSlugForRequests();
   const organization = useOrganization();
   const featuresQuery = useProductFeatures({
     organizationId: organization.id,
@@ -177,6 +180,7 @@ export default function RiskEvents(): JSX.Element {
   const { values, setValue, clearValue, clearAll } =
     useFilterState(RISK_FILTERS);
   const policyFilter = values.policy_id ?? "";
+  const mcpServerFilter = values.mcp_server_id ?? "";
   const ruleFilter = values.rule_id;
   const userFilter = values.user_id;
   const identifierFilter = values.identifier;
@@ -227,6 +231,13 @@ export default function RiskEvents(): JSX.Element {
     [policiesData?.policies],
   );
 
+  const { data: mcpServersData } = useMcpServers({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+  const mcpServers = useMemo(
+    () => mcpServersData?.mcpServers ?? [],
+    [mcpServersData?.mcpServers],
+  );
   // Powers the rule_id filter autocomplete: surface only rules that actually
   // have findings in this project's recent window.
   const { data: overviewData } = useRiskOverview({}, undefined, {
@@ -288,6 +299,10 @@ export default function RiskEvents(): JSX.Element {
         label: p.enabled === false ? `${p.name} (inactive)` : p.name,
         value: p.id,
       })),
+      mcp_server_id: mcpServers.map((server) => ({
+        label: server.name?.trim() || server.slug || server.id.slice(0, 8),
+        value: server.id,
+      })),
       rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
       identifier: identifierFilter.map((id) => ({ label: id, value: id })),
       assistant: [
@@ -295,7 +310,7 @@ export default function RiskEvents(): JSX.Element {
         ...assistants.map((a) => ({ label: a.name, value: a.id })),
       ],
     }),
-    [policies, ruleSuggestions, assistants, identifierFilter],
+    [policies, mcpServers, ruleSuggestions, assistants, identifierFilter],
   );
 
   const fromIso = from?.toISOString();
@@ -307,6 +322,7 @@ export default function RiskEvents(): JSX.Element {
     containerRef.current?.scrollTo({ top: 0 });
   }, [
     policyFilter,
+    mcpServerFilter,
     ruleFilter,
     userFilter,
     identifierKey,
@@ -322,6 +338,7 @@ export default function RiskEvents(): JSX.Element {
       "results",
       "list",
       policyFilter,
+      mcpServerFilter,
       ruleFilter,
       userFilter,
       identifierKey,
@@ -335,6 +352,7 @@ export default function RiskEvents(): JSX.Element {
         cursor: pageParam,
         limit: 50,
         policyId: policyFilter || undefined,
+        mcpServerId: mcpServerFilter || undefined,
         ruleId: ruleFilter || undefined,
         userId: userFilter || undefined,
         externalUserIds:

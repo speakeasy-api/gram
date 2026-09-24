@@ -44,6 +44,7 @@ func TestBuildListAIDetectionSummariesQuery_CanonicalFoldDisablesConditionCache(
 
 	arg := ListAIDetectionSummariesParams{
 		OrganizationID:       "org_0123456789",
+		TargetID:             "",
 		Categories:           nil,
 		UserEmails:           []string{"member@example.com"},
 		ExactUserEmail:       "member@example.com",

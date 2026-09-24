@@ -116,6 +116,10 @@ type Service interface {
 	// Records that an organization's enterprise trial converted to a signed
 	// contract.
 	MarkEnterpriseTrialConverted(context.Context, *MarkEnterpriseTrialConvertedPayload) (res *MarkEnterpriseTrialConvertedResult, err error)
+	// GetOrganizationOnboarding implements getOrganizationOnboarding.
+	GetOrganizationOnboarding(context.Context, *GetOrganizationOnboardingPayload) (res *AdminOnboardingConfiguration, err error)
+	// SetOrganizationOnboarding implements setOrganizationOnboarding.
+	SetOrganizationOnboarding(context.Context, *SetOrganizationOnboardingPayload) (res *AdminOnboardingConfiguration, err error)
 	// Create a global remote_session_issuer (project_id NULL, organization_id
 	// NULL). Requires platform admin.
 	CreateGlobalIssuer(context.Context, *CreateGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error)
@@ -227,7 +231,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [53]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix"}
+var MethodNames = [55]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "getOrganizationOnboarding", "setOrganizationOnboarding", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -351,6 +355,28 @@ type AdminMeterUsageResponse struct {
 	// Retrieval timestamp, not an ingestion watermark
 	QueriedAt         string
 	MeasurementMethod string
+}
+
+// AdminOnboardingConfiguration is the result type of the admin service
+// getOrganizationOnboarding method.
+type AdminOnboardingConfiguration struct {
+	OrganizationID string
+	// Absent for legacy organizations.
+	Preset  *string
+	Tasks   []*AdminOnboardingTask
+	Presets []*AdminOnboardingPreset
+}
+
+type AdminOnboardingPreset struct {
+	Key             string
+	VisibleTaskKeys []string
+}
+
+type AdminOnboardingTask struct {
+	Key         string
+	Title       string
+	Description string
+	Hidden      bool
 }
 
 // AdminOrganization is the result type of the admin service updateOrganization
@@ -671,6 +697,9 @@ type CreateGlobalIssuerPayload struct {
 	ScopesSupported []string
 	// Grant types advertised by the issuer.
 	GrantTypesSupported []string
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string
 	// Response types advertised by the issuer.
 	ResponseTypesSupported []string
 	// Token endpoint auth methods advertised by the issuer.
@@ -850,6 +879,13 @@ type GetOrganizationFeaturesPayload struct {
 	OrganizationID    string
 }
 
+// GetOrganizationOnboardingPayload is the payload type of the admin service
+// getOrganizationOnboarding method.
+type GetOrganizationOnboardingPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
 // GetOrganizationPayload is the payload type of the admin service
 // getOrganization method.
 type GetOrganizationPayload struct {
@@ -938,6 +974,10 @@ type GlobalRemoteSessionIssuer struct {
 	// Number of active tenant-owned user_session_issuers that trust this issuer.
 	// These block deletion and must be unlinked by their owning organizations.
 	TrustedUserSessionIssuerCount int
+	// Number of active identity-chaining bindings that block deletion and must be
+	// explicitly unlinked by their owning organizations. Included in the detail
+	// response; omitted from listings.
+	EmaBindingCount *int
 }
 
 // An organization- or project-level remote_session_issuer that names the same
@@ -988,8 +1028,13 @@ type IssuerMigratePreflight struct {
 	// Number of user_session_issuers that trust the source. Any non-zero value
 	// blocks migration.
 	TrustedUserSessionIssuerCount int
-	// TRUE when the migration would succeed: no endpoint mismatches, conflicting
-	// MCP-server bindings, or user-session issuers that trust the source.
+	// Number of active identity-chaining bindings on the source. Non-zero blocks
+	// migration; explicitly unlink these bindings before migration, then prepare
+	// new bindings for the target.
+	EmaBindingCount int
+	// TRUE when the migration would succeed: no active identity-chaining bindings,
+	// endpoint mismatches, conflicting MCP-server bindings, or user-session
+	// issuers that trust the source.
 	CanMigrate bool
 	// Number of tenant-owned remote_session_clients already registered with the
 	// target issuer, BEFORE this migration. Any non-zero value blocks deleting the
@@ -1330,6 +1375,17 @@ type SetOrganizationFeaturePayload struct {
 	Enabled           bool
 }
 
+// SetOrganizationOnboardingPayload is the payload type of the admin service
+// setOrganizationOnboarding method.
+type SetOrganizationOnboardingPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	// Complete explicit selection; an empty array selects no tasks.
+	VisibleTaskKeys []string
+	// Omit to preserve the saved preset. Null/reset is not supported.
+	Preset *string
+}
+
 // SetStripeCustomerPayload is the payload type of the admin service
 // setStripeCustomer method.
 type SetStripeCustomerPayload struct {
@@ -1467,11 +1523,14 @@ type UpdateGlobalIssuerPayload struct {
 	OpPolicyURI *string
 	// Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any
 	// other value must be an absolute http(s) URL.
-	OpTosURI                          *string
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
+	OpTosURI            *string
+	ScopesSupported     []string
+	GrantTypesSupported []string
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string
+	ResponseTypesSupported              []string
+	TokenEndpointAuthMethodsSupported   []string
 	// PKCE code challenge methods advertised by the issuer (RFC 8414
 	// code_challenge_methods_supported). Omitting the field leaves the stored
 	// value unchanged; an empty array records that the issuer advertises no

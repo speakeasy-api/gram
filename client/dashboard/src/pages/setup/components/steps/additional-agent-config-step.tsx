@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ArrowLeft,
-  Check,
-  ChevronRight,
-  KeyRound,
-  Loader2,
-} from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
@@ -91,11 +85,6 @@ export function AdditionalAgentConfigStep({
 
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <KeyRound className="text-foreground h-6 w-6" />
-        </div>
-      }
       title="Additional agent configuration"
       description="Optionally connect admin and compliance APIs so Speakeasy can import usage, spend, and review data across the agent platforms your team uses."
       onContinue={onComplete}

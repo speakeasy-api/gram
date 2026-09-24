@@ -17,6 +17,10 @@ export type RemoteSessionIssuer = {
    */
   authorizationEndpoint?: string | undefined;
   /**
+   * Advertised grant profiles; metadata evidence is not client authorization or user access.
+   */
+  authorizationGrantProfilesSupported?: Array<string> | undefined;
+  /**
    * Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Null until discovery captures the field.
    */
   authorizationResponseIssParameterSupported?: boolean | undefined;
@@ -155,6 +159,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authorization_endpoint: z.optional(z.string()),
+    authorization_grant_profiles_supported: z.optional(z.array(z.string())),
     authorization_response_iss_parameter_supported: z.optional(z.boolean()),
     backchannel_logout_supported: z.optional(z.boolean()),
     claims_supported: z.optional(z.nullable(z.array(z.string()))),
@@ -212,6 +217,8 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "authorization_endpoint": "authorizationEndpoint",
+      "authorization_grant_profiles_supported":
+        "authorizationGrantProfilesSupported",
       "authorization_response_iss_parameter_supported":
         "authorizationResponseIssParameterSupported",
       "backchannel_logout_supported": "backchannelLogoutSupported",

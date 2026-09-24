@@ -45,6 +45,31 @@ func clientUpstreamResource(rows []repo.ListOrganizationMcpServersForClientRow) 
 	return resource
 }
 
+// claimableUpstream qualifies a client's grant for the upstream the user is
+// connecting through. A client that derives a resource of its own keeps it
+// (claimable false). A client whose derivation is ambiguous may claim upstream
+// when it is attached to it — the caller must still check that no sibling
+// bound to the same endpoint serves it: an endpoint's own server sits in every
+// bound client's rows, so a looser rule would let a second client record the
+// same resource and fail routing closed as a duplicate.
+func claimableUpstream(own []repo.ListOrganizationMcpServersForClientRow, upstream string) (resource string, claimable bool) {
+	derived := clientUpstreamResource(own)
+	want := strings.TrimRight(upstream, "/")
+	if want == "" || derived != "" || !rowsServeUpstream(own, want) {
+		return derived, false
+	}
+	return want, true
+}
+
+func rowsServeUpstream(rows []repo.ListOrganizationMcpServersForClientRow, upstream string) bool {
+	for _, row := range rows {
+		if strings.TrimRight(row.Url, "/") == upstream {
+			return true
+		}
+	}
+	return false
+}
+
 // ListClientSessions lists the sessions minted against a client in the
 // caller's organization.
 func (s *Service) ListClientSessions(ctx context.Context, payload *orgsessionsgen.ListClientSessionsPayload) (*orgsessionsgen.ListOrganizationRemoteSessionsResult, error) {

@@ -105,7 +105,8 @@ GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLIC
 ## Temporal configuration ##
 ############################
 TEMPORAL_HOST = "127.0.0.1"
-TEMPORAL_PORT = "7233"
+# Avoid the legacy shared server on 7233 during migration.
+TEMPORAL_PORT = "17233"
 TEMPORAL_NAMESPACE = "default"
 TEMPORAL_TASK_QUEUE = "main"
 ## When using Temporal Cloud, the following variable should like something like:
@@ -258,7 +259,7 @@ VITE_DEV_HOSTNAMES = "localhost"
 ## renderBuiltUrl comment in client/dashboard/vite.config.ts). Unset locally
 ## and by default in production — assets are then served same-origin.
 # GRAM_CDN_URL = "https://cdn.dev.getgram.ai"
-TEMPORAL_WEB_PORT = "8233"
+TEMPORAL_WEB_PORT = "18233"
 ## If you want to enable/disable certain feature flags during local development,
 ## copy the following line to mise.local.toml and point to a CSV file containing
 ## flag settings. The server and worker run from the `server/` directory, and

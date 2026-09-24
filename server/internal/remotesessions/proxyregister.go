@@ -133,11 +133,9 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, tunnels
 	}
 
 	origin := serverURL.String()
-	redirectURIs := []string{
-		fmt.Sprintf("%s/oauth/callback", origin),
-		fmt.Sprintf("%s/mcp/remote_login_callback", origin),
-		fmt.Sprintf("%s/x/mcp/remote_login_callback", origin),
-	}
+	// Register only the callback used by new clients. Successful rotation
+	// clears legacy_callback_url before authorizing with the replacement.
+	redirectURIs := []string{fmt.Sprintf("%s/mcp/remote_login_callback", origin)}
 
 	dcrReq := DCRRequest{
 		RedirectURIs:            redirectURIs,

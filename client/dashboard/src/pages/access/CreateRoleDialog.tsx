@@ -729,7 +729,7 @@ export function CreateRoleDialog({
             {/* ─── Permissions ─── */}
             <div className="border-border border-t pt-4">
               <Text variant="body" className="mb-3 font-medium">
-                Add permissions
+                Permissions
               </Text>
             </div>
             <RolePermissionsSection

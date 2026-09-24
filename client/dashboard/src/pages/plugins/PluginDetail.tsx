@@ -1,3 +1,4 @@
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginServerQueries } from "./usePluginServerQueries";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -127,9 +128,10 @@ function serverOptionKey(kind: ServerOptionKind, id: string): string {
 export default function PluginDetail(): JSX.Element | null {
   const { hasScope, isLoading } = useRBAC();
   const organization = useOrganization();
+  const canWritePlugin = usePluginWriteAccess();
   if (isLoading) return null;
   // Keep privileged queries unmounted, rather than hiding their rendered UI.
-  return hasScope("org:read", organization.id) ? (
+  return canWritePlugin || hasScope("org:read", organization.id) ? (
     <AdminPluginDetail />
   ) : (
     <PluginDistributionDetail />
@@ -158,15 +160,20 @@ type AssignmentDataProps = {
 };
 
 function PluginDetailWithAssignments(): JSX.Element | null {
-  const { data: rolesData } = useRoles();
-  const { data: membersData } = useMembers();
-  const { data: audiencesData } = useAudiences();
+  const scope = usePluginQueryScope();
+  const { data: rolesData } = useRoles(scope, undefined, {
+    queryKeyHashFn: (key) => JSON.stringify([scope, key]),
+  });
+  const { data: membersData } = useMembers(scope, undefined, {
+    queryKeyHashFn: (key) => JSON.stringify([scope, key]),
+  });
+  const { data: audiencesData } = useAudiences(scope);
   const showAssignments = usePluginAssignmentsVisible();
   const {
     data: syncedUsersData,
     isLoading,
     error,
-  } = useSyncedAgentUsers(undefined, undefined, {
+  } = useSyncedAgentUsers(scope, undefined, {
     enabled: showAssignments,
     throwOnError: false,
   });
@@ -221,11 +228,12 @@ function PluginDetailContent({
     setAssignmentSearch("");
   }, [pluginId]);
 
-  const { data: plugin } = usePluginSuspense({ id: pluginId! });
+  const scope = usePluginQueryScope();
+  const { data: plugin } = usePluginSuspense({ ...scope, id: pluginId! });
   useRecentLabelOverride(location.pathname, plugin.name);
   // Polled so the publish-freshness badges/banner pick up the Temporal
   // generator-rollout schedule's auto-sync without a manual refresh.
-  const { data: publishStatus } = usePublishStatus(undefined, undefined, {
+  const { data: publishStatus } = usePublishStatus(scope, undefined, {
     refetchInterval: 5_000,
   });
 
@@ -234,6 +242,7 @@ function PluginDetailContent({
     client,
     pluginId!,
     setIsDownloadMenuOpen,
+    scope,
   );
 
   const { canReadServers, toolsetsQuery, serversQuery, endpointsQuery } =
@@ -295,9 +304,13 @@ function PluginDetailContent({
 
   const assignmentsVisible = usePluginAssignmentsVisible();
   const showAssignments = canAdmin && assignmentsVisible;
-  const { data: productFeatures } = useProductFeatures({
-    organizationId: organization.id,
-  });
+  const { data: productFeatures } = useProductFeatures(
+    {
+      organizationId: organization.id,
+    },
+    undefined,
+    { enabled: canAdmin },
+  );
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.
@@ -413,7 +426,11 @@ function PluginDetailContent({
   const deleteMutation = useDeletePluginMutation({
     onSuccess: async () => {
       setIsDeleteOpen(false);
-      await invalidateAll();
+      // The detail and sidebar are still mounted until navigation completes.
+      // Mark their deleted record stale without issuing a guaranteed 404.
+      await invalidateAllPlugin(queryClient, { refetchType: "none" });
+      await invalidateAllPlugins(queryClient);
+      void invalidateAllPublishStatus(queryClient);
       offerPublish("Plugin deleted");
       void navigate(routes.plugins.href());
     },
@@ -673,7 +690,7 @@ function PluginDetailContent({
                       description: plugin.description,
                       agentPluginsV1Compatible: plugin.agentPluginsV1Compatible,
                     }}
-                    publishStatus={publishStatus}
+                    publishStatus={canAdmin ? publishStatus : undefined}
                     isDownloadMenuOpen={isDownloadMenuOpen}
                     onDownloadMenuOpenChange={setIsDownloadMenuOpen}
                     onDownload={(platform) => void download(platform)}
@@ -777,7 +794,7 @@ function PluginDetailContent({
                       className="h-9 w-56"
                     />
                   )}
-                  {canPublish && (
+                  {canPublish && canReadServers && (
                     <Button
                       variant="secondary"
                       size="sm"

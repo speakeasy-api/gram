@@ -35,26 +35,34 @@ const (
 	setupTaskStatusDone            = "done"
 )
 
+// setupDomainCheckTimeout bounds the live WorkOS domain check that
+// ListSetupTasks runs for orgs with no stored verified domains.
+const setupDomainCheckTimeout = 3 * time.Second
+
 type setupTaskDefinition struct {
 	Key           string
 	Title         string
 	Description   string
 	Prerequisites []string
-	// HiddenByDefault keeps a task off the board unless a platform admin asks
-	// to see hidden tasks. The guided journey is identity and observability;
-	// these are real setup work an org may never reach for, and they crowd out
-	// the ones that matter on a first run.
+	// HiddenByDefault preserves legacy selection until staff explicitly save
+	// visibility. New tasks must not expand untouched organizations' boards.
 	HiddenByDefault bool
 }
 
 var setupTaskCatalog = []setupTaskDefinition{
-	{Key: "identity-provider", Title: "Set up identity provider", Description: "Connect single sign-on and sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "domain-verification", Title: "Verify your domain", Description: "Prove the organization owns its email domain. Single sign-on cannot be set up until a domain is verified.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "connect-idp", Title: "Connect identity provider", Description: "Configure single sign-on for the organization.", Prerequisites: []string{"domain-verification"}, HiddenByDefault: true},
+	{Key: "directory-sync", Title: "Set up directory sync", Description: "Sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: true},
+	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil, HiddenByDefault: true},
+	{Key: "enable-logging", Title: "Enable logging", Description: "Record tool calls, I/O, and agent sessions.", Prerequisites: nil, HiddenByDefault: true},
+	{Key: "identity-provider", Title: "Set up identity provider", Description: "Connect single sign-on and sync people and groups from the identity provider.", Prerequisites: []string{"domain-verification"}, HiddenByDefault: false},
 	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Turn on Anthropic inference hooks in Claude.ai so Claude conversations reach Speakeasy, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
 	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Connect Cursor, Codex, and other coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
 	{Key: "litellm", Title: "Set up LiteLLM", Description: "Point a LiteLLM proxy at Speakeasy so its traffic is scanned by risk policies and lands in observability, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: nil, HiddenByDefault: true},
+	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}, HiddenByDefault: true},
+	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: []string{"create-marketplace"}, HiddenByDefault: true},
 	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: true},
 }
@@ -75,9 +83,29 @@ func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTask
 		return nil, err
 	}
 
-	tasks, err := s.projectSetupTasks(ctx, orgrepo.New(s.db), ac.ActiveOrganizationID)
+	repo := orgrepo.New(s.db)
+	org, err := repo.GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization for setup tasks").LogError(ctx, s.logger)
+	}
+	// Orgs verified in WorkOS before the event sync tracked domains have an
+	// empty stored list. Filling it here keeps the identity provider card
+	// from showing blocked until someone opens the onboarding status. Active
+	// SSO already completes the domain task, so it needs no check.
+	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
+	// The check is best effort, so a slow WorkOS cannot hold up the board.
+	if workosOrgID != "" && !org.SsoEnabled.Bool {
+		refreshCtx, cancel := context.WithTimeout(ctx, setupDomainCheckTimeout)
+		_, err := s.refreshVerifiedDomains(refreshCtx, org.ID, workosOrgID, org.VerifiedDomains)
+		cancel()
+		if err != nil {
+			s.logger.WarnContext(ctx, "setup tasks: check domain verification", attr.SlogError(err), attr.SlogWorkOSOrganizationID(workosOrgID))
+		}
+	}
+
+	tasks, err := projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "project setup tasks").LogError(ctx, s.logger)
 	}
 	includeHidden := payload.IncludeHidden != nil && *payload.IncludeHidden && ac.IsAdmin
 	if !includeHidden {
@@ -130,9 +158,9 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock organization setup tasks").LogError(ctx, s.logger)
 	}
-	beforeTasks, err := s.projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
+	beforeTasks, err := projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "project setup tasks before update").LogError(ctx, s.logger)
 	}
 	before := setupTaskByKey(beforeTasks, payload.TaskKey)
 	if before == nil {
@@ -163,6 +191,8 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 		stored = row
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "get setup task state").LogError(ctx, s.logger)
+	} else if before.Hidden {
+		stored.HiddenAt = pgtype.Timestamptz{Time: time.Now().UTC(), InfinityModifier: pgtype.Finite, Valid: true}
 	}
 
 	if payload.Status != nil {
@@ -202,9 +232,9 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 		return nil, oops.E(oops.CodeUnexpected, err, "update setup task").LogError(ctx, s.logger)
 	}
 
-	afterTasks, err := s.projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
+	afterTasks, err := projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "project setup tasks after update").LogError(ctx, s.logger)
 	}
 	after := setupTaskByKey(afterTasks, payload.TaskKey)
 	if err := s.audit.LogOrganizationSetupTaskUpdated(ctx, tx, audit.LogOrganizationSetupTaskUpdatedEvent{
@@ -246,7 +276,7 @@ func (s *Service) sendSetupTaskAssignmentEmail(ctx context.Context, ac *contextv
 	}
 
 	recipient := conv.NormalizeEmail(task.Assignee.Email)
-	setupLink := fmt.Sprintf("%s/%s/setup?step=%s", strings.TrimRight(s.siteURL, "/"), organizationSlug, task.Key)
+	setupLink := fmt.Sprintf("%s/%s/setup?task=%s", strings.TrimRight(s.siteURL, "/"), organizationSlug, task.Key)
 	idempotencyMaterial := fmt.Sprintf("%s\x00%s\x00%s\x00%s", ac.ActiveOrganizationID, task.Key, assignmentTime.UTC().Format(time.RFC3339Nano), recipient)
 	idempotencyKey := fmt.Sprintf("setup-task-assignment:%x", sha256.Sum256([]byte(idempotencyMaterial)))
 	tmpl := email.SetupTaskAssignment{
@@ -271,18 +301,18 @@ func sameSetupTaskAssignee(before, after *gen.SetupTaskAssignee) bool {
 	return conv.NormalizeEmail(before.Email) == conv.NormalizeEmail(after.Email)
 }
 
-func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationID string) ([]*gen.SetupTask, error) {
+func projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationID string) ([]*gen.SetupTask, error) {
 	rows, err := repo.ListOrganizationSetupTasks(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list setup task state").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list setup task state")
 	}
 	members, err := repo.ListOrganizationUsers(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list setup task assignees").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list setup task assignees")
 	}
 	facts, err := repo.GetSetupTaskCompletionFacts(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get setup task completion facts").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get setup task completion facts")
 	}
 
 	stateByKey := make(map[string]orgrepo.OrganizationSetupTask, len(rows))
@@ -322,12 +352,7 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 	for _, definition := range setupTaskCatalog {
 		state, persisted := stateByKey[definition.Key]
 		status := setupTaskStatusTodo
-		// The catalog default only applies until the organization has a row of
-		// its own; from then on the row decides, in both directions, so a
-		// default-hidden task a platform admin restores stays restored. That
-		// also means a row written for a status or an assignee reveals the
-		// task, which is the trade for Restore working at all: nothing gets
-		// hidden unexpectedly, and a revealed task can be hidden again.
+		// Persisted visibility overrides the catalog default in both directions.
 		hidden := definition.HiddenByDefault
 		var assignee *gen.SetupTaskAssignee
 		if persisted {
@@ -338,7 +363,23 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 		// The identity provider card covers both single sign-on and directory
 		// sync, so it only completes by fact once both are configured; an admin
 		// who skips directory sync marks the card done by hand.
-		completedByFact := definition.Key == "identity-provider" && facts.SsoConfigured && facts.DsyncConfigured
+		var completedByFact bool
+		switch definition.Key {
+		case "domain-verification":
+			// An active SSO connection proves a domain was verified, even for
+			// orgs set up before verified_domains was tracked.
+			completedByFact = facts.DomainVerified || facts.SsoConfigured
+		case "identity-provider":
+			completedByFact = facts.SsoConfigured && facts.DsyncConfigured
+		case "connect-idp":
+			completedByFact = facts.SsoConfigured
+		case "directory-sync":
+			completedByFact = facts.DsyncConfigured
+		case "create-marketplace":
+			completedByFact = facts.MarketplacePublished
+		case "enable-logging":
+			completedByFact = facts.LoggingEnabled
+		}
 		if completedByFact {
 			status = setupTaskStatusDone
 		}

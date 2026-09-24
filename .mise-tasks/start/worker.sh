@@ -6,7 +6,7 @@
 
 set -e
 
-# Temporal schedules are hosted by the shared server, not by this process. If
+# Temporal schedules are hosted by the server, not by this process. If
 # the local worker stops, leaving them enabled keeps starting workflows that
 # nobody can consume (including a few schedules with seconds-scale cadence).
 # Keep their lifecycle attached to the worker as well as to pause/wake so a

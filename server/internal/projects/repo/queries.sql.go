@@ -12,6 +12,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countActiveProjectEMABindings = `-- name: CountActiveProjectEMABindings :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = $1 AND organization_id = $2 AND state IS DISTINCT FROM 'unlinked'
+`
+
+type CountActiveProjectEMABindingsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) CountActiveProjectEMABindings(ctx context.Context, arg CountActiveProjectEMABindingsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveProjectEMABindings, arg.ProjectID, arg.OrganizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (
     name
@@ -62,6 +78,20 @@ func (q *Queries) DeleteProject(ctx context.Context, id uuid.UUID) (uuid.UUID, e
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const deleteProjectEMATombstones = `-- name: DeleteProjectEMATombstones :exec
+DELETE FROM remote_session_ema_bindings WHERE project_id = $1 AND organization_id = $2 AND state = 'unlinked'
+`
+
+type DeleteProjectEMATombstonesParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteProjectEMATombstones(ctx context.Context, arg DeleteProjectEMATombstonesParams) error {
+	_, err := q.db.Exec(ctx, deleteProjectEMATombstones, arg.ProjectID, arg.OrganizationID)
+	return err
 }
 
 const getFirstProject = `-- name: GetFirstProject :one
@@ -246,7 +276,7 @@ SELECT
     p.slug as project_slug,
     
     -- Organization metadata fields
-    om.id, om.name, om.slug, om.gram_account_type, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.scim_enabled, om.sso_enabled, om.creation_source, om.created_at, om.updated_at, om.disabled_at
+    om.id, om.name, om.slug, om.gram_account_type, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.scim_enabled, om.sso_enabled, om.verified_domains, om.creation_source, om.created_at, om.updated_at, om.disabled_at
     
 FROM projects p
 INNER JOIN organization_metadata om ON p.organization_id = om.id
@@ -272,6 +302,7 @@ type GetProjectWithOrganizationMetadataRow struct {
 	FreeTrialEndsAt    pgtype.Timestamptz
 	ScimEnabled        pgtype.Bool
 	SsoEnabled         pgtype.Bool
+	VerifiedDomains    []string
 	CreationSource     pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
@@ -299,6 +330,7 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -502,6 +534,22 @@ func (q *Queries) ListProjectsByOrganizationPage(ctx context.Context, arg ListPr
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockProjectForEMADeletion = `-- name: LockProjectForEMADeletion :one
+SELECT id FROM projects WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE FOR UPDATE
+`
+
+type LockProjectForEMADeletionParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockProjectForEMADeletion(ctx context.Context, arg LockProjectForEMADeletionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockProjectForEMADeletion, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const setOrganizationWhitelist = `-- name: SetOrganizationWhitelist :exec
