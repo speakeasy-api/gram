@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -520,6 +521,9 @@ func (r *IssuerMetadataRefresher) record(ctx context.Context, issuerURL string, 
 
 // recordFailure stamps the error trio on the row as the refresh read it; a newer write, fetch or failure, wins. A retry URL marks the failure transient.
 func (r *IssuerMetadataRefresher) recordFailure(ctx context.Context, existing repo.RemoteSessionIssuer, msg, retryURL string, outcome remotesessionmetrics.IssuerMetadataRefreshOutcome) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerDiscoveryFailureRecordTimeout)
+	defer cancel()
+
 	rows, err := repo.New(r.db).RecordRemoteSessionIssuerMetadataRefreshFailure(ctx, repo.RecordRemoteSessionIssuerMetadataRefreshFailureParams{
 		MetadataLastError:         msg,
 		MetadataLastErrorUrl:      retryURL,
@@ -677,7 +681,7 @@ func issuerProfilesNeedReprojection(row repo.RemoteSessionIssuer) bool {
 	if err := json.Unmarshal(row.Metadata, &members); err != nil {
 		return true
 	}
-	raw, present := members["authorization_grant_profiles_supported"]
+	raw, present := members[oauthwire.MetadataAuthorizationGrantProfilesSupported]
 	if !present {
 		return len(row.AuthorizationGrantProfilesSupported) != 0
 	}

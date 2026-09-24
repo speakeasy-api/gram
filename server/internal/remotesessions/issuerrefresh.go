@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -175,6 +176,11 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolve
 	if err != nil {
 		return zero, nil, err
 	}
+	// A partial read is useful for a draft, but cannot replace a complete
+	// stored snapshot: omitted members may belong to the unreadable family.
+	if discovered.unreadableErr != nil {
+		return zero, nil, discovered.unreadableErr
+	}
 	doc := discovered.doc
 
 	if err := vetRefreshedDocument(doc, issuer); err != nil {
@@ -185,7 +191,7 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolve
 	// merged document, not the individual candidates or member provenance.
 	// Even for the same issuer, filling gaps from it could resurrect a grant,
 	// profile, or endpoint the readable primary has now omitted. An unreadable
-	// candidate is recorded below, but cannot justify borrowing old evidence.
+	// candidate fails the refresh above rather than borrowing old evidence.
 
 	// The key set rides the issuer's binding like the discovery document that
 	// advertised it. An issuer inside a customer network publishes its
@@ -395,10 +401,17 @@ func discoveryRetryURL(err error) string {
 	return ""
 }
 
+// Five seconds gives the single bookkeeping write time to finish after request
+// cancellation without letting database contention prolong cleanup indefinitely.
+const issuerDiscoveryFailureRecordTimeout = 5 * time.Second
+
 // recordIssuerDiscoveryFailure records the attempt without modifying the last
 // successful snapshot. The observed identity and timestamps prevent a failed
 // in-flight request from overwriting a newer refresh or a concurrent tier move.
 func (s *Service) recordIssuerDiscoveryFailure(ctx context.Context, logger *slog.Logger, existing repo.RemoteSessionIssuer, discoveryErr error) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerDiscoveryFailureRecordTimeout)
+	defer cancel()
+
 	msg, _ := discoveryFailureMessage(discoveryErr)
 	rows, err := repo.New(s.db).RecordRemoteSessionIssuerMetadataRefreshFailure(ctx, repo.RecordRemoteSessionIssuerMetadataRefreshFailureParams{
 		MetadataLastError:         msg,
@@ -411,10 +424,10 @@ func (s *Service) recordIssuerDiscoveryFailure(ctx context.Context, logger *slog
 		OrganizationID:            existing.OrganizationID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "record issuer discovery failure").LogError(ctx, logger)
+		logger.ErrorContext(ctx, "record issuer discovery failure", attr.SlogError(err))
 	}
-	if rows == 0 {
-		return oops.E(oops.CodeConflict, nil, refreshConflictMessage).LogWarn(ctx, logger)
+	if err == nil && rows == 0 {
+		logger.WarnContext(ctx, "issuer discovery failure record skipped after concurrent update")
 	}
 	return mapDiscoveryError(ctx, logger, discoveryErr, oops.CodeGatewayError)
 }

@@ -111,7 +111,6 @@ func TestIssuerDiscoveryRejectsUnsafeEvidence(t *testing.T) {
 	for _, tc := range []struct{ name, contentType, suffix, raw string }{
 		{"sibling_issuer", "application/json", "/sibling", ""},
 		{"html", "text/html", "", "<html>error</html>"},
-		{"json_as_html", "text/html", "", ""},
 		{"oversize", "application/json", "", `{"padding":"` + strings.Repeat("x", 1<<20) + `"}`},
 		{"null_array", "application/json", "", `{"authorization_grant_profiles_supported":[null]}`},
 	} {
@@ -243,5 +242,27 @@ func TestIssuerDiscoveryPartialSuccessPreservesStatusAndFreshEvidence(t *testing
 				require.NotContains(t, params.Metadata, "stale-")
 			})
 		}
+	}
+}
+
+func TestIssuerDiscoveryAcceptsJSONRegardlessOfContentType(t *testing.T) {
+	t.Parallel()
+	for _, contentType := range []string{"", "text/plain", "binary/octet-stream", "text/html", "invalid;"} {
+		t.Run(contentType, func(t *testing.T) {
+			t.Parallel()
+			var server *httptest.Server
+			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header()["Content-Type"] = []string{contentType}
+				assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+					"issuer": server.URL, "authorization_endpoint": server.URL + "/authorize", "token_endpoint": server.URL + "/token",
+				}))
+			}))
+			defer server.Close()
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+			require.NoError(t, err)
+			doc, err := DiscoverIssuerMetadata(t.Context(), policy, server.URL)
+			require.NoError(t, err)
+			require.Equal(t, server.URL, doc.Issuer)
+		})
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"maps"
-	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -44,6 +43,10 @@ import (
 // candidate probe shares this single budget — so a slow upstream cannot tie up
 // the request handler.
 const discoveryHTTPTimeout = 10 * time.Second
+
+// maxDiscoveryBodyBytes caps discovery documents at 1 MiB: ample room for
+// provider metadata while bounding memory consumed by an untrusted response.
+const maxDiscoveryBodyBytes = 1 << 20
 
 // rfc8414Document is a discovery document as Gram reads it: the RFC 8414
 // members, the OpenID Connect Discovery members it enriches sessions with,
@@ -1056,7 +1059,9 @@ func (e *discoveryError) Error() string {
 	}
 }
 
-func (e *discoveryError) Unwrap() error { return e.cause }
+func (e *discoveryError) Unwrap() error {
+	return e.cause
+}
 
 // UserMessage produces the public, user-facing summary surfaced through the
 // management API. Callers wrap it in an oops.E to attach the gateway error
@@ -1486,7 +1491,9 @@ func attemptIssuerProbe(ctx context.Context, client httpDoer, wellKnown string) 
 			definitive:   errors.Is(err, errDiscoveryRedirectRefused),
 		}
 	}
-	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+	defer o11y.NoLogDefer(func() error {
+		return resp.Body.Close()
+	})
 
 	if resp.StatusCode != http.StatusOK {
 		return rfc8414Document{}, &discoveryError{
@@ -1497,11 +1504,8 @@ func attemptIssuerProbe(ctx context.Context, client httpDoer, wellKnown string) 
 		}
 	}
 
-	mediaType, _, mediaErr := mime.ParseMediaType(resp.Header.Get("Content-Type"))
-	if mediaErr != nil || mediaType != "application/json" {
-		return rfc8414Document{}, &discoveryError{WellKnownURL: wellKnown, Status: resp.StatusCode, cause: errors.New("discovery content type must be application/json"), definitive: true}
-	}
-	const maxDiscoveryBodyBytes = 1 << 20
+	// Some providers serve valid JSON with missing or inaccurate media types.
+	// Validate the bounded body itself rather than trusting Content-Type.
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDiscoveryBodyBytes+1))
 	if len(body) > maxDiscoveryBodyBytes {
 		return rfc8414Document{}, &discoveryError{WellKnownURL: wellKnown, Status: resp.StatusCode, cause: errors.New("discovery document exceeds body limit"), definitive: true}
