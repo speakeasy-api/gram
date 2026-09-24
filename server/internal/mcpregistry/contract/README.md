@@ -27,6 +27,5 @@ Validation preserves extension JSON and numeric precision rather than projecting
 records through Go structs.
 
 Run `mise exec -- go test ./server/internal/mcpregistry/contract`.
-`contract-cases.json` covers record rules and native format boundaries. The two
-unchanged starter records are local/test fixtures only; their manifest pins record
-bytes, not schema authority. No production import is part of this contract.
+`contract-cases.json` covers record rules and native format boundaries. No starter
+inventory is shipped, and no production import is part of this contract.
