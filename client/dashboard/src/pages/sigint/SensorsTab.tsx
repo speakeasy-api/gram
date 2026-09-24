@@ -1,3 +1,4 @@
+import { duplicateNameCounts } from "./signal-names";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
@@ -36,14 +37,6 @@ const MODE_LABELS: Record<SigintSensorMode, string> = {
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
-}
-
-function duplicateNameCounts(signals: SigintSignal[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const signal of signals) {
-    counts.set(signal.name, (counts.get(signal.name) ?? 0) + 1);
-  }
-  return counts;
 }
 
 function SensorDetails({
@@ -153,7 +146,13 @@ export function SensorsTab(): JSX.Element {
   }, [hasNextPage, isFetching, isError, fetchNextPage]);
   const create = useCreateSigintSensorMutation();
   const update = useUpdateSigintSensorMutation();
-  const remove = useDeleteSigintSensorMutation();
+  const remove = useDeleteSigintSensorMutation({
+    onSuccess: async () => {
+      await invalidateAllSigintSensors(queryClient);
+      toast.success("Sensor deleted");
+      setDeleting(null);
+    },
+  });
   const [search, setSearch] = useState("");
   const [editorSensor, setEditorSensor] = useState<
     SigintSensor | null | undefined
@@ -287,9 +286,6 @@ export function SensorsTab(): JSX.Element {
     if (!canWrite || !deleting || mutationPending) return;
     try {
       await remove.mutateAsync({ request: { id: deleting.id } });
-      await invalidateAllSigintSensors(queryClient);
-      toast.success("Sensor deleted");
-      setDeleting(null);
     } catch (error) {
       toast.error(errorMessage(error, "Unable to delete the sensor."));
     }
