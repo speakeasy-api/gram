@@ -66,6 +66,7 @@ func TestMutationValidation(t *testing.T) {
 	_, err = s.Save(ctx, e.ID, Token(e), json.RawMessage(strings.Replace(basicRecord, "example.test/demo", "example.test/other", 1)))
 	var invalid *InvalidError
 	require.ErrorAs(t, err, &invalid)
+
 	for _, token := range []string{e.UpdatedAt.Add(time.Nanosecond).Format(time.RFC3339Nano)} {
 		_, err = s.Save(ctx, e.ID, token, json.RawMessage(basicRecord))
 		require.ErrorIs(t, err, ErrConflict)
@@ -213,6 +214,7 @@ func TestTokenParsing(t *testing.T) {
 	ctx, s, _ := newTestService(t)
 	e, err := s.Create(ctx, json.RawMessage(basicRecord))
 	require.NoError(t, err)
+
 	for _, token := range []string{"", "garbage", Token(e) + "0", "2026-09-21T12:00:00.1234567890Z", "2026-09-21T12:00:00,123456Z", " " + Token(e)} {
 		_, err = s.SetPublished(ctx, e.ID, token, false)
 		require.ErrorIs(t, err, ErrInvalidToken)
