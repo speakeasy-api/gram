@@ -3,12 +3,20 @@ package judgemessage
 import (
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 // Message is the message under evaluation by a judge.
 type Message struct {
+	// AnchorID locates the persisted event for conversation context; zero means unlinked.
+	AnchorID uuid.UUID
+
+	// ChatID locates available history for an event that has not been persisted.
+	ChatID uuid.UUID
+
 	// Type is the Gram chat message type that produced this judge input.
 	Type message.Type
 	// Body is the text content rendered for judge evaluation.
@@ -65,6 +73,8 @@ type ToolCall struct {
 func New(messageType message.Type, toolName, body string) Message {
 	server, fn, _ := toolref.AttributeTool(toolName)
 	return Message{
+		AnchorID:    uuid.Nil,
+		ChatID:      uuid.Nil,
 		Type:        messageType,
 		Body:        body,
 		ToolName:    toolName,
@@ -96,6 +106,8 @@ func NewToolCall(toolName, arguments string) ToolCall {
 
 func NewForToolCalls(calls []ToolCall) Message {
 	return Message{
+		AnchorID:    uuid.Nil,
+		ChatID:      uuid.Nil,
 		Type:        message.ToolRequest,
 		Body:        "",
 		ToolName:    "",

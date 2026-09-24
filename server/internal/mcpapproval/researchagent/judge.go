@@ -45,6 +45,7 @@ var _ InjectionJudge = (*ScannerJudge)(nil)
 func (j *ScannerJudge) JudgeFetchedPage(ctx context.Context, input JudgeInput) (JudgeVerdict, error) {
 	startedAt := time.Now().UTC()
 	result, providerResult, err := j.scanner.ScanStrictWithVerdict(ctx, input.Content, input.OrgID, input.ProjectID, "", judgemessage.Message{
+		AnchorID: uuid.Nil, ChatID: uuid.Nil,
 		// The page is tool output as far as the judge is concerned: content
 		// that arrived from outside and is being read by an agent.
 		Type:        message.ToolResponse,

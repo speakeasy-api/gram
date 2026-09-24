@@ -87,6 +87,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/typesafe"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
@@ -268,6 +269,17 @@ func NewActivities(
 
 	riskRecorder := metering.NewRiskRecorder(publishers.MeterReadings)
 
+	var policyPrefilter typesafe.Evaluator = typesafe.Unavailable{}
+	if guardianPolicy != nil {
+		policyPrefilter = typesafe.New(guardianPolicy.PooledClient(), func(ctx context.Context, orgID string) (string, error) {
+			key, err := openrouterProvisioner.ProvisionAPIKey(ctx, orgID, openrouter.KeyTypeInternal)
+			if err != nil {
+				return "", fmt.Errorf("provision policy prefilter key: %w", err)
+			}
+			return key, nil
+		})
+	}
+	policyCascade := ppopenrouter.NewCascade(ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter), policyPrefilter, features, db)
 	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
 		logger,
 		tracerProvider,
@@ -278,7 +290,7 @@ func NewActivities(
 		piScanner,
 		shadowMCPClient,
 		telemetryRepo,
-		ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate,
+		policyCascade.Evaluate,
 		features,
 		publishers.PresidioAnalysis,
 		publishers.GitleaksAnalysis,

@@ -1354,7 +1354,7 @@ func newStartCommand() *cli.Command {
 			hookJudgeLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
 			hookPIScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Classify)
 
-			hookPromptJudge := ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Evaluate
+			hookPromptJudge := newPromptPolicyCascade(ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter), guardianPolicy, openRouter, featureFlags, db)
 			hookPromptPolicyScanner := promptpolicy.NewScanner(logger, hookPromptJudge)
 			celEngine, err := celenv.New()
 			if err != nil {
