@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -237,8 +238,26 @@ func (s *Service) writeDiscoveredDisplay(ctx context.Context, authCtx *contextva
 
 // recordResourceDisplay writes display onto the client and audits the change.
 func (s *Service) recordResourceDisplay(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, existing remotesessionsrepo.GetRemoteSessionClientByIDRow, display resourceDisplay) error {
-	before := existing.RemoteSessionClient
-	updated, err := remotesessionsrepo.New(dbtx).UpdateRemoteSessionClientResourceDisplay(ctx, remotesessionsrepo.UpdateRemoteSessionClientResourceDisplayParams{
+	q := remotesessionsrepo.New(dbtx)
+	// This writer also moves resource_identifier, not just cosmetic fields.
+	// Serialize with first EMA binding creation, then compare the locked row.
+	before, err := q.LockEMAClient(ctx, remotesessionsrepo.LockEMAClientParams{ID: existing.RemoteSessionClient.ID, ProjectID: conv.ToNullUUID(*authCtx.ProjectID), OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
+	if err != nil {
+		return fmt.Errorf("lock client resource identity: %w", err)
+	}
+	if before.ResourceIdentifier != existing.RemoteSessionClient.ResourceIdentifier {
+		return fmt.Errorf("client resource identity changed: %w", pgx.ErrNoRows)
+	}
+	if conv.FromPGTextOrEmpty[string](before.ResourceIdentifier) != display.identifier {
+		count, err := q.CountActiveEMABindingsForClient(ctx, remotesessionsrepo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(before.ID), ProjectID: before.ProjectID.UUID, OrganizationID: authCtx.ActiveOrganizationID})
+		if err != nil {
+			return fmt.Errorf("check resource identity bindings: %w", err)
+		}
+		if count > 0 {
+			return oops.E(oops.CodeConflict, nil, "explicitly unlink identity-chaining bindings before changing the client resource")
+		}
+	}
+	updated, err := q.UpdateRemoteSessionClientResourceDisplay(ctx, remotesessionsrepo.UpdateRemoteSessionClientResourceDisplayParams{
 		ResourceIdentifier:    conv.ToPGTextEmpty(display.identifier),
 		ResourceName:          display.name,
 		ResourceDocumentation: display.documentation,

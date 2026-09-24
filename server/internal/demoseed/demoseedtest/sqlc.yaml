@@ -1,0 +1,12 @@
+# Regenerate: mise exec -- sqlc generate -f server/internal/demoseed/demoseedtest/sqlc.yaml
+version: "2"
+sql:
+  - engine: postgresql
+    schema: ../../../database/schema.sql
+    queries: queries.sql
+    gen:
+      go:
+        package: demoseedtest
+        out: .
+        sql_package: pgx/v5
+        omit_unused_structs: true
