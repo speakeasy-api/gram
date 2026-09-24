@@ -22,7 +22,12 @@ import (
 )
 
 var ErrConflict = errors.New("registry entry conflict")
-var ErrStageAStructure = errors.New("stage A endpoint structure is immutable")
+
+// ErrEndpointStructureImmutable enforces a temporary restriction for the initial
+// catalog rollout and migration from Pulse: endpoint structure is frozen even
+// when no references exist. Switching providers alone does not make edits safe.
+// Relax this only when endpoint changes can safely preserve existing references.
+var ErrEndpointStructureImmutable = errors.New("registry endpoint structure is immutable")
 
 var tokenSyntax = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$`)
 
@@ -46,9 +51,11 @@ func (s *Service) Create(ctx context.Context, data json.RawMessage) (Entry, erro
 func (s *Service) Save(ctx context.Context, id uuid.UUID, token string, data json.RawMessage) (Entry, error) {
 	return s.mutate(ctx, id, token, data, nil)
 }
+
 func (s *Service) SetPublished(ctx context.Context, id uuid.UUID, token string, published bool) (Entry, error) {
 	return s.mutate(ctx, id, token, nil, &published)
 }
+
 func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data json.RawMessage, published *bool) (Entry, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -64,31 +71,36 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 	if err != nil || !tokenSyntax.MatchString(token) || !parsed.Equal(old.UpdatedAt) {
 		return Entry{}, ErrConflict
 	}
-	var result Entry
 	if published == nil {
 		if issues := s.validator.Validate(data); len(issues) > 0 {
 			return Entry{}, &InvalidError{Issues: issues}
 		}
+		// Save replaces the full raw record, including unknown metadata. Its name
+		// is required by the record schema and must preserve the stored identity.
 		if recordName(old.Data) != recordName(data) {
 			return Entry{}, &InvalidError{Issues: []Issue{{Path: "/server/name", Message: "name is immutable"}}}
 		}
 		if err := checkStructure(old.Data, data); err != nil {
 			return Entry{}, err
 		}
+	}
+	if published != nil && *published {
+		if len(old.Data) > StoredRecordByteLimit {
+			return Entry{}, storedSizeError()
+		}
+		if issues := s.validator.ValidateStored(old.Data); len(issues) > 0 {
+			return Entry{}, &InvalidError{Issues: issues}
+		}
+	}
+
+	var result Entry
+	if published == nil {
 		row, updateErr := q.UpdateEntry(ctx, repo.UpdateEntryParams{ID: id, Data: data, StoredRecordLimit: StoredRecordByteLimit})
 		if errors.Is(updateErr, pgx.ErrNoRows) {
 			return Entry{}, storedSizeError()
 		}
 		result, err = entry(row, updateErr)
 	} else {
-		if *published {
-			if len(old.Data) > StoredRecordByteLimit {
-				return Entry{}, storedSizeError()
-			}
-			if issues := s.validator.ValidateStored(old.Data); len(issues) > 0 {
-				return Entry{}, &InvalidError{Issues: issues}
-			}
-		}
 		result, err = entry(q.SetEntryPublished(ctx, repo.SetEntryPublishedParams{ID: id, Published: *published}))
 	}
 	if err != nil {
@@ -106,13 +118,17 @@ func checkStructure(old, updated json.RawMessage) error {
 	a, errA := endpointRemotes(old)
 	b, errB := endpointRemotes(updated)
 	if errA != nil || errB != nil || len(a) != len(b) {
-		return fmt.Errorf("%w: /server/remotes", ErrStageAStructure)
+		return fmt.Errorf("%w: /server/remotes", ErrEndpointStructureImmutable)
 	}
 	for i, r := range a {
-		for _, key := range []string{"type", "url", "variables"} {
-			if !equalJSON(r[key], b[i][key]) {
-				return fmt.Errorf("%w: /server/remotes/%d/%s", ErrStageAStructure, i, key)
-			}
+		if !equalJSON(r["type"], b[i]["type"]) {
+			return fmt.Errorf("%w: /server/remotes/%d/type", ErrEndpointStructureImmutable, i)
+		}
+		if !equalJSON(r["url"], b[i]["url"]) {
+			return fmt.Errorf("%w: /server/remotes/%d/url", ErrEndpointStructureImmutable, i)
+		}
+		if !equalJSON(r["variables"], b[i]["variables"]) {
+			return fmt.Errorf("%w: /server/remotes/%d/variables", ErrEndpointStructureImmutable, i)
 		}
 	}
 	return nil

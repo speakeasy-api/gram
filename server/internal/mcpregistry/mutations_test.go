@@ -36,7 +36,7 @@ func TestStageARejectsEndpointChangeWithoutReferences(t *testing.T) {
 	e, err := s.Create(ctx, json.RawMessage(basicRecord))
 	require.NoError(t, err)
 	_, err = s.Save(ctx, e.ID, Token(e), json.RawMessage(strings.ReplaceAll(basicRecord, "https://example.test/mcp", "https://example.test/new")))
-	require.ErrorIs(t, err, ErrStageAStructure)
+	require.ErrorIs(t, err, ErrEndpointStructureImmutable)
 	got, err := s.Get(ctx, e.ID)
 	require.NoError(t, err)
 	require.Equal(t, Token(e), Token(got))
@@ -122,7 +122,7 @@ func TestStageAPositionalEvidence(t *testing.T) {
 		data, err := json.Marshal(doc)
 		require.NoError(t, err)
 		_, err = s.Save(ctx, e.ID, Token(e), data)
-		require.ErrorIs(t, err, ErrStageAStructure)
+		require.ErrorIs(t, err, ErrEndpointStructureImmutable)
 		got, err := s.Get(ctx, e.ID)
 		require.NoError(t, err)
 		require.Equal(t, e.Data, got.Data)
@@ -151,7 +151,7 @@ func TestStageAPositionalEvidence(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, string(other), string(retained))
 	_, err = s.Save(ctx, e.ID, Token(e), json.RawMessage(strings.ReplaceAll(string(removed), "https://example.test/one", "https://example.test/new")))
-	require.ErrorIs(t, err, ErrStageAStructure)
+	require.ErrorIs(t, err, ErrEndpointStructureImmutable)
 }
 func TestStageAProjection(t *testing.T) {
 	t.Parallel()
@@ -170,7 +170,7 @@ func TestStageAProjection(t *testing.T) {
 		if tc.equal {
 			require.NoError(t, err)
 		} else {
-			require.ErrorIs(t, err, ErrStageAStructure)
+			require.ErrorIs(t, err, ErrEndpointStructureImmutable)
 		}
 	}
 }
@@ -203,7 +203,7 @@ func TestStageANumericRoundTrip(t *testing.T) {
 	e, err = s.Save(ctx, e.ID, Token(e), json.RawMessage(equivalent))
 	require.NoError(t, err)
 	_, err = s.Save(ctx, e.ID, Token(e), json.RawMessage(strings.ReplaceAll(equivalent, "9007199254740993.0", "9007199254740992")))
-	require.ErrorIs(t, err, ErrStageAStructure)
+	require.ErrorIs(t, err, ErrEndpointStructureImmutable)
 	got, err := s.Get(ctx, e.ID)
 	require.NoError(t, err)
 	require.Equal(t, e.Data, got.Data)
@@ -322,7 +322,7 @@ func TestSaveExactEndpointKeys(t *testing.T) {
 			}
 			require.Empty(t, s.validator.Validate(json.RawMessage(changed)))
 			_, err = s.Save(ctx, e.ID, Token(e), json.RawMessage(changed))
-			require.ErrorIs(t, err, ErrStageAStructure)
+			require.ErrorIs(t, err, ErrEndpointStructureImmutable)
 			got, err := s.Get(ctx, e.ID)
 			require.NoError(t, err)
 			require.Equal(t, e.Data, got.Data)
@@ -343,4 +343,17 @@ func TestSaveExactEndpointKeys(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, saved.Data, got.Data)
 	})
+}
+
+func TestEndpointStructureErrorPaths(t *testing.T) {
+	t.Parallel()
+	for _, key := range []string{"type", "url", "variables"} {
+		t.Run(key, func(t *testing.T) {
+			old := json.RawMessage(`{"server":{"remotes":[{}]}}`)
+			updated := json.RawMessage(`{"server":{"remotes":[{"` + key + `":null}]}}`)
+			err := checkStructure(old, updated)
+			require.ErrorIs(t, err, ErrEndpointStructureImmutable)
+			require.EqualError(t, err, ErrEndpointStructureImmutable.Error()+": /server/remotes/0/"+key)
+		})
+	}
 }
