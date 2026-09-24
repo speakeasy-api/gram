@@ -2084,8 +2084,7 @@ func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
 	require.True(t, ok, "opencode package must ship the hooks bootstrapper the shim spawns")
 }
 
-// OpenCode 2 rejects a module without a default {id, setup} export and
-// OpenCode 1 only reaches the config hook through server(); pin both.
+// Pins the V2 {id, setup} export and the V1 server() bridge.
 func TestGenerateOpenCodeFeatureLoaderSupportsV1AndV2(t *testing.T) {
 	t.Parallel()
 	p := PluginInfo{
