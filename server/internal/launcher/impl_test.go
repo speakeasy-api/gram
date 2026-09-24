@@ -206,7 +206,7 @@ func TestJudgeMapsAnswersToCallerIDs(t *testing.T) {
 	jev.mu.Lock()
 	defer jev.mu.Unlock()
 	require.Equal(t, "Bearer sk-or-org-key", jev.lastAuth)
-	require.Equal(t, "typesafe/jev-latest", jev.lastModel)
+	require.Equal(t, "typesafe/jev-1.13", jev.lastModel)
 	require.Len(t, jev.lastTarget, 4)
 
 	keys.mu.Lock()

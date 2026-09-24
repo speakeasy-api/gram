@@ -1,5 +1,5 @@
 {
-  "model": "typesafe/jev-latest",
+  "model": "typesafe/jev-1.13",
   "state": {
     "query": "the disabled slack one",
     "query_note": "Text the user has typed so far into a ⌘K command palette in an admin dashboard. It is often an incomplete prefix or a short natural-language phrase.",

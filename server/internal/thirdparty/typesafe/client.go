@@ -28,7 +28,7 @@ import (
 const (
 	// DefaultModel is the OpenRouter model id every request is sent with; it
 	// is not configurable in this version.
-	DefaultModel = "typesafe/jev-latest"
+	DefaultModel = "typesafe/jev-1.13"
 
 	// DefaultEndpoint is the System One judgement endpoint as hosted by
 	// OpenRouter, so the org's provisioned OpenRouter key pays for it.

@@ -304,7 +304,7 @@ hand-assembled headers.
 
 - `client.go`: `POST https://openrouter.ai/api/v1/systemone` (OpenRouter hosts
   Jev's System One API unchanged, in beta), `Authorization: Bearer <OpenRouter key>`,
-  body `{model: "typesafe/jev-latest", state, questions}`, 4 s timeout, no
+  body `{model: "typesafe/jev-1.13", state, questions}`, 4 s timeout, no
   retry. The key is passed per call, never held by the client. Returns typed
   errors for transport, non-200, and decode failures.
 - Response shape: `answers[<id>].probabilities[<option>]` for Choice,
@@ -328,7 +328,7 @@ lookup _error_ (the key store unreachable, a row that will not decrypt, a
 platform key disabled) is not "no key": it returns a 502-class gateway error,
 also with no outbound call, and the client retries on the next keystroke
 rather than latching the feature off. `model` is the constant
-`typesafe/jev-latest`.
+`typesafe/jev-1.13` (OpenRouter has no prefixed "latest" alias; bump the pin deliberately when a new Jev version ships).
 
 ### Wiring
 
