@@ -53,6 +53,12 @@ type OrganizationReader interface {
 	GetOrganization(context.Context, *gen.GetOrganizationPayload) (*gen.AdminOrganization, error)
 }
 
+// ProjectReader extends the admin service reads for project inventory and detail.
+type ProjectReader interface {
+	ListOrganizationProjects(context.Context, *gen.ListOrganizationProjectsPayload) (*gen.AdminListOrganizationProjectsResult, error)
+	GetProject(context.Context, *gen.GetProjectPayload) (*gen.AdminProjectDetail, error)
+}
+
 func NewRuntime(authenticator Authenticator, resourceURL string, reads ...OrganizationReader) *Runtime {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "admin-mcp",
@@ -66,8 +72,10 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	if len(reads) > 0 {
 		reader = reads[0]
 	}
-	registerContextTool(server, reader != nil)
+	projectReader, _ := reader.(ProjectReader)
+	registerContextTool(server, reader != nil, projectReader != nil)
 	registerOrganizationTools(server, reader)
+	registerProjectTools(server, reader, projectReader)
 	return &Runtime{authenticator: authenticator, server: server, resourceURL: resourceURL}
 }
 
