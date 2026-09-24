@@ -141,23 +141,25 @@ ON CONFLICT (organization_id, workload_issuer_id, match_kind, subject) WHERE del
 DO UPDATE SET agent_id = EXCLUDED.agent_id, updated_at = clock_timestamp()
 RETURNING *;
 
--- name: LockWorkloadAdmissionsForSubject :many
--- Locks every live admission naming this tuple, both tiers, before the tier being
--- withdrawn is tombstoned. Two withdrawals of the same workload otherwise race:
--- under READ COMMITTED neither transaction sees the other's uncommitted delete, so
--- both count the sibling tier as live and both leave the shared assignment behind,
--- stranding an assignment with no admission. A NOT EXISTS in the delete closes the
--- window inside one transaction but not between two, which is why this locks
--- instead. Ordered by id so concurrent callers take the rows in the same
--- sequence.
+-- name: LockWorkloadIssuerForWrite :one
+-- Serializes every write under one issuer on the issuer row itself, taken before
+-- any child row is read or written.
+--
+-- The admissions cannot be the lock target. FOR UPDATE locks rows that exist, and
+-- the case that matters is an admission that does not exist yet: a withdrawal
+-- counts the tuple, sees none remaining, and a concurrent admit inserts one and
+-- assigns it before the withdrawal removes the shared assignment — leaving a live
+-- admission with no agent, which the token endpoint refuses. Locking existing
+-- admissions cannot prevent an insert; only something both paths must hold can,
+-- and the issuer is the one row every write under it has to resolve first.
+--
+-- One row per issuer also means one lock target, so there is no ordering between
+-- several locks to get wrong and no deadlock between the withdrawal paths.
 SELECT id
-FROM workload_identity_admissions
+FROM workload_issuers
 WHERE organization_id = @organization_id
-  AND workload_issuer_id = @workload_issuer_id
-  AND match_kind = @match_kind
-  AND subject = @subject
+  AND id = @id
   AND deleted IS FALSE
-ORDER BY id
 FOR UPDATE;
 
 -- name: CountLiveAdmissionsForSubject :one

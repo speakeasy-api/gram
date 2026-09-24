@@ -502,56 +502,38 @@ func (q *Queries) ListWorkloadIssuers(ctx context.Context, arg ListWorkloadIssue
 	return items, nil
 }
 
-const lockWorkloadAdmissionsForSubject = `-- name: LockWorkloadAdmissionsForSubject :many
+const lockWorkloadIssuerForWrite = `-- name: LockWorkloadIssuerForWrite :one
 SELECT id
-FROM workload_identity_admissions
+FROM workload_issuers
 WHERE organization_id = $1
-  AND workload_issuer_id = $2
-  AND match_kind = $3
-  AND subject = $4
+  AND id = $2
   AND deleted IS FALSE
-ORDER BY id
 FOR UPDATE
 `
 
-type LockWorkloadAdmissionsForSubjectParams struct {
-	OrganizationID   string
-	WorkloadIssuerID uuid.UUID
-	MatchKind        string
-	Subject          string
+type LockWorkloadIssuerForWriteParams struct {
+	OrganizationID string
+	ID             uuid.UUID
 }
 
-// Locks every live admission naming this tuple, both tiers, before the tier being
-// withdrawn is tombstoned. Two withdrawals of the same workload otherwise race:
-// under READ COMMITTED neither transaction sees the other's uncommitted delete, so
-// both count the sibling tier as live and both leave the shared assignment behind,
-// stranding an assignment with no admission. A NOT EXISTS in the delete closes the
-// window inside one transaction but not between two, which is why this locks
-// instead. Ordered by id so concurrent callers take the rows in the same
-// sequence.
-func (q *Queries) LockWorkloadAdmissionsForSubject(ctx context.Context, arg LockWorkloadAdmissionsForSubjectParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, lockWorkloadAdmissionsForSubject,
-		arg.OrganizationID,
-		arg.WorkloadIssuerID,
-		arg.MatchKind,
-		arg.Subject,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+// Serializes every write under one issuer on the issuer row itself, taken before
+// any child row is read or written.
+//
+// The admissions cannot be the lock target. FOR UPDATE locks rows that exist, and
+// the case that matters is an admission that does not exist yet: a withdrawal
+// counts the tuple, sees none remaining, and a concurrent admit inserts one and
+// assigns it before the withdrawal removes the shared assignment — leaving a live
+// admission with no agent, which the token endpoint refuses. Locking existing
+// admissions cannot prevent an insert; only something both paths must hold can,
+// and the issuer is the one row every write under it has to resolve first.
+//
+// One row per issuer also means one lock target, so there is no ordering between
+// several locks to get wrong and no deadlock between the withdrawal paths.
+func (q *Queries) LockWorkloadIssuerForWrite(ctx context.Context, arg LockWorkloadIssuerForWriteParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockWorkloadIssuerForWrite, arg.OrganizationID, arg.ID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const softDeleteWorkloadAdmission = `-- name: SoftDeleteWorkloadAdmission :one

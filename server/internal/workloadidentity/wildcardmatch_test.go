@@ -285,6 +285,13 @@ func TestValidateSubjectRule(t *testing.T) {
 		// shared issuer is every other tenant.
 		{name: "a bare star is refused", kind: workloadidentity.MatchKindWildcard, subject: "*", allowWildcard: true, wantErr: workloadidentity.ErrWildcardStemEmpty},
 
+		// Whitespace before the star stays part of the stem, so the rule matches
+		// nothing while looking correct — and it is invisible in the field. The
+		// dashboard warns about it, so refusing it here is what keeps the client
+		// and the server on one grammar.
+		{name: "whitespace before the star is refused", kind: workloadidentity.MatchKindWildcard, subject: fleetStem + " *", allowWildcard: true, wantErr: workloadidentity.ErrWildcardStemTrailingWhitespace},
+		{name: "a tab before the star is refused too", kind: workloadidentity.MatchKindWildcard, subject: fleetStem + "\t*", allowWildcard: true, wantErr: workloadidentity.ErrWildcardStemTrailingWhitespace},
+
 		{name: "empty subject matches nothing", kind: workloadidentity.MatchKindExact, subject: "", allowWildcard: true, wantErr: workloadidentity.ErrSubjectEmpty},
 
 		// A longer subject verifies here and then fails at token exchange, where

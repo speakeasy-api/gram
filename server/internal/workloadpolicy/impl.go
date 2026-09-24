@@ -350,6 +350,15 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading workload issuer").LogError(ctx, s.logger)
 	}
 
+	// Held before the cascade, so a concurrent admit cannot insert a child between
+	// the children being tombstoned and the issuer being withdrawn.
+	if _, err := q.LockWorkloadIssuerForWrite(ctx, repo.LockWorkloadIssuerForWriteParams{
+		OrganizationID: t.organizationID,
+		ID:             id,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error locking the workload issuer").LogError(ctx, s.logger)
+	}
+
 	// ON DELETE CASCADE only fires on a hard delete, so the children have to be
 	// tombstoned here or a withdrawn issuer leaves admissions in the active set
 	// pointing at a tombstone — invisible in the list, still a row.
@@ -541,6 +550,20 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent").LogError(ctx, s.logger)
 	}
 
+	// Held before the children are written, so a concurrent withdrawal of this
+	// issuer either happens first — making the insert below a foreign-key failure
+	// against a tombstone the caller is told about — or waits and cascades over
+	// these rows instead of leaving them behind it.
+	if _, err := q.LockWorkloadIssuerForWrite(ctx, repo.LockWorkloadIssuerForWriteParams{
+		OrganizationID: t.organizationID,
+		ID:             issuerRow.ID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "the issuer was withdrawn while admitting this subject")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error locking the workload issuer").LogError(ctx, s.logger)
+	}
+
 	admission, err := q.CreateWorkloadAdmission(ctx, repo.CreateWorkloadAdmissionParams{
 		OrganizationID:   t.organizationID,
 		ProjectID:        projectID,
@@ -644,16 +667,15 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading the admission's issuer").LogError(ctx, s.logger)
 	}
 
-	// Taken before the tombstone so a concurrent withdrawal of the other tier
-	// blocks here rather than reading this row as still live and leaving the
-	// shared assignment behind.
-	if _, err := q.LockWorkloadAdmissionsForSubject(ctx, repo.LockWorkloadAdmissionsForSubjectParams{
-		OrganizationID:   t.organizationID,
-		WorkloadIssuerID: existing.WorkloadIssuerID,
-		MatchKind:        existing.MatchKind,
-		Subject:          existing.Subject,
+	// Every write under this issuer serializes here, before any child row is read
+	// or written: a concurrent withdrawal of the other tier, and a concurrent
+	// admit that would otherwise insert a tier after this one counted none
+	// remaining and then lose its agent to the delete below.
+	if _, err := q.LockWorkloadIssuerForWrite(ctx, repo.LockWorkloadIssuerForWriteParams{
+		OrganizationID: t.organizationID,
+		ID:             existing.WorkloadIssuerID,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error locking the workload's admissions").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error locking the workload issuer").LogError(ctx, s.logger)
 	}
 
 	withdrawn, err := q.SoftDeleteWorkloadAdmission(ctx, repo.SoftDeleteWorkloadAdmissionParams{
