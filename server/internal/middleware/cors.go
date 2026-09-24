@@ -15,7 +15,11 @@ var mcpOpenAccessControlRoutes = []string{
 	"/openapi.yaml",
 }
 
-func CORSMiddleware(env string, serverURL string, chatSessionValidator ChatSessionValidator) func(next http.Handler) http.Handler {
+// CORSMiddleware sets the CORS headers. platformOrigins are the origins of the
+// extra platform hosts (GRAM_PLATFORM_HOSTS); a request from one of them gets
+// its own origin back, so the dashboard served there can call custom-domain MCP
+// endpoints. Every other request keeps serverURL.
+func CORSMiddleware(env string, serverURL string, platformOrigins []string, chatSessionValidator ChatSessionValidator) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch env {
@@ -25,9 +29,9 @@ func CORSMiddleware(env string, serverURL string, chatSessionValidator ChatSessi
 					w.Header().Set("Access-Control-Allow-Origin", origin)
 				}
 			case "dev":
-				w.Header().Set("Access-Control-Allow-Origin", serverURL)
+				w.Header().Set("Access-Control-Allow-Origin", allowedPlatformOrigin(w, r, serverURL, platformOrigins))
 			case "prod":
-				w.Header().Set("Access-Control-Allow-Origin", serverURL)
+				w.Header().Set("Access-Control-Allow-Origin", allowedPlatformOrigin(w, r, serverURL, platformOrigins))
 			default:
 				// No CORS headers set for unspecified environments
 			}
@@ -69,4 +73,16 @@ func CORSMiddleware(env string, serverURL string, chatSessionValidator ChatSessi
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// allowedPlatformOrigin returns the request Origin when it is one of the
+// platform origins, marking the response as varying by Origin, and serverURL
+// otherwise.
+func allowedPlatformOrigin(w http.ResponseWriter, r *http.Request, serverURL string, platformOrigins []string) string {
+	origin := r.Header.Get("Origin")
+	if origin == "" || origin == serverURL || !slices.Contains(platformOrigins, origin) {
+		return serverURL
+	}
+	w.Header().Add("Vary", "Origin")
+	return origin
 }

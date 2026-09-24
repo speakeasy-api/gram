@@ -63,6 +63,50 @@ func newTestInstance(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
+func TestParsePlatformHosts(t *testing.T) {
+	t.Parallel()
+
+	valid := []struct {
+		name     string
+		raw      []string
+		expected map[string]string
+	}{
+		{name: "unset", raw: nil, expected: map[string]string{}},
+		{name: "empty env value", raw: []string{""}, expected: map[string]string{}},
+		{
+			name:     "canonical host and base URL",
+			raw:      []string{"app.getgram.ai", " AI.Speakeasy.com:443 "},
+			expected: map[string]string{"app.getgram.ai": "https://app.getgram.ai", "ai.speakeasy.com": "https://ai.speakeasy.com"},
+		},
+	}
+	for _, tt := range valid {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			hosts, err := customdomains.ParsePlatformHosts(tt.raw)
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, hosts)
+		})
+	}
+
+	invalid := []struct {
+		name string
+		raw  []string
+	}{
+		{name: "empty entry in a list", raw: []string{"ai.speakeasy.com", ""}},
+		{name: "scheme", raw: []string{"https://ai.speakeasy.com"}},
+		{name: "path", raw: []string{"ai.speakeasy.com/app"}},
+		{name: "trailing dot", raw: []string{"ai.speakeasy.com."}},
+		{name: "malformed port", raw: []string{"ai.speakeasy.com:not-a-port"}},
+	}
+	for _, tt := range invalid {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := customdomains.ParsePlatformHosts(tt.raw)
+			require.Error(t, err)
+		})
+	}
+}
+
 func TestCustomDomainsMiddleware(t *testing.T) {
 	t.Parallel()
 	ctx, instance := newTestInstance(t)

@@ -60,6 +60,15 @@ function isProdHost(serverURL: string): boolean {
   return PROD_HOSTS.has(new URL(serverURL).hostname);
 }
 
+// Gram's own hosts: getgram.ai, ai.speakeasy.com and their subdomains. Matched
+// on label boundaries so lookalikes such as mygetgram.ai do not qualify.
+function isGramHost(serverURL: string): boolean {
+  const host = new URL(serverURL).hostname;
+  return ["getgram.ai", "ai.speakeasy.com"].some(
+    (domain) => host === domain || host.endsWith(`.${domain}`),
+  );
+}
+
 export const TelemetryProvider = (props: {
   children: ReactNode;
 }): JSX.Element => {
@@ -94,10 +103,7 @@ export const TelemetryProvider = (props: {
     }
 
     const serverURL = getServerURL();
-    if (
-      serverURL.includes("getgram.ai") ||
-      new URL(serverURL).hostname.endsWith("ai.speakeasy.com")
-    ) {
+    if (isGramHost(serverURL)) {
       const env = isProdHost(serverURL) ? "prod" : "dev";
       datadogRum.init({
         applicationId: "93afb64a-dd15-490c-a749-51b4c5c5a171",

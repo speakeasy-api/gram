@@ -22,13 +22,18 @@ import (
 // ParsePlatformHosts validates the first-party hosts (GRAM_PLATFORM_HOSTS) and
 // maps each canonical host to the base URL rendered for requests on it. The
 // server URL's own host is always first-party; if listed, it keeps the server
-// URL as its base URL.
+// URL as its base URL. An empty value (GRAM_PLATFORM_HOSTS="", which the flag
+// parser yields as one empty entry) means none; an empty entry in a longer
+// list is a malformed value and fails.
 func ParsePlatformHosts(rawHosts []string) (map[string]string, error) {
+	if len(rawHosts) == 1 && strings.TrimSpace(rawHosts[0]) == "" {
+		rawHosts = nil
+	}
 	hosts := make(map[string]string, len(rawHosts))
 	for _, raw := range rawHosts {
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
-			continue
+			return nil, errors.New("platform host must not be empty")
 		}
 		host, err := requestorigin.CanonicalHost(raw)
 		if err != nil {
