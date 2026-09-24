@@ -43,6 +43,14 @@ func TestService_ListScopes(t *testing.T) {
 		require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(scope)].Visibility)
 		require.Nil(t, bySlug[string(scope)].ExclusionScope)
 	}
+	// Mirrors the families above: the count alone would still pass if these were
+	// mapped to another resource type or hidden as internal.
+	for _, scope := range []authz.Scope{authz.ScopeWorkloadRead, authz.ScopeWorkloadWrite} {
+		require.Equal(t, "workload", bySlug[string(scope)].ResourceType)
+		require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(scope)].Visibility)
+	}
+	require.Equal(t, string(authz.ScopeWorkloadBlockedRead), *bySlug[string(authz.ScopeWorkloadRead)].ExclusionScope)
+	require.Equal(t, string(authz.ScopeWorkloadBlockedWrite), *bySlug[string(authz.ScopeWorkloadWrite)].ExclusionScope)
 	require.Equal(t, "Read organization metadata and members.", bySlug[string(authz.ScopeOrgRead)].Description)
 	require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(authz.ScopeProjectWrite)].Visibility)
 	require.Equal(t, authz.ScopeVisibilityInternal, bySlug[string(authz.ScopeProjectBlockedWrite)].Visibility)

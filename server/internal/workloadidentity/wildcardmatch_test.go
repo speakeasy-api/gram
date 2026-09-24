@@ -100,6 +100,31 @@ func TestIsAdmitted_WildcardDoesNotReachAnotherTenantOfTheSharedIssuer(t *testin
 	require.False(t, admitted)
 }
 
+// The Gram organization boundary, which the test above does not cover: that one
+// varies the WIMSE subject's Anthropic organization while both rows stay in one
+// Gram tenant. Here the subject matches the wildcard exactly and only the
+// querying organization differs, so the row can only be refused by the
+// organization predicate in the lookup.
+func TestIsAdmitted_AWildcardNeverReachesAnotherGramOrganization(t *testing.T) {
+	t.Parallel()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	f := newAdmissionFixture(t, conn)
+	allowWildcardAdmission(t, conn, f.issuerID, true)
+	seedAdmissionRule(t, conn, f.tenant.organizationID, organizationTier(), f.issuerID, fleetRule, workloadidentity.MatchKindWildcard)
+
+	// A second Gram tenant asking about a subject the first one's rule covers.
+	other := newTenant(t, conn)
+	params := f.params()
+	params.OrganizationID = other.organizationID
+	params.ProjectID = projectTier(other.projectID)
+	params.Subject = channelOne
+
+	admitted, err := workloadidentity.IsAdmitted(t.Context(), conn, params)
+	require.NoError(t, err)
+	require.False(t, admitted, "a wildcard admitted one organization's subject for another organization")
+}
+
 // Clearing the issuer's permission must revoke wildcard rules already written, not
 // merely stop new ones being created.
 func TestIsAdmitted_WildcardIsInertWhenTheIssuerDoesNotPermitIt(t *testing.T) {
