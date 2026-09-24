@@ -3,8 +3,8 @@ package privatekeyjwt
 import (
 	"github.com/go-jose/go-jose/v4/jwt"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // AssertionType is the only client_assertion_type this server accepts

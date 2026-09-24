@@ -1,4 +1,4 @@
-h1:vpPGqaCenVvaz1DuDoG8iyWFURlu+oWDaTesVtTO1ss=
+h1:MdGagGv4gACS6YYyiqyQpJr9/sOEjpgA12Lp7WnggGA=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -431,3 +431,4 @@ h1:vpPGqaCenVvaz1DuDoG8iyWFURlu+oWDaTesVtTO1ss=
 20260923175416_organization-metadata-add-verified-domains.sql h1:gKLrBw8W7Xbr6CS1VpXKkUi1cfjHHz0zo4PB2R7o8EY=
 20260923183736_scope_gateway_plugin_membership.sql h1:Hsqt9NF+ixW9QZuY/sQ2jtQRPGfHlBqe3rxzwuNxUP4=
 20260923184230_workload-admission-match-kind.sql h1:5A9HYWwMfLklaCt+ME3QcEJ6nkmVLufINeTGb9eIrVw=
+20260923235951_chat-messages-project-listing-idx.sql h1:gBabbevdHV7bKiVwLhFZTOOKjoYqEHOUYim49FKTadI=

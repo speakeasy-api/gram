@@ -12,6 +12,7 @@ import {
 import { Text } from "@/components/ui/Text";
 import { TextArea } from "@/components/ui/Textarea";
 import type { AIDetection } from "@gram/client/models/components/aidetection.js";
+import { invalidateAllAiDetectionUsers } from "@gram/client/react-query/aiDetectionUsers.js";
 import { invalidateAllAiDetections } from "@gram/client/react-query/aiDetections.js";
 import { useSetAIToolDecisionMutation } from "@gram/client/react-query/setAIToolDecision.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -95,6 +96,8 @@ function DecisionForm({
   const mutation = useSetAIToolDecisionMutation({
     onSuccess: () => {
       void invalidateAllAiDetections(queryClient);
+      // The tool page carries the same access summary on its own read.
+      void invalidateAllAiDetectionUsers(queryClient);
       toast.success(`Access decision saved for ${detection.displayName}`);
       onClose();
     },

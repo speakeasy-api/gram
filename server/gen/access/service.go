@@ -70,6 +70,14 @@ type Service interface {
 	// canonical identity. Requires project:read on the active project; the access
 	// decision on each row carries its state but not who recorded it, when, or why.
 	ListEmployeeAIDetections(context.Context, *ListEmployeeAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
+	// List the enrolled users one detected AI tool was found for, each with their
+	// devices, signals, versions and first and last sightings: the evidence
+	// listEmployeeAIDetections gives per tool for one person, expanded the other
+	// way round. Org-scoped like listAIDetections and, like it, requires an
+	// authenticated session authorized for org:admin on the active organization.
+	// Linked alias emails are folded to the canonical identity, so one person is
+	// one row. A target with no detections in the organization is not_found.
+	ListAIDetectionUsers(context.Context, *ListAIDetectionUsersPayload) (res *ListAIDetectionUsersResult, err error)
 	// Record whether a detected AI tool may reach this organization's MCP gateway.
 	// The decision is organization-level and applies to every server: a blocked
 	// tool is refused when it authenticates, so its users see an error their
@@ -131,7 +139,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [26]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
+var MethodNames = [27]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -162,6 +170,26 @@ type AIDetection struct {
 	// When this tool was most recently detected.
 	LastSeen string
 	Access   *AIToolAccessSummary
+}
+
+// One enrolled user a detection target was found for, with that user's share
+// of the organization's scan reports: the evidence AIDetection carries for the
+// whole organization, narrowed to one person.
+type AIDetectionUser struct {
+	// Canonical email of the enrolled user the detections are attributed to.
+	// Linked alias emails are folded into it.
+	UserEmail string
+	// Distinct devices, by hardware serial, this tool was detected on for this
+	// user. Devices that report no serial are not counted.
+	DeviceCount int64
+	// Detection signals observed for this user: installed and/or running.
+	Signals []string
+	// Unique non-empty detected versions for this user.
+	Versions []string
+	// When this tool was first detected for this user.
+	FirstSeen string
+	// When this tool was most recently detected for this user.
+	LastSeen string
 }
 
 // The enforcement verdict for one detected AI tool, computed server-side so a
@@ -416,6 +444,26 @@ type GetShadowMCPInventoryServerPayload struct {
 	// Shadow MCP server slug to inspect.
 	ServerSlug   string
 	SessionToken *string
+}
+
+// ListAIDetectionUsersPayload is the payload type of the access service
+// listAIDetectionUsers method.
+type ListAIDetectionUsersPayload struct {
+	// Id of the detection target to expand. Accepted exactly as agents report it,
+	// under the same length bound the scan-report ingest stores it with, so every
+	// id in the inventory can be expanded.
+	TargetID     string
+	SessionToken *string
+}
+
+// ListAIDetectionUsersResult is the result type of the access service
+// listAIDetectionUsers method.
+type ListAIDetectionUsersResult struct {
+	// The target as the inventory lists it, so a page reached by link needs no
+	// second read for its name, category and access decision.
+	Detection *AIDetection
+	// Users the target was detected for, most recently seen first.
+	Users []*AIDetectionUser
 }
 
 // ListAIDetectionsPayload is the payload type of the access service
