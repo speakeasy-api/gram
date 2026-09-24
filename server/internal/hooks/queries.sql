@@ -127,6 +127,15 @@ FROM skill_observations
 WHERE project_id = @project_id
 ORDER BY seen_at ASC, id ASC;
 
+-- name: GetChatProjectID :one
+-- Looks up a chat by id alone so hook ingest can refuse a write whose session
+-- already lives in another project. Session ids hash to chat ids with no
+-- project in the derivation, and an org-scoped key can present any project
+-- header in the org.
+SELECT project_id
+FROM chats
+WHERE id = @id;
+
 -- name: UpsertClaudeCodeSession :one
 -- Creates the chat row a captured agent session hangs off, or refreshes the one
 -- already there. The chat id is derived from a client-supplied session id, so a

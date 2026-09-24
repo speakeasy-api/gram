@@ -94,7 +94,7 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 Use the `gram-playwright-cli` skill and `mise run playwright` for routine dashboard inspection, page interaction, console or network debugging, and screenshots. The mise task uses the repository Playwright config, installs Chromium when missing, and writes ignored artifacts to `.playwright-cli/`.
 
-Use `pr-demo-gif` when a user-visible change needs a shareable PR screenshot, GIF recording, or PR comment. It builds on the same `mise run playwright` workflow and adds the capture and publishing steps. Do not use `npm`, `npx`, or `yarn` for either workflow.
+Use `pull-request-demo` when a user-visible change needs a shareable PR screenshot, GIF recording, or PR comment. It builds on the same `mise run playwright` workflow and adds the capture and publishing steps. Do not use `npm`, `npx`, or `yarn` for either workflow.
 
 ### Testing assistants locally
 
@@ -119,6 +119,10 @@ Background-work rules live in the `gram-temporal` skill (`.agents/skills/gram-te
 ### Platform MCP
 
 The Platform MCP is a first-party product surface under `server/internal/platformmcp/`. When adding or changing backend APIs, dashboard workflows, permissions, or user-facing product capabilities, explicitly assess whether an existing Platform MCP tool must change or a new outcome-oriented tool should be added. Keep tool schemas, descriptions, authorization, audiences, server instructions, tests, and shipped Platform MCP skills in sync with the product behavior. Activate the `maintaining-platform-mcp` skill (`.agents/skills/maintaining-platform-mcp/SKILL.md`) for this assessment and any Platform MCP implementation. Use `authoring-platform-mcp-skills` as well when changing workflows under `server/internal/plugins/platform_mcp_skills/`.
+
+### Staff Admin MCP
+
+When adding, removing, or changing an admin dashboard workflow, backend admin API, or staff permission, assess whether the staff-only Admin MCP needs a tool added or updated. Record an explicit reason when MCP parity is not appropriate. Keep staff-only authorization, exact target selection, safe results, tool contracts, and tests aligned with the dashboard. Activate `maintaining-admin-mcp` (`.agents/skills/maintaining-admin-mcp/SKILL.md`) for this assessment and any changes under `server/internal/adminmcp/`.
 
 ## Mise CLI
 

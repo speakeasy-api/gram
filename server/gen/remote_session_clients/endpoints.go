@@ -16,6 +16,9 @@ import (
 
 // Endpoints wraps the "remoteSessionClients" service endpoints.
 type Endpoints struct {
+	PrepareEMA                goa.Endpoint
+	ReadEMA                   goa.Endpoint
+	UnlinkEMA                 goa.Endpoint
 	CreateRemoteSessionClient goa.Endpoint
 	CreateCimd                goa.Endpoint
 	UpdateRemoteSessionClient goa.Endpoint
@@ -34,6 +37,9 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
+		PrepareEMA:                NewPrepareEMAEndpoint(s, a.APIKeyAuth),
+		ReadEMA:                   NewReadEMAEndpoint(s, a.APIKeyAuth),
+		UnlinkEMA:                 NewUnlinkEMAEndpoint(s, a.APIKeyAuth),
 		CreateRemoteSessionClient: NewCreateRemoteSessionClientEndpoint(s, a.APIKeyAuth),
 		CreateCimd:                NewCreateCimdEndpoint(s, a.APIKeyAuth),
 		UpdateRemoteSessionClient: NewUpdateRemoteSessionClientEndpoint(s, a.APIKeyAuth),
@@ -50,6 +56,9 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "remoteSessionClients" service
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.PrepareEMA = m(e.PrepareEMA)
+	e.ReadEMA = m(e.ReadEMA)
+	e.UnlinkEMA = m(e.UnlinkEMA)
 	e.CreateRemoteSessionClient = m(e.CreateRemoteSessionClient)
 	e.CreateCimd = m(e.CreateCimd)
 	e.UpdateRemoteSessionClient = m(e.UpdateRemoteSessionClient)
@@ -60,6 +69,183 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListRemoteSessionClients = m(e.ListRemoteSessionClients)
 	e.GetRemoteSessionClient = m(e.GetRemoteSessionClient)
 	e.DeleteRemoteSessionClient = m(e.DeleteRemoteSessionClient)
+}
+
+// NewPrepareEMAEndpoint returns an endpoint function that calls the method
+// "prepareEMA" of service "remoteSessionClients".
+func NewPrepareEMAEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*PrepareEMAPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.PrepareEMA(ctx, p)
+	}
+}
+
+// NewReadEMAEndpoint returns an endpoint function that calls the method
+// "readEMA" of service "remoteSessionClients".
+func NewReadEMAEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ReadEMAPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ReadEMA(ctx, p)
+	}
+}
+
+// NewUnlinkEMAEndpoint returns an endpoint function that calls the method
+// "unlinkEMA" of service "remoteSessionClients".
+func NewUnlinkEMAEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UnlinkEMAPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UnlinkEMA(ctx, p)
+	}
 }
 
 // NewCreateRemoteSessionClientEndpoint returns an endpoint function that calls

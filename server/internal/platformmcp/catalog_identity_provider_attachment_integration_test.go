@@ -26,6 +26,7 @@ func attachmentTestIssuerMetadata(issuerURL string) remotesessions.DiscoveredIss
 		RegistrationEndpoint:                       issuerURL + "/register",
 		ScopesSupported:                            []string{"read"},
 		GrantTypesSupported:                        []string{"authorization_code"},
+		AuthorizationGrantProfilesSupported:        []string{"urn:ietf:params:oauth:grant-profile:id-jag"},
 		ResponseTypesSupported:                     []string{"code"},
 		TokenEndpointAuthMethodsSupported:          []string{"client_secret_basic"},
 		CodeChallengeMethodsSupported:              []string{"S256"},
@@ -97,6 +98,7 @@ func attachmentTestEnsureIssuer(t *testing.T, service *CatalogIdentityProviderAt
 	}
 	issuer, err := service.createIssuer(t.Context(), principal, project, uuid.New(), metadata)
 	require.NoError(t, err)
+	require.Equal(t, metadata.AuthorizationGrantProfilesSupported, issuer.AuthorizationGrantProfilesSupported)
 	return issuer
 }
 

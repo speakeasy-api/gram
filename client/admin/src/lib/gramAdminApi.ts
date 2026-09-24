@@ -550,6 +550,42 @@ export function listOrganizationProjects(
   );
 }
 
+export type AdminMcpServerSource =
+  | "toolset"
+  | "remote"
+  | "tunneled"
+  | "unproxied"
+  | "toolset_only";
+
+export type AdminMcpServer = {
+  // The mcp_servers row id, or the toolset id for a toolset-only server.
+  id: string;
+  name: string;
+  // Omitted when the server has no routable address, such as an mcp_servers
+  // row with no endpoint.
+  url?: string;
+  visibility: "disabled" | "private" | "public";
+  source: AdminMcpServerSource;
+  created_at: string;
+};
+
+export type ListProjectMcpServersResult = {
+  mcp_servers: AdminMcpServer[];
+};
+
+export function listProjectMcpServers(
+  organizationID: string,
+  projectID: string,
+): Promise<ListProjectMcpServersResult> {
+  const qs = toSearchParams({
+    organization_id: organizationID,
+    project_id: projectID,
+  });
+  return gramAdminFetch<ListProjectMcpServersResult>(
+    `/admin/project.mcpServers?${qs}`,
+  );
+}
+
 export type AdminOrganizationMember = {
   id: string;
   email: string;
