@@ -54,10 +54,6 @@ const (
 	// FeatureNetworkIngress is the durable staff-managed entitlement for private
 	// network ingress. It is never included in default bundles or demo seed data.
 	FeatureNetworkIngress Feature = "network_ingress"
-
-	// FeatureClaudeTagSupport is the staff-managed organization capability for
-	// Claude Tag Slack workspace connections. It is disabled by default.
-	FeatureClaudeTagSupport Feature = "claude_tag_support"
 )
 
 // RequiresPlatformAdmin reports whether toggling f through productFeatures.set

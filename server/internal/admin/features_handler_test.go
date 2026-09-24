@@ -28,7 +28,6 @@ import (
 type adminOrganizationFeaturesResponse = adminserver.GetOrganizationFeaturesResponseBody
 
 var adminGenericWritableFeatures = []productfeatures.Feature{
-	productfeatures.FeatureClaudeTagSupport,
 	productfeatures.FeatureLogs,
 	productfeatures.FeatureToolIOLogs,
 	productfeatures.FeatureSessionCapture,
@@ -61,7 +60,7 @@ func TestAttach_MountsOrganizationFeaturesRoutes(t *testing.T) {
 	}
 }
 
-func TestGetOrganizationFeatures_ReturnsCompleteState(t *testing.T) {
+func TestGetOrganizationFeatures_ReturnsTwentyFields(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -91,7 +90,7 @@ func TestGetOrganizationFeatures_ReturnsCompleteState(t *testing.T) {
 		"skills_enabled": {}, "skill_capture_metadata_only": {}, "ai_platform_push_integrations_enabled": {},
 		"platform_mcp_enabled": {}, "customer_managed_encryption_keys_enabled": {},
 		"remote_session_auto_refresh_enabled": {}, "remote_session_auto_refresh_enforced_enabled": {},
-		"claude_tag_support_enabled": {}, "consent_tool_filtering_enabled": {}, "network_ingress_enabled": {}, "session_portability_enabled": {}, "device_agent": {},
+		"consent_tool_filtering_enabled": {}, "network_ingress_enabled": {}, "session_portability_enabled": {}, "device_agent": {},
 	}
 	gotKeys := make(map[string]struct{}, len(result))
 	for key := range result {
@@ -121,11 +120,7 @@ func TestSetOrganizationFeature_SkillsAndRefreshSemantics(t *testing.T) {
 	handler := SessionMiddleware(mux)
 	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
 
-	result := setAdminOrganizationFeature(t, handler, sessionID, orgID, productfeatures.FeatureClaudeTagSupport, true)
-	require.True(t, result.ClaudeTagSupportEnabled)
-	result = setAdminOrganizationFeature(t, handler, sessionID, orgID, productfeatures.FeatureClaudeTagSupport, false)
-	require.False(t, result.ClaudeTagSupportEnabled)
-	result = setAdminOrganizationFeature(t, handler, sessionID, orgID, productfeatures.FeatureSkills, false)
+	result := setAdminOrganizationFeature(t, handler, sessionID, orgID, productfeatures.FeatureSkills, false)
 	require.True(t, result.SkillsEnabled)
 	result = setAdminOrganizationFeature(t, handler, sessionID, orgID, productfeatures.FeatureSkills, true)
 	require.True(t, result.SkillsEnabled)
@@ -210,7 +205,7 @@ func TestSetOrganizationFeature_EnableThenDisableEveryGenericWritableFeature(t *
 	Attach(mux, svc)
 	handler := SessionMiddleware(mux)
 	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
-	require.Len(t, adminGenericWritableFeatures, 16)
+	require.Len(t, adminGenericWritableFeatures, 15)
 	for _, feature := range adminGenericWritableFeatures {
 		setAdminOrganizationFeature(t, handler, sessionID, orgID, feature, true)
 	}

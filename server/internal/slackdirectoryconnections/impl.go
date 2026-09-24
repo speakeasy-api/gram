@@ -34,7 +34,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.opentelemetry.io/otel/trace"
@@ -45,24 +44,23 @@ import (
 const stateTTL = 10 * time.Minute
 
 type Service struct {
-	db              *pgxpool.Pool
-	auth            *auth.Auth
-	authz           *authz.Engine
-	audit           *audit.Logger
-	productFeatures *productfeatures.Client
-	cache           cache.Cache
-	encryption      *encryption.Client
-	provider        Provider
-	siteURL         *url.URL
-	tracer          trace.Tracer
-	logger          *slog.Logger
+	db         *pgxpool.Pool
+	auth       *auth.Auth
+	authz      *authz.Engine
+	audit      *audit.Logger
+	cache      cache.Cache
+	encryption *encryption.Client
+	provider   Provider
+	siteURL    *url.URL
+	tracer     trace.Tracer
+	logger     *slog.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tp trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, engine *authz.Engine, auditLogger *audit.Logger, productFeatures *productfeatures.Client, stateCache cache.Cache, enc *encryption.Client, provider Provider, siteURL *url.URL) *Service {
-	return &Service{db: db, auth: auth.New(logger, db, sessions, engine), authz: engine, audit: auditLogger, productFeatures: productFeatures, cache: stateCache, encryption: enc, provider: provider, siteURL: siteURL, tracer: tp.Tracer("github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"), logger: logger}
+func NewService(logger *slog.Logger, tp trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, engine *authz.Engine, auditLogger *audit.Logger, stateCache cache.Cache, enc *encryption.Client, provider Provider, siteURL *url.URL) *Service {
+	return &Service{db: db, auth: auth.New(logger, db, sessions, engine), authz: engine, audit: auditLogger, cache: stateCache, encryption: enc, provider: provider, siteURL: siteURL, tracer: tp.Tracer("github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"), logger: logger}
 }
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
@@ -85,13 +83,6 @@ func (s *Service) authorize(ctx context.Context) (*contextvalues.AuthContext, er
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
-	}
-	enabled, err := s.productFeatures.IsFeatureEnabledUncached(ctx, ac.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnavailable, nil, "Slack workspace connections are unavailable")
-	}
-	if !enabled {
-		return nil, oops.C(oops.CodeNotFound)
 	}
 	return ac, nil
 }

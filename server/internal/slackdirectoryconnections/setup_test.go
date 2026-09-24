@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -53,15 +52,13 @@ func (p *mockProvider) Exchange(ctx context.Context, code string) (*slackdirecto
 }
 
 type fixture struct {
-	build           func(*productfeatures.Client, slackdirectoryconnections.Provider) *slackdirectoryconnections.Service
-	service         *slackdirectoryconnections.Service
-	db              *pgxpool.Pool
-	productFeatures *productfeatures.Client
-	featureService  *productfeatures.Service
-	provider        *mockProvider
-	enc             *encryption.Client
-	cache           cache.Cache
-	auth            *contextvalues.AuthContext
+	build    func(slackdirectoryconnections.Provider) *slackdirectoryconnections.Service
+	service  *slackdirectoryconnections.Service
+	db       *pgxpool.Pool
+	provider *mockProvider
+	enc      *encryption.Client
+	cache    cache.Cache
+	auth     *contextvalues.AuthContext
 }
 
 func newService(t *testing.T) (context.Context, *fixture) {
@@ -77,8 +74,6 @@ func newService(t *testing.T) (context.Context, *fixture) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	ctx = contextvalues.SetAuthContext(ctx, ac)
-	productFeatures := productfeatures.NewClient(logger, tp, db, redis)
-	require.NoError(t, productFeatures.SetFeatureEnabled(ctx, ac.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, true))
 	enc, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
 	provider := &mockProvider{}
@@ -86,12 +81,10 @@ func newService(t *testing.T) (context.Context, *fixture) {
 	store := cache.NewRedisCacheAdapter(redis)
 	site, err := url.Parse("https://dashboard.example")
 	require.NoError(t, err)
-	build := func(features *productfeatures.Client, oauth slackdirectoryconnections.Provider) *slackdirectoryconnections.Service {
-		return slackdirectoryconnections.NewService(logger, tp, db, sessions, engine, audit.NewLogger(), features, store, enc, oauth, site)
+	build := func(oauth slackdirectoryconnections.Provider) *slackdirectoryconnections.Service {
+		return slackdirectoryconnections.NewService(logger, tp, db, sessions, engine, audit.NewLogger(), store, enc, oauth, site)
 	}
-	svc := build(productFeatures, provider)
-	featureService := productfeatures.NewService(logger, tp, db, sessions, redis, engine, audit.NewLogger())
-	return ctx, &fixture{build: build, service: svc, db: db, productFeatures: productFeatures, featureService: featureService, provider: provider, enc: enc, cache: store, auth: ac}
+	return ctx, &fixture{build: build, service: build(provider), db: db, provider: provider, enc: enc, cache: store, auth: ac}
 }
 func begin(t *testing.T, ctx context.Context, f *fixture, id *string) string {
 	t.Helper()

@@ -55,13 +55,6 @@ const PRODUCT_FEATURES = {
     description:
       'Log every authorization decision (allow/deny) to ClickHouse. Powers auditing of "why did X have access to Y?"',
   },
-  claude_tag_support: {
-    kind: "toggle",
-    enabledKey: "claudeTagSupportEnabled",
-    label: "Claude Tag support",
-    description:
-      "Allows organization admins to connect Slack workspaces for Claude Tag. Disabling preserves connections and does not revoke Slack authorization.",
-  },
   customer_managed_encryption_keys: {
     kind: "toggle",
     enabledKey: "customerManagedEncryptionKeysEnabled",

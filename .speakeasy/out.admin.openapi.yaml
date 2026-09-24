@@ -6072,9 +6072,6 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
-        claude_tag_support_enabled:
-          type: boolean
-          description: Whether the organization can manage Slack workspace connections for Claude Tag
         consent_tool_filtering_enabled:
           type: boolean
           description: Whether MCP consent screens offer the tool filtering picker for the organization
@@ -6149,7 +6146,6 @@ components:
         - consent_tool_filtering_enabled
         - session_portability_enabled
         - network_ingress_enabled
-        - claude_tag_support_enabled
         - device_agent
     RearmTrialRequestBody:
       type: object
@@ -6587,7 +6583,6 @@ components:
             - consent_tool_filtering
             - session_portability
             - network_ingress
-            - claude_tag_support
           maxLength: 60
         organization_id:
           type: string

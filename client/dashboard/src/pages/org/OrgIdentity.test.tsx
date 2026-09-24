@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   admin: true,
   enabled: true,
   ema: vi.fn(),
+  slack: vi.fn(),
+  features: vi.fn(() => ({ data: {} as Record<string, boolean> })),
   onboarding: {
     domainVerified: false,
     ssoConfigured: false,
@@ -26,18 +28,6 @@ const mocks = vi.hoisted(() => ({
   portal: { isPending: false, mutate: vi.fn() },
   ssoActive: false,
   scimActive: false,
-  slack: vi.fn(),
-  features: vi.fn<
-    (...args: unknown[]) => {
-      data?: {
-        claudeTagSupportEnabled?: boolean;
-        ssoEnabled?: boolean;
-        scimEnabled?: boolean;
-      };
-      isError?: boolean;
-      isPending?: boolean;
-    }
-  >(() => ({ data: { claudeTagSupportEnabled: true } })),
 }));
 vi.mock("nuqs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("nuqs")>()),
@@ -88,7 +78,7 @@ vi.mock("@/routes", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: (...args: unknown[]) => mocks.features(...args),
+  useProductFeatures: () => mocks.features(),
 }));
 vi.mock("@gram/client/react-query/onboardingStatus", () => ({
   useOnboardingStatus: () =>
@@ -145,7 +135,7 @@ afterEach(() => {
   mocks.onboardingQuery = undefined;
   mocks.ssoActive = false;
   mocks.scimActive = false;
-  mocks.features.mockReturnValue({ data: { claudeTagSupportEnabled: true } });
+  mocks.features.mockImplementation(() => ({ data: {} }));
 });
 
 function show(search = "") {
@@ -164,19 +154,6 @@ function section(name: string) {
 }
 
 describe("identity top-level tabs", () => {
-  it.each(["sso", "enterprise-managed-auth", "slack-workspaces"])(
-    "reads product features once with safe options on %s",
-    (tab) => {
-      show(`?tab=${tab}`);
-      expect(mocks.features).toHaveBeenCalledOnce();
-      expect(mocks.features).toHaveBeenCalledWith(
-        { organizationId: "test-org" },
-        undefined,
-        { throwOnError: false, retry: false },
-      );
-    },
-  );
-
   it("shows SSO and preview connection tabs without mounting them on SSO", () => {
     show();
     expect(screen.getByRole("heading", { name: "IDP and SSO" })).toBeTruthy();
@@ -192,10 +169,10 @@ describe("identity top-level tabs", () => {
     expect(mocks.features).toHaveBeenCalled();
   });
 
-  it("mounts EMA while checking organization capabilities", () => {
+  it("mounts EMA without fetching employee SSO features", () => {
     show("?tab=enterprise-managed-auth");
     expect(screen.getByText("EMA workspace")).toBeTruthy();
-    expect(mocks.features).toHaveBeenCalled();
+    expect(mocks.features).not.toHaveBeenCalled();
   });
 
   it.each(["admin", "enabled"] as const)(
@@ -224,26 +201,6 @@ describe("identity top-level tabs", () => {
 
 describe("domain verification gate", () => {
   const ssoSection = () => section("Single Sign-On");
-
-  it.each([
-    { ssoEnabled: true, scimEnabled: false },
-    { ssoEnabled: false, scimEnabled: true },
-  ])("uses the parent SSO and SCIM feature flags: %j", (features) => {
-    mocks.features.mockReturnValue({ data: features });
-    mocks.onboarding.domainVerified = true;
-    show();
-
-    for (const [name, enabled] of [
-      ["Single Sign-On", features.ssoEnabled],
-      ["Directory Sync", features.scimEnabled],
-    ] as const) {
-      const configure = section(name).getByRole("button", {
-        name: "Configure",
-      });
-      const setupHref = configure.closest("a")?.getAttribute("href");
-      expect(setupHref).toBe(enabled ? "/example/setup/idp" : undefined);
-    }
-  });
 
   it("renders the domain card and blocks SSO setup until verified", () => {
     mocks.features.mockImplementation(() => ({ data: { ssoEnabled: true } }));
@@ -405,23 +362,16 @@ describe("domain verification portal", () => {
   });
 });
 
-describe("Slack product feature gate", () => {
-  it("opens Slack independently of PostHog rollout flags", () => {
+describe("Slack workspaces tab", () => {
+  it("opens for organization admins independently of rollout flags", () => {
     mocks.enabled = false;
     show("?tab=slack-workspaces");
     expect(screen.getByText("Slack workspace connections")).toBeTruthy();
     expect(mocks.slack).toHaveBeenCalled();
   });
 
-  it.each([
-    { data: undefined },
-    { data: {} },
-    { data: { claudeTagSupportEnabled: false } },
-    { data: undefined, isError: true },
-    { data: { claudeTagSupportEnabled: true }, isError: true },
-    { data: { claudeTagSupportEnabled: true }, isPending: true },
-  ])("hides Slack without an enabled product feature: %j", (result) => {
-    mocks.features.mockReturnValue(result);
+  it("is hidden from non-admins", () => {
+    mocks.admin = false;
     show("?tab=slack-workspaces");
     expect(screen.queryByRole("link", { name: "Slack workspaces" })).toBeNull();
     expect(mocks.slack).not.toHaveBeenCalled();
@@ -430,12 +380,5 @@ describe("Slack product feature gate", () => {
         .getByRole("link", { name: "Single sign-on" })
         .getAttribute("aria-current"),
     ).toBe("page");
-  });
-
-  it("requires org admin even when the capability is enabled", () => {
-    mocks.admin = false;
-    show("?tab=slack-workspaces");
-    expect(screen.queryByRole("link", { name: "Slack workspaces" })).toBeNull();
-    expect(mocks.slack).not.toHaveBeenCalled();
   });
 });

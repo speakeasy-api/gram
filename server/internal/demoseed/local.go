@@ -256,7 +256,6 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Clie
 		productfeatures.FeaturePlatformMCP,
 		productfeatures.FeatureSSO,
 		productfeatures.FeatureSCIM,
-		productfeatures.FeatureClaudeTagSupport,
 	} {
 		keys = append(keys, productfeatures.FeatureCacheKey(orgID, feature))
 	}

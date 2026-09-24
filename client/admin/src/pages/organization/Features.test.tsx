@@ -38,7 +38,6 @@ const ORG = anOrganization();
 const FEATURES: ProductFeatures = {
   aiPlatformPushIntegrationsEnabled: false,
   authzChallengeLoggingEnabled: true,
-  claudeTagSupportEnabled: false,
   consentToolFilteringEnabled: false,
   customModelKeysEnabled: true,
   customerManagedEncryptionKeysEnabled: false,
@@ -62,7 +61,6 @@ const FEATURES: ProductFeatures = {
 const FEATURES_RESPONSE = {
   ai_platform_push_integrations_enabled: false,
   authz_challenge_logging_enabled: true,
-  claude_tag_support_enabled: false,
   consent_tool_filtering_enabled: false,
   custom_model_keys_enabled: true,
   customer_managed_encryption_keys_enabled: false,
@@ -93,11 +91,6 @@ const TOGGLE_FEATURES = [
     featureName: "authz_challenge_logging",
     enabledKey: "authzChallengeLoggingEnabled",
     label: "Authz Challenge Logging",
-  },
-  {
-    featureName: "claude_tag_support",
-    enabledKey: "claudeTagSupportEnabled",
-    label: "Claude Tag support",
   },
   {
     featureName: "customer_managed_encryption_keys",

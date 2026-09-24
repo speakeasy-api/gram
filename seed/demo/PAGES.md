@@ -225,4 +225,4 @@ dashboard, provider acceptance, or usable human access is demonstrated.
 
 ### [~] Organization Identity: Slack workspaces
 
-The shared demo/local seed enables the `claude_tag_support` organization product feature. With `org:admin`, the Slack workspaces tab shows Acme Engineering as disconnected and Acme Operations as requiring authorization. These are synthetic history rows with no credentials. Shared Explore Demo disables Connect, Reconnect, and Disconnect and refuses their server operations; the retargeted local organization remains writable. They do not demonstrate live Slack authorization, directory sync, mappings, or invocation protection.
+With `org:admin`, the Slack workspaces tab shows Acme Engineering as disconnected and Acme Operations as requiring authorization. These are synthetic history rows with no credentials. Shared Explore Demo disables Connect, Reconnect, and Disconnect and refuses their server operations; the retargeted local organization remains writable. They do not demonstrate live Slack authorization, directory sync, mappings, or invocation protection.

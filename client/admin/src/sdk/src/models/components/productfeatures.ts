@@ -18,10 +18,6 @@ export type ProductFeatures = {
    */
   authzChallengeLoggingEnabled: boolean;
   /**
-   * Whether the organization can manage Slack workspace connections for Claude Tag
-   */
-  claudeTagSupportEnabled: boolean;
-  /**
    * Whether MCP consent screens offer the tool filtering picker for the organization
    */
   consentToolFilteringEnabled: boolean;
@@ -103,7 +99,6 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
   z.object({
     ai_platform_push_integrations_enabled: z.boolean(),
     authz_challenge_logging_enabled: z.boolean(),
-    claude_tag_support_enabled: z.boolean(),
     consent_tool_filtering_enabled: z.boolean(),
     custom_model_keys_enabled: z.boolean(),
     customer_managed_encryption_keys_enabled: z.boolean(),
@@ -128,7 +123,6 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
       "ai_platform_push_integrations_enabled":
         "aiPlatformPushIntegrationsEnabled",
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
-      "claude_tag_support_enabled": "claudeTagSupportEnabled",
       "consent_tool_filtering_enabled": "consentToolFilteringEnabled",
       "custom_model_keys_enabled": "customModelKeysEnabled",
       "customer_managed_encryption_keys_enabled":

@@ -306,7 +306,6 @@ func TestFeature_RequiresPlatformAdmin(t *testing.T) {
 	}
 
 	staffOnly := []productfeatures.Feature{
-		productfeatures.FeatureClaudeTagSupport,
 		productfeatures.FeatureSSO,
 		productfeatures.FeatureSCIM,
 		productfeatures.FeatureSkills,
