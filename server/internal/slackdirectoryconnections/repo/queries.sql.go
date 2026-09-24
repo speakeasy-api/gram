@@ -71,7 +71,7 @@ func (q *Queries) AuthorizeSlackDirectoryConnection(ctx context.Context, arg Aut
 const countSlackDirectoryMembers = `-- name: CountSlackDirectoryMembers :one
 SELECT count(*)::bigint FROM slack_directory_memberships m
 JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND c.slack_team_id = m.slack_team_id
-WHERE m.organization_id = $1
+WHERE m.organization_id = $1 AND c.disconnected_at IS NULL
   AND ($2::uuid IS NULL OR c.id = $2)
   AND ($3::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower($3)) > 0
     OR strpos(lower(coalesce(m.email, '')), lower($3)) > 0 OR strpos(lower(m.slack_user_id), lower($3)) > 0)
@@ -427,7 +427,7 @@ SELECT m.id, m.organization_id, m.slack_team_id, m.slack_user_id, m.display_name
     (m.last_seen_at = c.last_full_sync_succeeded_at)::boolean AS observed_in_last_sync
 FROM slack_directory_memberships m
 JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND c.slack_team_id = m.slack_team_id
-WHERE m.organization_id = $1
+WHERE m.organization_id = $1 AND c.disconnected_at IS NULL
   AND ($2::uuid IS NULL OR c.id = $2)
   AND ($3::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower($3)) > 0
     OR strpos(lower(coalesce(m.email, '')), lower($3)) > 0 OR strpos(lower(m.slack_user_id), lower($3)) > 0)

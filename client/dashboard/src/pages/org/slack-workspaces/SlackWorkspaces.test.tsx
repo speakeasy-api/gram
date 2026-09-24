@@ -92,6 +92,18 @@ vi.mock("@gram/client/react-query/slackDirectoryConnections.js", () => ({
                   directoryStatus: "never_synced",
                   syncStatus: "idle",
                 },
+                {
+                  id: "connection-two",
+                  workspaceId: "TEXAMPLE02",
+                  workspaceName: "Retired workspace",
+                  status: "disconnected",
+                  generation: "generation-retired",
+                  grantedScopes: [],
+                  updatedAt: "2026-01-01T00:00:00Z",
+                  memberCount: 0,
+                  directoryStatus: "stale",
+                  syncStatus: "idle",
+                },
               ],
             },
       isPending: mocks.pending,
@@ -165,6 +177,12 @@ it("does not fetch workspace data for a non-admin", () => {
   mocks.admin = false;
   show();
   expect(mocks.list).not.toHaveBeenCalled();
+});
+it("hides disconnected workspaces and has no all-members link", () => {
+  show();
+  expect(screen.getByText("Example workspace")).toBeTruthy();
+  expect(screen.queryByText("Retired workspace")).toBeNull();
+  expect(screen.queryByText("All workspace members")).toBeNull();
 });
 it("disables connect when the deployment is unconfigured", () => {
   mocks.configured = false;

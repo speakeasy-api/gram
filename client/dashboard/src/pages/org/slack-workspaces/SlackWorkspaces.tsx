@@ -110,7 +110,10 @@ function SlackWorkspacesContent(): JSX.Element {
       void invalidateAllSlackDirectoryConnections(queryClient);
     },
   });
-  const connections = query.data?.connections ?? [];
+  // Disconnected workspaces keep their history but leave the UI; connecting again restores them.
+  const connections = (query.data?.connections ?? []).filter(
+    (connection) => connection.status !== "disconnected",
+  );
   const configured = query.data?.authorizationConfigured === true;
   // Connecting a workspace that is already listed reauthorizes it in place.
   const start = () => {
@@ -225,13 +228,6 @@ function SlackWorkspacesContent(): JSX.Element {
         />
       )}
       {connections.length > 0 && (
-        <Button variant="tertiary" asChild>
-          <Link to="?tab=slack-workspaces&slack_view=members">
-            All workspace members
-          </Link>
-        </Button>
-      )}
-      {connections.length > 0 && (
         <ul
           className="border-border divide-border divide-y border"
           aria-label="Slack workspaces"
@@ -303,7 +299,7 @@ function SlackWorkspacesContent(): JSX.Element {
           if (!open) close();
         }}
         title={`Disconnect ${selected?.workspaceName || selected?.workspaceId || "workspace"}?`}
-        description="Speakeasy will stop using this connection. The app stays installed in Slack, and workspace history is kept. You can reconnect later."
+        description="Speakeasy will stop using this connection. The workspace is hidden from this list, the app stays installed in Slack, and its history is kept. Connect it again to restore it."
         confirmLabel="Disconnect workspace"
         isPending={disconnect.isPending}
         error={disconnect.error?.message}

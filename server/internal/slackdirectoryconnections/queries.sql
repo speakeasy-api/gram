@@ -86,7 +86,7 @@ SELECT m.*, c.id AS connection_id, c.slack_team_name AS workspace_name,
     (m.last_seen_at = c.last_full_sync_succeeded_at)::boolean AS observed_in_last_sync
 FROM slack_directory_memberships m
 JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND c.slack_team_id = m.slack_team_id
-WHERE m.organization_id = @organization_id
+WHERE m.organization_id = @organization_id AND c.disconnected_at IS NULL
   AND (sqlc.narg(connection_id)::uuid IS NULL OR c.id = sqlc.narg(connection_id))
   AND (@search::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower(@search)) > 0
     OR strpos(lower(coalesce(m.email, '')), lower(@search)) > 0 OR strpos(lower(m.slack_user_id), lower(@search)) > 0)
@@ -97,7 +97,7 @@ LIMIT @page_size;
 -- name: CountSlackDirectoryMembers :one
 SELECT count(*)::bigint FROM slack_directory_memberships m
 JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND c.slack_team_id = m.slack_team_id
-WHERE m.organization_id = @organization_id
+WHERE m.organization_id = @organization_id AND c.disconnected_at IS NULL
   AND (sqlc.narg(connection_id)::uuid IS NULL OR c.id = sqlc.narg(connection_id))
   AND (@search::text = '' OR strpos(lower(coalesce(m.display_name, '')), lower(@search)) > 0
     OR strpos(lower(coalesce(m.email, '')), lower(@search)) > 0 OR strpos(lower(m.slack_user_id), lower(@search)) > 0);
