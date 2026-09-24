@@ -106,16 +106,18 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	})
 	require.NoError(t, err)
 	//nolint:glint // This test needs an addressable domain without exercising domain provisioning.
-	_, err = ti.conn.Exec(ctx, `UPDATE custom_domains SET verified = TRUE, activated = TRUE WHERE id = $1`, domain.ID)
+	result, err := ti.conn.Exec(ctx, `UPDATE custom_domains SET verified = TRUE, activated = TRUE WHERE id = $1`, domain.ID)
 	require.NoError(t, err)
+	require.EqualValues(t, 1, result.RowsAffected())
 	root, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID: *ac.ProjectID, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
 		MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true}, Slug: "gateway-root",
 	})
 	require.NoError(t, err)
 	//nolint:glint // Gateway root endpoints are not supported by the public root setter yet.
-	_, err = ti.conn.Exec(ctx, `UPDATE mcp_endpoints SET is_domain_root = TRUE WHERE id = $1`, root.ID)
+	result, err = ti.conn.Exec(ctx, `UPDATE mcp_endpoints SET is_domain_root = TRUE WHERE id = $1`, root.ID)
 	require.NoError(t, err)
+	require.EqualValues(t, 1, result.RowsAffected())
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"], &config))
@@ -138,7 +140,7 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	require.Equal(t, "https://tail.example/mcp/gateway-test", config.MCPServers["Gateway"].URL)
 
 	//nolint:glint // Exercise a persisted gateway whose required issuer disappeared after attachment.
-	result, err := ti.conn.Exec(ctx, `UPDATE meta_mcp_servers SET user_session_issuer_id = NULL WHERE id = $1`, gateway.ID)
+	result, err = ti.conn.Exec(ctx, `UPDATE meta_mcp_servers SET user_session_issuer_id = NULL WHERE id = $1`, gateway.ID)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, result.RowsAffected())
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
@@ -146,8 +148,9 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	require.ErrorAs(t, err, &missingIssuer)
 	require.Equal(t, oops.CodeUnavailable, missingIssuer.Code)
 	//nolint:glint // Restore the test gateway for the missing-admission-guard assertion below.
-	_, err = ti.conn.Exec(ctx, `UPDATE meta_mcp_servers SET user_session_issuer_id = $1 WHERE id = $2`, issuer.ID, gateway.ID)
+	result, err = ti.conn.Exec(ctx, `UPDATE meta_mcp_servers SET user_session_issuer_id = $1 WHERE id = $2`, issuer.ID, gateway.ID)
 	require.NoError(t, err)
+	require.EqualValues(t, 1, result.RowsAffected())
 
 	ti.service.WithDistributionAdmission(nil)
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
