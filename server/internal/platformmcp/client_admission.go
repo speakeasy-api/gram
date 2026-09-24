@@ -112,7 +112,7 @@ func (s *ClientAdmissionService) Set(ctx context.Context, principal Principal, p
 	// Take the lifecycle locks in advisory-then-row order before comparing the
 	// stored mode. This also serializes with EMA preparation and owner binding.
 	if err := lifecycle.LockUserIssuer(ctx, tx, principal.OrganizationID, project.ID, issuerID); err != nil {
-		return ClientAdmission{}, err
+		return ClientAdmission{}, fmt.Errorf("lock platform mcp client admission issuer: %w", err)
 	}
 	existing, err := q.GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{ID: issuerID, ProjectID: project.ID, OrganizationID: principal.OrganizationID})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -124,7 +124,7 @@ func (s *ClientAdmissionService) Set(ctx context.Context, principal Principal, p
 	currentMode, _ := admission.ResolveMode(existing.ClientIDMetadataAdmissionMode.String, existing.ClientIDMetadataAdmissionMode.Valid)
 	if string(currentMode) != mode {
 		if err := lifecycle.GuardEMABindings(ctx, tx, principal.OrganizationID, project.ID, issuerID); err != nil {
-			return ClientAdmission{}, err
+			return ClientAdmission{}, fmt.Errorf("guard platform mcp client admission bindings: %w", err)
 		}
 	}
 	updated, err := q.UpdateUserSessionIssuer(ctx, usersessionsrepo.UpdateUserSessionIssuerParams{

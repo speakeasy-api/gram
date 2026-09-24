@@ -143,7 +143,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 
 	txRepo := repo.New(dbtx)
 	if err := lifecycle.LockUserIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, id); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("lock project user session issuer: %w", err)
 	}
 
 	existing, err := txRepo.GetProjectUserSessionIssuerByID(ctx, repo.GetProjectUserSessionIssuerByIDParams{

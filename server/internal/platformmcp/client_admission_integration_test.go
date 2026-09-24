@@ -139,7 +139,7 @@ func TestClientAdmissionProtectsActiveEMABindings(t *testing.T) {
 			if concurrentPreparation {
 				tx := testenv.BeginTx(t, ctx, conn)
 				txq := remoterepo.New(tx)
-				_, err := txq.LockEMAUserIssuer(ctx, remoterepo.LockEMAUserIssuerParams{
+				_, err = txq.LockEMAUserIssuer(ctx, remoterepo.LockEMAUserIssuerParams{
 					ID: issuerID, ProjectID: conv.ToNullUUID(project.ID), OrganizationID: conv.ToPGText(principal.OrganizationID),
 				})
 				require.NoError(t, err)
