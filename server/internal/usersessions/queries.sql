@@ -882,6 +882,7 @@ RETURNING issuer.*;
 --
 -- This endpoint only mutates project-owned issuers. Organization-owned rows
 -- have a separate org-admin API and cannot be deleted with project:write.
+WITH deleted_parent AS (
 UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
 WHERE issuer.id = @id
@@ -910,7 +911,14 @@ WHERE issuer.id = @id
       AND meta_mcp_server.user_session_issuer_id = issuer.id
       AND meta_mcp_server.deleted IS FALSE
   )
-RETURNING issuer.*;
+RETURNING issuer.*
+), tombstones AS (
+ DELETE FROM remote_session_ema_bindings b USING deleted_parent p
+ WHERE b.user_session_issuer_id = p.id AND b.state = 'unlinked'
+ AND (p.project_id IS NULL OR b.project_id = p.project_id)
+ AND (p.project_id IS NOT NULL OR p.organization_id IS NULL OR b.organization_id = p.organization_id)
+)
+SELECT * FROM deleted_parent;
 
 -- name: UserSessionIssuerHasActiveOwner :one
 -- An issuer can be referenced by an MCP server, toolset, or meta MCP server.
@@ -1004,6 +1012,7 @@ WHERE issuer.id = @user_session_issuer_id
   AND session.refresh_expires_at > now();
 
 -- name: DeleteOrganizationUserSessionIssuer :one
+WITH deleted_parent AS (
 UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
 WHERE issuer.id = @id
@@ -1029,7 +1038,14 @@ WHERE issuer.id = @id
       AND project.deleted IS FALSE
       AND project.organization_id = issuer.organization_id
   )
-RETURNING issuer.*;
+RETURNING issuer.*
+), tombstones AS (
+ DELETE FROM remote_session_ema_bindings b USING deleted_parent p
+ WHERE b.user_session_issuer_id = p.id AND b.state = 'unlinked'
+ AND (p.project_id IS NULL OR b.project_id = p.project_id)
+ AND (p.project_id IS NOT NULL OR p.organization_id IS NULL OR b.organization_id = p.organization_id)
+)
+SELECT * FROM deleted_parent;
 
 -- name: SoftDeleteUserSessionsByIssuerID :many
 -- Cascading soft-delete of user_sessions for an issuer being soft-deleted.

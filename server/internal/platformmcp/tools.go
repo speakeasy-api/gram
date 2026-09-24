@@ -60,7 +60,8 @@ type PlatformContext struct {
 // meaning outside Gram.
 const platformOverview = "This session exposes a catalogue filtered to workflows supported by your current RBAC grants. Exact project or resource checks apply only when a call targets that project or resource. " +
 	"A workflow missing from the catalogue may be requestable; requestable_workflows names only broad categories and never reveals hidden resources. A denied admin-gated call names the required permission and, when safe, offers a request-access link; member reads may instead hide inaccessible resources or return a generic denial. " +
-	"A project is where MCP servers and skills are kept. A plugin is a bundle administrators share with people. MCP read access, MCP connection access, and skill permissions remain separate."
+	"A project is where MCP servers and skills are kept. A plugin is a bundle administrators share with people. MCP read access, MCP connection access, and skill permissions remain separate. " +
+	"Issuer migration and identity-chaining binding inspection, unlinking, and rebinding are not available through this server. Active identity-chaining bindings can block issuer configuration changes, deletion, and consolidation. Ask an authorized administrator to inspect the issuer preflight in the dashboard or management API, explicitly unlink affected bindings using a supported management workflow before changing the issuer, and prepare new bindings for the target provider afterward. If that workflow is unavailable, stop and contact support; never bypass the binding safeguard or claim that an MCP connection operation unlinks these bindings."
 
 type ListProjectsInput struct {
 	Limit int `json:"limit,omitempty" jsonschema:"maximum number of projects to return; server clamps this to 100"`

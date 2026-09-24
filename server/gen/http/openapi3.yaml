@@ -1562,6 +1562,160 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.onboarding:
+        get:
+            operationId: adminGetOrganizationOnboarding
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingConfiguration'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getOrganizationOnboarding admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: AdminOrganizationOnboarding
+        post:
+            operationId: adminSetOrganizationOnboarding
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetOrganizationOnboardingRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingConfiguration'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: setOrganizationOnboarding admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: SetAdminOrganizationOnboarding
     /admin/organization.open-dashboard:
         post:
             tags:
@@ -5169,6 +5323,97 @@ paths:
             x-speakeasy-name-override: getShadowMCPInventoryServer
             x-speakeasy-react-hook:
                 name: ShadowMCPInventoryServer
+    /rpc/access.listAIDetectionUsers:
+        get:
+            description: 'List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.'
+            operationId: listAIDetectionUsers
+            parameters:
+                - allowEmptyValue: true
+                  description: Id of the detection target to expand. Accepted exactly as agents report it, under the same length bound the scan-report ingest stores it with, so every id in the inventory can be expanded.
+                  in: query
+                  name: target_id
+                  required: true
+                  schema:
+                    description: Id of the detection target to expand. Accepted exactly as agents report it, under the same length bound the scan-report ingest stores it with, so every id in the inventory can be expanded.
+                    maxLength: 64
+                    minLength: 1
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAIDetectionUsersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listAIDetectionUsers access
+            tags:
+                - access
+            x-speakeasy-name-override: listAIDetectionUsers
+            x-speakeasy-react-hook:
+                name: AIDetectionUsers
     /rpc/access.listAIDetections:
         get:
             description: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
@@ -75369,6 +75614,45 @@ components:
                 - versions
                 - first_seen
                 - last_seen
+        AIDetectionUser:
+            type: object
+            properties:
+                device_count:
+                    type: integer
+                    description: Distinct devices, by hardware serial, this tool was detected on for this user. Devices that report no serial are not counted.
+                    format: int64
+                first_seen:
+                    type: string
+                    description: When this tool was first detected for this user.
+                    format: date-time
+                last_seen:
+                    type: string
+                    description: When this tool was most recently detected for this user.
+                    format: date-time
+                signals:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - installed
+                            - running
+                    description: 'Detection signals observed for this user: installed and/or running.'
+                user_email:
+                    type: string
+                    description: Canonical email of the enrolled user the detections are attributed to. Linked alias emails are folded into it.
+                versions:
+                    type: array
+                    items:
+                        type: string
+                    description: Unique non-empty detected versions for this user.
+            description: 'One enrolled user a detection target was found for, with that user''s share of the organization''s scan reports: the evidence AIDetection carries for the whole organization, narrowed to one person.'
+            required:
+                - user_email
+                - device_count
+                - signals
+                - versions
+                - first_seen
+                - last_seen
         AIIntegrationConfig:
             type: object
             properties:
@@ -76200,6 +76484,60 @@ components:
                 - buckets
                 - queried_at
                 - measurement_method
+        AdminOnboardingConfiguration:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                preset:
+                    type: string
+                    description: Absent for legacy organizations.
+                    enum:
+                        - gateway
+                        - security
+                presets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingPreset'
+                tasks:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingTask'
+            required:
+                - organization_id
+                - tasks
+                - presets
+        AdminOnboardingPreset:
+            type: object
+            properties:
+                key:
+                    type: string
+                    enum:
+                        - gateway
+                        - security
+                visible_task_keys:
+                    type: array
+                    items:
+                        type: string
+            required:
+                - key
+                - visible_task_keys
+        AdminOnboardingTask:
+            type: object
+            properties:
+                description:
+                    type: string
+                hidden:
+                    type: boolean
+                key:
+                    type: string
+                title:
+                    type: string
+            required:
+                - key
+                - title
+                - description
+                - hidden
         AdminOpenRouterKey:
             type: object
             properties:
@@ -85473,6 +85811,10 @@ components:
         GlobalRemoteSessionIssuer:
             type: object
             properties:
+                ema_binding_count:
+                    type: integer
+                    description: Number of active identity-chaining bindings that block deletion and must be explicitly unlinked by their owning organizations. Included in the detail response; omitted from listings.
+                    format: int64
                 global_client_count:
                     type: integer
                     description: Number of non-deleted global remote_session_clients (project_id NULL, organization_id NULL) registered with this issuer. These block a delete and the platform admin can remove them here.
@@ -86738,7 +87080,7 @@ components:
             properties:
                 can_migrate:
                     type: boolean
-                    description: 'TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
+                    description: 'TRUE when the migration would succeed: no active identity-chaining bindings, endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
                 client_count:
                     type: integer
                     description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
@@ -86748,6 +87090,10 @@ components:
                     items:
                         type: string
                     description: Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.
+                ema_binding_count:
+                    type: integer
+                    description: Number of active identity-chaining bindings on the source. Non-zero blocks migration; explicitly unlink these bindings before migration, then prepare new bindings for the target.
+                    format: int64
                 endpoint_mismatches:
                     type: array
                     items:
@@ -86773,6 +87119,7 @@ components:
                     description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
             description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: how many clients move, which MCP servers are affected, every blocker that would make the migration fail, and how many tenant-owned clients the target already carries.'
             required:
+                - ema_binding_count
                 - client_count
                 - mcp_server_names
                 - endpoint_mismatches
@@ -87427,6 +87774,19 @@ components:
             required:
                 - client_name
                 - activity_count
+        ListAIDetectionUsersResult:
+            type: object
+            properties:
+                detection:
+                    $ref: '#/components/schemas/AIDetection'
+                users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AIDetectionUser'
+                    description: Users the target was detected for, most recently seen first.
+            required:
+                - detection
+                - users
         ListAIDetectionsResult:
             type: object
             properties:
@@ -91692,6 +92052,10 @@ components:
                     type: integer
                     description: Number of non-deleted remote_session_clients registered with this issuer.
                     format: int64
+                ema_binding_count:
+                    type: integer
+                    description: Active identity-chaining bindings that must be explicitly unlinked before deletion.
+                    format: int64
                 mcp_server_names:
                     type: array
                     items:
@@ -91702,17 +92066,18 @@ components:
                     items:
                         $ref: '#/components/schemas/TrustedUserSessionIssuerReference'
                     description: Organization-owned user_session_issuers that trust this issuer and block deletion.
-            description: 'Authoritative impact summary for deleting a remote_session_issuer: its client and trusted user-session-issuer references.'
+            description: 'Authoritative impact summary for deleting a remote_session_issuer: its client, trusted user-session-issuer, and active identity-chaining binding references.'
             required:
                 - client_count
                 - mcp_server_names
                 - trusted_user_session_issuers
+                - ema_binding_count
         OrganizationIssuerMigratePreflight:
             type: object
             properties:
                 can_migrate:
                     type: boolean
-                    description: 'TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
+                    description: 'TRUE when the migration would succeed: no active identity-chaining bindings, endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
                 client_count:
                     type: integer
                     description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
@@ -91722,6 +92087,10 @@ components:
                     items:
                         type: string
                     description: Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.
+                ema_binding_count:
+                    type: integer
+                    description: Number of active identity-chaining bindings on the source. Non-zero blocks migration; explicitly unlink these bindings before migration, then prepare new bindings for the target.
+                    format: int64
                 endpoint_mismatches:
                     type: array
                     items:
@@ -91744,6 +92113,7 @@ components:
                     description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
             description: 'Authoritative impact summary for migrating a remote_session_issuer''s clients onto another issuer: how many clients move, which MCP servers are affected, and every blocker that would make the migration fail.'
             required:
+                - ema_binding_count
                 - client_count
                 - mcp_server_names
                 - endpoint_mismatches
@@ -91859,10 +92229,14 @@ components:
             properties:
                 can_delete:
                     type: boolean
-                    description: True when no live MCP server or toolset references the issuer.
+                    description: True when no live MCP server, toolset, or active identity-chaining binding references the issuer.
                 client_count:
                     type: integer
                     description: Number of non-deleted user_session_clients registered with the issuer.
+                    format: int64
+                ema_binding_count:
+                    type: integer
+                    description: Active identity-chaining bindings that must be explicitly unlinked before deletion.
                     format: int64
                 live_session_count:
                     type: integer
@@ -91885,6 +92259,7 @@ components:
                 - mcp_servers
                 - toolsets
                 - can_delete
+                - ema_binding_count
         OrganizationUserSessionIssuerMigratePreflight:
             type: object
             properties:
@@ -93725,6 +94100,10 @@ components:
                         - role
                         - group
                         - project_id
+                include_dimension_values:
+                    type: boolean
+                    description: Whether to include distinct values for other dimensions in each table row. When omitted, defaults to true.
+                    default: true
                 sort_by:
                     type: string
                     description: Measure used to rank groups for top_n. Defaults to total_cost.
@@ -97958,6 +98337,25 @@ components:
                 - organization_id
                 - feature_name
                 - enabled
+        SetOrganizationOnboardingRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                preset:
+                    type: string
+                    description: Omit to preserve the saved preset. Null/reset is not supported.
+                    enum:
+                        - gateway
+                        - security
+                visible_task_keys:
+                    type: array
+                    items:
+                        type: string
+                    description: Complete explicit selection; an empty array selects no tasks.
+            required:
+                - organization_id
+                - visible_task_keys
         SetOrganizationWhitelistRequestBody:
             type: object
             properties:

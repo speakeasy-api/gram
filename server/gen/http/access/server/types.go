@@ -366,6 +366,16 @@ type ListEmployeeAIDetectionsResponseBody struct {
 	Detections []*AIDetectionResponseBody `form:"detections" json:"detections" xml:"detections"`
 }
 
+// ListAIDetectionUsersResponseBody is the type of the "access" service
+// "listAIDetectionUsers" endpoint HTTP response body.
+type ListAIDetectionUsersResponseBody struct {
+	// The target as the inventory lists it, so a page reached by link needs no
+	// second read for its name, category and access decision.
+	Detection *AIDetectionResponseBody `form:"detection" json:"detection" xml:"detection"`
+	// Users the target was detected for, most recently seen first.
+	Users []*AIDetectionUserResponseBody `form:"users" json:"users" xml:"users"`
+}
+
 // SetAIToolDecisionResponseBody is the type of the "access" service
 // "setAIToolDecision" endpoint HTTP response body.
 type SetAIToolDecisionResponseBody struct {
@@ -3579,6 +3589,193 @@ type ListEmployeeAIDetectionsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListAIDetectionUsersUnauthorizedResponseBody is the type of the "access"
+// service "listAIDetectionUsers" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListAIDetectionUsersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIDetectionUsersForbiddenResponseBody is the type of the "access"
+// service "listAIDetectionUsers" endpoint HTTP response body for the
+// "forbidden" error.
+type ListAIDetectionUsersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIDetectionUsersBadRequestResponseBody is the type of the "access"
+// service "listAIDetectionUsers" endpoint HTTP response body for the
+// "bad_request" error.
+type ListAIDetectionUsersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIDetectionUsersNotFoundResponseBody is the type of the "access" service
+// "listAIDetectionUsers" endpoint HTTP response body for the "not_found" error.
+type ListAIDetectionUsersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIDetectionUsersConflictResponseBody is the type of the "access" service
+// "listAIDetectionUsers" endpoint HTTP response body for the "conflict" error.
+type ListAIDetectionUsersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIDetectionUsersUnsupportedMediaResponseBody is the type of the "access"
+// service "listAIDetectionUsers" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListAIDetectionUsersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIDetectionUsersInvalidResponseBody is the type of the "access" service
+// "listAIDetectionUsers" endpoint HTTP response body for the "invalid" error.
+type ListAIDetectionUsersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIDetectionUsersInvariantViolationResponseBody is the type of the
+// "access" service "listAIDetectionUsers" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListAIDetectionUsersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIDetectionUsersUnexpectedResponseBody is the type of the "access"
+// service "listAIDetectionUsers" endpoint HTTP response body for the
+// "unexpected" error.
+type ListAIDetectionUsersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAIDetectionUsersGatewayErrorResponseBody is the type of the "access"
+// service "listAIDetectionUsers" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListAIDetectionUsersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SetAIToolDecisionUnauthorizedResponseBody is the type of the "access"
 // service "setAIToolDecision" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -5517,6 +5714,24 @@ type AIToolAccessSummaryResponseBody struct {
 	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
 }
 
+// AIDetectionUserResponseBody is used to define fields on response body types.
+type AIDetectionUserResponseBody struct {
+	// Canonical email of the enrolled user the detections are attributed to.
+	// Linked alias emails are folded into it.
+	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
+	// Distinct devices, by hardware serial, this tool was detected on for this
+	// user. Devices that report no serial are not counted.
+	DeviceCount int64 `form:"device_count" json:"device_count" xml:"device_count"`
+	// Detection signals observed for this user: installed and/or running.
+	Signals []string `form:"signals" json:"signals" xml:"signals"`
+	// Unique non-empty detected versions for this user.
+	Versions []string `form:"versions" json:"versions" xml:"versions"`
+	// When this tool was first detected for this user.
+	FirstSeen string `form:"first_seen" json:"first_seen" xml:"first_seen"`
+	// When this tool was most recently detected for this user.
+	LastSeen string `form:"last_seen" json:"last_seen" xml:"last_seen"`
+}
+
 // ResourceAudienceEntryResponseBody is used to define fields on response body
 // types.
 type ResourceAudienceEntryResponseBody struct {
@@ -6151,6 +6366,28 @@ func NewListEmployeeAIDetectionsResponseBody(res *access.ListAIDetectionsResult)
 		}
 	} else {
 		body.Detections = []*AIDetectionResponseBody{}
+	}
+	return body
+}
+
+// NewListAIDetectionUsersResponseBody builds the HTTP response body from the
+// result of the "listAIDetectionUsers" endpoint of the "access" service.
+func NewListAIDetectionUsersResponseBody(res *access.ListAIDetectionUsersResult) *ListAIDetectionUsersResponseBody {
+	body := &ListAIDetectionUsersResponseBody{}
+	if res.Detection != nil {
+		body.Detection = marshalAccessAIDetectionToAIDetectionResponseBody(res.Detection)
+	}
+	if res.Users != nil {
+		body.Users = make([]*AIDetectionUserResponseBody, len(res.Users))
+		for i, val := range res.Users {
+			if val == nil {
+				body.Users[i] = nil
+				continue
+			}
+			body.Users[i] = marshalAccessAIDetectionUserToAIDetectionUserResponseBody(val)
+		}
+	} else {
+		body.Users = []*AIDetectionUserResponseBody{}
 	}
 	return body
 }
@@ -8783,6 +9020,156 @@ func NewListEmployeeAIDetectionsGatewayErrorResponseBody(res *goa.ServiceError) 
 	return body
 }
 
+// NewListAIDetectionUsersUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listAIDetectionUsers" endpoint of the "access"
+// service.
+func NewListAIDetectionUsersUnauthorizedResponseBody(res *goa.ServiceError) *ListAIDetectionUsersUnauthorizedResponseBody {
+	body := &ListAIDetectionUsersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIDetectionUsersForbiddenResponseBody builds the HTTP response body
+// from the result of the "listAIDetectionUsers" endpoint of the "access"
+// service.
+func NewListAIDetectionUsersForbiddenResponseBody(res *goa.ServiceError) *ListAIDetectionUsersForbiddenResponseBody {
+	body := &ListAIDetectionUsersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIDetectionUsersBadRequestResponseBody builds the HTTP response body
+// from the result of the "listAIDetectionUsers" endpoint of the "access"
+// service.
+func NewListAIDetectionUsersBadRequestResponseBody(res *goa.ServiceError) *ListAIDetectionUsersBadRequestResponseBody {
+	body := &ListAIDetectionUsersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIDetectionUsersNotFoundResponseBody builds the HTTP response body
+// from the result of the "listAIDetectionUsers" endpoint of the "access"
+// service.
+func NewListAIDetectionUsersNotFoundResponseBody(res *goa.ServiceError) *ListAIDetectionUsersNotFoundResponseBody {
+	body := &ListAIDetectionUsersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIDetectionUsersConflictResponseBody builds the HTTP response body
+// from the result of the "listAIDetectionUsers" endpoint of the "access"
+// service.
+func NewListAIDetectionUsersConflictResponseBody(res *goa.ServiceError) *ListAIDetectionUsersConflictResponseBody {
+	body := &ListAIDetectionUsersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIDetectionUsersUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listAIDetectionUsers" endpoint of the "access"
+// service.
+func NewListAIDetectionUsersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListAIDetectionUsersUnsupportedMediaResponseBody {
+	body := &ListAIDetectionUsersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIDetectionUsersInvalidResponseBody builds the HTTP response body
+// from the result of the "listAIDetectionUsers" endpoint of the "access"
+// service.
+func NewListAIDetectionUsersInvalidResponseBody(res *goa.ServiceError) *ListAIDetectionUsersInvalidResponseBody {
+	body := &ListAIDetectionUsersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIDetectionUsersInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listAIDetectionUsers" endpoint of the
+// "access" service.
+func NewListAIDetectionUsersInvariantViolationResponseBody(res *goa.ServiceError) *ListAIDetectionUsersInvariantViolationResponseBody {
+	body := &ListAIDetectionUsersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIDetectionUsersUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listAIDetectionUsers" endpoint of the "access"
+// service.
+func NewListAIDetectionUsersUnexpectedResponseBody(res *goa.ServiceError) *ListAIDetectionUsersUnexpectedResponseBody {
+	body := &ListAIDetectionUsersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAIDetectionUsersGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listAIDetectionUsers" endpoint of the "access"
+// service.
+func NewListAIDetectionUsersGatewayErrorResponseBody(res *goa.ServiceError) *ListAIDetectionUsersGatewayErrorResponseBody {
+	body := &ListAIDetectionUsersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewSetAIToolDecisionUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "setAIToolDecision" endpoint of the "access" service.
 func NewSetAIToolDecisionUnauthorizedResponseBody(res *goa.ServiceError) *SetAIToolDecisionUnauthorizedResponseBody {
@@ -10337,6 +10724,16 @@ func NewListEmployeeAIDetectionsPayload(userEmail string, sessionToken *string, 
 	v.UserEmail = userEmail
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListAIDetectionUsersPayload builds a access service listAIDetectionUsers
+// endpoint payload.
+func NewListAIDetectionUsersPayload(targetID string, sessionToken *string) *access.ListAIDetectionUsersPayload {
+	v := &access.ListAIDetectionUsersPayload{}
+	v.TargetID = targetID
+	v.SessionToken = sessionToken
 
 	return v
 }

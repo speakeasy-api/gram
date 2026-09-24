@@ -204,6 +204,7 @@ func (env syntheticExpiryEnv) callback(t *testing.T, rawQuery string) (*httptest
 // syntheticLoginOptions shapes the issuer, client, and callback of a
 // synthetic login; the zero value is the plain AIS-115 fixture.
 type syntheticLoginOptions struct {
+	legacyCallbackURL          bool
 	issuerScopes               []string
 	clientScope                []string
 	scopeOverride              []string
@@ -524,6 +525,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod: conv.ToPGText("none"),
 		Scope:                   options.clientScope,
+		LegacyCallbackUrl:       options.legacyCallbackURL,
 	})
 	require.NoError(t, err)
 

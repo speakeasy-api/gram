@@ -141,7 +141,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				autoRefresh = &v
 			}
 		}
-		challengeURL, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, autoRefresh)
+		challengeURL, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, clients, autoRefresh)
 		if berr != nil {
 			return berr
 		}
@@ -259,10 +259,13 @@ func (s *Service) buildRemoteConnectURL(
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
+	bound []remotesessions.Client,
 	autoRefresh *bool,
 ) (string, error) {
-	// Not endpoint.UpstreamResource: under multi-binding that may belong
-	// to a different client's upstream.
+	// endpoint.UpstreamResource only when no other bound client can claim
+	// it: under multi-binding it may belong to a different client's
+	// upstream, while a client shared by servers with different upstreams
+	// derives none on its own and would record a grant nothing routes to.
 	var clientResource string
 	var rerr error
 	claimedByMember := false
@@ -278,7 +281,11 @@ func (s *Service) buildRemoteConnectURL(
 	// Gate on the claim, not an empty resource: an ambiguous meta MCP has
 	// decided, and falling back would qualify the credential anyway.
 	if rerr == nil && !claimedByMember {
-		clientResource, rerr = s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
+		boundIDs := make([]uuid.UUID, 0, len(bound))
+		for i := range bound {
+			boundIDs = append(boundIDs, bound[i].ID)
+		}
+		clientResource, rerr = s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, client.ID, boundIDs, endpoint.UpstreamResource)
 	}
 	if rerr != nil {
 		return "", oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)

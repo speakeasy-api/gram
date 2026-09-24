@@ -35,6 +35,7 @@ function ShadowAIHrefs(): JSX.Element {
     <output data-testid="shadow-ai-hrefs">
       {[
         routes.shadowAI.harnesses.href(),
+        routes.shadowAI.harnesses.detail.href("cursor"),
         routes.shadowAI.mcps.href(),
         routes.shadowAI.mcps.detail.href("server-slug"),
       ].join("\n")}
@@ -89,7 +90,7 @@ describe("project routes", () => {
     expect(hrefs).toContain("/org/projects/project/shadow-mcp");
   });
 
-  it("nests the Shadow MCP tab and server detail under the section", () => {
+  it("nests the tabs and their detail pages under the section", () => {
     render(
       <MemoryRouter initialEntries={["/org/projects/project"]}>
         <ShadowAIHrefs />
@@ -100,6 +101,7 @@ describe("project routes", () => {
       (screen.getByTestId("shadow-ai-hrefs").textContent ?? "").split("\n"),
     ).toEqual([
       "/org/projects/project/shadow-ai/harnesses",
+      "/org/projects/project/shadow-ai/harnesses/cursor",
       "/org/projects/project/shadow-ai/mcps",
       "/org/projects/project/shadow-ai/mcps/server-slug",
     ]);

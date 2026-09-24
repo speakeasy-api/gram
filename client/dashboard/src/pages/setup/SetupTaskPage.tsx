@@ -169,6 +169,7 @@ function SetupTaskPageInner(): JSX.Element {
   const complete = () =>
     guarded(async () => {
       if (!task) return;
+      if (task.completedByFact) return goToBoard();
       if (await setStatus("done", "Failed to complete setup task")) {
         toast.success(`${task.title} completed`);
         goToBoard();
@@ -177,6 +178,7 @@ function SetupTaskPageInner(): JSX.Element {
 
   const requestSupport = () =>
     guarded(async () => {
+      if (task?.completedByFact) return showPylonChat();
       if (await setStatus("awaiting_support", "Failed to request support")) {
         showPylonChat();
       }
@@ -226,6 +228,7 @@ function SetupTaskPageInner(): JSX.Element {
         projectSlug="default"
         onComplete={() => void complete()}
         onSupport={() => void requestSupport()}
+        onClose={goToBoard}
       />
     );
   }

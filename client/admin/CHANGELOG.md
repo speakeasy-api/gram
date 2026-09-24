@@ -1,5 +1,11 @@
 # admin
 
+## 0.5.2
+
+### Patch Changes
+
+- 718a2e9: Add staff controls for onboarding presets and explicit task selection, with confirmation before replacing a draft. Seed a customized Security selection for the demo organization.
+
 ## 0.5.1
 
 ### Patch Changes
