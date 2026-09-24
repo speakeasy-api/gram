@@ -18,11 +18,15 @@ func TestNormalizeAndValidateMCPScope(t *testing.T) {
 	t.Parallel()
 
 	serverID := uuid.New()
-	scope, err := NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{{
-		MCPServerID: serverID.String(),
-		Tools:       []string{" write ", "read", "read"},
-	}}})
+	scope, err := NormalizeMCPScope(&MCPScopeInput{
+		ToolAnnotations: []string{" readOnlyHint ", "destructiveHint", "readOnlyHint"},
+		Servers: []*MCPServerScopeInput{{
+			MCPServerID: serverID.String(),
+			Tools:       []string{" write ", "read", "read"},
+		}},
+	})
 	require.NoError(t, err)
+	require.Equal(t, []string{"destructiveHint", "readOnlyHint"}, scope.ToolAnnotations)
 	require.Equal(t, []MCPServerScope{{
 		MCPServerID: serverID,
 		Tools:       []string{"read", "write"},
@@ -30,9 +34,26 @@ func TestNormalizeAndValidateMCPScope(t *testing.T) {
 	require.NoError(t, ValidateMCPScopeOwnership(scope, []uuid.UUID{serverID}))
 	require.Error(t, ValidateMCPScopeOwnership(scope, nil))
 
+	allServers, err := NormalizeMCPScope(&MCPScopeInput{
+		AllServers:      true,
+		ToolAnnotations: []string{"openWorldHint"},
+	})
+	require.NoError(t, err)
+	require.True(t, allServers.AllServers)
+	require.Empty(t, allServers.Servers)
+
 	cleared, err := NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{}})
 	require.NoError(t, err)
 	require.Nil(t, cleared)
+
+	_, err = NormalizeMCPScope(&MCPScopeInput{ToolAnnotations: []string{"unknownHint"}})
+	require.ErrorContains(t, err, "not recognized")
+
+	_, err = NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{{
+		MCPServerID: serverID.String(),
+		Tools:       []string{},
+	}}})
+	require.ErrorContains(t, err, "must include at least one tool")
 
 	_, err = NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{
 		{MCPServerID: serverID.String()},

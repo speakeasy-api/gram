@@ -3,7 +3,9 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -13,30 +15,83 @@ import {
   RiskMCPServerScope$outboundSchema,
 } from "./riskmcpserverscope.js";
 
+export const RiskMCPScopeToolAnnotations = {
+  DestructiveHint: "destructiveHint",
+  ReadOnlyHint: "readOnlyHint",
+  IdempotentHint: "idempotentHint",
+  OpenWorldHint: "openWorldHint",
+} as const;
+export type RiskMCPScopeToolAnnotations = ClosedEnum<
+  typeof RiskMCPScopeToolAnnotations
+>;
+
 export type RiskMCPScope = {
   /**
-   * Selected MCP servers and gateways. An empty list clears the restriction and applies the policy to every MCP server.
+   * Apply to every MCP server, including servers added later.
+   */
+  allServers?: boolean | undefined;
+  /**
+   * Selected MCP servers and gateways, or custom per-server tool overrides when all_servers is true.
    */
   servers: Array<RiskMCPServerScope>;
+  /**
+   * Tool annotation hints matched by the policy-level rule. Empty matches all tools.
+   */
+  toolAnnotations?: Array<RiskMCPScopeToolAnnotations> | undefined;
 };
 
 /** @internal */
+export const RiskMCPScopeToolAnnotations$inboundSchema: z.ZodMiniEnum<
+  typeof RiskMCPScopeToolAnnotations
+> = z.enum(RiskMCPScopeToolAnnotations);
+/** @internal */
+export const RiskMCPScopeToolAnnotations$outboundSchema: z.ZodMiniEnum<
+  typeof RiskMCPScopeToolAnnotations
+> = RiskMCPScopeToolAnnotations$inboundSchema;
+
+/** @internal */
 export const RiskMCPScope$inboundSchema: z.ZodMiniType<RiskMCPScope, unknown> =
-  z.object({
-    servers: z.array(RiskMCPServerScope$inboundSchema),
-  });
+  z.pipe(
+    z.object({
+      all_servers: z._default(z.boolean(), false),
+      servers: z.array(RiskMCPServerScope$inboundSchema),
+      tool_annotations: z.optional(
+        z.array(RiskMCPScopeToolAnnotations$inboundSchema),
+      ),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        "all_servers": "allServers",
+        "tool_annotations": "toolAnnotations",
+      });
+    }),
+  );
 /** @internal */
 export type RiskMCPScope$Outbound = {
+  all_servers: boolean;
   servers: Array<RiskMCPServerScope$Outbound>;
+  tool_annotations?: Array<string> | undefined;
 };
 
 /** @internal */
 export const RiskMCPScope$outboundSchema: z.ZodMiniType<
   RiskMCPScope$Outbound,
   RiskMCPScope
-> = z.object({
-  servers: z.array(RiskMCPServerScope$outboundSchema),
-});
+> = z.pipe(
+  z.object({
+    allServers: z._default(z.boolean(), false),
+    servers: z.array(RiskMCPServerScope$outboundSchema),
+    toolAnnotations: z.optional(
+      z.array(RiskMCPScopeToolAnnotations$outboundSchema),
+    ),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      allServers: "all_servers",
+      toolAnnotations: "tool_annotations",
+    });
+  }),
+);
 
 export function riskMCPScopeToJSON(riskMCPScope: RiskMCPScope): string {
   return JSON.stringify(RiskMCPScope$outboundSchema.parse(riskMCPScope));

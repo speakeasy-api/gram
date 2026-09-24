@@ -38,11 +38,11 @@ func TestRiskPolicyCreateMatchesMCPScope(t *testing.T) {
 
 	require.True(t, riskPolicyCreateMatches(row, audience, desired, catalog))
 
-	desired.McpScope = []byte(`{"servers":[{"mcp_server_id":"11111111-1111-4111-8111-111111111111","tools":["search"]}]}`)
-	row.McpScope = []byte(`{"servers":[{"tools":["search"],"mcp_server_id":"11111111-1111-4111-8111-111111111111"}]}`)
+	desired.McpScope = []byte(`{"all_servers":true,"tool_annotations":["destructiveHint"],"servers":[{"mcp_server_id":"11111111-1111-4111-8111-111111111111","tools":["search"]}]}`)
+	row.McpScope = []byte(`{"servers":[{"tools":["search"],"mcp_server_id":"11111111-1111-4111-8111-111111111111"}],"tool_annotations":["destructiveHint"],"all_servers":true}`)
 	require.True(t, riskPolicyCreateMatches(row, audience, desired, catalog))
 
-	row.McpScope = nil
+	row.McpScope = []byte(`{"all_servers":true,"tool_annotations":["readOnlyHint"],"servers":[{"mcp_server_id":"11111111-1111-4111-8111-111111111111","tools":["search"]}]}`)
 	require.False(t, riskPolicyCreateMatches(row, audience, desired, catalog))
 }
 

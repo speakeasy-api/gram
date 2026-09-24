@@ -135,7 +135,9 @@ var RiskMCPServerScope = Type("RiskMCPServerScope", func() {
 	Attribute("mcp_server_id", String, "The selected MCP server or gateway ID.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("tools", ArrayOf(String), "Selected tool names. Empty or omitted selects every tool on the server.")
+	Attribute("tools", ArrayOf(String), "Custom tool names for this server. Omit to follow the policy tool rule.", func() {
+		MinLength(1)
+	})
 
 	Required("mcp_server_id")
 })
@@ -143,7 +145,13 @@ var RiskMCPServerScope = Type("RiskMCPServerScope", func() {
 var RiskMCPScope = Type("RiskMCPScope", func() {
 	Meta("struct:pkg:path", "types")
 
-	Attribute("servers", ArrayOf(RiskMCPServerScope), "Selected MCP servers and gateways. An empty list clears the restriction and applies the policy to every MCP server.")
+	Attribute("all_servers", Boolean, "Apply to every MCP server, including servers added later.", func() {
+		Default(false)
+	})
+	Attribute("tool_annotations", ArrayOf(String, func() {
+		Enum("destructiveHint", "readOnlyHint", "idempotentHint", "openWorldHint")
+	}), "Tool annotation hints matched by the policy-level rule. Empty matches all tools.")
+	Attribute("servers", ArrayOf(RiskMCPServerScope), "Selected MCP servers and gateways, or custom per-server tool overrides when all_servers is true.")
 
 	Required("servers")
 })

@@ -10926,8 +10926,13 @@ type RiskDetectionScopeRequestBody struct {
 
 // RiskMCPScopeRequestBody is used to define fields on request body types.
 type RiskMCPScopeRequestBody struct {
-	// Selected MCP servers and gateways. An empty list clears the restriction and
-	// applies the policy to every MCP server.
+	// Apply to every MCP server, including servers added later.
+	AllServers bool `form:"all_servers" json:"all_servers" xml:"all_servers"`
+	// Tool annotation hints matched by the policy-level rule. Empty matches all
+	// tools.
+	ToolAnnotations []string `form:"tool_annotations,omitempty" json:"tool_annotations,omitempty" xml:"tool_annotations,omitempty"`
+	// Selected MCP servers and gateways, or custom per-server tool overrides when
+	// all_servers is true.
 	Servers []*RiskMCPServerScopeRequestBody `form:"servers" json:"servers" xml:"servers"`
 }
 
@@ -10935,7 +10940,7 @@ type RiskMCPScopeRequestBody struct {
 type RiskMCPServerScopeRequestBody struct {
 	// The selected MCP server or gateway ID.
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	// Selected tool names. Empty or omitted selects every tool on the server.
+	// Custom tool names for this server. Omit to follow the policy tool rule.
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 }
 
@@ -10965,8 +10970,13 @@ type RiskDetectionScopeResponseBody struct {
 
 // RiskMCPScopeResponseBody is used to define fields on response body types.
 type RiskMCPScopeResponseBody struct {
-	// Selected MCP servers and gateways. An empty list clears the restriction and
-	// applies the policy to every MCP server.
+	// Apply to every MCP server, including servers added later.
+	AllServers *bool `form:"all_servers,omitempty" json:"all_servers,omitempty" xml:"all_servers,omitempty"`
+	// Tool annotation hints matched by the policy-level rule. Empty matches all
+	// tools.
+	ToolAnnotations []string `form:"tool_annotations,omitempty" json:"tool_annotations,omitempty" xml:"tool_annotations,omitempty"`
+	// Selected MCP servers and gateways, or custom per-server tool overrides when
+	// all_servers is true.
 	Servers []*RiskMCPServerScopeResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 }
 
@@ -10975,7 +10985,7 @@ type RiskMCPScopeResponseBody struct {
 type RiskMCPServerScopeResponseBody struct {
 	// The selected MCP server or gateway ID.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// Selected tool names. Empty or omitted selects every tool on the server.
+	// Custom tool names for this server. Omit to follow the policy tool rule.
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 }
 
@@ -34745,6 +34755,11 @@ func ValidateRiskMCPScopeRequestBody(body *RiskMCPScopeRequestBody) (err error) 
 	if body.Servers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
 	}
+	for _, e := range body.ToolAnnotations {
+		if !(e == "destructiveHint" || e == "readOnlyHint" || e == "idempotentHint" || e == "openWorldHint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tool_annotations[*]", e, []any{"destructiveHint", "readOnlyHint", "idempotentHint", "openWorldHint"}))
+		}
+	}
 	for _, e := range body.Servers {
 		if e != nil {
 			if err2 := ValidateRiskMCPServerScopeRequestBody(e); err2 != nil {
@@ -34759,6 +34774,9 @@ func ValidateRiskMCPScopeRequestBody(body *RiskMCPScopeRequestBody) (err error) 
 // RiskMCPServerScopeRequestBody
 func ValidateRiskMCPServerScopeRequestBody(body *RiskMCPServerScopeRequestBody) (err error) {
 	err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+	if len(body.Tools) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tools", body.Tools, len(body.Tools), 1, true))
+	}
 	return
 }
 
@@ -34776,6 +34794,11 @@ func ValidateRiskDetectionScopeResponseBody(body *RiskDetectionScopeResponseBody
 func ValidateRiskMCPScopeResponseBody(body *RiskMCPScopeResponseBody) (err error) {
 	if body.Servers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	for _, e := range body.ToolAnnotations {
+		if !(e == "destructiveHint" || e == "readOnlyHint" || e == "idempotentHint" || e == "openWorldHint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tool_annotations[*]", e, []any{"destructiveHint", "readOnlyHint", "idempotentHint", "openWorldHint"}))
+		}
 	}
 	for _, e := range body.Servers {
 		if e != nil {
@@ -34795,6 +34818,9 @@ func ValidateRiskMCPServerScopeResponseBody(body *RiskMCPServerScopeResponseBody
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if len(body.Tools) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tools", body.Tools, len(body.Tools), 1, true))
 	}
 	return
 }

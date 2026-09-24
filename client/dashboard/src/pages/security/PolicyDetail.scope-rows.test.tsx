@@ -13,6 +13,10 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { StandardPolicyEditor } from "./PolicyDetail";
+import {
+  policyMCPScopePayload,
+  policyMCPScopeValue,
+} from "./PolicyMCPScopePicker";
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -69,6 +73,7 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
         {
           id: "11111111-1111-4111-8111-111111111111",
           name: "Support MCP",
+          toolsetId: "toolset-1",
         },
       ],
     },
@@ -85,9 +90,33 @@ vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
   }),
 }));
 
+vi.mock("@gram/client/react-query/metaMcpMembers.js", () => ({
+  useMetaMcpMembers: () => ({
+    data: { members: [] },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 vi.mock("@gram/client/react-query/listToolsets.js", () => ({
   useListToolsets: () => ({
-    data: { toolsets: [] },
+    data: {
+      toolsets: [
+        {
+          id: "toolset-1",
+          name: "Support tools",
+          tools: [
+            {
+              annotations: { destructiveHint: true },
+              id: "tool-1",
+              name: "deleteTicket",
+              toolUrn: "tools:deleteTicket",
+              type: "http",
+            },
+          ],
+        },
+      ],
+    },
     isLoading: false,
     isError: false,
   }),
@@ -223,58 +252,70 @@ describe("StandardPolicyEditor scope rows", () => {
     } as unknown as ReturnType<typeof useSdkClient>);
   });
 
-  it("renders a row for a stored custom scope with no recommendation", () => {
-    renderEditor(
-      policy({
-        detectionScopes: [
-          { category: "custom", scopeInclude: 'kind in ["tool_request"]' },
-        ],
-      }),
-    );
-
-    expect(screen.getByText("Custom rules")).toBeTruthy();
-    expect(screen.getByText("Custom")).toBeTruthy();
-  });
-
-  it("still renders a category with a non-empty recommendation", () => {
+  it("renders one inspect row for every enabled detector", () => {
     renderEditor(policy());
 
     expect(screen.getByText("Secrets")).toBeTruthy();
-    expect(screen.getByText("Recommended")).toBeTruthy();
+    expect(screen.getByText("Shadow MCP")).toBeTruthy();
+    expect(screen.getByText("Custom rules")).toBeTruthy();
+    expect(screen.getAllByText("Tool", { selector: "span" })).toHaveLength(2);
+    expect(screen.getByText("Response", { selector: "span" })).toBeTruthy();
   });
 
-  it("hides a category with neither a recommendation nor a stored scope", () => {
+  it("keeps the final inspection surface selected", () => {
     renderEditor(policy());
 
-    expect(screen.queryByText("Shadow MCP")).toBeNull();
-    expect(screen.queryByText("Custom rules")).toBeNull();
+    const response = screen.getByRole("checkbox", {
+      name: "Secrets: Tool responses",
+    });
+    expect(response.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(response);
+    expect(response.getAttribute("aria-checked")).toBe("true");
   });
 
-  it("shows only tool surfaces for selected MCP servers", async () => {
+  it("shows MCP-only columns without disabling response inspection", () => {
     renderEditor(policy());
 
-    fireEvent.click(screen.getByLabelText("Selected servers"));
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+
+    expect(
+      screen.getAllByLabelText("User is not part of an MCP call").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByLabelText("Assistant is not part of an MCP call").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Secrets: Tool responses" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+    expect(
+      screen.getByText(
+        "Tool responses are stored now. Response inspection applies once MCP response scanning ships.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("preserves server selection across mode switches", async () => {
+    renderEditor(policy());
+
+    fireEvent.click(screen.getByText("Selected MCP servers"));
     const server = screen.getByRole("checkbox", { name: "Support MCP" });
     fireEvent.click(server);
-
     await waitFor(() => {
       expect(server.getAttribute("aria-checked")).toBe("true");
     });
-    expect(screen.queryByRole("button", { name: "User" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Assistant" })).toBeNull();
+
+    fireEvent.click(screen.getByText("Everywhere"));
+    fireEvent.click(screen.getByText("Selected MCP servers"));
     expect(
       screen
-        .getAllByRole("button", { name: "Tool requests" })
-        .every((button) => !button.hasAttribute("disabled")),
-    ).toBe(true);
-    expect(
-      screen
-        .getAllByRole("button", { name: "Tool responses" })
-        .every((button) => !button.hasAttribute("disabled")),
-    ).toBe(true);
+        .getByRole("checkbox", { name: "Support MCP" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 
-  it("preserves custom CEL when switching to selected MCP servers", async () => {
+  it("preserves custom CEL across mode switches", () => {
     const expression = 'content.contains("access token")';
     renderEditor(
       policy({
@@ -283,34 +324,77 @@ describe("StandardPolicyEditor scope rows", () => {
         ],
       }),
     );
-    expect(screen.getByText(expression)).toBeTruthy();
 
-    fireEvent.click(screen.getByLabelText("Selected servers"));
-    const server = screen.getByRole("checkbox", { name: "Support MCP" });
-    fireEvent.click(server);
-
-    await waitFor(() => {
-      expect(server.getAttribute("aria-checked")).toBe("true");
-    });
+    fireEvent.click(screen.getAllByRole("button", { name: "CEL" })[0]!);
     expect(screen.getByText(expression)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Customize" })).toBeTruthy();
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+    expect(screen.queryByText(expression)).toBeNull();
+    fireEvent.click(screen.getByText("Everywhere"));
+    expect(screen.getByText(expression)).toBeTruthy();
   });
 
-  it("shows synchronous detector cost for a scoped gating action", () => {
+  it("configures the global annotation rule", () => {
+    renderEditor(policy());
+
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Tool rule: All tools" }),
+    );
+    fireEvent.click(screen.getByText("Tools with MCP annotations"));
+
+    expect(
+      screen.getByRole("button", {
+        name: "Tool rule: Destructive tools",
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText("destructiveHint")).toBeTruthy();
+  });
+
+  it("shows the block latency note in MCP mode", () => {
     renderEditor(policy({ action: "block" }));
 
-    fireEvent.click(screen.getByLabelText("Selected servers"));
-    fireEvent.click(screen.getByText("Support MCP"));
-    expect(
-      screen
-        .getByRole("checkbox", { name: "Support MCP" })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
-
+    fireEvent.click(screen.getByText("Selected MCP servers"));
     expect(
       screen.getByText(
-        "This action gates each matching MCP call synchronously and incurs the configured detector cost.",
+        "Block runs before each matching call. Detector time adds to call latency.",
       ),
     ).toBeTruthy();
+  });
+});
+
+describe("MCP scope form conversion", () => {
+  it("hydrates and serializes all-server annotation rules", () => {
+    const value = policyMCPScopeValue({
+      allServers: true,
+      toolAnnotations: ["destructiveHint"],
+      servers: [
+        {
+          mcpServerId: "11111111-1111-4111-8111-111111111111",
+          tools: ["deleteTicket"],
+        },
+      ],
+    });
+
+    expect(value.mode).toBe("mcp");
+    expect(policyMCPScopePayload(value)).toEqual({
+      allServers: true,
+      toolAnnotations: ["destructiveHint"],
+      servers: [
+        {
+          mcpServerId: "11111111-1111-4111-8111-111111111111",
+          tools: ["deleteTicket"],
+        },
+      ],
+    });
+  });
+
+  it("serializes Everywhere as no MCP scope", () => {
+    const value = policyMCPScopeValue({
+      allServers: true,
+      toolAnnotations: ["readOnlyHint"],
+      servers: [],
+    });
+
+    expect(policyMCPScopePayload({ ...value, mode: "everywhere" })).toBeNull();
   });
 });

@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/tooldisposition"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -242,7 +243,7 @@ func NewService(
 		logger: logger,
 		db:     db,
 		repo:   repo.New(db),
-		policies: policycore.New(db, policycore.MutationDependencies{
+		policies: policycore.NewWithToolAnnotations(db, tooldisposition.New(logger, db, cacheImpl), policycore.MutationDependencies{
 			Transactor:       db,
 			Auditor:          policyMutationAuditor{logger: auditLogger},
 			Approvals:        approvalIntake,
@@ -2695,7 +2696,9 @@ func (s *Service) normalizeMCPScope(
 	var coreInput *policycore.MCPScopeInput
 	if input != nil {
 		coreInput = &policycore.MCPScopeInput{
-			Servers: make([]*policycore.MCPServerScopeInput, 0, len(input.Servers)),
+			AllServers:      input.AllServers,
+			ToolAnnotations: input.ToolAnnotations,
+			Servers:         make([]*policycore.MCPServerScopeInput, 0, len(input.Servers)),
 		}
 		for _, server := range input.Servers {
 			if server == nil {

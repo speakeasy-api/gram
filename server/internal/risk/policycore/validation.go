@@ -19,6 +19,13 @@ var (
 	customRuleIDFormat   = regexp.MustCompile(`^custom\.[a-z0-9_]+$`)
 )
 
+var knownMCPToolAnnotations = []string{
+	"destructiveHint",
+	"idempotentHint",
+	"openWorldHint",
+	"readOnlyHint",
+}
+
 // ValidationError separates a stable client-facing validation message from an
 // underlying technical cause retained for logs and diagnostics.
 type ValidationError struct {
@@ -44,7 +51,9 @@ type DetectionScopeInput struct {
 
 // MCPScopeInput preserves transport strings until UUID and tool validation.
 type MCPScopeInput struct {
-	Servers []*MCPServerScopeInput
+	AllServers      bool
+	ToolAnnotations []string
+	Servers         []*MCPServerScopeInput
 }
 
 // MCPServerScopeInput is one server or gateway selection.
@@ -54,13 +63,39 @@ type MCPServerScopeInput struct {
 }
 
 // NormalizeMCPScope validates and canonicalizes an MCP policy scope. An
-// explicit empty server list clears the restriction and therefore returns nil.
+// explicit empty scope clears the restriction and therefore returns nil.
 func NormalizeMCPScope(input *MCPScopeInput) (*MCPScope, error) {
-	if input == nil || len(input.Servers) == 0 {
+	if input == nil {
 		return nil, nil
 	}
 
-	scope := &MCPScope{Servers: make([]MCPServerScope, 0, len(input.Servers))}
+	annotations := make([]string, 0, len(input.ToolAnnotations))
+	seenAnnotations := make(map[string]struct{}, len(input.ToolAnnotations))
+	for _, rawAnnotation := range input.ToolAnnotations {
+		annotation := strings.TrimSpace(rawAnnotation)
+		if !isKnownMCPToolAnnotation(annotation) {
+			return nil, fmt.Errorf("MCP tool annotation %q is not recognized", rawAnnotation)
+		}
+		if _, ok := seenAnnotations[annotation]; ok {
+			continue
+		}
+		seenAnnotations[annotation] = struct{}{}
+		annotations = append(annotations, annotation)
+	}
+	slices.Sort(annotations)
+
+	if !input.AllServers && len(input.Servers) == 0 {
+		if len(annotations) == 0 {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("MCP scope must select all servers or at least one server")
+	}
+
+	scope := &MCPScope{
+		AllServers:      input.AllServers,
+		ToolAnnotations: annotations,
+		Servers:         make([]MCPServerScope, 0, len(input.Servers)),
+	}
 	seenServers := make(map[uuid.UUID]struct{}, len(input.Servers))
 	for _, server := range input.Servers {
 		if server == nil {
@@ -75,20 +110,29 @@ func NormalizeMCPScope(input *MCPScopeInput) (*MCPScope, error) {
 		}
 		seenServers[serverID] = struct{}{}
 
-		tools := make([]string, 0, len(server.Tools))
-		seenTools := make(map[string]struct{}, len(server.Tools))
-		for _, rawTool := range server.Tools {
-			tool := strings.TrimSpace(rawTool)
-			if tool == "" {
-				return nil, fmt.Errorf("MCP tool name must not be empty")
+		var tools []string
+		if server.Tools != nil {
+			if len(server.Tools) == 0 {
+				return nil, fmt.Errorf("custom MCP tool selection must include at least one tool")
 			}
-			if _, ok := seenTools[tool]; ok {
-				continue
+			tools = make([]string, 0, len(server.Tools))
+			seenTools := make(map[string]struct{}, len(server.Tools))
+			for _, rawTool := range server.Tools {
+				tool := strings.TrimSpace(rawTool)
+				if tool == "" {
+					return nil, fmt.Errorf("MCP tool name must not be empty")
+				}
+				if _, ok := seenTools[tool]; ok {
+					continue
+				}
+				seenTools[tool] = struct{}{}
+				tools = append(tools, tool)
 			}
-			seenTools[tool] = struct{}{}
-			tools = append(tools, tool)
+			slices.Sort(tools)
 		}
-		slices.Sort(tools)
+		if input.AllServers && tools == nil {
+			return nil, fmt.Errorf("all-servers scope entries must contain custom tools")
+		}
 		scope.Servers = append(scope.Servers, MCPServerScope{
 			MCPServerID: serverID,
 			Tools:       tools,
@@ -98,6 +142,10 @@ func NormalizeMCPScope(input *MCPScopeInput) (*MCPScope, error) {
 		return strings.Compare(a.MCPServerID.String(), b.MCPServerID.String())
 	})
 	return scope, nil
+}
+
+func isKnownMCPToolAnnotation(annotation string) bool {
+	return slices.Contains(knownMCPToolAnnotations, annotation)
 }
 
 // ValidateMCPScopeOwnership requires every selected server or gateway to

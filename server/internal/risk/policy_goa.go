@@ -37,7 +37,11 @@ func policyToGoa(policy policycore.Policy) *types.RiskPolicy {
 				Tools:       server.Tools,
 			})
 		}
-		mcpScope = &types.RiskMCPScope{Servers: servers}
+		mcpScope = &types.RiskMCPScope{
+			AllServers:      policy.MCPScope.AllServers,
+			ToolAnnotations: policy.MCPScope.ToolAnnotations,
+			Servers:         servers,
+		}
 	}
 
 	return &types.RiskPolicy{

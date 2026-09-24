@@ -163,6 +163,7 @@ DECLARE
   policy_cd CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f007';
   policy_tb CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f008';
   policy_q  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f009';
+  policy_ma CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f010';
 
   -- Read-only tool verbs the destructive-command policy exempts. Declared once
   -- because both of that policy's categories carry the same exemption.
@@ -1763,6 +1764,18 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
          'mcp_server_id', demo.det_uuid('gram-demo-mcpserver-support')::text,
          'tools', jsonb_build_array('process_refund')))),
      TRUE, 'flag', 'everyone', NULL, FALSE, 8.6, 1),
+    -- MCP annotation rule scoped to the support server.
+    (policy_ma, proj_a, demo_org, 'Acme destructive MCP tool policy', 'standard',
+     '{destructive_tool}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'destructive_tool',
+                          'scope_include', 'kind in ["tool_request","tool_response"]'))), '{}',
+     jsonb_build_object(
+       'tool_annotations', jsonb_build_array('destructiveHint'),
+       'servers', jsonb_build_array(
+         jsonb_build_object(
+           'mcp_server_id', demo.det_uuid('gram-demo-mcpserver-support')::text))),
+     TRUE, 'flag', 'everyone', NULL, FALSE, 8.8, 1),
     -- MCP security best practices: unapproved / unsandboxed MCP servers.
     -- Name matches shadowMCPPolicyAutoName so the UI reads consistently.
     (policy_sm, proj_a, demo_org, 'Shadow MCP Server Policy', 'standard',

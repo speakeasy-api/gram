@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listRiskPoliciesForMcpServer risk
  *
  * @remarks
- * List enabled risk policies that apply to an MCP server and optional tool.
+ * List enabled MCP-scoped risk policies that apply to an MCP server and optional tool. Policies without an MCP scope are excluded.
  */
 export function riskPoliciesListForMcpServer(
   client: GramCore,

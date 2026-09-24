@@ -12359,7 +12359,21 @@ func marshalTypesRiskMCPScopeToRiskMCPScopeRequestBody(v *types.RiskMCPScope) *R
 	if v == nil {
 		return nil
 	}
-	res := &RiskMCPScopeRequestBody{}
+	res := &RiskMCPScopeRequestBody{
+		AllServers: v.AllServers,
+	}
+	{
+		var zero bool
+		if res.AllServers == zero {
+			res.AllServers = false
+		}
+	}
+	if v.ToolAnnotations != nil {
+		res.ToolAnnotations = make([]string, len(v.ToolAnnotations))
+		for i, val := range v.ToolAnnotations {
+			res.ToolAnnotations[i] = val
+		}
+	}
 	if v.Servers != nil {
 		res.Servers = make([]*RiskMCPServerScopeRequestBody, len(v.Servers))
 		for i, val := range v.Servers {
@@ -12430,7 +12444,21 @@ func marshalRiskMCPScopeRequestBodyToTypesRiskMCPScope(v *RiskMCPScopeRequestBod
 	if v == nil {
 		return nil
 	}
-	res := &types.RiskMCPScope{}
+	res := &types.RiskMCPScope{
+		AllServers: v.AllServers,
+	}
+	{
+		var zero bool
+		if res.AllServers == zero {
+			res.AllServers = false
+		}
+	}
+	if v.ToolAnnotations != nil {
+		res.ToolAnnotations = make([]string, len(v.ToolAnnotations))
+		for i, val := range v.ToolAnnotations {
+			res.ToolAnnotations[i] = val
+		}
+	}
 	if v.Servers != nil {
 		res.Servers = make([]*types.RiskMCPServerScope, len(v.Servers))
 		for i, val := range v.Servers {
@@ -12502,6 +12530,18 @@ func unmarshalRiskMCPScopeResponseBodyToTypesRiskMCPScope(v *RiskMCPScopeRespons
 		return nil
 	}
 	res := &types.RiskMCPScope{}
+	if v.AllServers != nil {
+		res.AllServers = *v.AllServers
+	}
+	if v.AllServers == nil {
+		res.AllServers = false
+	}
+	if v.ToolAnnotations != nil {
+		res.ToolAnnotations = make([]string, len(v.ToolAnnotations))
+		for i, val := range v.ToolAnnotations {
+			res.ToolAnnotations[i] = val
+		}
+	}
 	res.Servers = make([]*types.RiskMCPServerScope, len(v.Servers))
 	for i, val := range v.Servers {
 		if val == nil {

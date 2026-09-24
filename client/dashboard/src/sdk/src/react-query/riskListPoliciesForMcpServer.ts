@@ -59,7 +59,7 @@ export type RiskListPoliciesForMcpServerQueryError =
  * listRiskPoliciesForMcpServer risk
  *
  * @remarks
- * List enabled risk policies that apply to an MCP server and optional tool.
+ * List enabled MCP-scoped risk policies that apply to an MCP server and optional tool. Policies without an MCP scope are excluded.
  */
 export function useRiskListPoliciesForMcpServer(
   request: ListRiskPoliciesForMcpServerRequest,
@@ -88,7 +88,7 @@ export function useRiskListPoliciesForMcpServer(
  * listRiskPoliciesForMcpServer risk
  *
  * @remarks
- * List enabled risk policies that apply to an MCP server and optional tool.
+ * List enabled MCP-scoped risk policies that apply to an MCP server and optional tool. Policies without an MCP scope are excluded.
  */
 export function useRiskListPoliciesForMcpServerSuspense(
   request: ListRiskPoliciesForMcpServerRequest,

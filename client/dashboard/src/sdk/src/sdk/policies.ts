@@ -148,7 +148,7 @@ export class Policies extends ClientSDK {
    * listRiskPoliciesForMcpServer risk
    *
    * @remarks
-   * List enabled risk policies that apply to an MCP server and optional tool.
+   * List enabled MCP-scoped risk policies that apply to an MCP server and optional tool. Policies without an MCP scope are excluded.
    */
   async listForMcpServer(
     request: ListRiskPoliciesForMcpServerRequest,

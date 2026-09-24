@@ -8,7 +8,12 @@
 package types
 
 type RiskMCPScope struct {
-	// Selected MCP servers and gateways. An empty list clears the restriction and
-	// applies the policy to every MCP server.
+	// Apply to every MCP server, including servers added later.
+	AllServers bool
+	// Tool annotation hints matched by the policy-level rule. Empty matches all
+	// tools.
+	ToolAnnotations []string
+	// Selected MCP servers and gateways, or custom per-server tool overrides when
+	// all_servers is true.
 	Servers []*RiskMCPServerScope
 }

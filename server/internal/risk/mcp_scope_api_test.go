@@ -11,6 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -21,7 +22,19 @@ func TestRiskPolicyMCPScopeRoundTripsAndFiltersEnabledPolicies(t *testing.T) {
 	projectID, organizationID := riskTestProject(t, ctx)
 	serverID, otherServerID, gatewayID := seedRiskMCPServers(t, ctx, ti, projectID, organizationID)
 
-	allPolicy := createMCPScopedPolicy(t, ctx, ti, "All servers", true, nil)
+	_, err := mcpserversrepo.New(ti.conn).AddMCPServerToolMetadata(ctx, mcpserversrepo.AddMCPServerToolMetadataParams{
+		ProjectID:   projectID,
+		McpServerID: serverID,
+		Tools:       []byte(`[{"tool_name":"danger","destructive_hint":true}]`),
+	})
+	require.NoError(t, err)
+
+	allPolicy := createMCPScopedPolicy(t, ctx, ti, "Everywhere", true, nil)
+	annotationPolicy := createMCPScopedPolicy(t, ctx, ti, "Destructive tools", true, &types.RiskMCPScope{
+		AllServers:      true,
+		ToolAnnotations: []string{"destructiveHint"},
+		Servers:         []*types.RiskMCPServerScope{},
+	})
 	directPolicy := createMCPScopedPolicy(t, ctx, ti, "Direct search", true, &types.RiskMCPScope{Servers: []*types.RiskMCPServerScope{{
 		McpServerID: serverID.String(),
 		Tools:       []string{"search"},
@@ -41,25 +54,36 @@ func TestRiskPolicyMCPScopeRoundTripsAndFiltersEnabledPolicies(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, directPolicy.McpScope, got.McpScope)
 
+	annotationRoundTrip, err := ti.service.GetRiskPolicy(ctx, &gen.GetRiskPolicyPayload{ID: annotationPolicy.ID})
+	require.NoError(t, err)
+	require.Equal(t, annotationPolicy.McpScope, annotationRoundTrip.McpScope)
+
 	searchPolicies, err := ti.service.ListRiskPoliciesForMcpServer(ctx, &gen.ListRiskPoliciesForMcpServerPayload{
 		McpServerID: serverID.String(),
 		ToolName:    new("search"),
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"All servers", "Direct search", "Gateway"}, sortedPolicyNames(searchPolicies.Policies))
+	require.Equal(t, []string{"Direct search", "Gateway"}, sortedPolicyNames(searchPolicies.Policies))
+
+	destructivePolicies, err := ti.service.ListRiskPoliciesForMcpServer(ctx, &gen.ListRiskPoliciesForMcpServerPayload{
+		McpServerID: serverID.String(),
+		ToolName:    new("danger"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"Destructive tools", "Gateway"}, sortedPolicyNames(destructivePolicies.Policies))
 
 	otherToolPolicies, err := ti.service.ListRiskPoliciesForMcpServer(ctx, &gen.ListRiskPoliciesForMcpServerPayload{
 		McpServerID: serverID.String(),
 		ToolName:    new("write"),
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"All servers", "Gateway"}, sortedPolicyNames(otherToolPolicies.Policies))
+	require.Equal(t, []string{"Gateway"}, sortedPolicyNames(otherToolPolicies.Policies))
 
 	serverOnlyPolicies, err := ti.service.ListRiskPoliciesForMcpServer(ctx, &gen.ListRiskPoliciesForMcpServerPayload{
 		McpServerID: serverID.String(),
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"All servers", "Direct search", "Gateway"}, sortedPolicyNames(serverOnlyPolicies.Policies))
+	require.Equal(t, []string{"Destructive tools", "Direct search", "Gateway"}, sortedPolicyNames(serverOnlyPolicies.Policies))
 
 	cleared, err := ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
 		ID:       gatewayPolicy.ID,

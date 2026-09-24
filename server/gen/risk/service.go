@@ -21,7 +21,8 @@ type Service interface {
 	CreateRiskPolicy(context.Context, *CreateRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// List all risk analysis policies for the current project.
 	ListRiskPolicies(context.Context, *ListRiskPoliciesPayload) (res *ListRiskPoliciesResult, err error)
-	// List enabled risk policies that apply to an MCP server and optional tool.
+	// List enabled MCP-scoped risk policies that apply to an MCP server and
+	// optional tool. Policies without an MCP scope are excluded.
 	ListRiskPoliciesForMcpServer(context.Context, *ListRiskPoliciesForMcpServerPayload) (res *ListRiskPoliciesResult, err error)
 	// List the built-in exclusion library (known-safe values suppressed before
 	// they reach exclusions), grouped by category.

@@ -494,6 +494,185 @@ func (q *Queries) HasLiveMCPServerInOrganization(ctx context.Context, arg HasLiv
 	return exists, err
 }
 
+const listEffectiveMCPServerToolAnnotations = `-- name: ListEffectiveMCPServerToolAnnotations :many
+WITH target_server AS (
+  SELECT s.toolset_id, s.tool_variations_group_id
+  FROM mcp_servers s
+  WHERE s.id = $1
+    AND s.project_id = $2
+    AND s.deleted IS FALSE
+),
+effective_variation_group AS (
+  SELECT COALESCE(
+    s.tool_variations_group_id,
+    t.tool_variations_group_id,
+    (
+      SELECT ptv.group_id
+      FROM project_tool_variations ptv
+      WHERE ptv.project_id = $2
+      ORDER BY ptv.id DESC
+      LIMIT 1
+    )
+  ) AS group_id
+  FROM target_server s
+  LEFT JOIN toolsets t ON t.id = s.toolset_id
+),
+latest_toolset_version AS (
+  SELECT tv.tool_urns
+  FROM target_server s
+  JOIN LATERAL (
+    SELECT tool_urns
+    FROM toolset_versions
+    WHERE toolset_id = s.toolset_id
+      AND deleted IS FALSE
+    ORDER BY version DESC
+    LIMIT 1
+  ) tv ON TRUE
+),
+active_deployment AS (
+  SELECT d.id
+  FROM deployments d
+  JOIN deployment_statuses ds ON ds.deployment_id = d.id
+  WHERE d.project_id = $2
+    AND ds.status = 'completed'
+  ORDER BY d.seq DESC
+  LIMIT 1
+),
+http_source_deployments AS (
+  SELECT id
+  FROM active_deployment
+  UNION ALL
+  SELECT pv.deployment_id
+  FROM active_deployment ad
+  JOIN deployments_packages dp ON dp.deployment_id = ad.id
+  JOIN package_versions pv ON pv.id = dp.version_id
+),
+source_annotations AS (
+  SELECT
+    h.tool_urn,
+    h.name AS tool_name,
+    h.read_only_hint,
+    h.destructive_hint,
+    h.idempotent_hint,
+    h.open_world_hint
+  FROM latest_toolset_version tv
+  JOIN http_tool_definitions h ON h.tool_urn = ANY(tv.tool_urns)
+  JOIN http_source_deployments sd ON sd.id = h.deployment_id
+  WHERE h.deleted IS FALSE
+  UNION ALL
+  SELECT
+    f.tool_urn,
+    f.name AS tool_name,
+    f.read_only_hint,
+    f.destructive_hint,
+    f.idempotent_hint,
+    f.open_world_hint
+  FROM latest_toolset_version tv
+  JOIN function_tool_definitions f ON f.tool_urn = ANY(tv.tool_urns)
+  JOIN active_deployment ad ON ad.id = f.deployment_id
+  WHERE f.deleted IS FALSE
+  UNION ALL
+  SELECT
+    e.tool_urn,
+    e.name AS tool_name,
+    e.read_only_hint,
+    e.destructive_hint,
+    e.idempotent_hint,
+    e.open_world_hint
+  FROM latest_toolset_version tv
+  JOIN external_mcp_tool_definitions e ON e.tool_urn = ANY(tv.tool_urns)
+  JOIN external_mcp_attachments a ON a.id = e.external_mcp_attachment_id
+  JOIN active_deployment ad ON ad.id = a.deployment_id
+  WHERE e.deleted IS FALSE
+    AND a.deleted IS FALSE
+    AND e.type <> 'proxy'
+    AND e.name IS NOT NULL
+),
+varied_annotations AS (
+  SELECT
+    COALESCE(v.name, source.tool_name) AS tool_name,
+    COALESCE(v.read_only_hint, source.read_only_hint) AS read_only_hint,
+    COALESCE(v.destructive_hint, source.destructive_hint) AS destructive_hint,
+    COALESCE(v.idempotent_hint, source.idempotent_hint) AS idempotent_hint,
+    COALESCE(v.open_world_hint, source.open_world_hint) AS open_world_hint
+  FROM source_annotations source
+  LEFT JOIN effective_variation_group variation_group ON TRUE
+  LEFT JOIN tool_variations v
+    ON v.group_id = variation_group.group_id
+   AND v.src_tool_urn = source.tool_urn
+   AND v.deleted IS FALSE
+),
+effective_annotations AS (
+  SELECT
+    m.tool_name,
+    m.read_only_hint,
+    m.destructive_hint,
+    m.idempotent_hint,
+    m.open_world_hint,
+    0 AS source_priority
+  FROM mcp_server_tool_metadata m
+  WHERE m.mcp_server_id = $1
+    AND m.project_id = $2
+    AND m.deleted IS FALSE
+  UNION ALL
+  SELECT
+    tool_name,
+    read_only_hint,
+    destructive_hint,
+    idempotent_hint,
+    open_world_hint,
+    1 AS source_priority
+  FROM varied_annotations
+)
+SELECT DISTINCT ON (tool_name)
+  tool_name,
+  read_only_hint,
+  destructive_hint,
+  idempotent_hint,
+  open_world_hint
+FROM effective_annotations
+ORDER BY tool_name, source_priority
+`
+
+type ListEffectiveMCPServerToolAnnotationsParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type ListEffectiveMCPServerToolAnnotationsRow struct {
+	ToolName        string
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+}
+
+func (q *Queries) ListEffectiveMCPServerToolAnnotations(ctx context.Context, arg ListEffectiveMCPServerToolAnnotationsParams) ([]ListEffectiveMCPServerToolAnnotationsRow, error) {
+	rows, err := q.db.Query(ctx, listEffectiveMCPServerToolAnnotations, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEffectiveMCPServerToolAnnotationsRow
+	for rows.Next() {
+		var i ListEffectiveMCPServerToolAnnotationsRow
+		if err := rows.Scan(
+			&i.ToolName,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLiveMCPServerIDsInOrganization = `-- name: ListLiveMCPServerIDsInOrganization :many
 SELECT m.id
 FROM mcp_servers AS m

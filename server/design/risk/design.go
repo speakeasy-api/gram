@@ -112,7 +112,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("listRiskPoliciesForMcpServer", func() {
-		Description("List enabled risk policies that apply to an MCP server and optional tool.")
+		Description("List enabled MCP-scoped risk policies that apply to an MCP server and optional tool. Policies without an MCP scope are excluded.")
 
 		Payload(func() {
 			security.ByKeyPayload()

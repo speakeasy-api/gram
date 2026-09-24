@@ -52222,7 +52222,7 @@ paths:
         name: RiskListResultsForAgent
   /rpc/risk.listRiskPoliciesForMcpServer:
     get:
-      description: List enabled risk policies that apply to an MCP server and optional tool.
+      description: List enabled MCP-scoped risk policies that apply to an MCP server and optional tool. Policies without an MCP scope are excluded.
       operationId: listRiskPoliciesForMcpServer
       parameters:
         - allowEmptyValue: true
@@ -89763,11 +89763,25 @@ components:
     RiskMCPScope:
       type: object
       properties:
+        all_servers:
+          type: boolean
+          description: Apply to every MCP server, including servers added later.
+          default: false
         servers:
           type: array
           items:
             $ref: '#/components/schemas/RiskMCPServerScope'
-          description: Selected MCP servers and gateways. An empty list clears the restriction and applies the policy to every MCP server.
+          description: Selected MCP servers and gateways, or custom per-server tool overrides when all_servers is true.
+        tool_annotations:
+          type: array
+          items:
+            type: string
+            enum:
+              - destructiveHint
+              - readOnlyHint
+              - idempotentHint
+              - openWorldHint
+          description: Tool annotation hints matched by the policy-level rule. Empty matches all tools.
       required:
         - servers
     RiskMCPServerScope:
@@ -89781,7 +89795,8 @@ components:
           type: array
           items:
             type: string
-          description: Selected tool names. Empty or omitted selects every tool on the server.
+          description: Custom tool names for this server. Omit to follow the policy tool rule.
+          minItems: 1
       required:
         - mcp_server_id
     RiskOverviewCategory:
