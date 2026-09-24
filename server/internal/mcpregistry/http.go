@@ -173,6 +173,7 @@ type discoveryWireError struct {
 }
 
 func (e discoveryWireError) StatusCode() int { return e.Status }
+
 func discoveryErrorFormatter(ctx context.Context, err error) goahttp.Statuser {
 	if discovery, ok := errors.AsType[*gen.RegistryDiscoveryError](err); ok {
 		status := http.StatusBadRequest

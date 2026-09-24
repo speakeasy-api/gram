@@ -19,6 +19,7 @@ import (
 // independently of credential fixtures. Authentication is tested separately.
 func TestDiscoveryGeneratedTransportEncodedNames(t *testing.T) {
 	t.Parallel()
+
 	m := discoveryMux{goahttp.NewMuxer()}
 	ep := &gen.Endpoints{
 		DiscoverVersion: func(_ context.Context, p any) (any, error) {
@@ -44,8 +45,10 @@ func TestDiscoveryGeneratedTransportEncodedNames(t *testing.T) {
 	require.Contains(t, w.Body.String(), `"_meta"`)
 	require.NotContains(t, w.Body.String(), `data_json`)
 }
+
 func TestDiscoveryMountDisabledAndFailClosed(t *testing.T) {
 	t.Parallel()
+
 	ctx, s, _ := newTestService(t)
 	m := goahttp.NewMuxer()
 	require.NoError(t, s.AttachDiscovery(ctx, m, false, nil, nil))
@@ -60,9 +63,11 @@ func TestDiscoveryMountDisabledAndFailClosed(t *testing.T) {
 
 func TestDiscoveryGeneratedClientPathSegments(t *testing.T) {
 	t.Parallel()
+
 	for _, value := range []string{"io.example/slash", "percent%", "unicodeé", "literal%2F"} {
 		t.Run(value, func(t *testing.T) {
 			t.Parallel()
+
 			m := discoveryMux{goahttp.NewMuxer()}
 			called := 0
 			ep := &gen.Endpoints{
