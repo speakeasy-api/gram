@@ -12,9 +12,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// GuardEMABindings protects issuer mutation, including automatic
-// orphan cleanup by other services. The caller must retain tx through mutation.
-func GuardEMABindings(ctx context.Context, tx pgx.Tx, organizationID string, projectID, id uuid.UUID) error {
+// LockUserIssuer verifies exact ownership and serializes issuer mutation with
+// binding preparation. The caller must retain tx through mutation and compare
+// binding-sensitive fields only after this lock.
+func LockUserIssuer(ctx context.Context, tx pgx.Tx, organizationID string, projectID, id uuid.UUID) error {
 	q := repo.New(tx)
 	if err := verifyUserIssuerEMAScope(ctx, q, organizationID, projectID, id); err != nil {
 		return err
@@ -36,6 +37,15 @@ func GuardEMABindings(ctx context.Context, tx pgx.Tx, organizationID string, pro
 			return oops.E(oops.CodeNotFound, err, "user session issuer not found")
 		}
 		return oops.E(oops.CodeUnexpected, err, "lock user session issuer scope")
+	}
+	return nil
+}
+
+// GuardEMABindings protects issuer mutation, including automatic
+// orphan cleanup by other services. The caller must retain tx through mutation.
+func GuardEMABindings(ctx context.Context, tx pgx.Tx, organizationID string, projectID, id uuid.UUID) error {
+	if err := LockUserIssuer(ctx, tx, organizationID, projectID, id); err != nil {
+		return err
 	}
 	count, err := remotesessionsrepo.New(tx).CountActiveEMABindingsForUserIssuer(ctx, remotesessionsrepo.CountActiveEMABindingsForUserIssuerParams{IssuerID: id, OrganizationID: organizationID, ProjectID: projectID})
 	if err != nil {

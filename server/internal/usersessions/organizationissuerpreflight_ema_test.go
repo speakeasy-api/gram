@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
+	gen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -120,4 +121,46 @@ func TestOrganizationIssuerMutationWaitsForEMAPreparation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestProjectIssuerUpdateActiveEMABindings(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, auth)
+	require.NotNil(t, auth.ProjectID)
+	user, err := ti.service.CreateUserSessionIssuer(ctx, &gen.CreateUserSessionIssuerPayload{
+		Slug: "ema-project-human", AuthnChallengeMode: "chain", SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	remote := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "ema-project-remote", uuid.NullUUID{}, conv.ToPGText(auth.ActiveOrganizationID))
+	q := remoterepo.New(ti.conn)
+	require.NoError(t, q.EnsureEMABinding(ctx, remoterepo.EnsureEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: uuid.MustParse(user.ID), RemoteSessionIssuerID: remote, Resource: "https://resource.example.com/"}))
+	for _, patch := range []*gen.UpdateUserSessionIssuerPayload{
+		{ID: user.ID, Slug: conv.PtrEmpty("ema-project-renamed")},
+		{ID: user.ID},
+		{ID: user.ID, AuthnChallengeMode: conv.PtrEmpty("chain"), SessionDurationHours: conv.PtrEmpty(24)},
+	} {
+		updated, err := ti.service.UpdateUserSessionIssuer(ctx, patch)
+		require.NoError(t, err)
+		require.Equal(t, "ema-project-renamed", updated.Slug)
+		require.Equal(t, "chain", updated.AuthnChallengeMode)
+		require.Equal(t, 24, updated.SessionDurationHours)
+	}
+	for _, patch := range []*gen.UpdateUserSessionIssuerPayload{
+		{ID: user.ID, AuthnChallengeMode: conv.PtrEmpty("interactive")},
+		{ID: user.ID, SessionDurationHours: conv.PtrEmpty(12)},
+		{ID: user.ID, ClientIDMetadataAdmissionMode: conv.PtrEmpty("disabled")},
+	} {
+		_, err := ti.service.UpdateUserSessionIssuer(ctx, patch)
+		requireOopsCode(t, err, oops.CodeConflict)
+	}
+	binding, err := q.GetEMABinding(ctx, remoterepo.GetEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: uuid.MustParse(user.ID), RemoteSessionIssuerID: remote, Resource: "https://resource.example.com/"})
+	require.NoError(t, err)
+	_, err = q.SetEMABinding(ctx, remoterepo.SetEMABindingParams{ID: binding.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ExpectedGeneration: binding.Generation, Generation: binding.Generation + 1, State: conv.ToPGText("unlinked"), GrantSource: conv.ToPGText("unknown"), RequestedScopes: []string{}})
+	require.NoError(t, err)
+	updated, err := ti.service.UpdateUserSessionIssuer(ctx, &gen.UpdateUserSessionIssuerPayload{ID: user.ID, SessionDurationHours: conv.PtrEmpty(12)})
+	require.NoError(t, err)
+	require.Equal(t, 12, updated.SessionDurationHours)
 }
