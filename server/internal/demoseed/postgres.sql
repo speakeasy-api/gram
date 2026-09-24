@@ -1152,7 +1152,11 @@ BEGIN
     (id, organization_id, project_id, name, issuer, jwks_uri,
      allow_wildcard_admission)
   VALUES
-    (demo.det_uuid('gram-demo-workload-issuer-1'), demo_org, proj_a,
+    -- Organization tier. Two of the admissions below are organization-tier and
+    -- name this issuer, and an organization-tier admission may only bind an
+    -- organization-tier issuer, so a project row here would be a policy shape
+    -- the management API refuses to write.
+    (demo.det_uuid('gram-demo-workload-issuer-1'), demo_org, NULL,
      'Acme CI', 'https://ci-identity.example.com',
      'https://ci-identity.example.com/.well-known/jwks.json', FALSE),
     (demo.det_uuid('gram-demo-workload-issuer-2'), demo_org, NULL,
@@ -1194,10 +1198,13 @@ BEGIN
      demo.det_uuid('gram-demo-workload-issuer-1'),
      'repo:acme/docs-site:environment:production', 'exact',
      demo.det_uuid('gram-demo-managed-agent-2')),
+    -- An active agent on purpose: this is the one rule standing for a whole
+    -- fleet, so pointing it at a suspended or revoked agent would show a
+    -- workload that authenticates and then reaches nothing.
     (demo.det_uuid('gram-demo-workload-assignment-3'), demo_org,
      demo.det_uuid('gram-demo-workload-issuer-2'),
      'wimse://agents.example.com/org/acme/agent/*', 'wildcard',
-     demo.det_uuid('gram-demo-managed-agent-3'));
+     demo.det_uuid('gram-demo-managed-agent-4'));
 
   INSERT INTO user_sessions
     (id, project_id, organization_id, user_session_issuer_id,
@@ -3174,6 +3181,33 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE organization_id = demo_org AND deleted IS FALSE;
   IF stray <> 3 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 3 workload agent assignments, found %', stray;
+  END IF;
+
+  -- An admission may not out-reach its issuer's tier: an organization-tier
+  -- admission has to name an organization-tier issuer. The management API refuses
+  -- the pairing and the admission lookup ignores it, so a seeded row in that shape
+  -- would be silently inert — the page would list it and no workload would match.
+  SELECT count(*) INTO stray
+  FROM workload_identity_admissions a
+  JOIN workload_issuers i ON i.organization_id = a.organization_id AND i.id = a.workload_issuer_id
+  WHERE a.organization_id = demo_org AND a.deleted IS FALSE AND i.deleted IS FALSE
+    AND i.project_id IS NOT NULL
+    AND (a.project_id IS NULL OR a.project_id <> i.project_id);
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % admissions whose tier out-reaches their issuer''s', stray;
+  END IF;
+
+  -- A wildcard rule standing for a fleet is the headline of this fixture, so its
+  -- agent has to be one a workload can actually inherit. A suspended or revoked
+  -- agent resolves and is then denied, which reads as a broken feature.
+  SELECT count(*) INTO stray
+  FROM workload_agent_assignments g
+  JOIN agents ag ON ag.organization_id = g.organization_id AND ag.id = g.agent_id
+  WHERE g.organization_id = demo_org AND g.deleted IS FALSE
+    AND g.match_kind = 'wildcard'
+    AND (ag.suspended_at IS NOT NULL OR ag.revoked_at IS NOT NULL);
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % wildcard assignments pointing at a suspended or revoked agent', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_sessions

@@ -334,3 +334,75 @@ func TestParseMatchKind(t *testing.T) {
 	_, err = workloadidentity.ParseMatchKind("glob")
 	require.ErrorIs(t, err, workloadidentity.ErrMatchKindUnknown)
 }
+
+// A wildcard row whose value does not end in "*" is malformed: ValidateSubjectRule
+// refuses it on write, but nothing in the database enforces the shape, and the
+// lookup strips a last character unconditionally. Left unguarded, a row reading
+// "repo:org" would be read as the stem "repo:or" and admit far more than it says.
+func TestIsAdmitted_MalformedWildcardRowIsInertRatherThanWider(t *testing.T) {
+	t.Parallel()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	f := newAdmissionFixture(t, conn)
+	allowWildcardAdmission(t, conn, f.issuerID, true)
+
+	// No terminator, so the unguarded query would compare against "repo:or".
+	seedAdmissionRule(t, conn, f.tenant.organizationID, organizationTier(), f.issuerID, "repo:org", workloadidentity.MatchKindWildcard)
+
+	params := f.params()
+	for _, subject := range []string{"repo:organization-elsewhere", "repo:org", "repo:or"} {
+		params.Subject = subject
+		admitted, err := workloadidentity.IsAdmitted(t.Context(), conn, params)
+		require.NoError(t, err)
+		require.False(t, admitted, "a wildcard row with no terminator must admit nothing, not everything under its truncation: %q", subject)
+	}
+}
+
+// A bare "*" would strip to an empty stem, which starts_with treats as leading
+// every string — admitting every subject the issuer signs, every other tenant of
+// a shared issuer included.
+func TestIsAdmitted_BareStarAdmitsNothing(t *testing.T) {
+	t.Parallel()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	f := newAdmissionFixture(t, conn)
+	allowWildcardAdmission(t, conn, f.issuerID, true)
+	seedAdmissionRule(t, conn, f.tenant.organizationID, organizationTier(), f.issuerID, "*", workloadidentity.MatchKindWildcard)
+
+	params := f.params()
+	params.Subject = otherOrgAgent
+	admitted, err := workloadidentity.IsAdmitted(t.Context(), conn, params)
+	require.NoError(t, err)
+	require.False(t, admitted, `a bare "*" must admit nothing rather than every subject the issuer signs`)
+}
+
+// An organization-tier admission naming a project-tier issuer lets one project's
+// trust decide an organization-wide admission. The write path refuses the pairing;
+// this proves a row that reached the table another way is inert.
+func TestIsAdmitted_OrganizationTierAdmissionCannotUseAProjectTierIssuer(t *testing.T) {
+	t.Parallel()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	tenant := newTenant(t, conn)
+
+	projectIssuer := seedIssuer(t, conn, tenant.organizationID, projectTier(tenant.projectID), "project-ci", testIssuerURL, epoch)
+	seedAdmissionRule(t, conn, tenant.organizationID, organizationTier(), projectIssuer, channelOne, workloadidentity.MatchKindExact)
+
+	params := workloadidentity.AdmissionParams{
+		OrganizationID:   tenant.organizationID,
+		ProjectID:        projectTier(tenant.projectID),
+		WorkloadIssuerID: projectIssuer,
+		Subject:          channelOne,
+	}
+	admitted, err := workloadidentity.IsAdmitted(t.Context(), conn, params)
+	require.NoError(t, err)
+	require.False(t, admitted, "an organization-tier admission must not be satisfied by a project-tier issuer")
+
+	// The same issuer still works for an admission at its own tier, so the guard
+	// narrows the pairing rather than disabling project-tier issuers.
+	seedAdmissionRule(t, conn, tenant.organizationID, projectTier(tenant.projectID), projectIssuer, channelTwo, workloadidentity.MatchKindExact)
+	params.Subject = channelTwo
+	admitted, err = workloadidentity.IsAdmitted(t.Context(), conn, params)
+	require.NoError(t, err)
+	require.True(t, admitted)
+}

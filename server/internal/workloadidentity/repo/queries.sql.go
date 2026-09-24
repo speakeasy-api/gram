@@ -101,6 +101,8 @@ WHERE a.organization_id = $1
     OR (
       a.match_kind = 'wildcard'
       AND i.allow_wildcard_admission
+      AND a.subject LIKE '%*'
+      AND length(a.subject) > 1
       AND starts_with($3, left(a.subject, length(a.subject) - 1))
     )
   )
@@ -158,6 +160,13 @@ SELECT EXISTS (
   JOIN workload_issuers i
     ON i.organization_id = a.organization_id
     AND i.id = a.workload_issuer_id
+    -- The admission's tier may not out-reach its issuer's. An organization-tier
+    -- admission has to name an organization-tier issuer; a project-tier one may
+    -- name its own project's or the organization's. The write path refuses any
+    -- other pairing, and this makes a row that reached the table another way
+    -- inert rather than letting one project's trust decide an organization-wide
+    -- admission.
+    AND (i.project_id IS NULL OR i.project_id = a.project_id)
   WHERE a.organization_id = $1
     AND a.workload_issuer_id = $2
     AND (a.project_id = $3 OR a.project_id IS NULL)
@@ -168,6 +177,8 @@ SELECT EXISTS (
       OR (
         a.match_kind = 'wildcard'
         AND i.allow_wildcard_admission
+        AND a.subject LIKE '%*'
+        AND length(a.subject) > 1
         AND starts_with($4, left(a.subject, length(a.subject) - 1))
       )
     )
@@ -200,10 +211,16 @@ type WorkloadIdentityIsAdmittedParams struct {
 // it scans instead — bounded by the (organization, issuer) columns above and by
 // how few admissions an issuer has.
 //
-// The `*` is always the last character of a wildcard row, enforced on write, so
 // left(subject, length(subject) - 1) is the stem. Storing the `*` rather than
 // stripping it before the insert is deliberate: a row then states its own breadth
 // to anyone reading the table, which a bare stem does not.
+//
+// The shape is re-checked here rather than trusted from write time, for the same
+// reason the issuer's permission is. Nothing in the database enforces it, and
+// stripping a last character that is not a `*` silently widens the rule: a row
+// reading `repo:org` would admit every subject under `repo:or`. Requiring the
+// terminator and a non-empty stem on read makes a malformed row inert instead of
+// over-broad, which is the safe direction for a row no writer should have made.
 //
 // The wildcard arm additionally requires the issuer to permit wildcard matching,
 // and that is checked HERE rather than trusted from write time. A write-side gate

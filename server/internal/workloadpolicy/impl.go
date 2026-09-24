@@ -338,6 +338,7 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 	// than something checked after the fact.
 	existing, err := q.GetWorkloadIssuer(ctx, repo.GetWorkloadIssuerParams{
 		OrganizationID: t.organizationID,
+		ProjectID:      t.projectID,
 		ID:             id,
 	})
 	if err != nil {
@@ -405,6 +406,7 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 
 	deleted, err := q.SoftDeleteWorkloadIssuer(ctx, repo.SoftDeleteWorkloadIssuerParams{
 		OrganizationID: t.organizationID,
+		ProjectID:      t.projectID,
 		ID:             id,
 	})
 	if err != nil {
@@ -630,6 +632,7 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 
 	issuerRow, err := q.GetWorkloadIssuer(ctx, repo.GetWorkloadIssuerParams{
 		OrganizationID: t.organizationID,
+		ProjectID:      t.projectID,
 		ID:             existing.WorkloadIssuerID,
 	})
 	if err != nil {

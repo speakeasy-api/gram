@@ -15,9 +15,14 @@ WHERE organization_id = @organization_id
 ORDER BY (project_id IS NULL) DESC, name;
 
 -- name: GetWorkloadIssuer :one
+-- Scoped exactly as ListWorkloadIssuers is, so the set a caller can name by id
+-- is the set it can see. Organization alone is not enough: a sibling project's
+-- issuer is invisible in the list, so reading or withdrawing one by supplying
+-- its UUID would let a project-scoped caller act on a row it cannot observe.
 SELECT *
 FROM workload_issuers
 WHERE organization_id = @organization_id
+  AND (project_id IS NULL OR project_id = @project_id)
   AND id = @id
   AND deleted IS FALSE;
 
@@ -45,9 +50,13 @@ VALUES (@organization_id, @project_id, @name, @issuer, @jwks_uri, @allow_wildcar
 RETURNING *;
 
 -- name: SoftDeleteWorkloadIssuer :one
+-- Carries the same project predicate as the read above rather than trusting the
+-- caller to have gone through it: the withdrawal is the destructive half, and a
+-- row the caller cannot list is a row it cannot withdraw.
 UPDATE workload_issuers
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
+  AND (project_id IS NULL OR project_id = @project_id)
   AND id = @id
   AND deleted IS FALSE
 RETURNING *;

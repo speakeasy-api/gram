@@ -254,17 +254,23 @@ const getWorkloadIssuer = `-- name: GetWorkloadIssuer :one
 SELECT id, organization_id, project_id, name, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
-  AND id = $2
+  AND (project_id IS NULL OR project_id = $2)
+  AND id = $3
   AND deleted IS FALSE
 `
 
 type GetWorkloadIssuerParams struct {
 	OrganizationID string
+	ProjectID      uuid.NullUUID
 	ID             uuid.UUID
 }
 
+// Scoped exactly as ListWorkloadIssuers is, so the set a caller can name by id
+// is the set it can see. Organization alone is not enough: a sibling project's
+// issuer is invisible in the list, so reading or withdrawing one by supplying
+// its UUID would let a project-scoped caller act on a row it cannot observe.
 func (q *Queries) GetWorkloadIssuer(ctx context.Context, arg GetWorkloadIssuerParams) (WorkloadIssuer, error) {
-	row := q.db.QueryRow(ctx, getWorkloadIssuer, arg.OrganizationID, arg.ID)
+	row := q.db.QueryRow(ctx, getWorkloadIssuer, arg.OrganizationID, arg.ProjectID, arg.ID)
 	var i WorkloadIssuer
 	err := row.Scan(
 		&i.ID,
@@ -627,18 +633,23 @@ const softDeleteWorkloadIssuer = `-- name: SoftDeleteWorkloadIssuer :one
 UPDATE workload_issuers
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = $1
-  AND id = $2
+  AND (project_id IS NULL OR project_id = $2)
+  AND id = $3
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, name, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteWorkloadIssuerParams struct {
 	OrganizationID string
+	ProjectID      uuid.NullUUID
 	ID             uuid.UUID
 }
 
+// Carries the same project predicate as the read above rather than trusting the
+// caller to have gone through it: the withdrawal is the destructive half, and a
+// row the caller cannot list is a row it cannot withdraw.
 func (q *Queries) SoftDeleteWorkloadIssuer(ctx context.Context, arg SoftDeleteWorkloadIssuerParams) (WorkloadIssuer, error) {
-	row := q.db.QueryRow(ctx, softDeleteWorkloadIssuer, arg.OrganizationID, arg.ID)
+	row := q.db.QueryRow(ctx, softDeleteWorkloadIssuer, arg.OrganizationID, arg.ProjectID, arg.ID)
 	var i WorkloadIssuer
 	err := row.Scan(
 		&i.ID,
