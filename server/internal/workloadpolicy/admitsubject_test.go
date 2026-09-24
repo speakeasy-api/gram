@@ -157,3 +157,43 @@ func TestAdmitSubject_RequiresWorkloadWrite(t *testing.T) {
 	_, err := admit(t, readOnly, ti, channelOne, string(workloadidentity.MatchKindExact), agentID)
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+func TestAdmitSubject_RefusesTwoIssuersSharingAURLAtOneTier(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	// The issuer column is not unique, and the per-tier name index lets two rows
+	// in one project carry the same URL under different names. Choosing between
+	// them would silently decide which jwks_uri verifies this subject and whether
+	// wildcards are permitted for it, so it has to be a refusal — tier precedence
+	// resolves across tiers, never within one.
+	for _, name := range []string{"Claude Tag A", "Claude Tag B"} {
+		_, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
+			SessionToken:           nil,
+			ApikeyToken:            nil,
+			ProjectSlugInput:       nil,
+			Name:                   name,
+			Issuer:                 anthropicIssuer,
+			JwksURI:                anthropicJWKS,
+			AllowWildcardAdmission: nil,
+			ProjectScoped:          new(true),
+		})
+		require.NoError(t, err)
+	}
+
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+
+	_, err := ti.service.AdmitSubject(ctx, &gen.AdmitSubjectPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Issuer:           anthropicIssuer,
+		Subject:          channelOne,
+		MatchKind:        new(string(workloadidentity.MatchKindExact)),
+		Name:             nil,
+		AgentID:          agentID.String(),
+		ProjectScoped:    new(true),
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.Contains(t, err.Error(), "same tier")
+}

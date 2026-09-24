@@ -76981,6 +76981,7 @@ components:
                 issuer:
                     type: string
                     description: The issuer identifier of an already-trusted issuer, resolved within the caller's organization. Naming one the caller cannot see is a not-found, not a permission error.
+                    format: uri
                 match_kind:
                     type: string
                     description: 'How the subject is compared: exact compares the whole value; wildcard requires a trailing * and matches anything beginning with the value before it. Wildcard additionally requires the issuer to permit it. Defaults to exact.'
@@ -94381,10 +94382,12 @@ components:
                     description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to false, and is re-checked on every lookup, so clearing it revokes wildcard rules already written.
                 issuer:
                     type: string
-                    description: The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name.
+                    description: The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name, with no query or fragment.
+                    format: uri
                 jwks_uri:
                     type: string
-                    description: Where the issuer publishes the keys its assertions are signed with. Must be an https URL.
+                    description: Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.
+                    format: uri
                 name:
                     type: string
                     description: The label an operator works with. Unique within its tier.

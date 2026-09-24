@@ -19,10 +19,10 @@ type RegisterIssuerRequestBody struct {
 	// The label an operator works with. Unique within its tier.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The issuer identifier the assertion's iss claim must carry. Must be an https
-	// URL on a fully qualified domain name.
+	// URL on a fully qualified domain name, with no query or fragment.
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
 	// Where the issuer publishes the keys its assertions are signed with. Must be
-	// an https URL.
+	// an https URL on a fully qualified domain name.
 	JwksURI string `form:"jwks_uri" json:"jwks_uri" xml:"jwks_uri"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to false, and is re-checked on every lookup, so clearing it revokes

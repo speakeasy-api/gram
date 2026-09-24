@@ -107,10 +107,10 @@ type RegisterIssuerPayload struct {
 	// The label an operator works with. Unique within its tier.
 	Name string
 	// The issuer identifier the assertion's iss claim must carry. Must be an https
-	// URL on a fully qualified domain name.
+	// URL on a fully qualified domain name, with no query or fragment.
 	Issuer string
 	// Where the issuer publishes the keys its assertions are signed with. Must be
-	// an https URL.
+	// an https URL on a fully qualified domain name.
 	JwksURI string
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to false, and is re-checked on every lookup, so clearing it revokes

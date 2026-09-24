@@ -20,10 +20,10 @@ type RegisterIssuerRequestBody struct {
 	// The label an operator works with. Unique within its tier.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The issuer identifier the assertion's iss claim must carry. Must be an https
-	// URL on a fully qualified domain name.
+	// URL on a fully qualified domain name, with no query or fragment.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
 	// Where the issuer publishes the keys its assertions are signed with. Must be
-	// an https URL.
+	// an https URL on a fully qualified domain name.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to false, and is re-checked on every lookup, so clearing it revokes
@@ -2065,6 +2065,12 @@ func ValidateRegisterIssuerRequestBody(body *RegisterIssuerRequestBody) (err err
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 100, false))
 		}
 	}
+	if body.Issuer != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.issuer", *body.Issuer, goa.FormatURI))
+	}
+	if body.JwksURI != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_uri", *body.JwksURI, goa.FormatURI))
+	}
 	return
 }
 
@@ -2079,6 +2085,9 @@ func ValidateAdmitSubjectRequestBody(body *AdmitSubjectRequestBody) (err error) 
 	}
 	if body.AgentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))
+	}
+	if body.Issuer != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.issuer", *body.Issuer, goa.FormatURI))
 	}
 	if body.MatchKind != nil {
 		if !(*body.MatchKind == "exact" || *body.MatchKind == "wildcard") {
