@@ -22,6 +22,7 @@ import (
 )
 
 var ErrConflict = errors.New("registry entry conflict")
+
 var ErrInvalidToken = errors.New("invalid registry write token")
 
 // ErrEndpointStructureImmutable enforces a temporary restriction for the initial

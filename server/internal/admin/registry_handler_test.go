@@ -19,6 +19,7 @@ import (
 
 func TestRegistryMiddleware(t *testing.T) {
 	t.Parallel()
+
 	_, svc, _ := newTestAdminService(t)
 	session, err := svc.sessions.Store(t.Context(), StoreParams{Email: "operator@example.com", Name: "Operator", OIDCSubject: "sub-admin", HD: testAdminHD, AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
@@ -28,6 +29,7 @@ func TestRegistryMiddleware(t *testing.T) {
 	handler := middleware.AdminCORS(origins)(middleware.AdminOriginCheck(origins)(SessionMiddleware(mux)))
 	request := func(method, route, body, cookie, origin string) *httptest.ResponseRecorder {
 		t.Helper()
+
 		req := httptest.NewRequest(method, route, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		if origin != "" {
@@ -94,13 +96,16 @@ func TestRegistryMiddleware(t *testing.T) {
 type registryUnreadBody struct{ read bool }
 
 func (b *registryUnreadBody) Read([]byte) (int, error) { b.read = true; return 0, io.EOF }
-func (*registryUnreadBody) Close() error               { return nil }
+
+func (*registryUnreadBody) Close() error { return nil }
 
 func TestRegistrySecurityAndPayloadBoundaries(t *testing.T) {
 	t.Parallel()
+
 	ctx, svc, db := newTestAdminService(t)
 	store := func(expiry time.Time) string {
 		t.Helper()
+
 		id, err := svc.sessions.Store(t.Context(), StoreParams{Email: "operator@example.com", Name: "Operator", OIDCSubject: "sub-admin", HD: testAdminHD, AccessToken: "access-token", RefreshToken: "", ExpiresAt: expiry})
 		require.NoError(t, err)
 		return id
@@ -113,6 +118,7 @@ func TestRegistrySecurityAndPayloadBoundaries(t *testing.T) {
 	handler := middleware.AdminCORS([]string{origin})(middleware.AdminOriginCheck([]string{origin})(SessionMiddleware(mux)))
 	send := func(method, route, token, cookie, ref string, body io.Reader) *httptest.ResponseRecorder {
 		t.Helper()
+
 		req := httptest.NewRequest(method, route, body)
 		req.Header.Set("Content-Type", "application/json")
 		if ref == "" {
@@ -144,6 +150,7 @@ func TestRegistrySecurityAndPayloadBoundaries(t *testing.T) {
 	}
 	encode := func(raw string) *bytes.Reader {
 		t.Helper()
+
 		b, err := json.Marshal(map[string]string{"data_json": raw})
 		require.NoError(t, err)
 		return bytes.NewReader(b)
