@@ -191,6 +191,21 @@ func (q *Queries) CreateSlackMappingForTest(ctx context.Context, arg CreateSlack
 	return i, err
 }
 
+const deleteSlackDirectoryMemberships = `-- name: DeleteSlackDirectoryMemberships :exec
+DELETE FROM slack_directory_memberships WHERE organization_id = $1 AND slack_team_id = $2
+`
+
+type DeleteSlackDirectoryMembershipsParams struct {
+	OrganizationID string
+	SlackTeamID    string
+}
+
+// Disconnect forgets the workspace directory; connecting again starts a fresh sync.
+func (q *Queries) DeleteSlackDirectoryMemberships(ctx context.Context, arg DeleteSlackDirectoryMembershipsParams) error {
+	_, err := q.db.Exec(ctx, deleteSlackDirectoryMemberships, arg.OrganizationID, arg.SlackTeamID)
+	return err
+}
+
 const disconnectSlackDirectoryConnection = `-- name: DisconnectSlackDirectoryConnection :one
 UPDATE slack_directory_connections SET
 credentials_encrypted = NULL, granted_scopes = '{}', generation = $1,
@@ -639,6 +654,21 @@ func (q *Queries) PublishSlackDirectorySync(ctx context.Context, arg PublishSlac
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const resetSlackDirectorySnapshot = `-- name: ResetSlackDirectorySnapshot :exec
+UPDATE slack_directory_connections SET last_full_sync_generation = NULL, last_full_sync_succeeded_at = NULL, updated_at = clock_timestamp()
+WHERE organization_id = $1 AND id = $2
+`
+
+type ResetSlackDirectorySnapshotParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) ResetSlackDirectorySnapshot(ctx context.Context, arg ResetSlackDirectorySnapshotParams) error {
+	_, err := q.db.Exec(ctx, resetSlackDirectorySnapshot, arg.OrganizationID, arg.ID)
+	return err
 }
 
 const setSlackMappingRevisionForTest = `-- name: SetSlackMappingRevisionForTest :exec

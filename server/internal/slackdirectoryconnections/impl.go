@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/slack_directory_connections/server"
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
@@ -340,10 +341,18 @@ func (s *Service) Disconnect(ctx context.Context, p *gen.DisconnectPayload) (*ge
 	}
 	memberCount, err := queries.CountSlackDirectorySnapshotMembers(ctx, repo.CountSlackDirectorySnapshotMembersParams{OrganizationID: ac.ActiveOrganizationID, ID: id})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "could not count retained Slack members").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "could not count Slack members").LogError(ctx, s.logger)
 	}
+	if err := queries.DeleteSlackDirectoryMemberships(ctx, repo.DeleteSlackDirectoryMembershipsParams{OrganizationID: ac.ActiveOrganizationID, SlackTeamID: before.SlackTeamID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "could not forget Slack members").LogError(ctx, s.logger)
+	}
+	if err := queries.ResetSlackDirectorySnapshot(ctx, repo.ResetSlackDirectorySnapshotParams{OrganizationID: ac.ActiveOrganizationID, ID: id}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "could not reset Slack directory").LogError(ctx, s.logger)
+	}
+	row.LastFullSyncGeneration = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	row.LastFullSyncSucceededAt = pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite}
 	result := s.connectionView(ctx, row)
-	result.MemberCount = memberCount
+	result.MemberCount = 0
 	previous := s.connectionView(ctx, before)
 	previous.MemberCount = memberCount
 	if err := s.audit.LogSlackDirectoryConnectionDisconnect(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: ac.ActiveOrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ConnectionURN: urn.NewSlackDirectoryConnection(row.ID), ConnectionSnapshotBefore: previous, ConnectionSnapshotAfter: result}); err != nil {

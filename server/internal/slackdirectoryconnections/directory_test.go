@@ -151,17 +151,18 @@ func TestDirectorySearchUsesCharactersAndDistinctFields(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestDirectoryDisconnectRetainsCountAndAudit(t *testing.T) {
+func TestDirectoryDisconnectForgetsMembers(t *testing.T) {
 	t.Parallel()
 	ctx, f := newService(t)
 	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
 	require.NoError(t, syncer(f, snapshot("UEXAMPLE01", "UEXAMPLE02")).Run(ctx, syncRequest(f, c), nil))
 	require.NoError(t, syncer(f, snapshot("UEXAMPLE01")).Run(ctx, syncRequest(f, c), nil))
-	require.Len(t, members(t, ctx, f), 2, "absent profiles remain available in history")
+	require.Len(t, members(t, ctx, f), 2, "absent profiles remain available while connected")
 	disconnected, err := f.service.Disconnect(ctx, &gen.DisconnectPayload{SessionToken: nil, ID: c.ID, Generation: c.Generation})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), disconnected.MemberCount)
-	require.Equal(t, "stale", disconnected.DirectoryStatus)
+	require.Equal(t, int64(0), disconnected.MemberCount)
+	require.Equal(t, "never_synced", disconnected.DirectoryStatus)
+	require.Empty(t, members(t, ctx, f))
 	entry, err := audittest.LatestAuditLogByAction(ctx, f.db, audit.ActionSlackDirectoryConnectionDisconnect)
 	require.NoError(t, err)
 	var before, after struct {
@@ -170,15 +171,12 @@ func TestDirectoryDisconnectRetainsCountAndAudit(t *testing.T) {
 	require.NoError(t, json.Unmarshal(entry.BeforeSnapshot, &before))
 	require.NoError(t, json.Unmarshal(entry.AfterSnapshot, &after))
 	require.Equal(t, int64(1), before.MemberCount)
-	require.Equal(t, int64(1), after.MemberCount)
+	require.Equal(t, int64(0), after.MemberCount)
+	// Connecting again starts over with a fresh sync.
 	reconnected := authorize(t, ctx, f, begin(t, ctx, f, &c.ID), "TEXAMPLE01")
-	require.Equal(t, int64(1), reconnected.MemberCount)
-	entry, err = audittest.LatestAuditLogByAction(ctx, f.db, audit.ActionSlackDirectoryConnectionAuthorize)
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(entry.BeforeSnapshot, &before))
-	require.NoError(t, json.Unmarshal(entry.AfterSnapshot, &after))
-	require.Equal(t, int64(1), before.MemberCount)
-	require.Equal(t, int64(1), after.MemberCount)
+	require.Equal(t, int64(0), reconnected.MemberCount)
+	require.NoError(t, syncer(f, snapshot("UEXAMPLE01")).Run(ctx, syncRequest(f, reconnected), nil))
+	require.Len(t, members(t, ctx, f), 1)
 }
 
 func TestSharedDemoDirectoryRemainsReadableWithoutSync(t *testing.T) {
