@@ -3021,6 +3021,23 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 	require.Equal(t, base["plugin-b"], changedFP["plugin-b"], "untouched plugin's fingerprint must be stable")
 }
 
+func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const skill = "skills/configure-private-mcp-access/SKILL.md"
+	content := files["speakeasy/"+skill]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+skill])
+	workflow := string(content)
+	for _, name := range []string{"list_projects", "list_plugins", "get_plugin", "get_mcp_connection_settings", "set_mcp_address", "set_mcp_network_access"} {
+		require.Contains(t, workflow, name)
+	}
+	require.Contains(t, workflow, "explicit confirmation")
+	require.Contains(t, workflow, "An enqueued request is not a published package")
+	require.NotContains(t, workflow, "speakeasy-skill-feedback")
+}
+
 func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 	t.Parallel()
 	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")

@@ -36,6 +36,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -149,8 +150,8 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
-	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
+	if err := lockEndpointMutationScope(ctx, dbtx, authCtx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope").LogError(ctx, logger)
 	}
 
 	// Match the deletion and update paths' lock order — custom domains before
@@ -481,6 +482,9 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := lockEndpointMutationScope(ctx, dbtx, authCtx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope").LogError(ctx, logger)
+	}
 
 	domainIDs := uniqueIDs(preexisting.CustomDomainID, customDomainID)
 	if err := lockCustomDomains(ctx, dbtx, domainIDs); err != nil {
@@ -694,6 +698,9 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := lockEndpointMutationScope(ctx, dbtx, authCtx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope").LogError(ctx, logger)
+	}
 
 	if err := lockCustomDomains(ctx, dbtx, uniqueIDs(preexisting.CustomDomainID)); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock custom domain").LogError(ctx, logger)
@@ -820,6 +827,19 @@ func uniqueIDs(ids ...uuid.NullUUID) []uuid.UUID {
 		return strings.Compare(a.String(), b.String())
 	})
 	return result
+}
+
+func lockEndpointMutationScope(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext) error {
+	if tx == nil || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
+		return fmt.Errorf("invalid MCP endpoint mutation scope")
+	}
+	if err := networkingressrepo.New(tx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return fmt.Errorf("lock network ingress lifecycle: %w", err)
+	}
+	if err := admission.LockProject(ctx, tx, *authCtx.ProjectID); err != nil {
+		return fmt.Errorf("lock distribution admission: %w", err)
+	}
+	return nil
 }
 
 func lockCustomDomains(ctx context.Context, dbtx pgx.Tx, domainIDs []uuid.UUID) error {

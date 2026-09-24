@@ -172,7 +172,7 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate, nil, nil)
 }
 
-func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService) (*mcp.Server, *Registrar) {
+func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService, connectionMutations ...*MCPConnectionMutationService) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "platform-mcp",
 		Title:   "Platform MCP",
@@ -200,8 +200,13 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	reg := newRegistrar(server)
 
 	registerReadTools(reg, reader, cursorKeyMaterial)
+	var connectionMutationService *MCPConnectionMutationService
+	if len(connectionMutations) > 0 {
+		connectionMutationService = connectionMutations[0]
+	}
 	if postgresReader, ok := reader.(*PostgresReader); ok {
 		registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(postgresReader.db))
+		registerMCPConnectionMutationTools(reg, connectionMutationService)
 		if postgresReader.reviewRequests == nil {
 			registerUnavailableReviewRequestTools(reg)
 		} else {
@@ -234,6 +239,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerShadowAITools(reg, postgresReader.shadowAI)
 	} else {
 		registerUnavailableMCPConnectionSettingsTool(reg)
+		registerMCPConnectionMutationTools(reg, nil)
 		registerUnavailableReviewRequestTools(reg)
 		registerRiskAnalysisStatusTool(reg, nil)
 		registerRiskFindingsTool(reg, nil)

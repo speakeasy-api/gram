@@ -2,6 +2,8 @@ package platformmcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -58,6 +60,7 @@ type MCPConnectionSettings struct {
 	Name              string                          `json:"name"`
 	Visibility        string                          `json:"visibility"`
 	NetworkMode       string                          `json:"network_mode"`
+	Version           string                          `json:"version"`
 	Endpoints         []MCPConnectionEndpoint         `json:"endpoints"`
 	Ingress           *MCPConnectionIngress           `json:"ingress,omitempty"`
 	PluginMemberships []MCPConnectionPluginMembership `json:"plugin_memberships"`
@@ -81,10 +84,9 @@ func (s *MCPConnectionSettingsService) Get(ctx context.Context, principal Princi
 	return s.get(ctx, s.queries, principal, input)
 }
 
-// GetInTx returns the same connection-settings snapshot through the caller's
-// transaction. It does not imply concurrency safety for a later mutation: the
-// endpoint, ingress, and plugin-membership writers do not share a lock/version
-// protocol with this read.
+// GetInTx returns the settings snapshot through the caller transaction. Version
+// covers network mode and endpoint IDs, slugs, and domain IDs. It deliberately
+// excludes ingress observations, domain names, membership, and root selection.
 func (s *MCPConnectionSettingsService) GetInTx(ctx context.Context, tx pgx.Tx, principal Principal, input GetMCPConnectionSettingsInput) (MCPConnectionSettings, error) {
 	if s == nil || s.queries == nil || tx == nil {
 		return MCPConnectionSettings{}, ErrUnavailable
@@ -125,10 +127,7 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, queries *platfor
 		}
 	}
 	row, err := queries.GetPlatformMCPConnectionSettings(ctx, platformrepo.GetPlatformMCPConnectionSettingsParams{
-		OrganizationID: principal.OrganizationID,
-		ProjectID:      projectID,
-		TargetKind:     string(input.TargetKind),
-		TargetID:       targetID,
+		OrganizationID: principal.OrganizationID, ProjectID: projectID, TargetKind: string(input.TargetKind), TargetID: targetID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsNotFound
@@ -152,11 +151,36 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, queries *platfor
 		}
 		ingress = &value
 	}
-	return MCPConnectionSettings{
+	settings := MCPConnectionSettings{
 		ProjectID: projectID.String(), TargetKind: input.TargetKind, TargetID: targetID.String(),
 		Name: row.Name, Visibility: row.Visibility, NetworkMode: row.NetworkMode,
-		Endpoints: endpoints, Ingress: ingress, PluginMemberships: memberships,
-	}, nil
+		Version: "", Endpoints: endpoints, Ingress: ingress, PluginMemberships: memberships,
+	}
+	version := connectionAddressVersion{ProjectID: settings.ProjectID, TargetKind: settings.TargetKind, TargetID: settings.TargetID, NetworkMode: settings.NetworkMode, Endpoints: nil}
+	for _, endpoint := range endpoints {
+		version.Endpoints = append(version.Endpoints, connectionVersionEndpoint{ID: endpoint.ID, Slug: endpoint.Slug, CustomDomainID: endpoint.CustomDomainID})
+	}
+	payload, err := json.Marshal(version)
+	if err != nil {
+		return MCPConnectionSettings{}, fmt.Errorf("version MCP connection settings: %w", err)
+	}
+	digest := sha256.Sum256(payload)
+	settings.Version = hex.EncodeToString(digest[:])
+	return settings, nil
+}
+
+type connectionAddressVersion struct {
+	ProjectID   string                          `json:"project_id"`
+	TargetKind  MCPConnectionSettingsTargetKind `json:"target_kind"`
+	TargetID    string                          `json:"target_id"`
+	NetworkMode string                          `json:"network_mode"`
+	Endpoints   []connectionVersionEndpoint     `json:"endpoints"`
+}
+
+type connectionVersionEndpoint struct {
+	ID             string `json:"id"`
+	Slug           string `json:"slug"`
+	CustomDomainID string `json:"custom_domain_id"`
 }
 
 var (

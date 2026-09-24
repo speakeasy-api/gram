@@ -1,6 +1,7 @@
 package plugins_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,6 +14,41 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
+
+type publicationTestSignaler struct {
+	calls int
+}
+
+func (s *publicationTestSignaler) SignalPluginPublish(context.Context, uuid.UUID, string) error {
+	s.calls++
+	return nil
+}
+
+func TestSignalPluginPublishAfterRequest(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name       string
+		outcome    plugins.ProjectPublicationRequestOutcome
+		wantSignal bool
+	}{
+		{name: "enqueued", outcome: plugins.ProjectPublicationEnqueued},
+		{name: "emission disabled", outcome: plugins.ProjectPublicationEmissionDisabled, wantSignal: true},
+		{name: "not configured", outcome: plugins.ProjectPublicationNotConfigured, wantSignal: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			signaler := &publicationTestSignaler{}
+			err := plugins.SignalPluginPublishAfterRequest(context.Background(), signaler, test.outcome, uuid.New(), "actor")
+			require.NoError(t, err)
+			if test.wantSignal {
+				require.Equal(t, 1, signaler.calls)
+			} else {
+				require.Zero(t, signaler.calls)
+			}
+		})
+	}
+}
 
 func TestPublicationRequestsProjectRequiresExistingMarketplace(t *testing.T) {
 	t.Parallel()
