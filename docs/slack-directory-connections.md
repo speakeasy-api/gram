@@ -1,6 +1,6 @@
 # Slack workspace authorization
 
-Organization administrators manage workspace authorizations under Identity, in the Slack workspaces preview tab. Every connection, sync and member operation requires a browser session with `org:admin`; support sessions and API keys are refused. The shared Explore Demo organization is read-only: listing remains available, but begin, callback, and disconnect refuse the exact demo organization before consuming OAuth state, calling Slack, or changing connections.
+Organization administrators manage workspace authorizations under Identity, in the Slack workspaces preview tab. Every connection, sync and member operation requires a browser session with `org:admin`; support sessions and API keys are refused. The shared Explore Demo organization is read-only: listing remains available, but begin, callback, and disconnect refuse the exact demo organization before consuming OAuth state, calling Slack, or changing connections. The retargeted local seed remains writable.
 
 Reuse the Gram Slack app with `SLACK_CLIENT_ID` and the existing `SLACK_CLIENT_SECRET`. Both must belong to the same Slack app. Empty values and `unset` leave authorization unavailable. Register `<SERVER_URL>/rpc/slackDirectoryConnections.callback` with Slack. The server requires HTTPS outside local development. The directory authorization requests the bot scopes `users:read` and `users:read.email`. It accepts workspace installations, including a workspace within Enterprise Grid, and rejects organization-wide installations. OAuth exchange and `auth.test` must agree on the workspace ID.
 
@@ -24,7 +24,7 @@ The shared demo/local seed contains two synthetic workspace history records with
 
 A successful connect or reconnect requests an initial sync after authorization commits. Administrators can also request a sync and inspect one workspace or search across all workspaces. A scheduling failure leaves authorization intact and the directory marked never synced or stale, with a manual retry available.
 
-Sync checks the uncached `claude_tag_support` state before fetching and reads it again on the held database connection before publication. Disabled queued work stops without fetching. Disabling during a fetch preserves the previous snapshot. These checks occur at work boundaries; they do not cancel a Slack request already in flight. Shared Explore Demo refuses sync requests and activity execution.
+Shared Explore Demo refuses sync requests and activity execution.
 
 One durable Temporal workflow runs per requested sync, deduplicated while running by task queue, connection and generation. One activity fetches every users.list page before publishing. A Postgres session advisory lock serializes the entire attempt, including provider waits, across workers and retries. It holds a dedicated pooled connection and publishes on that same session. The repository configures pgxpool directly; this requires a direct or session-pooled Postgres connection, not transaction pooling.
 

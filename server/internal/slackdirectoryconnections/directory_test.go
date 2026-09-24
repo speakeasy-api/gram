@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +25,7 @@ func memberRequest() *gen.ListMembersPayload {
 	return &gen.ListMembersPayload{SessionToken: nil, ConnectionID: nil, Search: nil, Cursor: nil, Limit: 50}
 }
 
-func TestDirectoryEndpointsRequireAdminSessionAndProductFeature(t *testing.T) {
+func TestDirectoryEndpointsRequireAdminSession(t *testing.T) {
 	t.Parallel()
 	ctx, f := newService(t)
 	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
@@ -49,11 +48,6 @@ func TestDirectoryEndpointsRequireAdminSessionAndProductFeature(t *testing.T) {
 	require.Error(t, err)
 	_, err = f.service.ListMembers(cancelled, memberRequest())
 	require.Error(t, err)
-	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, f.auth.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, false))
-	_, err = f.service.Sync(ctx, request)
-	require.Error(t, err)
-	_, err = f.service.ListMembers(ctx, memberRequest())
-	require.Error(t, err)
 }
 
 func TestDirectoryTenantIsolationAndGeneration(t *testing.T) {
@@ -66,7 +60,6 @@ func TestDirectoryTenantIsolationAndGeneration(t *testing.T) {
 	other.ActiveOrganizationID = "org_synthetic_other"
 	otherCtx := contextvalues.SetAuthContext(ctx, &other)
 	otherCtx = authztest.WithExactGrants(t, otherCtx, authz.NewGrant(authz.ScopeOrgAdmin, other.ActiveOrganizationID))
-	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, other.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, true))
 	empty, err := f.service.ListMembers(otherCtx, memberRequest())
 	require.NoError(t, err)
 	require.Empty(t, empty.Members)
@@ -194,7 +187,6 @@ func TestSharedDemoDirectoryRemainsReadableWithoutSync(t *testing.T) {
 	visitor := *f.auth
 	visitor.ActiveOrganizationID = constants.DemoOrganizationID
 	ctx = authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &visitor), authz.DemoScopeGrants()...)
-	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, visitor.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, true))
 	_, err := f.service.ListMembers(ctx, memberRequest())
 	require.NoError(t, err)
 	_, err = f.service.Sync(ctx, &gen.SyncPayload{SessionToken: nil, ID: uuid.NewString(), Generation: uuid.NewString()})

@@ -10,14 +10,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,7 +38,7 @@ func syncRequest(f *fixture, c *gen.SlackDirectoryConnection) slackdirectoryconn
 	return slackdirectoryconnections.SyncInput{OrganizationID: f.auth.ActiveOrganizationID, ConnectionID: uuid.MustParse(c.ID), Generation: uuid.MustParse(c.Generation), ActorID: f.auth.UserID, StartedAt: time.Now().UTC().Truncate(time.Microsecond)}
 }
 func syncer(f *fixture, provider slackdirectoryconnections.DirectoryProvider) *slackdirectoryconnections.DirectorySync {
-	return slackdirectoryconnections.NewDirectorySync(f.db, f.enc, provider, audit.NewLogger(), f.productFeatures)
+	return slackdirectoryconnections.NewDirectorySync(f.db, f.enc, provider, audit.NewLogger())
 }
 func members(t *testing.T, ctx context.Context, f *fixture) []repo.ListSlackDirectoryMembersRow {
 	t.Helper()
@@ -260,71 +257,4 @@ func TestSyncBatchesAndPreservesObservedMapping(t *testing.T) {
 	list, err := f.service.List(ctx, &gen.ListPayload{SessionToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, int64(501), list.Connections[0].MemberCount)
-}
-
-func TestSyncProductFeatureDisabledBeforeFetch(t *testing.T) {
-	t.Parallel()
-	ctx, f := newService(t)
-	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
-	input := syncRequest(f, c)
-	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, f.auth.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, false))
-	provider := directoryFunc(func(context.Context, string, string, func(slackdirectoryconnections.SyncProgress)) ([]slackdirectoryconnections.DirectoryMember, error) {
-		t.Error("disabled feature fetched Slack profiles")
-		return nil, nil
-	})
-	err := syncer(f, provider).Run(ctx, input, nil)
-	var syncErr *slackdirectoryconnections.SyncError
-	require.ErrorAs(t, err, &syncErr)
-	require.Equal(t, "feature_disabled", syncErr.Code)
-	require.False(t, syncErr.Retryable)
-	require.False(t, connection(t, ctx, f, input).LastSyncStartedAt.Valid)
-}
-
-func TestSyncProductFeatureDisabledDuringFetchPreservesSnapshot(t *testing.T) {
-	t.Parallel()
-	ctx, f := newService(t)
-	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
-	input := syncRequest(f, c)
-	require.NoError(t, syncer(f, snapshot("UEXAMPLE01")).Run(ctx, input, nil))
-	previous := connection(t, ctx, f, input)
-	input.StartedAt = time.Now().UTC().Truncate(time.Microsecond)
-	provider := directoryFunc(func(ctx context.Context, token, team string, report func(slackdirectoryconnections.SyncProgress)) ([]slackdirectoryconnections.DirectoryMember, error) {
-		err := f.productFeatures.SetFeatureEnabled(ctx, input.OrganizationID, productfeatures.FeatureClaudeTagSupport, false)
-		if err != nil {
-			return nil, fmt.Errorf("disable feature during sync: %w", err)
-		}
-		return snapshot("UEXAMPLE02")(ctx, token, team, report)
-	})
-	err := syncer(f, provider).Run(ctx, input, nil)
-	var syncErr *slackdirectoryconnections.SyncError
-	require.ErrorAs(t, err, &syncErr)
-	require.Equal(t, "feature_disabled", syncErr.Code)
-	require.Equal(t, previous.LastFullSyncSucceededAt, connection(t, ctx, f, input).LastFullSyncSucceededAt)
-	rows := members(t, ctx, f)
-	require.Len(t, rows, 1)
-	require.Equal(t, "UEXAMPLE01", rows[0].SlackUserID)
-	count, err := audittest.AuditLogCountByAction(ctx, f.db, audit.ActionSlackDirectoryConnectionSync)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, count)
-}
-
-func TestSyncProductFeatureRecheckUsesHeldConnection(t *testing.T) {
-	t.Parallel()
-	ctx, f := newService(t)
-	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
-	config := f.db.Config()
-	config.MaxConns = 1
-	config.MinConns = 0
-	config.MinIdleConns = 0
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	require.NoError(t, err)
-	t.Cleanup(pool.Close)
-	redis, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), pool, redis)
-	worker := slackdirectoryconnections.NewDirectorySync(pool, f.enc, snapshot("UEXAMPLE01"), audit.NewLogger(), features)
-	limited, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	require.NoError(t, worker.Run(limited, syncRequest(f, c), nil))
-	require.Len(t, members(t, ctx, f), 1)
 }

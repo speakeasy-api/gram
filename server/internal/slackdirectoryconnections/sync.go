@@ -17,8 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	productrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -45,15 +43,14 @@ type SyncScheduler interface {
 }
 
 type DirectorySync struct {
-	db              *pgxpool.Pool
-	encryption      *encryption.Client
-	provider        DirectoryProvider
-	audit           *audit.Logger
-	productFeatures *productfeatures.Client
+	db         *pgxpool.Pool
+	encryption *encryption.Client
+	provider   DirectoryProvider
+	audit      *audit.Logger
 }
 
-func NewDirectorySync(db *pgxpool.Pool, enc *encryption.Client, provider DirectoryProvider, auditLogger *audit.Logger, productFeatures *productfeatures.Client) *DirectorySync {
-	return &DirectorySync{db: db, encryption: enc, provider: provider, audit: auditLogger, productFeatures: productFeatures}
+func NewDirectorySync(db *pgxpool.Pool, enc *encryption.Client, provider DirectoryProvider, auditLogger *audit.Logger) *DirectorySync {
+	return &DirectorySync{db: db, encryption: enc, provider: provider, audit: auditLogger}
 }
 
 func usableTokens(enc *encryption.Client, row repo.SlackDirectoryConnection) (*TokenBundle, error) {
@@ -77,13 +74,6 @@ func usableTokens(enc *encryption.Client, row repo.SlackDirectoryConnection) (*T
 func (s *DirectorySync) Run(ctx context.Context, input SyncInput, report func(SyncProgress)) error {
 	if input.OrganizationID == constants.DemoOrganizationID {
 		return &SyncError{Code: "demo_read_only", Retryable: false, Reconnect: false, RetryAfter: 0}
-	}
-	enabled, err := s.productFeatures.IsFeatureEnabledUncached(ctx, input.OrganizationID, productfeatures.FeatureClaudeTagSupport)
-	if err != nil {
-		return fmt.Errorf("check Slack directory product feature: %w", err)
-	}
-	if !enabled {
-		return &SyncError{Code: "feature_disabled", Retryable: false, Reconnect: false, RetryAfter: 0}
 	}
 	conn, err := s.db.Acquire(ctx)
 	if err != nil {
@@ -142,15 +132,6 @@ func (s *DirectorySync) Run(ctx context.Context, input SyncInput, report func(Sy
 	members, err := s.provider.Fetch(ctx, tokens.AccessToken, row.SlackTeamID, func(p SyncProgress) { progress = p; report(p) })
 	if err != nil {
 		return s.recordFailure(ctx, queries, input, started, err)
-	}
-	// Reuse the held connection so concurrent syncs cannot exhaust the pool
-	// while waiting for a second connection to check whether publication is allowed.
-	enabled, err = productrepo.New(conn).IsFeatureEnabled(ctx, productrepo.IsFeatureEnabledParams{OrganizationID: input.OrganizationID, FeatureName: string(productfeatures.FeatureClaudeTagSupport)})
-	if err != nil {
-		return s.recordFailure(ctx, queries, input, started, fmt.Errorf("recheck Slack directory product feature: %w", err))
-	}
-	if !enabled {
-		return s.recordFailure(ctx, queries, input, started, &SyncError{Code: "feature_disabled", Retryable: false, Reconnect: false, RetryAfter: 0})
 	}
 	progress.Phase = "publishing"
 	report(progress)
