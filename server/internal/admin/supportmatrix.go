@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -32,12 +33,7 @@ func validSupportEligibility(value string) bool {
 }
 
 func validSupportAccountType(value string) bool {
-	for _, accountType := range supportAccountTypes {
-		if accountType == value {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(supportAccountTypes, value)
 }
 
 // SeedSupportMatrix inserts missing global catalog entries without replacing

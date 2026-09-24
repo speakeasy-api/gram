@@ -10,6 +10,7 @@ import (
 	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
@@ -89,8 +90,8 @@ func TestSupportMatrixAccountEligibility(t *testing.T) {
 func TestSupportMatrixSeedRefreshesCatalogPresentation(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
-	_, err := db.Exec(ctx, `INSERT INTO support_matrix_platforms (slug, name, vendor, family, surface, sort_order) VALUES ('claude-chat-web', 'Stale name', 'Stale', 'Stale', 'Stale', 99)`)
-	require.NoError(t, err)
+	stale := []byte(`{"products":[{"id":"claude-chat-web","name":"Stale name","vendor":"Stale","family":"Stale","surface":"Stale"}]}`)
+	require.NoError(t, repo.New(db).SeedSupportPlatforms(ctx, stale))
 	require.NoError(t, SeedSupportMatrix(ctx, db))
 	snapshot, err := svc.GetSupportMatrix(ctx, nil)
 	require.NoError(t, err)
