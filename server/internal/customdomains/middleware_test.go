@@ -114,8 +114,7 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 
 	serverURL, err := url.Parse("https://api.speakeasyapi.dev")
 	require.NoError(t, err)
-	// Deployments list the server host too; it must keep its configured base URL.
-	platformHosts, err := customdomains.ParsePlatformHosts([]string{"api.speakeasyapi.dev", "ai.speakeasy.com"})
+	platformHosts, err := customdomains.ParsePlatformHosts([]string{"ai.speakeasy.com"})
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -362,6 +361,47 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 					require.Nil(t, domainCtx, "Expected no domain context to be set")
 				}
 			}
+		})
+	}
+}
+
+// The server URL's host is first-party whether or not GRAM_PLATFORM_HOSTS lists
+// it, and always keeps the server URL as its base URL. A port on the server URL
+// tells the configured base URL apart from the one ParsePlatformHosts derives.
+func TestCustomDomainsMiddleware_ServerHost(t *testing.T) {
+	t.Parallel()
+	_, instance := newTestInstance(t)
+	logger := testenv.NewLogger(t)
+
+	serverURL, err := url.Parse("https://api.speakeasyapi.dev:8443")
+	require.NoError(t, err)
+	listed, err := customdomains.ParsePlatformHosts([]string{"api.speakeasyapi.dev", "ai.speakeasy.com"})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name          string
+		platformHosts map[string]string
+	}{
+		{name: "flag unset", platformHosts: nil},
+		{name: "server host listed", platformHosts: listed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var origin requestorigin.Origin
+			handler := customdomains.Middleware(logger, instance.conn, "prod", serverURL, tt.platformHosts)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				origin, _ = requestorigin.FromContext(r.Context())
+				w.WriteHeader(http.StatusOK)
+			}))
+			req := httptest.NewRequest(http.MethodGet, "https://example.com/test", nil)
+			req.Host = "api.speakeasyapi.dev:8443"
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.Equal(t, requestorigin.SurfacePlatform, origin.Surface)
+			require.Equal(t, "https://api.speakeasyapi.dev:8443", origin.BaseURL)
 		})
 	}
 }
