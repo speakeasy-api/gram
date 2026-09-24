@@ -11,16 +11,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-func seedMCPEndpoint(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, serverID uuid.UUID, customDomainID uuid.NullUUID, slug string) {
+func seedMCPEndpoint(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, serverID uuid.UUID, customDomainID uuid.NullUUID, slug string) uuid.UUID {
 	t.Helper()
 
-	_, err := mcpendpointsRepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsRepo.CreateMCPEndpointParams{
+	e, err := mcpendpointsRepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsRepo.CreateMCPEndpointParams{
 		ProjectID:       projectID,
 		CustomDomainID:  customDomainID,
 		McpServerID:     uuid.NullUUID{UUID: serverID, Valid: true},
@@ -28,18 +29,36 @@ func seedMCPEndpoint(t *testing.T, ctx context.Context, conn *pgxpool.Pool, proj
 		Slug:            slug,
 	})
 	require.NoError(t, err)
+
+	return e.ID
 }
 
-func seedCustomDomain(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, domain string) uuid.UUID {
+// seedCustomDomain creates a custom domain that is verified and activated, and
+// so addressable, unless live is false.
+func seedCustomDomain(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, domain string, live bool) uuid.UUID {
 	t.Helper()
 
-	d, err := customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+	queries := customdomainsRepo.New(conn)
+	d, err := queries.CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
 		OrganizationID:  orgID,
 		Domain:          domain,
 		IngressName:     pgtype.Text{String: "", Valid: false},
 		CertSecretName:  pgtype.Text{String: "", Valid: false},
 		ProvisionerKind: "ingress",
 		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	if !live {
+		return d.ID
+	}
+
+	_, err = queries.UpdateCustomDomain(ctx, customdomainsRepo.UpdateCustomDomainParams{
+		Verified:        true,
+		Activated:       true,
+		IngressName:     pgtype.Text{String: "", Valid: false},
+		CertSecretName:  pgtype.Text{String: "", Valid: false},
+		ProvisionerKind: "ingress",
+		ID:              d.ID,
 	})
 	require.NoError(t, err)
 
@@ -142,7 +161,7 @@ func TestListProjectMcpServers_PrefersCustomDomainEndpoint(t *testing.T) {
 	projectID := seedProject(t, ctx, conn, "org_one", "domains")
 	backing := seedToolset(t, ctx, conn, "org_one", projectID, "backing", false)
 	serverID := seedMCPServer(t, ctx, conn, projectID, backing, "served")
-	domainID := seedCustomDomain(t, ctx, conn, "org_one", "mcp.example.org")
+	domainID := seedCustomDomain(t, ctx, conn, "org_one", "mcp.example.org", true)
 	seedMCPEndpoint(t, ctx, conn, projectID, serverID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "one-served")
 	seedMCPEndpoint(t, ctx, conn, projectID, serverID, uuid.NullUUID{UUID: domainID, Valid: true}, "served")
 
@@ -150,6 +169,64 @@ func TestListProjectMcpServers_PrefersCustomDomainEndpoint(t *testing.T) {
 	require.Len(t, got, 1)
 	require.NotNil(t, got[0].URL)
 	require.Equal(t, "https://mcp.example.org/mcp/served", *got[0].URL)
+}
+
+// A domain that is not verified and activated serves nothing, so the server
+// falls back to its platform endpoint.
+func TestListProjectMcpServers_UnaddressableCustomDomainFallsBackToPlatform(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestMCPServersService(t)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
+	projectID := seedProject(t, ctx, conn, "org_one", "pending-domain")
+	backing := seedToolset(t, ctx, conn, "org_one", projectID, "backing", false)
+	serverID := seedMCPServer(t, ctx, conn, projectID, backing, "served")
+	domainID := seedCustomDomain(t, ctx, conn, "org_one", "pending.example.org", false)
+	seedMCPEndpoint(t, ctx, conn, projectID, serverID, uuid.NullUUID{UUID: domainID, Valid: true}, "served")
+
+	// Its slug is only reserved on that domain, so it is not shown on the
+	// platform origin either.
+	got := listMCPServers(t, ctx, svc, "org_one", projectID)
+	require.Len(t, got, 1)
+	require.Nil(t, got[0].URL)
+
+	seedMCPEndpoint(t, ctx, conn, projectID, serverID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "one-served")
+
+	got = listMCPServers(t, ctx, svc, "org_one", projectID)
+	require.Len(t, got, 1)
+	require.NotNil(t, got[0].URL)
+	require.Equal(t, "https://gram.example.com/mcp/one-served", *got[0].URL)
+}
+
+// A domain-root endpoint is served at the bare domain and outranks the other
+// endpoints, as it does everywhere else endpoints are resolved.
+func TestListProjectMcpServers_DomainRootEndpointIsBareDomain(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestMCPServersService(t)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
+	projectID := seedProject(t, ctx, conn, "org_one", "root-domain")
+	backing := seedToolset(t, ctx, conn, "org_one", projectID, "backing", false)
+	serverID := seedMCPServer(t, ctx, conn, projectID, backing, "served")
+	domainID := seedCustomDomain(t, ctx, conn, "org_one", "mcp.example.org", true)
+	customDomain := uuid.NullUUID{UUID: domainID, Valid: true}
+	seedMCPEndpoint(t, ctx, conn, projectID, serverID, customDomain, "served")
+	rootID := seedMCPEndpoint(t, ctx, conn, projectID, serverID, customDomain, "root")
+	_, err := mcpendpointsRepo.New(conn).UpdateMCPEndpoint(ctx, mcpendpointsRepo.UpdateMCPEndpointParams{
+		CustomDomainID:  customDomain,
+		McpServerID:     uuid.NullUUID{UUID: serverID, Valid: true},
+		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:            "root",
+		IsDomainRoot:    pgtype.Bool{Bool: true, Valid: true},
+		ID:              rootID,
+		ProjectID:       projectID,
+	})
+	require.NoError(t, err)
+
+	got := listMCPServers(t, ctx, svc, "org_one", projectID)
+	require.Len(t, got, 1)
+	require.NotNil(t, got[0].URL)
+	require.Equal(t, "https://mcp.example.org", *got[0].URL)
 }
 
 func TestListProjectMcpServers_ServerWithoutEndpointHasNoURL(t *testing.T) {
@@ -167,14 +244,16 @@ func TestListProjectMcpServers_ServerWithoutEndpointHasNoURL(t *testing.T) {
 }
 
 // Without an mcp_slug a toolset is addressed by project, toolset and default
-// environment slugs.
+// environment slugs on the platform origin, even with a custom domain: that
+// domain only serves an mcp_slug.
 func TestListProjectMcpServers_ToolsetWithoutMCPSlugUsesLegacyPath(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestMCPServersService(t)
 	seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
 	projectID := seedProject(t, ctx, conn, "org_one", "old")
-	_, err := toolsetsRepo.New(conn).CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
+	toolsets := toolsetsRepo.New(conn)
+	_, err := toolsets.CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
 		OrganizationID:         "org_one",
 		ProjectID:              projectID,
 		Name:                   "Old",
@@ -186,10 +265,37 @@ func TestListProjectMcpServers_ToolsetWithoutMCPSlugUsesLegacyPath(t *testing.T)
 	})
 	require.NoError(t, err)
 
-	got := listMCPServers(t, ctx, svc, "org_one", projectID)
-	require.Len(t, got, 1)
-	require.NotNil(t, got[0].URL)
-	require.Equal(t, "https://gram.example.com/mcp/old/old-toolset/prod", *got[0].URL)
+	requireLegacyURL := func() {
+		t.Helper()
+		got := listMCPServers(t, ctx, svc, "org_one", projectID)
+		require.Len(t, got, 1)
+		require.NotNil(t, got[0].URL)
+		require.Equal(t, "https://gram.example.com/mcp/old/old-toolset/prod", *got[0].URL)
+	}
+	requireLegacyURL()
+
+	domainID := seedCustomDomain(t, ctx, conn, "org_one", "mcp.example.org", true)
+	require.NoError(t, toolsets.SetToolsetCustomDomain(ctx, toolsetsRepo.SetToolsetCustomDomainParams{
+		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true},
+		Slug:           "old-toolset",
+		ProjectID:      projectID,
+	}))
+	requireLegacyURL()
+}
+
+func TestMcpServerSource(t *testing.T) {
+	t.Parallel()
+
+	backend := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	tests := map[string]repo.AdminListProjectMcpServerRowsRow{
+		"toolset":   {ToolsetID: backend},
+		"remote":    {RemoteMcpServerID: backend},
+		"tunneled":  {TunneledMcpServerID: backend},
+		"unproxied": {},
+	}
+	for want, row := range tests {
+		require.Equal(t, want, mcpServerSource(row), want)
+	}
 }
 
 func TestListProjectMcpServers_IgnoresDeletedServers(t *testing.T) {

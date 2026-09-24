@@ -463,8 +463,8 @@ SELECT EXISTS (
 
 -- name: AdminListProjectMcpServerRows :many
 -- One row per live endpoint, and one with no endpoint columns for a server that
--- has none. Ordered so the first row for each server carries the address the
--- dashboard shows: a custom-domain endpoint before the platform one.
+-- has none. custom_domain is null for an endpoint whose domain cannot serve it;
+-- the caller skips those and picks the address with mcpendpoints.PrimaryEndpoint.
 SELECT
     m.id,
     m.name,
@@ -474,16 +474,23 @@ SELECT
     m.toolset_id,
     m.remote_mcp_server_id,
     m.tunneled_mcp_server_id,
+    e.id AS endpoint_id,
     e.slug AS endpoint_slug,
+    e.custom_domain_id AS endpoint_custom_domain_id,
+    e.is_domain_root AS endpoint_is_domain_root,
+    e.created_at AS endpoint_created_at,
     d.domain AS custom_domain,
     m.created_at
 FROM mcp_servers m
+JOIN projects p ON p.id = m.project_id
 LEFT JOIN toolsets t ON t.id = m.toolset_id
 LEFT JOIN mcp_endpoints e ON e.mcp_server_id = m.id AND e.deleted IS FALSE
 LEFT JOIN custom_domains d ON d.id = e.custom_domain_id AND d.deleted IS FALSE
+    AND d.organization_id = p.organization_id
+    AND d.verified IS TRUE AND d.activated IS TRUE
 WHERE m.project_id = @project_id
   AND m.deleted IS FALSE
-ORDER BY m.created_at, m.id, (d.domain IS NULL), e.created_at;
+ORDER BY m.created_at, m.id;
 
 -- name: AdminListProjectToolsetOnlyMcpServers :many
 -- The legacy half of AdminListProjectsForOrganization's count, with the same
@@ -501,6 +508,8 @@ SELECT
 FROM toolsets t
 JOIN projects p ON p.id = t.project_id
 LEFT JOIN custom_domains d ON d.id = t.custom_domain_id AND d.deleted IS FALSE
+    AND d.organization_id = p.organization_id
+    AND d.verified IS TRUE AND d.activated IS TRUE
 WHERE t.project_id = @project_id
   AND t.deleted IS FALSE
   AND t.mcp_enabled IS TRUE

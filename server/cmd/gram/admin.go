@@ -458,8 +458,11 @@ func newAdminCommand() *cli.Command {
 			mcpServerURL := siteURL
 			if raw := c.String("server-url"); raw != "" {
 				mcpServerURL, err = url.Parse(raw)
-				if err != nil || mcpServerURL.Host == "" || (mcpServerURL.Scheme != "http" && mcpServerURL.Scheme != "https") {
-					return fmt.Errorf("invalid server-url: must be an absolute HTTP(S) URL")
+				if err != nil {
+					return fmt.Errorf("invalid server-url: %w", err)
+				}
+				if err := validateServerURL(mcpServerURL, c.String("environment")); err != nil {
+					return fmt.Errorf("invalid server-url: %w", err)
 				}
 			}
 			adminService.SetMCPServerURL(mcpServerURL)

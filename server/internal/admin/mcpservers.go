@@ -13,6 +13,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -54,31 +56,25 @@ func (s *Service) ListProjectMcpServers(ctx context.Context, payload *gen.ListPr
 
 	servers := make([]adminMCPServer, 0, len(serverRows)+len(toolsetRows))
 
-	// The query returns a row per endpoint, ordered so the first row for each
-	// server carries the address to show.
-	seen := make(map[uuid.UUID]struct{}, len(serverRows))
-	for _, row := range serverRows {
-		if _, ok := seen[row.ID]; ok {
-			continue
+	// The query returns a row per endpoint, with each server's rows adjacent.
+	for start := 0; start < len(serverRows); {
+		end := start + 1
+		for end < len(serverRows) && serverRows[end].ID == serverRows[start].ID {
+			end++
 		}
-		seen[row.ID] = struct{}{}
-
-		var mcpURL *string
-		if row.EndpointSlug.Valid {
-			mcpURL = s.mcpURL(row.CustomDomain, row.EndpointSlug.String)
-		}
-
+		row := serverRows[start]
 		servers = append(servers, adminMCPServer{
 			server: &gen.AdminMcpServer{
 				ID:         row.ID.String(),
 				Name:       cmp.Or(row.Name.String, row.ToolsetName.String, row.Slug.String, row.ID.String()),
-				URL:        mcpURL,
+				URL:        s.primaryEndpointURL(serverRows[start:end]),
 				Visibility: row.Visibility,
 				Source:     mcpServerSource(row),
 				CreatedAt:  row.CreatedAt.Time.Format(time.RFC3339),
 			},
 			createdAt: row.CreatedAt.Time,
 		})
+		start = end
 	}
 
 	for _, row := range toolsetRows {
@@ -105,6 +101,52 @@ func (s *Service) ListProjectMcpServers(ctx context.Context, payload *gen.ListPr
 	}
 
 	return &gen.AdminListProjectMcpServersResult{McpServers: result}, nil
+}
+
+// primaryEndpointURL picks the address the dashboard shows for one server's
+// rows, skipping endpoints on a domain that cannot serve them.
+func (s *Service) primaryEndpointURL(rows []repo.AdminListProjectMcpServerRowsRow) *string {
+	endpoints := make([]mcpendpointsrepo.McpEndpoint, 0, len(rows))
+	domains := make(map[uuid.UUID]string, len(rows))
+	for _, row := range rows {
+		if !row.EndpointID.Valid || (row.EndpointCustomDomainID.Valid && !row.CustomDomain.Valid) {
+			continue
+		}
+		endpoints = append(endpoints, mcpendpointsrepo.McpEndpoint{
+			ID:              row.EndpointID.UUID,
+			ProjectID:       uuid.Nil,
+			CustomDomainID:  row.EndpointCustomDomainID,
+			McpServerID:     uuid.NullUUID{UUID: row.ID, Valid: true},
+			MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			Slug:            row.EndpointSlug.String,
+			IsDomainRoot:    row.EndpointIsDomainRoot,
+			CreatedAt:       row.EndpointCreatedAt,
+			UpdatedAt:       pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+			DeletedAt:       pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+			Deleted:         false,
+		})
+		if row.CustomDomain.Valid {
+			domains[row.EndpointID.UUID] = row.CustomDomain.String
+		}
+	}
+
+	primary := mcpendpoints.PrimaryEndpoint(endpoints)
+	if primary == nil {
+		return nil
+	}
+	domain := domains[primary.ID]
+	serverURL := ""
+	switch {
+	case s.mcpServerURL != nil:
+		serverURL = s.mcpServerURL.String()
+	case domain == "":
+		return nil
+	}
+	u, err := mcpendpoints.EndpointURL(primary, domain, serverURL)
+	if err != nil {
+		return nil
+	}
+	return &u
 }
 
 func mcpServerSource(row repo.AdminListProjectMcpServerRowsRow) string {

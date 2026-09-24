@@ -765,35 +765,46 @@ SELECT
     m.toolset_id,
     m.remote_mcp_server_id,
     m.tunneled_mcp_server_id,
+    e.id AS endpoint_id,
     e.slug AS endpoint_slug,
+    e.custom_domain_id AS endpoint_custom_domain_id,
+    e.is_domain_root AS endpoint_is_domain_root,
+    e.created_at AS endpoint_created_at,
     d.domain AS custom_domain,
     m.created_at
 FROM mcp_servers m
+JOIN projects p ON p.id = m.project_id
 LEFT JOIN toolsets t ON t.id = m.toolset_id
 LEFT JOIN mcp_endpoints e ON e.mcp_server_id = m.id AND e.deleted IS FALSE
 LEFT JOIN custom_domains d ON d.id = e.custom_domain_id AND d.deleted IS FALSE
+    AND d.organization_id = p.organization_id
+    AND d.verified IS TRUE AND d.activated IS TRUE
 WHERE m.project_id = $1
   AND m.deleted IS FALSE
-ORDER BY m.created_at, m.id, (d.domain IS NULL), e.created_at
+ORDER BY m.created_at, m.id
 `
 
 type AdminListProjectMcpServerRowsRow struct {
-	ID                  uuid.UUID
-	Name                pgtype.Text
-	Slug                pgtype.Text
-	ToolsetName         pgtype.Text
-	Visibility          string
-	ToolsetID           uuid.NullUUID
-	RemoteMcpServerID   uuid.NullUUID
-	TunneledMcpServerID uuid.NullUUID
-	EndpointSlug        pgtype.Text
-	CustomDomain        pgtype.Text
-	CreatedAt           pgtype.Timestamptz
+	ID                     uuid.UUID
+	Name                   pgtype.Text
+	Slug                   pgtype.Text
+	ToolsetName            pgtype.Text
+	Visibility             string
+	ToolsetID              uuid.NullUUID
+	RemoteMcpServerID      uuid.NullUUID
+	TunneledMcpServerID    uuid.NullUUID
+	EndpointID             uuid.NullUUID
+	EndpointSlug           pgtype.Text
+	EndpointCustomDomainID uuid.NullUUID
+	EndpointIsDomainRoot   pgtype.Bool
+	EndpointCreatedAt      pgtype.Timestamptz
+	CustomDomain           pgtype.Text
+	CreatedAt              pgtype.Timestamptz
 }
 
 // One row per live endpoint, and one with no endpoint columns for a server that
-// has none. Ordered so the first row for each server carries the address the
-// dashboard shows: a custom-domain endpoint before the platform one.
+// has none. custom_domain is null for an endpoint whose domain cannot serve it;
+// the caller skips those and picks the address with mcpendpoints.PrimaryEndpoint.
 func (q *Queries) AdminListProjectMcpServerRows(ctx context.Context, projectID uuid.UUID) ([]AdminListProjectMcpServerRowsRow, error) {
 	rows, err := q.db.Query(ctx, adminListProjectMcpServerRows, projectID)
 	if err != nil {
@@ -812,7 +823,11 @@ func (q *Queries) AdminListProjectMcpServerRows(ctx context.Context, projectID u
 			&i.ToolsetID,
 			&i.RemoteMcpServerID,
 			&i.TunneledMcpServerID,
+			&i.EndpointID,
 			&i.EndpointSlug,
+			&i.EndpointCustomDomainID,
+			&i.EndpointIsDomainRoot,
+			&i.EndpointCreatedAt,
 			&i.CustomDomain,
 			&i.CreatedAt,
 		); err != nil {
@@ -840,6 +855,8 @@ SELECT
 FROM toolsets t
 JOIN projects p ON p.id = t.project_id
 LEFT JOIN custom_domains d ON d.id = t.custom_domain_id AND d.deleted IS FALSE
+    AND d.organization_id = p.organization_id
+    AND d.verified IS TRUE AND d.activated IS TRUE
 WHERE t.project_id = $1
   AND t.deleted IS FALSE
   AND t.mcp_enabled IS TRUE
