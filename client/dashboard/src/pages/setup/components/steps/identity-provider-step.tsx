@@ -93,7 +93,12 @@ function StatusUnavailableAlert({
           We could not read your identity provider setup from WorkOS, so the
           states below may be out of date.
         </p>
-        <Button variant="secondary" size="sm" onClick={onRetry} className="mt-3">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onRetry}
+          className="mt-3"
+        >
           Try again
         </Button>
       </div>
