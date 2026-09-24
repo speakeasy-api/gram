@@ -63,7 +63,9 @@ const serverColumn = createColumnHelper<DataTableFeatures, AdminMcpServer>();
 const serverColumns = serverColumn.columns([
   serverColumn.accessor("name", {
     header: "Name",
-    meta: { cellClassName: "whitespace-normal" },
+    // A floor, because the URL column takes the rest of the width and would
+    // otherwise fold a two-word name onto three lines.
+    meta: { cellClassName: "min-w-48 whitespace-normal" },
     cell: ({ row }) => <span className="text-sm">{row.original.name}</span>,
   }),
   serverColumn.accessor("url", {
@@ -194,7 +196,13 @@ export function McpServers({ org }: { org: AdminOrganization }): JSX.Element {
           </SelectTrigger>
           <SelectContent position="popper" align="start" className="min-w-64">
             {projects.map((project) => (
-              <SelectItem key={project.id} value={project.id}>
+              <SelectItem
+                key={project.id}
+                value={project.id}
+                // Stretches the item's text so the count sits at the right
+                // edge, clear of the check.
+                className="*:[span]:last:flex-1"
+              >
                 <span className="grow">{project.name}</span>
                 <span className="text-muted-foreground text-xs tabular-nums">
                   {project.mcp_server_count}
