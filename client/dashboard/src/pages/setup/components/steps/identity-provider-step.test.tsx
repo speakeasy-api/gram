@@ -125,6 +125,9 @@ describe("IdentityProviderStep", () => {
       portal.mutate.mock.calls[0]![1].onSuccess({
         url: "https://example.com/portal",
       });
+      expect(toast.error).toHaveBeenCalledWith(
+        "Unable to open the WorkOS portal. Allow popups and try again.",
+      );
       expect(screen.getByRole("button", { name: button })).toBeTruthy();
     },
   );

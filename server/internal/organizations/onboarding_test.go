@@ -66,7 +66,6 @@ func TestOnboardingAuditFailureRollsBackPresetUpdate(t *testing.T) {
 func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	queries := orgrepo.New(ti.conn)
@@ -118,7 +117,6 @@ func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 func TestOnboardingPreservesRawProgressAndAssignment(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestOrganizationsServiceWithEmail(t)
-	stubUnverifiedDomainPolicy(ti)
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	queries := orgrepo.New(ti.conn)
@@ -205,7 +203,6 @@ func TestOnboardingSerializesWithTaskUpdates(t *testing.T) {
 func TestOnboardingAuditsFactCompletionAndResolvedAssignee(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	_, err := orgrepo.New(ti.conn).UpsertOrganizationSetupTask(ctx, orgrepo.UpsertOrganizationSetupTaskParams{

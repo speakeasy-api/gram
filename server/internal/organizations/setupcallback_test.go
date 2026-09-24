@@ -17,7 +17,7 @@ import (
 func TestSetupCallbackPreservesValidatedOriginAndLegacyNavigation(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
+	ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, mock.Anything).Return(&workos.OrganizationDomainPolicy{Domains: nil}, nil).Maybe()
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, ac.SessionID)
@@ -33,6 +33,7 @@ func TestSetupCallbackPreservesValidatedOriginAndLegacyNavigation(t *testing.T) 
 	}{
 		{"intent=sso&task=identity-provider", "?task=identity-provider", true},
 		{"intent=dsync&task=identity-provider", "?task=identity-provider", false},
+		{"intent=domain_verification&task=identity-provider", "?task=identity-provider", false},
 		{"intent=sso", "?step=identity-provider", true},
 		{"intent=sso", "", false},
 		{"intent=dsync", "?step=anthropic-observability", false},

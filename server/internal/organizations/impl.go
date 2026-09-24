@@ -1138,7 +1138,7 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	originTask := r.URL.Query().Get("task")
 	validOrigin := originTask == "" ||
-		((intent == "sso" || intent == "dsync") && originTask == "identity-provider")
+		((intent == "domain_verification" || intent == "sso" || intent == "dsync") && originTask == "identity-provider")
 	if !validOrigin {
 		span.SetStatus(codes.Error, "invalid originating task")
 		http.Error(w, "invalid originating task", http.StatusBadRequest)

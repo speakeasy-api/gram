@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/stretchr/testify/mock"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -16,7 +15,6 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
-	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,7 +22,6 @@ func TestService_ListSetupTasksProjectsCatalog(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
 
@@ -51,7 +48,6 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	platformAuth := *authCtx
@@ -115,7 +111,6 @@ func TestService_ListSetupTasksResolvesEmailAssigneeAndScopesOrganization(t *tes
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.Email)
@@ -147,7 +142,6 @@ func TestService_ListSetupTasksHiddenTaskPlatformVisibility(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	platformAuth := *authCtx
@@ -174,7 +168,6 @@ func TestService_ListSetupTasksRestoresADefaultHiddenTask(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	platformAuth := *authCtx
@@ -217,12 +210,6 @@ func TestService_ListSetupTasksRequiresOrgRead(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-// stubUnverifiedDomainPolicy answers a live WorkOS domain check with no
-// verified domains, for tests that do not exercise it.
-func stubUnverifiedDomainPolicy(ti *testInstance) {
-	ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, mock.Anything).Return(&thirdpartyworkos.OrganizationDomainPolicy{Domains: nil}, nil).Maybe()
-}
-
 func setupTask(tasks []*gen.SetupTask, key string) *gen.SetupTask {
 	for _, task := range tasks {
 		if task.Key == key {
@@ -236,7 +223,6 @@ func TestService_ListSetupTasksMarksLoggingDoneOnceTheBundleIsEnabled(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	platformAuth := *authCtx
@@ -280,7 +266,6 @@ func TestService_ListSetupTasksPreservesBranchCompletionFactsWithoutWriting(t *t
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	platformAuth := *authCtx
@@ -324,7 +309,6 @@ func TestService_ListSetupTasksReopenedPrerequisiteBlocksProgressedDependent(t *
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	platformAuth := *authCtx
@@ -357,7 +341,6 @@ func TestService_ListSetupTasksHiddenPrerequisiteAndPlatformVisibility(t *testin
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	platformAuth := *authCtx
@@ -383,7 +366,6 @@ func TestService_UpdateSetupTaskCompletesMergedCatalog(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	done := "done"
 	for _, key := range []string{
 		"create-marketplace", "enable-logging",
