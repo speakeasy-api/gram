@@ -375,6 +375,20 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	if mode != preflightMode {
 		return nil, oops.E(oops.CodeConflict, nil, "meta mcp server network access mode changed concurrently; retry the update")
 	}
+	visibility := existing.Visibility
+	if payload.Visibility != nil {
+		visibility = string(*payload.Visibility)
+	}
+	if visibility != VisibilityDisabled {
+		if err := admission.CheckGatewayNetworkMode(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, mode); err != nil {
+			switch {
+			case errors.Is(err, admission.ErrPrivateGatewayAudience):
+				return nil, oops.E(oops.CodeConflict, err, "private-only gateway cannot be distributed to Everyone")
+			default:
+				return nil, oops.E(oops.CodeUnavailable, err, "check gateway plugin audience")
+			}
+		}
+	}
 	storedMode := networkaccess.Storage(mode)
 
 	updated, err := txRepo.UpdateMetaMCPServer(ctx, repo.UpdateMetaMCPServerParams{

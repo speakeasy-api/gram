@@ -252,6 +252,8 @@ func pluginAssignmentAdmissionError(err error) error {
 	switch {
 	case errors.Is(err, admission.ErrApprovalRequired):
 		return &PluginAssignmentMutationError{Code: "approval_required", Message: "This MCP server does not have approval for the plugin's complete audience. Review the current audience and approval, then try again.", Cause: err}
+	case errors.Is(err, admission.ErrPrivateGatewayAudience):
+		return &PluginAssignmentMutationError{Code: "conflict", Message: "A private-only gateway cannot be distributed to Everyone. Choose a scoped plugin audience or change the gateway's network access.", Cause: err}
 	case errors.Is(err, admission.ErrDistributionDisabled):
 		return &PluginAssignmentMutationError{Code: "distribution_disabled", Message: "Direct-remote distribution is temporarily disabled. Existing audiences can still be narrowed.", Cause: err}
 	case errors.Is(err, admission.ErrUnavailable):

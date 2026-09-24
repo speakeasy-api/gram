@@ -331,7 +331,13 @@ func (q *Queries) GetDefaultPluginForUpdate(ctx context.Context, arg GetDefaultP
 
 const getGatewayForPluginServer = `-- name: GetGatewayForPluginServer :one
 SELECT g.id, g.name, g.visibility, (g.user_session_issuer_id IS NOT NULL)::bool AS has_oauth,
-  EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.meta_mcp_server_id = g.id AND e.project_id = g.project_id AND e.deleted IS FALSE) AS has_endpoint
+  EXISTS (
+    SELECT 1 FROM mcp_endpoints e
+    LEFT JOIN custom_domains cd ON cd.id = e.custom_domain_id AND cd.organization_id = g.organization_id
+      AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
+    WHERE e.meta_mcp_server_id = g.id AND e.project_id = g.project_id AND e.deleted IS FALSE
+      AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ) AS has_endpoint
 FROM meta_mcp_servers g
 WHERE g.id = $1 AND g.project_id = $2 AND g.deleted IS FALSE
 `

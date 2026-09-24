@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -66,6 +67,41 @@ func TestGatewayMemberAdmissionChecksEveryPluginAudience(t *testing.T) {
 	require.ErrorIs(t, guard.CheckGatewayAttachment(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID), ErrApprovalRequired)
 	require.ErrorIs(t, guard.CheckPluginAudience(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, []string{"role:developers", "role:operators"}), ErrApprovalRequired)
 	require.ErrorIs(t, guard.CheckRemoteTarget(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, remoteID, "https://mcp.example.test/changed"), ErrApprovalRequired)
+}
+
+func TestPrivateGatewayAudienceBlocksEveryone(t *testing.T) {
+	t.Parallel()
+	fixture := newAdmissionFixture(t)
+	ctx := t.Context()
+	gateway, err := metamcprepo.New(fixture.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID: fixture.orgID, ProjectID: fixture.projectID, Name: "Private gateway", Visibility: "private",
+		NetworkAccessMode: pgtype.Text{String: "private_only", Valid: true},
+	})
+	require.NoError(t, err)
+	plugin, err := pluginsrepo.New(fixture.conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
+		OrganizationID: fixture.orgID, ProjectID: fixture.projectID, Name: "Gateway plugin", Slug: "gateway-private", Description: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(fixture.conn).AddGatewayPluginServer(ctx, pluginsrepo.AddGatewayPluginServerParams{
+		PluginID: plugin.ID, ProjectID: fixture.projectID, MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true},
+		DisplayName: "Gateway", Policy: "required", SortOrder: 0,
+	})
+	require.NoError(t, err)
+	guard := NewGuard(nil, nil)
+	rollout := RolloutConfig{Mode: ModeLegacy}
+	tx := testenv.BeginTx(t, ctx, fixture.conn)
+	require.NoError(t, guard.CheckGatewayAttachment(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID))
+	require.ErrorIs(t, guard.CheckPluginAudience(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, []string{urn.PrincipalWildcard}), ErrPrivateGatewayAudience)
+	require.NoError(t, tx.Rollback(ctx))
+
+	_, err = pluginsrepo.New(fixture.conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
+		OrganizationID: fixture.orgID, PluginID: plugin.ID, PrincipalUrn: urn.PrincipalWildcard,
+	})
+	require.NoError(t, err)
+	tx = testenv.BeginTx(t, ctx, fixture.conn)
+	require.ErrorIs(t, guard.CheckGatewayAttachment(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID), ErrPrivateGatewayAudience)
+	require.ErrorIs(t, CheckGatewayNetworkMode(ctx, tx, fixture.orgID, fixture.projectID, gateway.ID, networkaccess.ModePrivateOnly), ErrPrivateGatewayAudience)
+	require.NoError(t, CheckGatewayNetworkMode(ctx, tx, fixture.orgID, fixture.projectID, gateway.ID, networkaccess.ModePublicOnly))
 }
 
 func TestGuardRemoteTargetKillSwitchWithoutAttachments(t *testing.T) {

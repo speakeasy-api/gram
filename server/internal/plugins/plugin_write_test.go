@@ -22,6 +22,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -74,16 +75,70 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, NetworkAccessMode: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+	inactiveDomain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: ac.ActiveOrganizationID, Domain: "inactive-gateway.example.test", ProvisionerKind: "ingress", IpAllowlist: []string{},
+	})
+	require.NoError(t, err)
+	inactiveEndpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: *ac.ProjectID, MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true},
+		CustomDomainID: uuid.NullUUID{UUID: inactiveDomain.ID, Valid: true}, Slug: "inactive-gateway",
+	})
+	require.NoError(t, err)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID: plugin.ID, MetaMcpServerID: conv.PtrEmpty(gateway.ID.String()), Policy: "required",
+	})
+	var inactiveDomainError *oops.ShareableError
+	require.ErrorAs(t, err, &inactiveDomainError)
+	require.Equal(t, oops.CodeBadRequest, inactiveDomainError.Code)
+	_, err = mcpendpointsrepo.New(ti.conn).DeleteMCPEndpoint(ctx, mcpendpointsrepo.DeleteMCPEndpointParams{
+		ID: inactiveEndpoint.ID, ProjectID: *ac.ProjectID,
+	})
+	require.NoError(t, err)
+	endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID: *ac.ProjectID, MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true}, Slug: "gateway-test",
 	})
 	require.NoError(t, err)
 
+	_, err = testrepo.New(ti.conn).SetMetaMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMetaMCPServerNetworkAccessModeFixtureParams{
+		ID: gateway.ID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
+		NetworkAccessMode: pgtype.Text{String: "private_only", Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID: plugin.ID, MetaMcpServerID: conv.PtrEmpty(gateway.ID.String()), Policy: "required",
+	})
+	var attachmentAudience *oops.ShareableError
+	require.ErrorAs(t, err, &attachmentAudience)
+	require.Equal(t, oops.CodeConflict, attachmentAudience.Code)
+	require.ErrorIs(t, err, admission.ErrPrivateGatewayAudience)
+	_, err = testrepo.New(ti.conn).SetMetaMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMetaMCPServerNetworkAccessModeFixtureParams{
+		ID: gateway.ID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
+		NetworkAccessMode: pgtype.Text{},
+	})
+	require.NoError(t, err)
 	attached, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID: plugin.ID, MetaMcpServerID: conv.PtrEmpty(gateway.ID.String()), Policy: "required",
 	})
 	require.NoError(t, err)
 	require.Equal(t, gateway.ID.String(), *attached.MetaMcpServerID)
+	_, err = mcpendpointsrepo.New(ti.conn).DeleteMCPEndpoint(ctx, mcpendpointsrepo.DeleteMCPEndpointParams{
+		ID: endpoint.ID, ProjectID: *ac.ProjectID,
+	})
+	require.NoError(t, err)
+	var liveEndpoints int
+	//nolint:glint // Verify the test has removed every live gateway endpoint before publishing.
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_endpoints WHERE meta_mcp_server_id = $1 AND deleted IS FALSE`, gateway.ID).Scan(&liveEndpoints))
+	require.Zero(t, liveEndpoints)
+	gatewayRows, err := pluginsrepo.New(ti.conn).ListPluginsWithGatewaysForProject(ctx, pluginsrepo.ListPluginsWithGatewaysForProjectParams{ProjectID: *ac.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, gatewayRows, 1)
+	require.Empty(t, gatewayRows[0].EndpointSlug)
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.ErrorContains(t, errors.Unwrap(err), "no public endpoint")
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: *ac.ProjectID, MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true}, Slug: "gateway-test",
+	})
+	require.NoError(t, err)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID: plugin.ID, MetaMcpServerID: conv.PtrEmpty(gateway.ID.String()), Policy: "required",
 	})
@@ -101,12 +156,9 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"], &config))
 	require.Equal(t, "https://app.getgram.ai/mcp/gateway-test", config.MCPServers["Gateway"].URL)
 
-	domain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
-		OrganizationID: ac.ActiveOrganizationID, Domain: "gateway.example.test", ProvisionerKind: "ingress", IpAllowlist: []string{},
-	})
-	require.NoError(t, err)
+	domain := inactiveDomain
 	//nolint:glint // This test needs an addressable domain without exercising domain provisioning.
-	result, err := ti.conn.Exec(ctx, `UPDATE custom_domains SET verified = TRUE, activated = TRUE WHERE id = $1`, domain.ID)
+	result, err := ti.conn.Exec(ctx, `UPDATE custom_domains SET domain = $1, verified = TRUE, activated = TRUE WHERE id = $2`, "gateway.example.test", domain.ID)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, result.RowsAffected())
 	root, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
@@ -123,6 +175,11 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"], &config))
 	require.Equal(t, "https://gateway.example.test", config.MCPServers["Gateway"].URL)
 
+	principal := createTestRolePrincipal(t, ctx, ti, "gateway-private")
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID: plugin.ID, PrincipalUrns: []string{principal},
+	})
+	require.NoError(t, err)
 	fixtures := testrepo.New(ti.conn)
 	_, err = fixtures.SetMetaMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMetaMCPServerNetworkAccessModeFixtureParams{
 		ID: gateway.ID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
@@ -138,6 +195,23 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"], &config))
 	require.Equal(t, "https://tail.example/mcp/gateway-test", config.MCPServers["Gateway"].URL)
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID: plugin.ID, PrincipalUrns: []string{"*"},
+	})
+	var privateAudience *oops.ShareableError
+	require.ErrorAs(t, err, &privateAudience)
+	require.Equal(t, oops.CodeConflict, privateAudience.Code)
+	require.ErrorIs(t, err, admission.ErrPrivateGatewayAudience)
+
+	//nolint:glint // Model a pre-existing incompatible assignment, which must also block package publication.
+	_, err = ti.conn.Exec(ctx, `INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn) VALUES ($1, $2, $3)`, uuid.MustParse(plugin.ID), ac.ActiveOrganizationID, "*")
+	require.NoError(t, err)
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.ErrorIs(t, err, admission.ErrPrivateGatewayAudience)
+	//nolint:glint // Restore the scoped assignment for the remaining publication checks.
+	_, err = ti.conn.Exec(ctx, `DELETE FROM plugin_assignments WHERE plugin_id = $1 AND principal_urn = $2`, uuid.MustParse(plugin.ID), "*")
+	require.NoError(t, err)
 
 	//nolint:glint // Exercise a persisted gateway whose required issuer disappeared after attachment.
 	result, err = ti.conn.Exec(ctx, `UPDATE meta_mcp_servers SET user_session_issuer_id = NULL WHERE id = $1`, gateway.ID)
