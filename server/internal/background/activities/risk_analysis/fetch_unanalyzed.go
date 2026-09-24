@@ -2,7 +2,6 @@ package risk_analysis
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -72,13 +71,6 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 	if err != nil {
 		return nil, fmt.Errorf("list enabled risk policies: %w", err)
 	}
-	chatPolicies := policies[:0]
-	for _, policy := range policies {
-		if !hasProjectedMCPScope(policy.McpScope) {
-			chatPolicies = append(chatPolicies, policy)
-		}
-	}
-	policies = chatPolicies
 
 	if len(policies) == 0 {
 		return &FetchUnanalyzedResult{
@@ -129,24 +121,4 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 	}
 
 	return result, nil
-}
-
-// hasProjectedMCPScope mirrors policycore's projection without importing it.
-// risk_analysis is itself a policycore dependency, so sharing the function
-// directly would form a package cycle.
-func hasProjectedMCPScope(raw []byte) bool {
-	if len(raw) == 0 || string(raw) == "null" {
-		return false
-	}
-	var encoded struct {
-		Servers json.RawMessage `json:"servers"`
-	}
-	if err := json.Unmarshal(raw, &encoded); err != nil || encoded.Servers == nil || string(encoded.Servers) == "null" {
-		return true
-	}
-	var servers []json.RawMessage
-	if err := json.Unmarshal(encoded.Servers, &servers); err != nil {
-		return true
-	}
-	return len(servers) > 0
 }

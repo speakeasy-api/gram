@@ -47,7 +47,7 @@ type PolicyConfig struct {
 
 // DefaultPolicyConfig is the process-level MCP enforcement configuration.
 var DefaultPolicyConfig = PolicyConfig{
-	Deadline:        2 * time.Second,
+	Deadline:        5 * time.Second,
 	FailMode:        FailOpen,
 	FlagConcurrency: 8,
 }
@@ -172,9 +172,7 @@ func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subje
 		return
 	}
 	payload := bytes.Clone(subject.Payload.Bytes())
-	p.flagScans.Add(1)
-	go func() {
-		defer p.flagScans.Done()
+	p.flagScans.Go(func() {
 		defer func() { <-p.flagSlots }()
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), p.config.Deadline)
 		defer cancel()
@@ -188,7 +186,7 @@ func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subje
 				p.logger.WarnContext(ctx, "MCP flag policy scan failed", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
 			}
 		}
-	}()
+	})
 }
 
 func (p *policyEvaluator) drain(ctx context.Context) error {
