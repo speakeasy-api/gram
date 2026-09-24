@@ -3083,6 +3083,94 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/project.mcpServers:
+        get:
+            tags:
+                - admin
+            summary: listProjectMcpServers admin
+            description: Lists the MCP servers in a project (admin view, no auth scoping).
+            operationId: adminListProjectMcpServers
+            parameters:
+                - name: organization_id
+                  in: query
+                  description: Organization the project must belong to. A project outside it is reported as not found.
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: Organization the project must belong to. A project outside it is reported as not found.
+                - name: project_id
+                  in: query
+                  description: Project ID.
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: Project ID.
+                    format: uuid
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminListProjectMcpServersResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/remote-session-issuers.createGlobalIssuer:
         post:
             description: Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.
@@ -75902,6 +75990,54 @@ components:
             required:
                 - organizations
                 - total
+        AdminListProjectMcpServersResult:
+            type: object
+            properties:
+                mcp_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminMcpServer'
+                    description: The project's MCP servers, oldest first.
+            required:
+                - mcp_servers
+        AdminMcpServer:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                    description: The mcp_servers row ID, or the toolset ID for a toolset-only server.
+                name:
+                    type: string
+                    description: Display name of the server.
+                source:
+                    type: string
+                    description: What backs the server. toolset_only is a toolset with no mcp_servers row.
+                    enum:
+                        - toolset
+                        - remote
+                        - tunneled
+                        - unproxied
+                        - toolset_only
+                url:
+                    type: string
+                    description: The URL clients connect to. Omitted when the server has no routable address.
+                visibility:
+                    type: string
+                    description: The visibility of the server.
+                    enum:
+                        - disabled
+                        - private
+                        - public
+            description: 'MCP server surfaced to admin operators. Covers both server models: mcp_servers rows and mcp_enabled toolsets that no mcp_servers row points at.'
+            required:
+                - id
+                - name
+                - visibility
+                - source
+                - created_at
         AdminMeterUsageBucket:
             type: object
             properties:

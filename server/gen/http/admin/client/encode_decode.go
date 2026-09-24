@@ -4283,6 +4283,241 @@ func DecodeListOrganizationProjectsResponse(decoder func(*http.Response) goahttp
 	}
 }
 
+// BuildListProjectMcpServersRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "listProjectMcpServers"
+// endpoint
+func (c *Client) BuildListProjectMcpServersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListProjectMcpServersAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listProjectMcpServers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListProjectMcpServersRequest returns an encoder for requests sent to
+// the admin listProjectMcpServers server.
+func EncodeListProjectMcpServersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListProjectMcpServersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listProjectMcpServers", "*admin.ListProjectMcpServersPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		values.Add("project_id", p.ProjectID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListProjectMcpServersResponse returns a decoder for responses returned
+// by the admin listProjectMcpServers endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListProjectMcpServersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListProjectMcpServersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListProjectMcpServersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listProjectMcpServers", err)
+			}
+			err = ValidateListProjectMcpServersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listProjectMcpServers", err)
+			}
+			res := NewListProjectMcpServersAdminListProjectMcpServersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListProjectMcpServersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listProjectMcpServers", err)
+			}
+			err = ValidateListProjectMcpServersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listProjectMcpServers", err)
+			}
+			return nil, NewListProjectMcpServersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListProjectMcpServersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listProjectMcpServers", err)
+			}
+			err = ValidateListProjectMcpServersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listProjectMcpServers", err)
+			}
+			return nil, NewListProjectMcpServersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListProjectMcpServersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listProjectMcpServers", err)
+			}
+			err = ValidateListProjectMcpServersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listProjectMcpServers", err)
+			}
+			return nil, NewListProjectMcpServersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListProjectMcpServersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listProjectMcpServers", err)
+			}
+			err = ValidateListProjectMcpServersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listProjectMcpServers", err)
+			}
+			return nil, NewListProjectMcpServersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListProjectMcpServersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listProjectMcpServers", err)
+			}
+			err = ValidateListProjectMcpServersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listProjectMcpServers", err)
+			}
+			return nil, NewListProjectMcpServersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListProjectMcpServersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listProjectMcpServers", err)
+			}
+			err = ValidateListProjectMcpServersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listProjectMcpServers", err)
+			}
+			return nil, NewListProjectMcpServersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListProjectMcpServersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listProjectMcpServers", err)
+			}
+			err = ValidateListProjectMcpServersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listProjectMcpServers", err)
+			}
+			return nil, NewListProjectMcpServersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListProjectMcpServersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listProjectMcpServers", err)
+				}
+				err = ValidateListProjectMcpServersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listProjectMcpServers", err)
+				}
+				return nil, NewListProjectMcpServersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListProjectMcpServersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listProjectMcpServers", err)
+				}
+				err = ValidateListProjectMcpServersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listProjectMcpServers", err)
+				}
+				return nil, NewListProjectMcpServersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listProjectMcpServers", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListProjectMcpServersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listProjectMcpServers", err)
+			}
+			err = ValidateListProjectMcpServersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listProjectMcpServers", err)
+			}
+			return nil, NewListProjectMcpServersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listProjectMcpServers", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListOrganizationActivityRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "listOrganizationActivity"
 // endpoint
@@ -13398,6 +13633,21 @@ func unmarshalAdminProjectResponseBodyToAdminAdminProject(v *AdminProjectRespons
 		McpServerCount: *v.McpServerCount,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerResponseBodyToAdminAdminMcpServer builds a value of
+// type *admin.AdminMcpServer from a value of type *AdminMcpServerResponseBody.
+func unmarshalAdminMcpServerResponseBodyToAdminAdminMcpServer(v *AdminMcpServerResponseBody) *admin.AdminMcpServer {
+	res := &admin.AdminMcpServer{
+		ID:         *v.ID,
+		Name:       *v.Name,
+		URL:        v.URL,
+		Visibility: *v.Visibility,
+		Source:     *v.Source,
+		CreatedAt:  *v.CreatedAt,
 	}
 
 	return res
