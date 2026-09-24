@@ -25,7 +25,9 @@ func TestPublicationRequestsProjectRequiresExistingMarketplace(t *testing.T) {
 	defer func() { require.NoError(t, tx.Rollback(ctx)) }()
 
 	requester := plugins.PublicationRequests{Enabled: true}
-	require.NoError(t, requester.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID))
+	outcome, err := requester.ProjectWithOutcome(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID)
+	require.NoError(t, err)
+	require.Equal(t, plugins.ProjectPublicationNotConfigured, outcome)
 	count, err := testrepo.New(tx).CountPublishOutboxRows(ctx)
 	require.NoError(t, err)
 	require.Zero(t, count)
@@ -34,6 +36,9 @@ func TestPublicationRequestsProjectRequiresExistingMarketplace(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, count)
 	require.Error(t, requester.Project(ctx, tx, ac.ActiveOrganizationID, uuid.Nil, ac.UserID))
+	outcome, err = (plugins.PublicationRequests{Enabled: false}).ProjectWithOutcome(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID)
+	require.NoError(t, err)
+	require.Equal(t, plugins.ProjectPublicationEmissionDisabled, outcome)
 }
 
 func TestPublicationRequestsOrganization(t *testing.T) {
@@ -88,7 +93,9 @@ func TestPublicationRequestsCommitAndRollbackWithMutation(t *testing.T) {
 
 	tx, err := ti.conn.Begin(ctx) //nolint:glint // transaction boundary for SQLc outbox checks
 	require.NoError(t, err)
-	require.NoError(t, requester.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID))
+	outcome, err := requester.ProjectWithOutcome(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID)
+	require.NoError(t, err)
+	require.Equal(t, plugins.ProjectPublicationEnqueued, outcome)
 	assertCount(0)
 	require.NoError(t, tx.Rollback(ctx))
 	assertCount(0)

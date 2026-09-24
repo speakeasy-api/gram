@@ -6,6 +6,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -137,7 +138,7 @@ type Plugin struct {
 	// could be mistaken for a complete recipient summary.
 	Assignments *PluginAssignmentSummary `json:"assignments,omitempty"`
 
-	// Publication is the plugin's package publication state.
+	// Publication indicates that a package exists, not whether its addresses are current.
 	Publication           string                 `json:"publication"`
 	DistributionAdmission *DistributionAdmission `json:"distribution_admission,omitempty"`
 }
@@ -145,11 +146,19 @@ type Plugin struct {
 // PluginServer is one MCP server a plugin carries. It names the server; it
 // does not hand out an endpoint URL.
 type PluginServer struct {
+	// MembershipID is the exact plugin membership ID. It is present only in
+	// administrative plugin reads.
+	MembershipID string `json:"membership_id,omitempty"`
+
 	// DisplayName is the name the generated package gives this server.
 	DisplayName string `json:"display_name"`
 
 	// Backend is what the entry is backed by: "toolset", "mcp_server", or "gateway".
 	Backend string `json:"backend"`
+
+	// TargetID is the exact typed backend ID. It is present only in
+	// administrative plugin reads.
+	TargetID string `json:"target_id,omitempty"`
 
 	// MCPSlug is the server's MCP slug, empty when the backing server has no
 	// usable endpoint.
@@ -207,8 +216,10 @@ type ListPluginsOutput struct {
 }
 
 type GetPluginInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID that owns the plugin"`
-	Plugin    string `json:"plugin" jsonschema:"exact plugin ID, slug, or name as returned by list_plugins"`
+	ProjectID        string `json:"project_id" jsonschema:"project ID that owns the plugin"`
+	Plugin           string `json:"plugin" jsonschema:"exact plugin ID, slug, or name as returned by list_plugins"`
+	MembershipLimit  int    `json:"membership_limit,omitempty" jsonschema:"maximum MCP memberships to return; server clamps this to 100"`
+	MembershipCursor string `json:"membership_cursor,omitempty" jsonschema:"opaque membership cursor from a previous get_plugin result"`
 }
 
 type GetPluginOutput struct {
@@ -223,6 +234,10 @@ type GetPluginOutput struct {
 
 	// Skills is the skills the plugin carries.
 	Skills []PluginSkill `json:"skills"`
+
+	// PublicationEvidence is admin-only. It compares the current package inputs
+	// with stored publish fingerprints; installed clients are not inspected.
+	PublicationEvidence *PluginPublicationEvidence `json:"publication_evidence,omitempty"`
 
 	// AssignmentVersion is an opaque optimistic-concurrency token over the
 	// plugin identity and its complete canonical assignment set. It remains
@@ -246,14 +261,94 @@ type GetPluginOutput struct {
 	// ReferencesExpireAt applies to every assignment reference in this result.
 	ReferencesExpireAt string `json:"references_expire_at,omitempty"`
 
-	// Truncated is true when the plugin carries more members than one result
-	// projects, so the lists above are a prefix rather than the whole bundle.
+	// Truncated preserves the legacy bounded member/skill projection. For
+	// administrative MCP memberships use MembershipNextCursor to continue.
 	Truncated bool `json:"truncated"`
+
+	// MembershipNextCursor continues the complete administrative MCP membership
+	// list. It is independent of the legacy skill and assignment truncation.
+	MembershipNextCursor string `json:"membership_next_cursor,omitempty"`
+
+	// MembershipVersion changes when the complete live MCP membership set changes.
+	MembershipVersion string `json:"membership_version,omitempty"`
+}
+
+type pluginMembershipCursor struct {
+	OrganizationID string `json:"organization_id"`
+	Binding        string `json:"binding"`
+	ProjectID      string `json:"project_id"`
+	PluginID       string `json:"plugin_id"`
+	Version        string `json:"version"`
+	AfterSortOrder int32  `json:"after_sort_order"`
+	AfterDisplay   string `json:"after_display"`
+	AfterID        string `json:"after_id"`
+}
+
+func (s *PluginsService) encodeMembershipCursor(cursor pluginMembershipCursor) (string, error) {
+	if s == nil || s.cursors == nil || len(s.cursors.key) == 0 || cursor.OrganizationID == "" || cursor.Binding == "" || cursor.ProjectID == "" || cursor.PluginID == "" || cursor.Version == "" || cursor.AfterID == "" {
+		return "", ErrPluginCursorInvalid
+	}
+	payload, err := json.Marshal(cursor)
+	if err != nil {
+		return "", fmt.Errorf("encode Platform MCP plugin membership cursor: %w", err)
+	}
+	mac := hmac.New(sha256.New, s.cursors.key)
+	_, _ = mac.Write(payload)
+	token := append([]byte{}, payload...)
+	token = append(token, mac.Sum(nil)...)
+	return base64.RawURLEncoding.EncodeToString(token), nil
+}
+
+func (s *PluginsService) decodeMembershipCursor(value string, principal Principal, projectID, pluginID uuid.UUID) (pluginMembershipCursor, error) {
+	if value == "" {
+		return pluginMembershipCursor{}, nil
+	}
+	binding := principalCursorBinding(principal)
+	if s == nil || s.cursors == nil || len(s.cursors.key) == 0 || principal.OrganizationID == "" || binding == "" || projectID == uuid.Nil || pluginID == uuid.Nil {
+		return pluginMembershipCursor{}, ErrPluginCursorInvalid
+	}
+	token, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil || len(token) <= sha256.Size {
+		return pluginMembershipCursor{}, ErrPluginCursorInvalid
+	}
+	payload, signature := token[:len(token)-sha256.Size], token[len(token)-sha256.Size:]
+	mac := hmac.New(sha256.New, s.cursors.key)
+	_, _ = mac.Write(payload)
+	if !hmac.Equal(signature, mac.Sum(nil)) {
+		return pluginMembershipCursor{}, ErrPluginCursorInvalid
+	}
+	var cursor pluginMembershipCursor
+	if err := json.Unmarshal(payload, &cursor); err != nil || cursor.OrganizationID != principal.OrganizationID || cursor.Binding != binding || cursor.ProjectID != projectID.String() || cursor.PluginID != pluginID.String() || cursor.Version == "" || cursor.AfterID == "" {
+		return pluginMembershipCursor{}, ErrPluginCursorInvalid
+	}
+	if _, err := uuid.Parse(cursor.AfterID); err != nil {
+		return pluginMembershipCursor{}, ErrPluginCursorInvalid
+	}
+	return cursor, nil
+}
+
+// PluginPublicationEvidence describes the package that would be generated now.
+// Fresh is nil when the last published package cannot be checked.
+type PluginPublicationEvidence struct {
+	NotConfigured bool                       `json:"not_configured"`
+	Unavailable   bool                       `json:"unavailable"`
+	Fresh         *bool                      `json:"fresh"`
+	Packages      []PluginPublicationPackage `json:"packages"`
+}
+
+type PluginPublicationPackage struct {
+	ServerName string `json:"server_name"`
+	MCPURL     string `json:"mcp_url"`
+}
+
+type publicationEvidenceReader interface {
+	ResolvePublicationEvidence(context.Context, string, uuid.UUID, []string) ([]plugindelivery.PublicationEvidence, error)
 }
 
 // PluginsService answers what plugins a project has and what is inside one,
 // and resolves the exact plugin a distribution names.
 type PluginsService struct {
+	publicationEvidence  publicationEvidenceReader
 	db                   *pgxpool.Pool
 	authorization        *authz.Engine
 	dashboardURL         *url.URL
@@ -306,6 +401,13 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		mutationReceipts:      nil,
 		distributionAdmission: admission.NewGuard(nil, nil),
 	}
+}
+
+func (s *PluginsService) WithPublicationEvidence(reader publicationEvidenceReader) *PluginsService {
+	if s != nil {
+		s.publicationEvidence = reader
+	}
+	return s
 }
 
 func (s *PluginsService) WithAuthorization(engine *authz.Engine) *PluginsService {
@@ -637,14 +739,48 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 	if err != nil {
 		return GetPluginOutput{}, fmt.Errorf("get platform mcp plugin: %w", err)
 	}
-	servers, err := q.ListPlatformMCPPluginServers(ctx, platformrepo.ListPlatformMCPPluginServersParams{
-		OrganizationID: principal.OrganizationID,
-		ProjectID:      project.ID,
-		PluginID:       target.ID,
-		ResultLimit:    maxPluginMembers + 1,
+	membershipCursor, err := s.decodeMembershipCursor(input.MembershipCursor, principal, project.ID, target.ID)
+	if err != nil {
+		return GetPluginOutput{}, err
+	}
+	membershipVersion, err := q.GetPlatformMCPPluginMembershipVersion(ctx, platformrepo.GetPlatformMCPPluginMembershipVersionParams{
+		OrganizationID: principal.OrganizationID, ProjectID: project.ID, PluginID: target.ID,
 	})
 	if err != nil {
-		return GetPluginOutput{}, fmt.Errorf("list platform mcp plugin servers: %w", err)
+		return GetPluginOutput{}, fmt.Errorf("get platform mcp plugin membership version: %w", err)
+	}
+	if membershipCursor.Version != "" && membershipCursor.Version != membershipVersion {
+		return GetPluginOutput{}, ErrPluginCursorInvalid
+	}
+	membershipLimit := maxPluginMembers
+	if input.MembershipLimit > 0 {
+		membershipLimit = min(input.MembershipLimit, maxPluginMembers)
+	}
+	membershipAfterID := uuid.Nil
+	if membershipCursor.AfterID != "" {
+		membershipAfterID = uuid.MustParse(membershipCursor.AfterID)
+	}
+	memberships, err := q.ListPlatformMCPPluginMemberships(ctx, platformrepo.ListPlatformMCPPluginMembershipsParams{
+		OrganizationID: principal.OrganizationID, ProjectID: project.ID, PluginID: target.ID,
+		UseAfter: membershipCursor.AfterID != "", AfterSortOrder: membershipCursor.AfterSortOrder,
+		AfterDisplayName: membershipCursor.AfterDisplay, AfterID: membershipAfterID,
+		ResultLimit: int32(membershipLimit + 1), // #nosec G115 -- bounded above by maxPluginMembers.
+	})
+	if err != nil {
+		return GetPluginOutput{}, fmt.Errorf("list platform mcp plugin memberships: %w", err)
+	}
+	memberships, membershipsMore := boundedRows(memberships, membershipLimit)
+	if len(memberships) > 0 && memberships[0].MembershipVersion != membershipVersion {
+		return GetPluginOutput{}, ErrPluginCursorInvalid
+	}
+	currentMembershipVersion, err := q.GetPlatformMCPPluginMembershipVersion(ctx, platformrepo.GetPlatformMCPPluginMembershipVersionParams{
+		OrganizationID: principal.OrganizationID, ProjectID: project.ID, PluginID: target.ID,
+	})
+	if err != nil {
+		return GetPluginOutput{}, fmt.Errorf("recheck platform mcp plugin membership version: %w", err)
+	}
+	if currentMembershipVersion != membershipVersion {
+		return GetPluginOutput{}, ErrPluginCursorInvalid
 	}
 	skills, err := q.ListPlatformMCPPluginSkills(ctx, platformrepo.ListPlatformMCPPluginSkillsParams{
 		OrganizationID: principal.OrganizationID,
@@ -655,7 +791,6 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 	if err != nil {
 		return GetPluginOutput{}, fmt.Errorf("list platform mcp plugin skills: %w", err)
 	}
-	servers, serversTruncated := boundedRows(servers, maxPluginMembers)
 	skills, skillsTruncated := boundedRows(skills, maxPluginMembers)
 	assignments, err := q.ListPlatformMCPPluginAssignments(ctx, platformrepo.ListPlatformMCPPluginAssignmentsParams{
 		PluginID:       target.ID,
@@ -683,13 +818,49 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		// The two inventory rows are the same projection selected two ways, so the
 		// conversion keeps one mapping rather than a second copy of it.
 		Plugin:                    pluginFromInventoryRow(platformrepo.ListPlatformMCPPluginInventoryRow(row)),
-		Servers:                   make([]PluginServer, 0, len(servers)),
+		Servers:                   make([]PluginServer, 0, len(memberships)),
 		Skills:                    make([]PluginSkill, 0, len(skills)),
 		AssignmentVersion:         assignmentVersion,
 		Assignments:               publicAssignments,
 		AssignmentDetailsComplete: &detailsComplete,
 		AssignmentsTruncated:      &assignmentsTruncated,
-		Truncated:                 serversTruncated || skillsTruncated,
+		Truncated:                 skillsTruncated,
+		MembershipVersion:         membershipVersion,
+	}
+	for _, membership := range memberships {
+		targetID := ""
+		if membership.TargetResolved && membership.TargetID.Valid {
+			targetID = membership.TargetID.UUID.String()
+		}
+		output.Servers = append(output.Servers, PluginServer{MembershipID: membership.MembershipID.String(), DisplayName: membership.DisplayName, Backend: membership.TargetKind, TargetID: targetID, MCPSlug: membership.McpSlug, Policy: membership.Policy, Enabled: membership.Enabled})
+	}
+	if membershipsMore && len(memberships) > 0 {
+		last := memberships[len(memberships)-1]
+		output.MembershipNextCursor, err = s.encodeMembershipCursor(pluginMembershipCursor{
+			OrganizationID: principal.OrganizationID, Binding: principalCursorBinding(principal), ProjectID: project.ID.String(), PluginID: target.ID.String(), Version: membershipVersion,
+			AfterSortOrder: last.SortOrder, AfterDisplay: last.DisplayName, AfterID: last.MembershipID.String(),
+		})
+		if err != nil {
+			return GetPluginOutput{}, err
+		}
+	}
+	if s.publicationEvidence != nil {
+		evidence, evidenceErr := s.publicationEvidence.ResolvePublicationEvidence(ctx, principal.OrganizationID, project.ID, []string{target.Slug})
+		if evidenceErr != nil || len(evidence) != 1 || evidence[0].PluginSlug != target.Slug {
+			// Package resolution can fail when a private address is incomplete.
+			// Preserve the admin inventory without claiming a package is current.
+			output.PublicationEvidence = &PluginPublicationEvidence{Unavailable: true, Packages: []PluginPublicationPackage{}}
+		} else {
+			packages := make([]PluginPublicationPackage, 0, len(evidence[0].Packages))
+			for _, pkg := range evidence[0].Packages {
+				packages = append(packages, PluginPublicationPackage{ServerName: pkg.ServerName, MCPURL: pkg.MCPURL})
+			}
+			output.PublicationEvidence = &PluginPublicationEvidence{
+				NotConfigured: evidence[0].NotConfigured,
+				Fresh:         evidence[0].Fresh,
+				Packages:      packages,
+			}
+		}
 	}
 	if s.distributionAdmissionRead != nil {
 		distributionAdmission := s.distributionAdmissionRead.ForPlugin(ctx, principal.OrganizationID, project.ID, target.ID)
@@ -697,21 +868,6 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 	}
 	if !expiresAt.IsZero() {
 		output.ReferencesExpireAt = expiresAt.Format(time.RFC3339)
-	}
-	for _, server := range servers {
-		backend := "mcp_server"
-		if server.ToolsetBacked {
-			backend = "toolset"
-		} else if server.GatewayBacked {
-			backend = "gateway"
-		}
-		output.Servers = append(output.Servers, PluginServer{
-			DisplayName: server.DisplayName,
-			Backend:     backend,
-			MCPSlug:     server.McpSlug,
-			Policy:      server.Policy,
-			Enabled:     server.Enabled,
-		})
 	}
 	for _, skill := range skills {
 		pinned := ""
