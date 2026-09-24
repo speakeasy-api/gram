@@ -16,12 +16,29 @@ type PublicationRequests struct {
 	Enabled bool
 }
 
+// ProjectPublicationRequestOutcome is the transaction-time result of requesting
+// a package refresh, not evidence that a consumer delivered or published it.
+type ProjectPublicationRequestOutcome string
+
+const (
+	ProjectPublicationEmissionDisabled ProjectPublicationRequestOutcome = "emission_disabled"
+	ProjectPublicationNotConfigured    ProjectPublicationRequestOutcome = "not_configured"
+	ProjectPublicationEnqueued         ProjectPublicationRequestOutcome = "enqueued"
+)
+
 func (r PublicationRequests) Project(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, actorID string) error {
+	_, err := r.ProjectWithOutcome(ctx, tx, organizationID, projectID, actorID)
+	return err
+}
+
+// ProjectWithOutcome reports what was actually written in the caller's transaction.
+// A successful enqueue remains provisional until that transaction commits.
+func (r PublicationRequests) ProjectWithOutcome(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, actorID string) (ProjectPublicationRequestOutcome, error) {
 	if !r.Enabled {
-		return nil
+		return ProjectPublicationEmissionDisabled, nil
 	}
 	if organizationID == "" || projectID == uuid.Nil {
-		return fmt.Errorf("plugin publication requires an organization and project")
+		return "", fmt.Errorf("plugin publication requires an organization and project")
 	}
 	var connected bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (
@@ -29,10 +46,10 @@ func (r PublicationRequests) Project(ctx context.Context, tx pgx.Tx, organizatio
 		JOIN projects p ON p.id = c.project_id
 		WHERE c.project_id = $1 AND p.organization_id = $2 AND p.deleted IS FALSE
 	)`, projectID, organizationID).Scan(&connected); err != nil {
-		return fmt.Errorf("check project marketplace connection: %w", err)
+		return "", fmt.Errorf("check project marketplace connection: %w", err)
 	}
 	if !connected {
-		return nil
+		return ProjectPublicationNotConfigured, nil
 	}
 	_, err := outbox.Publish(ctx, tx, organizationID, outbox.Message{
 		PublicID:   uuid.Nil,
@@ -44,9 +61,9 @@ func (r PublicationRequests) Project(ctx context.Context, tx pgx.Tx, organizatio
 		}.Build(),
 	})
 	if err != nil {
-		return fmt.Errorf("enqueue plugin publication: %w", err)
+		return "", fmt.Errorf("enqueue plugin publication: %w", err)
 	}
-	return nil
+	return ProjectPublicationEnqueued, nil
 }
 
 func (r PublicationRequests) Organization(ctx context.Context, tx pgx.Tx, organizationID, actorID string) error {
