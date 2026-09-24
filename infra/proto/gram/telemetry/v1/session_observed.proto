@@ -1,0 +1,23 @@
+edition = "2024";
+
+package gram.telemetry.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1;telemetryv1";
+
+// SessionObserved commits with an imported transcript. The consumer resolves
+// current attribution from storage; no transcript content leaves the outbox.
+message SessionObserved {
+  string project_id = 1;
+  string message_id = 2;
+  string user_email = 3;
+  string provider = 4;
+  string hook_hostname = 5;
+  string account_type = 6;
+  string billing_mode = 7;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {seconds: 604800}
+  };
+}

@@ -49,6 +49,7 @@ func newApp() *cli.App {
 			newRenderPlatformMCPCommand(),
 			newStreamsCommand(),
 			newDemoSeedCommand(),
+			newReplaySessionObservationsCommand(),
 			newAdminSeedCommand(),
 			newVersionCommand(),
 		},

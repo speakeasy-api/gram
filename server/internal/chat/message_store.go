@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -25,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 )
 
@@ -707,6 +709,17 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 			}
 			if err := metering.Enqueue(ctx, tx, readings); err != nil {
 				return false, fmt.Errorf("enqueue external chat message readings: %w", err)
+			}
+			if _, err := outbox.Publish(ctx, tx, organizationID, outbox.Message{Proto: telemetryv1.SessionObserved_builder{
+				ProjectId:    new(projectID.String()),
+				MessageId:    new(param.ID.String()),
+				UserEmail:    new(write.UserEmail),
+				Provider:     new(write.Provider),
+				HookHostname: new(write.HookHostname),
+				AccountType:  new(write.AccountType),
+				BillingMode:  new(write.BillingMode),
+			}.Build(), PublicID: uuid.Nil, Attributes: nil}); err != nil {
+				return false, fmt.Errorf("enqueue imported session observation: %w", err)
 			}
 			if err := tx.Commit(ctx); err != nil {
 				return false, fmt.Errorf("commit external chat message transaction: %w", err)

@@ -141,6 +141,32 @@ DO UPDATE SET
   , updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
 RETURNING id;
 
+-- name: GetImportedSessionObservations :many
+-- Read current ownership at consumption time, so attribution repaired between
+-- capture and delivery is reflected in analytics. Never read transcript text.
+SELECT m.id, m.chat_id, m.created_at, m.source, m.model, c.external_chat_id,
+       COALESCE(m.external_user_id, c.external_user_id, '')::text AS external_user_id,
+       COALESCE(m.user_id, c.user_id, '')::text AS user_id,
+       COALESCE(u.email, m.external_user_id, c.external_user_id, '')::text AS user_email,
+       c.organization_id
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+LEFT JOIN users u ON u.id = COALESCE(m.user_id, c.user_id)
+WHERE m.project_id = @project_id
+  AND m.id = ANY(@message_ids::uuid[])
+  AND c.deleted IS FALSE;
+
+-- name: ListImportedSessionObservationReplay :many
+SELECT m.id, c.organization_id
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+WHERE m.project_id = @project_id AND c.deleted IS FALSE
+  AND m.external_message_id IS NOT NULL
+  AND m.created_at >= @from_time AND m.created_at < @to_time
+  AND m.id > @after_id
+ORDER BY m.id
+LIMIT @row_limit;
+
 -- name: LinkAIIntegrationConfigChat :one
 -- Links a chat to the AI integration config that imported it and returns the
 -- chat's persisted message pagination cursor so imports resume where the last
