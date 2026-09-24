@@ -69,6 +69,10 @@ JOIN workload_issuers i
   ON i.organization_id = a.organization_id
  AND i.id = a.workload_issuer_id
  AND i.deleted IS FALSE
+ -- The same visibility predicate the issuer list uses. Without it an admission
+ -- naming another project's issuer would surface here, and the issuer column
+ -- would name a row this caller cannot otherwise see.
+ AND (i.project_id IS NULL OR i.project_id = @project_id)
 LEFT JOIN workload_agent_assignments g
   ON g.organization_id = a.organization_id
  AND g.workload_issuer_id = a.workload_issuer_id
@@ -89,6 +93,7 @@ SELECT *
 FROM workload_identity_admissions
 WHERE organization_id = @organization_id
   AND id = @id
+  AND (project_id IS NULL OR project_id = @project_id)
   AND deleted IS FALSE;
 
 -- name: CreateWorkloadAdmission :one
@@ -101,6 +106,7 @@ UPDATE workload_identity_admissions
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND id = @id
+  AND (project_id IS NULL OR project_id = @project_id)
   AND deleted IS FALSE
 RETURNING *;
 
@@ -125,6 +131,20 @@ VALUES (@organization_id, @workload_issuer_id, @subject, @match_kind, @agent_id)
 ON CONFLICT (organization_id, workload_issuer_id, match_kind, subject) WHERE deleted IS FALSE
 DO UPDATE SET agent_id = EXCLUDED.agent_id, updated_at = clock_timestamp()
 RETURNING *;
+
+-- name: CountLiveAdmissionsForSubject :one
+-- How many live admissions still name this tuple, across both tiers. The agent
+-- assignment is keyed on (issuer, match_kind, subject) and is therefore shared
+-- by them, so withdrawing one tier must not strip the agent from the other:
+-- that admission would survive with no policy and be refused at the token
+-- endpoint, which reads as a broken rule rather than a withdrawn one.
+SELECT count(*)
+FROM workload_identity_admissions
+WHERE organization_id = @organization_id
+  AND workload_issuer_id = @workload_issuer_id
+  AND match_kind = @match_kind
+  AND subject = @subject
+  AND deleted IS FALSE;
 
 -- name: SoftDeleteWorkloadAgentAssignmentForSubject :many
 -- Keyed the way the assignment is, not by admission id. Returns rows so the
