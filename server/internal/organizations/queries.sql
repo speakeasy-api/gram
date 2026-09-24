@@ -941,6 +941,15 @@ FROM organization_metadata
 WHERE id = @organization_id
 FOR UPDATE;
 
+-- name: CountBlockedSetupTaskUpdatesFixture :one
+-- Test-only synchronization counts actual setup-task lock waiters in this test database.
+SELECT count(*)
+FROM pg_catalog.pg_stat_activity
+WHERE datname = current_database()
+  AND state = 'active'
+  AND wait_event_type = 'Lock'
+  AND query LIKE '-- name: LockOrganizationForSetupTaskUpdate %';
+
 -- name: GetOrganizationSetupTask :one
 SELECT *
 FROM organization_setup_tasks
@@ -999,3 +1008,25 @@ SELECT
     )::boolean AS logging_enabled
 FROM organization_metadata
 WHERE organization_metadata.id = @organization_id;
+
+-- name: GetOrganizationOnboardingSelection :many
+SELECT onboarding.preset AS onboarding_preset, task.task_key, task.hidden_at
+FROM organization_metadata om
+LEFT JOIN organization_onboarding onboarding ON onboarding.organization_id = om.id
+LEFT JOIN organization_setup_tasks task ON task.organization_id = om.id
+WHERE om.id = @organization_id;
+
+-- name: SetOrganizationOnboardingPreset :exec
+INSERT INTO organization_onboarding (organization_id, preset)
+VALUES (@organization_id::text, @preset)
+ON CONFLICT (organization_id) DO UPDATE SET
+    preset = EXCLUDED.preset,
+    updated_at = clock_timestamp();
+
+-- name: SetOrganizationSetupTaskVisibility :exec
+INSERT INTO organization_setup_tasks (organization_id, task_key, status, hidden_at)
+VALUES (@organization_id, @task_key, 'todo', CASE WHEN @hidden::boolean THEN clock_timestamp() ELSE NULL END)
+ON CONFLICT (organization_id, task_key) DO UPDATE SET
+    hidden_at = EXCLUDED.hidden_at,
+    updated_at = clock_timestamp()
+WHERE (organization_setup_tasks.hidden_at IS NOT NULL) IS DISTINCT FROM @hidden::boolean;
