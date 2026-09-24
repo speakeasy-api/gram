@@ -53,7 +53,7 @@ func TestIssuerLifecycle_RotationAdoptsEMABoundReplacement(t *testing.T) {
 	require.Contains(t, err.Error(), "unlink")
 }
 
-func TestIssuerLifecycle_FailedDiscoveryAfterConcurrentEditConflicts(t *testing.T) {
+func TestIssuerLifecycle_FailedDiscoveryAfterConcurrentEditPreservesDiscoveryError(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	var issuerID string
@@ -77,7 +77,11 @@ func TestIssuerLifecycle_FailedDiscoveryAfterConcurrentEditConflicts(t *testing.
 	payload.ID = created.ID
 	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &payload)
 	require.NoError(t, <-editErr)
-	requireOopsCode(t, err, oops.CodeConflict)
+	// Superseded failure bookkeeping must not hide the upstream discovery error.
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	stored := loadIssuerRow(t, ctx, ti, created)
+	require.Equal(t, "Concurrent edit", stored.Name.String)
+	require.False(t, stored.MetadataLastErrorAt.Valid, "the stale failure record must not overwrite the concurrent edit")
 }
 
 func TestIssuerLifecycle_ProjectUserIssuerMutationHidesSiblingBindings(t *testing.T) {
