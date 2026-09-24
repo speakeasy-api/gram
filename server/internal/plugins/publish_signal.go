@@ -28,8 +28,9 @@ func (s *Service) signalPublish(ctx context.Context, projectID uuid.UUID, create
 	if s.publisher == nil || s.github == nil {
 		return
 	}
-
-	// The request returning shouldn't drop the enqueue.
+	// Keep the direct signal while emission and consumption are independently
+	// gated. Rechecking the connection after commit cannot prove that this
+	// transaction enqueued a request, and duplicate signals are debounced.
 	if err := s.publisher.SignalPluginPublish(context.WithoutCancel(ctx), projectID, createdByUserID); err != nil {
 		s.logger.WarnContext(ctx, "failed to signal plugin publish",
 			attr.SlogProjectID(projectID.String()), attr.SlogError(err))

@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 )
 
-func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, clients *k8s.KubernetesClients, config networkingress.RuntimeConfig) (*networkingress.Executor, error) {
+func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, clients *k8s.KubernetesClients, config networkingress.RuntimeConfig, publicationRequester networkingress.PublicationRequester) (*networkingress.Executor, error) {
 	providers := make(map[string]k8s.NetworkIngressProvisioner)
 	if clients != nil && clients.Clientset != nil && clients.DynamicClient != nil && config.Tailscale.OperatorNamespace != "" {
 		provider, err := k8s.NewTailscaleNetworkIngressProvisioner(clients.Clientset, clients.DynamicClient, config.Tailscale)
@@ -29,6 +29,8 @@ func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterPr
 	return networkingress.NewExecutor(db, enc, registry, networkingress.ExecutorOptions{
 		Queue: config.ReconcileTaskQueue, Image: config.AttestorImage,
 		BackendService: config.BackendService, BackendPort: config.BackendPort,
+		PublicationRequester: publicationRequester,
+		PublicationActor:     "",
 		CanApply: func(context.Context) error {
 			if !config.MutationReady() {
 				return fmt.Errorf("network ingress provider mutations disabled")

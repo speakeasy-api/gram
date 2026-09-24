@@ -54,6 +54,7 @@ type Service struct {
 	temporalEnv           *tenv.Environment
 	pluginsGitHubEnabled  bool
 	distributionAdmission *admission.Guard
+	publicationRequests   plugins.PublicationRequests
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -81,7 +82,13 @@ func NewService(
 		temporalEnv:           temporalEnv,
 		pluginsGitHubEnabled:  pluginsGitHubEnabled,
 		distributionAdmission: admission.NewGuard(nil, nil),
+		publicationRequests:   plugins.PublicationRequests{Enabled: false},
 	}
+}
+
+func (s *Service) WithPublicationRequests(enabled bool) *Service {
+	s.publicationRequests.Enabled = enabled
+	return s
 }
 
 func (s *Service) WithDistributionAdmission(guard *admission.Guard) *Service {
@@ -246,6 +253,9 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		}
 	}
 
+	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{mcpServerID}, metaMcpServerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -598,6 +608,9 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		}
 	}
 
+	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{existing.McpServerID, updated.McpServerID}, existing.MetaMcpServerID, updated.MetaMcpServerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -729,6 +742,9 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		}
 	}
 
+	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{existing.McpServerID}, existing.MetaMcpServerID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}

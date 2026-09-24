@@ -174,6 +174,7 @@ type Service struct {
 	// itself the thing doing the publishing) and in tests; signalPublish is a
 	// no-op then.
 	publisher             PluginPublishSignaler
+	publicationRequests   PublicationRequests
 	distributionAdmission *admission.Guard
 }
 
@@ -216,8 +217,14 @@ func NewService(
 		// publisher. Fail-closed when nil: non-canary orgs defer those changes.
 		features:              features,
 		publisher:             publisher,
+		publicationRequests:   PublicationRequests{Enabled: false},
 		distributionAdmission: admission.NewGuard(nil, nil),
 	}
+}
+
+func (s *Service) WithPublicationRequests(enabled bool) *Service {
+	s.publicationRequests.Enabled = enabled
+	return s
 }
 
 func NewPublisher(
@@ -246,6 +253,7 @@ func NewPublisher(
 		features:  features,
 		// The publisher runs the publish workflow itself; it never signals one.
 		publisher:             nil,
+		publicationRequests:   PublicationRequests{Enabled: false},
 		distributionAdmission: admission.NewGuard(nil, nil),
 	}
 }
@@ -420,6 +428,9 @@ func (s *Service) ensureDefaultPlugin(ctx context.Context, ac *contextvalues.Aut
 		return oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enqueue default plugin publication").LogError(ctx, s.logger)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
@@ -575,6 +586,9 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin create").LogError(ctx, s.logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue plugin publication").LogError(ctx, s.logger)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
@@ -668,6 +682,9 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin update").LogError(ctx, s.logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue plugin publication").LogError(ctx, s.logger)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
@@ -803,6 +820,9 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.E(oops.CodeUnexpected, err, "audit log plugin delete").LogError(ctx, s.logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enqueue plugin publication").LogError(ctx, s.logger)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
@@ -1003,6 +1023,9 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin server add").LogError(ctx, s.logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue plugin publication").LogError(ctx, s.logger)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
@@ -1139,6 +1162,9 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin server update").LogError(ctx, s.logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue plugin publication").LogError(ctx, s.logger)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
@@ -1211,6 +1237,9 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 		return oops.E(oops.CodeUnexpected, err, "audit log plugin server remove").LogError(ctx, s.logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enqueue plugin publication").LogError(ctx, s.logger)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
