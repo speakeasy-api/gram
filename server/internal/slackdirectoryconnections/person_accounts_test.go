@@ -224,7 +224,7 @@ func TestPersonAccountsShowsEveryMembershipAndRetainedReviewState(t *testing.T) 
 			require.Equal(t, "mapped", account.Member.MappingStatus)
 		}
 	}
-	// Disconnected workspaces leave the UI, including a person's accounts.
+	// Disconnecting a workspace removes its mappings, including from a person's accounts.
 	_, err = f.service.Disconnect(ctx, &gen.DisconnectPayload{SessionToken: nil, ID: first.ID, Generation: first.Generation})
 	require.NoError(t, err)
 	result, err = f.service.ListPersonAccounts(ctx, personAccountsRequest(f.auth.UserID))
@@ -234,11 +234,11 @@ func TestPersonAccountsShowsEveryMembershipAndRetainedReviewState(t *testing.T) 
 		require.NotEqual(t, m.ID, account.Member.ID)
 	}
 	// Revoked mappings disappear, with no email-based replacement.
-	_, err = f.service.SetMapping(ctx, mappingRequest(readMapping(t, ctx, f, m.ID), nil))
+	_, err = f.service.SetMapping(ctx, mappingRequest(readMapping(t, ctx, f, result.Accounts[0].Member.ID), nil))
 	require.NoError(t, err)
 	result, err = f.service.ListPersonAccounts(ctx, personAccountsRequest(f.auth.UserID))
 	require.NoError(t, err)
-	require.Len(t, result.Accounts, 2)
+	require.Len(t, result.Accounts, 1)
 }
 
 func TestPersonAccountsPaginationAndEmptyState(t *testing.T) {
