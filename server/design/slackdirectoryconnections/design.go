@@ -115,14 +115,15 @@ var _ = Service("slackDirectoryConnections", func() {
 			Attribute("include_deactivated", Boolean, "Include members deactivated in Slack.", func() { Default(false) })
 			Attribute("include_bots", Boolean, "Include bots and apps.", func() { Default(false) })
 			Attribute("include_guests", Boolean, "Include guests.", func() { Default(false) })
-			Attribute("sort_as_of", String, "Sort by mapping state at this time, so mapping changes after it do not reorder pages. Defaults to now.", func() { Format(FormatDateTime) })
+			Attribute("sort_as_of", String, "Sort by mapping state at this time, so mapping changes after it do not reorder pages. Pass back the sort_as_of from the first page; defaults to the database's current time.", func() { Format(FormatDateTime) })
 			Attribute("page", Int, "One-based page number. Unmapped members sort first, then members needing review, then mapped members, each alphabetically.", func() { Default(1); Minimum(1) })
 			Attribute("limit", Int, "Maximum returned rows.", func() { Default(50); Minimum(1); Maximum(100) })
 		})
 		Result(func() {
 			Attribute("members", ArrayOf(Member))
 			Attribute("total", Int64, "Matching retained membership rows.")
-			Required("members", "total")
+			Attribute("sort_as_of", String, "Time the mapping-state sort used. Pass it back to keep the order stable across pages and edits.", func() { Format(FormatDateTime) })
+			Required("members", "total", "sort_as_of")
 		})
 		HTTP(func() {
 			GET("/rpc/slackDirectoryConnections.listMembers")

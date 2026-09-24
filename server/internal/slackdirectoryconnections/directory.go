@@ -84,16 +84,22 @@ func (s *Service) ListMembers(ctx context.Context, p *gen.ListMembersPayload) (*
 	if limit < 1 || limit > 100 || page < 1 || page > math.MaxInt32/limit || utf8.RuneCountInString(search) > 200 {
 		return nil, oops.C(oops.CodeBadRequest)
 	}
-	sortAsOf := time.Now()
+	q := repo.New(s.db)
+	var sortAsOf time.Time
 	if p.SortAsOf != nil {
 		parsed, err := time.Parse(time.RFC3339, *p.SortAsOf)
 		if err != nil {
 			return nil, oops.C(oops.CodeBadRequest)
 		}
 		sortAsOf = parsed
+	} else {
+		now, err := q.SlackDirectoryClock(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "could not read the database clock").LogError(ctx, s.logger)
+		}
+		sortAsOf = now.Time
 	}
 	offset := int32((page - 1) * limit) // #nosec G115 -- page is bounded above so the offset fits in int32.
-	q := repo.New(s.db)
 	rows, err := q.ListSlackDirectoryMembersPage(ctx, repo.ListSlackDirectoryMembersPageParams{OrganizationID: ac.ActiveOrganizationID, ConnectionID: connectionID, MappingStatus: mappingStatus, Search: search, IncludeDeactivated: p.IncludeDeactivated, IncludeBots: p.IncludeBots, IncludeGuests: p.IncludeGuests, SortAsOf: pgtype.Timestamptz{Time: sortAsOf, Valid: true, InfinityModifier: pgtype.Finite}, PageOffset: offset, PageSize: int32(limit)})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not list Slack members").LogError(ctx, s.logger)
@@ -102,7 +108,7 @@ func (s *Service) ListMembers(ctx context.Context, p *gen.ListMembersPayload) (*
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not count Slack members").LogError(ctx, s.logger)
 	}
-	result := &gen.ListMembersResult{Members: make([]*gen.SlackDirectoryMember, 0, len(rows)), Total: total}
+	result := &gen.ListMembersResult{Members: make([]*gen.SlackDirectoryMember, 0, len(rows)), Total: total, SortAsOf: sortAsOf.UTC().Format(time.RFC3339Nano)}
 	for _, row := range rows {
 		result.Members = append(result.Members, mv.BuildSlackDirectoryMemberView(repo.ListSlackDirectoryMembersRow(row)))
 	}

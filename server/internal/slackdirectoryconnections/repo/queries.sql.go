@@ -1127,6 +1127,18 @@ func (q *Queries) SetSlackMappingRevisionForTest(ctx context.Context, arg SetSla
 	return err
 }
 
+const slackDirectoryClock = `-- name: SlackDirectoryClock :one
+SELECT clock_timestamp()::timestamptz
+`
+
+// Sort snapshots use the database clock, which also stamps mappings.
+func (q *Queries) SlackDirectoryClock(ctx context.Context) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, slackDirectoryClock)
+	var column_1 pgtype.Timestamptz
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const startSlackDirectorySync = `-- name: StartSlackDirectorySync :execrows
 UPDATE slack_directory_connections
 SET last_sync_started_at = $1, updated_at = clock_timestamp()

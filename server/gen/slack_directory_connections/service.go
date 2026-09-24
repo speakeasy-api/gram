@@ -108,7 +108,8 @@ type ListMembersPayload struct {
 	// Include guests.
 	IncludeGuests bool
 	// Sort by mapping state at this time, so mapping changes after it do not
-	// reorder pages. Defaults to now.
+	// reorder pages. Pass back the sort_as_of from the first page; defaults to the
+	// database's current time.
 	SortAsOf *string
 	// One-based page number. Unmapped members sort first, then members needing
 	// review, then mapped members, each alphabetically.
@@ -123,6 +124,9 @@ type ListMembersResult struct {
 	Members []*SlackDirectoryMember
 	// Matching retained membership rows.
 	Total int64
+	// Time the mapping-state sort used. Pass it back to keep the order stable
+	// across pages and edits.
+	SortAsOf string
 }
 
 // ListPayload is the payload type of the slackDirectoryConnections service

@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -14,6 +15,10 @@ import {
 export type ListMembersResponseBody = {
   members: Array<SlackDirectoryMember>;
   /**
+   * Time the mapping-state sort used. Pass it back to keep the order stable across pages and edits.
+   */
+  sortAsOf: Date;
+  /**
    * Matching retained membership rows.
    */
   total: number;
@@ -23,10 +28,21 @@ export type ListMembersResponseBody = {
 export const ListMembersResponseBody$inboundSchema: z.ZodMiniType<
   ListMembersResponseBody,
   unknown
-> = z.object({
-  members: z.array(SlackDirectoryMember$inboundSchema),
-  total: z.int(),
-});
+> = z.pipe(
+  z.object({
+    members: z.array(SlackDirectoryMember$inboundSchema),
+    sort_as_of: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
+    total: z.int(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "sort_as_of": "sortAsOf",
+    });
+  }),
+);
 
 export function listMembersResponseBodyFromJSON(
   jsonString: string,

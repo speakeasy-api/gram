@@ -1,5 +1,6 @@
 import { syncInProgress } from "./syncView";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router";
 import { Page } from "@/components/page-layout";
 import { defineFilters, useFilterState } from "@/components/filters";
@@ -259,8 +260,8 @@ function MemberTable({
     throwOnError: false,
   });
   const columns = memberColumns(people.data?.users, canEdit);
-  // Pin the sort to when this view loaded so mapping someone does not move rows until a refresh.
-  const [sortAsOf] = useState(() => new Date());
+  // Pin the sort to the server's time for the first page so mapping someone does not move rows until a refresh.
+  const [sortAsOf, setSortAsOf] = useState<Date | undefined>(undefined);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const query = useSlackDirectoryMembers(
@@ -280,8 +281,14 @@ function MemberTable({
       retry: false,
       throwOnError: false,
       refetchInterval: syncing ? 3000 : 60000,
+      // Keep rows on screen while the pinned sort time replaces the first request.
+      placeholderData: keepPreviousData,
     },
   );
+  const loadedSortAsOf = query.data?.sortAsOf;
+  useEffect(() => {
+    if (!sortAsOf && loadedSortAsOf) setSortAsOf(loadedSortAsOf);
+  }, [sortAsOf, loadedSortAsOf]);
   const rows = query.data?.members ?? [];
   const total = query.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));

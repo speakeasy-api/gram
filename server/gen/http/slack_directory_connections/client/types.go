@@ -72,6 +72,9 @@ type ListMembersResponseBody struct {
 	Members []*SlackDirectoryMemberResponseBody `form:"members,omitempty" json:"members,omitempty" xml:"members,omitempty"`
 	// Matching retained membership rows.
 	Total *int64 `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+	// Time the mapping-state sort used. Pass it back to keep the order stable
+	// across pages and edits.
+	SortAsOf *string `form:"sort_as_of,omitempty" json:"sort_as_of,omitempty" xml:"sort_as_of,omitempty"`
 }
 
 // GetMemberResponseBody is the type of the "slackDirectoryConnections" service
@@ -2131,7 +2134,8 @@ func NewSyncUnavailable(body *SyncUnavailableResponseBody) *goa.ServiceError {
 // "listMembers" endpoint result from a HTTP "OK" response.
 func NewListMembersResultOK(body *ListMembersResponseBody) *slackdirectoryconnections.ListMembersResult {
 	v := &slackdirectoryconnections.ListMembersResult{
-		Total: *body.Total,
+		Total:    *body.Total,
+		SortAsOf: *body.SortAsOf,
 	}
 	v.Members = make([]*slackdirectoryconnections.SlackDirectoryMember, len(body.Members))
 	for i, val := range body.Members {
@@ -3101,12 +3105,18 @@ func ValidateListMembersResponseBody(body *ListMembersResponseBody) (err error) 
 	if body.Total == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
 	}
+	if body.SortAsOf == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sort_as_of", "body"))
+	}
 	for _, e := range body.Members {
 		if e != nil {
 			if err2 := ValidateSlackDirectoryMemberResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	if body.SortAsOf != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.sort_as_of", *body.SortAsOf, goa.FormatDateTime))
 	}
 	return
 }

@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   error: null as Error | null,
   rows: [] as unknown[],
   total: null as number | null,
+  sortAsOf: new Date("2026-01-01T00:00:00Z"),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ slug: mocks.orgSlug }),
@@ -70,7 +71,11 @@ vi.mock("@gram/client/react-query/slackDirectoryMembers.js", () => ({
     return {
       data: mocks.pending
         ? undefined
-        : { members: mocks.rows, total: mocks.total ?? mocks.rows.length },
+        : {
+            members: mocks.rows,
+            total: mocks.total ?? mocks.rows.length,
+            sortAsOf: mocks.sortAsOf,
+          },
       isPending: mocks.pending,
       isFetching: mocks.pending,
       isError: Boolean(mocks.error),
@@ -377,15 +382,22 @@ it("renders read-only pickers for employees without loading people", () => {
     "Not mapped · read-only",
   );
 });
-it("pins the sort time for the life of the view", () => {
+it("pins the sort time the server returned for the life of the view", async () => {
+  const serverTime = new Date("2026-01-02T03:04:05Z");
+  mocks.sortAsOf = serverTime;
   show(<SlackDirectory connections={[connection]} />);
-  const first = mocks.query.mock.calls[0]?.[0].sortAsOf;
-  expect(first).toBeInstanceOf(Date);
+  expect(mocks.query.mock.calls[0]?.[0].sortAsOf).toBeUndefined();
+  await waitFor(() =>
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sortAsOf: serverTime }),
+    ),
+  );
+  mocks.sortAsOf = new Date("2026-02-01T00:00:00Z");
   fireEvent.change(
     screen.getByPlaceholderText("Search name, email or Slack ID…"),
     { target: { value: "" } },
   );
-  expect(mocks.query.mock.calls.at(-1)?.[0].sortAsOf).toBe(first);
+  expect(mocks.query.mock.calls.at(-1)?.[0].sortAsOf).toBe(serverTime);
 });
 it("passes the mapping-status toolbar filter to the paginated query", () => {
   show(

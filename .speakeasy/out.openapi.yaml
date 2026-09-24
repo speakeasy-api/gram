@@ -58721,11 +58721,11 @@ paths:
             description: Include guests.
             type: boolean
         - allowEmptyValue: true
-          description: Sort by mapping state at this time, so mapping changes after it do not reorder pages. Defaults to now.
+          description: Sort by mapping state at this time, so mapping changes after it do not reorder pages. Pass back the sort_as_of from the first page; defaults to the database's current time.
           in: query
           name: sort_as_of
           schema:
-            description: Sort by mapping state at this time, so mapping changes after it do not reorder pages. Defaults to now.
+            description: Sort by mapping state at this time, so mapping changes after it do not reorder pages. Pass back the sort_as_of from the first page; defaults to the database's current time.
             format: date-time
             type: string
         - allowEmptyValue: true
@@ -85531,6 +85531,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SlackDirectoryMember'
+        sort_as_of:
+          type: string
+          description: Time the mapping-state sort used. Pass it back to keep the order stable across pages and edits.
+          format: date-time
         total:
           type: integer
           description: Matching retained membership rows.
@@ -85538,6 +85542,7 @@ components:
       required:
         - members
         - total
+        - sort_as_of
     ListMembersResult:
       type: object
       properties:

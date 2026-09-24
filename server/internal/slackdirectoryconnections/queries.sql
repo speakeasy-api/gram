@@ -277,3 +277,7 @@ GROUP BY m.id
 HAVING count(*) = 1 AND NOT EXISTS (SELECT 1 FROM slack_identity_mappings x
   WHERE x.organization_id = @organization_id AND x.slack_team_id = @slack_team_id AND x.user_id = min(u.id) AND x.revoked_at IS NULL)
 ORDER BY m.id;
+
+-- name: SlackDirectoryClock :one
+-- Sort snapshots use the database clock, which also stamps mappings.
+SELECT clock_timestamp()::timestamptz;

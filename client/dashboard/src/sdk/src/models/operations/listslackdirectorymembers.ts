@@ -49,7 +49,7 @@ export type ListSlackDirectoryMembersRequest = {
    */
   includeGuests?: boolean | undefined;
   /**
-   * Sort by mapping state at this time, so mapping changes after it do not reorder pages. Defaults to now.
+   * Sort by mapping state at this time, so mapping changes after it do not reorder pages. Pass back the sort_as_of from the first page; defaults to the database's current time.
    */
   sortAsOf?: Date | undefined;
   /**

@@ -74,6 +74,9 @@ type ListMembersResponseBody struct {
 	Members []*SlackDirectoryMemberResponseBody `form:"members" json:"members" xml:"members"`
 	// Matching retained membership rows.
 	Total int64 `form:"total" json:"total" xml:"total"`
+	// Time the mapping-state sort used. Pass it back to keep the order stable
+	// across pages and edits.
+	SortAsOf string `form:"sort_as_of" json:"sort_as_of" xml:"sort_as_of"`
 }
 
 // GetMemberResponseBody is the type of the "slackDirectoryConnections" service
@@ -1764,7 +1767,8 @@ func NewSyncResponseBody(res *slackdirectoryconnections.SyncResult) *SyncRespons
 // the "listMembers" endpoint of the "slackDirectoryConnections" service.
 func NewListMembersResponseBody(res *slackdirectoryconnections.ListMembersResult) *ListMembersResponseBody {
 	body := &ListMembersResponseBody{
-		Total: res.Total,
+		Total:    res.Total,
+		SortAsOf: res.SortAsOf,
 	}
 	if res.Members != nil {
 		body.Members = make([]*SlackDirectoryMemberResponseBody, len(res.Members))

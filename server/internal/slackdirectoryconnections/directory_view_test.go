@@ -3,7 +3,6 @@ package slackdirectoryconnections_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -120,12 +119,9 @@ func TestDirectoryOrderStaysStableAfterMappingUntilRefreshed(t *testing.T) {
 		entry("UEXAMPLE01", "Ada", "ada@example.com", "active", "person"),
 		entry("UEXAMPLE02", "Ben", "ben@example.com", "active", "person"),
 	)).Run(ctx, syncRequest(f, c), nil))
-	// Mapping timestamps come from the database clock, so read "now" from it too.
-	var now time.Time
-	require.NoError(t, f.db.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&now))
-	loaded := now.UTC().Format(time.RFC3339Nano)
 	page, err := f.service.ListMembers(ctx, memberRequest())
 	require.NoError(t, err)
+	loaded := page.SortAsOf
 	require.Equal(t, []string{"Ada", "Ben"}, names(page))
 
 	_, err = f.service.SetMapping(ctx, mappingRequest(readMapping(t, ctx, f, page.Members[0].ID), new(addPerson(t, ctx, f))))
