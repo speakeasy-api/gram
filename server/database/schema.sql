@@ -9506,6 +9506,9 @@ CREATE TABLE IF NOT EXISTS queries (
 CREATE INDEX IF NOT EXISTS queries_project_id_updated_at_idx
 ON queries (project_id, updated_at DESC) WHERE deleted IS FALSE;
 
+-- API deletion is soft. Required ownership/reference columns intentionally
+-- prevent physical parent deletion until memberships and owned rows are removed
+-- child-first; ON DELETE SET NULL follows the repository's FK convention.
 CREATE TABLE IF NOT EXISTS sigint_custom_signals (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -9574,3 +9577,10 @@ ON sigint_sensor_signals (project_id, sensor_id, sort_order, id) WHERE deleted I
 
 CREATE INDEX IF NOT EXISTS sigint_sensor_signals_project_id_signal_id_idx
 ON sigint_sensor_signals (project_id, signal_id) WHERE deleted IS FALSE;
+
+-- Foreign-key checks must also locate soft-deleted memberships.
+CREATE INDEX IF NOT EXISTS sigint_sensor_signals_sensor_reference_idx
+ON sigint_sensor_signals (project_id, sensor_id);
+
+CREATE INDEX IF NOT EXISTS sigint_sensor_signals_signal_reference_idx
+ON sigint_sensor_signals (project_id, signal_id);
